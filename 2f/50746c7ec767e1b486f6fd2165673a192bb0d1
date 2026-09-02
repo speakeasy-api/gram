@@ -1,0 +1,83 @@
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_aa553d2f7bb513 67-69
+server/internal/risk/fingerprint.go
+  s_b390d6ce53b276::t_a8359336cda4a8 21-24,239-244
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_18e6fadce36c54 72,123-127
+  s_b390d6ce53b276::t_cee6ce5dc6ed50 69-71
+  s_b390d6ce53b276::t_0b0bef773a76b6 1-38,48-68,76-119,131-134,136
+  s_b390d6ce53b276::t_30e721417be6fd 73-75,120-122
+  s_b390d6ce53b276::t_f9abc38a3d3cad 128-130
+  s_b390d6ce53b276::t_9648d0a0498527 135
+  s_b390d6ce53b276::t_b9e4c2bf199c4f 39-47
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_187434d406fe96 1-15,23-54,59-105,108-132,142-150,155-183,187-190,203-293
+  s_b390d6ce53b276::t_dcaed07ae46601 20-22,133-135
+  s_b390d6ce53b276::t_86a13664f38c96 151-153
+  s_b390d6ce53b276::t_07dc77f6640cca 200-202
+  s_b390d6ce53b276::t_b6a9d40eb664f5 16-18
+  s_b390d6ce53b276::t_110dd19f26018b 154
+  s_b390d6ce53b276::t_9f568d0edd787e 136-138
+  s_b390d6ce53b276::t_cc3d90c33b1b70 194-199
+  s_b390d6ce53b276::t_70bb884d7ab4dc 139-141,191-193
+  s_b390d6ce53b276::t_a66681ab4a2ff9 184-186
+  s_b390d6ce53b276::t_4400b93cb1fc51 19
+  s_b390d6ce53b276::t_813a6bdf9aeabf 55-58
+  s_b390d6ce53b276::t_45133581847735 106-107
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_7b0c74b58dd940 4,12-18,24,33-34,36,38,49,79-82,126-130,136-170,198-211,255-271
+server/internal/risk/fingerprint_test.go
+  s_b390d6ce53b276::t_2e600332a2d282 107-111,128,234
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_4c17f1d1bdf34d 219-221,240-242
+  s_b390d6ce53b276::t_9171dac18d3b77 279
+  s_b390d6ce53b276::t_40ba706d99c36f 325-327,334-336
+  s_b390d6ce53b276::t_cbd4ec2d82edfd 272-273
+  s_b390d6ce53b276::t_726dc130363f7f 294-296
+  s_b390d6ce53b276::t_4c06ae8fc5a794 363-365
+  s_b390d6ce53b276::t_acb0a08a824dee 126,151,218,243-271,274-278,280-281,293,297,301,305,315,323-324,337-339,341,361-362
+  s_b390d6ce53b276::t_3302f985f3f605 152-154,215-217
+  s_b390d6ce53b276::t_7a62c0bfa0ec5d 1-49,66-122,130-147,155-181,185,187-193,195-196,198-201,211-214,222-239,285-289,309-311,319,328-333,366-367
+  s_b390d6ce53b276::t_529317ba6b67c5 53-62
+  s_b390d6ce53b276::t_92bc8030cd8ed1 182-184,186
+  s_b390d6ce53b276::t_a71decd3eb7d6b 63-65,123-125
+  s_b390d6ce53b276::t_ecf7dd1fa10e63 302-304
+  s_b390d6ce53b276::t_9b55204bc72865 342-346,360
+  s_b390d6ce53b276::t_900686a709ed4a 347-359
+  s_b390d6ce53b276::t_d04dd5c828e46e 50-52
+  s_b390d6ce53b276::t_bac9f018eda5bf 194,197,202-210
+  s_b390d6ce53b276::t_c7d9516a96a904 298-300
+  s_b390d6ce53b276::t_88f639689701b5 282-284,290-292
+  s_b390d6ce53b276::t_ee197703400f7f 127-129,148-150
+  s_b390d6ce53b276::t_9da9b9442fc1df 306-308,312-314
+  s_b390d6ce53b276::t_c60c5311e5b039 316-318,320-322
+  s_b390d6ce53b276::t_0c915668251076 340
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_635da645c3e5d2 180-189,253
+server/internal/scanners/gitleaks/enforce_metrics.go
+  s_b390d6ce53b276::t_38fe1e842a5c69 18
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_c90d15147759d5 1-33
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_93d8f2f726f97c 91-93
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_b390d6ce53b276::t_8347a9e261e77d 85-103
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_32d1dc7266d21a 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2f50746c7ec767e1b486f6fd2165673a192bb0d1",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
