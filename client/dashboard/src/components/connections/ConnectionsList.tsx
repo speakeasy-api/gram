@@ -86,6 +86,7 @@ function useNow(): number {
 /** What a sub-row stands for, given what its parent row stands for. */
 const CHILD_OF: Record<ConnectionGrouping, "agent" | "person"> = {
   subject: "agent",
+  issuer: "person",
   provider: "person",
   client: "person",
 };
@@ -465,11 +466,15 @@ function ConnectionGroupRow({
             ) : grouping !== "provider" ? (
               // Said rather than left blank: reaching only native tools is a
               // real state, and an empty slot beside every other row's provider
-              // count reads as data we failed to load.
-              <span className="text-muted-foreground/70">
-                {" "}
-                · Speakeasy tools only
-              </span>
+              // count reads as data we failed to load. Short enough to survive
+              // the column, with the sentence in the tooltip — spelled out it
+              // truncated to "Speakeasy to…", which says nothing.
+              <SimpleTooltip tooltip="Reaches Speakeasy-native tools only — this session holds no upstream provider tokens.">
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  · no upstreams
+                </span>
+              </SimpleTooltip>
             ) : null}
           </span>
 
@@ -569,6 +574,7 @@ export function ConnectionsList({
   onRevoked,
   clients,
   project,
+  bordered = true,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -587,6 +593,12 @@ export function ConnectionsList({
    * the literal "default" and both the lookup and its refresh would miss.
    */
   project?: { slug: string; id: string };
+  /**
+   * Whether the table draws its own frame. Off for a caller that already
+   * encloses it — a panel with its own border and heading — where a second box
+   * inside the first reads as a table nested in a table.
+   */
+  bordered?: boolean;
 }): JSX.Element {
   const now = useNow();
   const { active, inactive } = useMemo(
@@ -616,7 +628,7 @@ export function ConnectionsList({
       {/* Header and rows share one box rather than the header floating above
           it: unenclosed, the column labels read as a caption hanging off the
           grouping control above them instead of as the top of this table. */}
-      <div className="border-border border">
+      <div className={cn(bordered && "border-border border")}>
         {/* Fixed to the body row's height rather than padded to approximate it:
             a group row is `py-2.5` around a `size-6` icon, so 44px. The header
             has no icon, so equal padding would leave it visibly shorter. */}

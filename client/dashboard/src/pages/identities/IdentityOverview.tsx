@@ -3,12 +3,12 @@ import {
   StatTileGroup,
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
-import { Text } from "@/components/ui/Text";
+import { ShareBar } from "@/components/chart/ShareBar";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { Info } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import {
   IdentityPanel,
@@ -27,7 +27,6 @@ import {
   useIdentityDevices,
   useIdentityMetrics,
   useIdentityPeers,
-  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -38,11 +37,7 @@ export default function IdentityOverview(): JSX.Element {
   const { identity, urn } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const location = useLocation();
-  const project = useIdentityProject();
-  // Project routes resolve against the project this page is filtered to: the
-  // page is org-level, so the router has no :projectSlug of its own to fill in
-  // and every handoff would otherwise resolve to a path with the slug missing.
-  const routes = useRoutes({ projectSlug: project.slug });
+  const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
@@ -100,6 +95,12 @@ export default function IdentityOverview(): JSX.Element {
     devicesQuery.isLoading ||
     peersPending;
 
+  // Which surfaces the work came through. Rides on the roster row, like the
+  // accounts below it — the per-user summary carries neither.
+  const platforms = [...(self?.hookSources ?? [])]
+    .filter((source) => source.source && source.eventCount > 0)
+    .sort((a, b) => b.eventCount - a.eventCount);
+
   // Personal-vs-team is recorded per linked account on the roster row; the
   // per-user summary does not carry accounts at all.
   const personalAccounts = (self?.accounts ?? []).filter(
@@ -122,7 +123,7 @@ export default function IdentityOverview(): JSX.Element {
         .map((c) => c.category)
         .join(", "),
       trailing: "Security",
-      href: orgRoutes.identities.detail.security.href(encodedUrn),
+      href: routes.identities.detail.security.href(encodedUrn),
     },
     personalAccounts.length > 0 && {
       key: "personal-account",
@@ -137,7 +138,7 @@ export default function IdentityOverview(): JSX.Element {
         .filter(Boolean)
         .join(", "),
       trailing: "Devices",
-      href: orgRoutes.identities.detail.devices.href(encodedUrn),
+      href: routes.identities.detail.devices.href(encodedUrn),
     },
     shadowServers.length > 0 && {
       key: "shadow",
@@ -146,7 +147,7 @@ export default function IdentityOverview(): JSX.Element {
       }`,
       detail: shadowServers[0]?.urlHost,
       trailing: "Security",
-      href: orgRoutes.identities.detail.security.href(encodedUrn),
+      href: routes.identities.detail.security.href(encodedUrn),
     },
     deniedChallenges.length > 0 && {
       key: "challenges",
@@ -158,7 +159,7 @@ export default function IdentityOverview(): JSX.Element {
         .map((c) => c.scope)
         .join(", "),
       trailing: "Access",
-      href: orgRoutes.identities.detail.access.href(encodedUrn),
+      href: routes.identities.detail.access.href(encodedUrn),
     },
     staleDevices.length > 0 && {
       key: "devices",
@@ -167,7 +168,7 @@ export default function IdentityOverview(): JSX.Element {
       } without an active agent`,
       detail: staleDevices[0]?.hostname ?? staleDevices[0]?.serialNumber,
       trailing: "Devices",
-      href: orgRoutes.identities.detail.devices.href(encodedUrn),
+      href: routes.identities.detail.devices.href(encodedUrn),
     },
   ];
   const attention = attentionCandidates.filter(
@@ -194,14 +195,6 @@ export default function IdentityOverview(): JSX.Element {
   return (
     <IdentitySection>
       <div className="flex flex-col gap-6">
-        <div className="text-muted-foreground flex items-start gap-2">
-          <Info className="mt-0.5 size-3.5 shrink-0" />
-          <Text variant="small" muted className="text-xs">
-            Each panel shows this identity&rsquo;s slice. Open in links lead to
-            the page that owns the data.
-          </Text>
-        </div>
-
         <IdentityPanel
           title="Needs attention"
           loading={attentionLoading}
@@ -293,6 +286,30 @@ export default function IdentityOverview(): JSX.Element {
             />
           )}
         </StatTileGroup>
+
+        {/* Which platforms someone works through, ahead of the activity
+            feeds: two people with the same tool count can be running one CLI
+            or juggling four, and that changes what the rest of the page
+            means. Usage carries the same reading beside its tool volumes. */}
+        {(peersPending || platforms.length > 0) && (
+          <IdentityPanel
+            title="Platforms"
+            handoffLabel="Usage"
+            handoffHref={routes.identities.detail.usage.href(encodedUrn)}
+            contentClassName="px-4 py-4"
+            loading={peersPending}
+            loadingVariant="block"
+          >
+            <ShareBar
+              segments={platforms.map((platform) => ({
+                key: platform.source,
+                label: formatPlatform(platform.source),
+                value: platform.eventCount,
+              }))}
+              ariaLabel="Share of activity by platform"
+            />
+          </IdentityPanel>
+        )}
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <IdentityPanel

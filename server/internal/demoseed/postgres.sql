@@ -489,12 +489,15 @@ BEGIN
       AND dg.organization_id = demo_org AND dg.name = demo_teams[i];
   END LOOP;
 
-  -- AI provider accounts (enrollment page Accounts column): everyone has a
-  -- team account under one shared fake provider org; mateo also carries a
-  -- personal account so the personal-account story has an example.
+  -- AI provider accounts (the identity pages' Accounts column and panel):
+  -- everyone has a team account under one shared fake provider org, and three
+  -- people also work through a personal one — the reading the personal-account
+  -- governance note exists for, and the state a single example made look like
+  -- an edge case rather than a pattern worth a filter.
   DELETE FROM user_accounts WHERE organization_id = demo_org;
   DELETE FROM device_owners WHERE organization_id = demo_org;
   DELETE FROM device_agent_syncs WHERE organization_id = demo_org;
+  DELETE FROM device_agent_device_syncs WHERE organization_id = demo_org;
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO user_accounts
       (organization_id, user_id, provider, external_org_id, external_account_uuid,
@@ -506,17 +509,111 @@ BEGIN
     INSERT INTO device_owners (organization_id, provider, device_id, linked_user_id)
     VALUES (demo_org, 'anthropic', 'demo-device-' || demo_user_ids[i], demo_user_ids[i]);
 
+    -- Agent heartbeats, split so coverage has more than one answer to give.
+    -- The first three reported minutes ago (agent_active); the contractor's
+    -- last check-in is six days old (agent_stale); the last two never
+    -- installed it (no_agent). A fleet where every row is the same colour
+    -- tells an admin nothing, which is the whole job of this page.
     IF i <= 4 THEN
       INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
-      VALUES (demo_org, demo_user_emails[i], now() - interval '9 days', now() - interval '3 hours');
+      VALUES (demo_org, demo_user_emails[i], now() - interval '9 days',
+              CASE WHEN i <= 3 THEN now() - interval '12 minutes'
+                   ELSE now() - interval '6 days' END);
     END IF;
   END LOOP;
+  -- Three personal accounts across two providers: a contractor on his own
+  -- Claude subscription, an engineer signed into Cursor personally, and a
+  -- manager whose second Claude login is not the team one. Spread across
+  -- providers because the column labels the provider, and one-provider data
+  -- makes that column look constant.
   INSERT INTO user_accounts
     (organization_id, user_id, provider, external_org_id, external_account_uuid,
      external_account_id, email, account_type, billing_mode)
-  VALUES (demo_org, 'user_demo_mateo', 'anthropic', 'demo-ext-org-personal',
-          'demo-acct-mateo-personal', 'user_demo_mateo_personal',
-          'mateo.alvarez@personal.example', 'personal', 'flat_rate');
+  VALUES
+    (demo_org, 'user_demo_mateo', 'anthropic', 'demo-ext-org-personal',
+     'demo-acct-mateo-personal', 'user_demo_mateo_personal',
+     'mateo.alvarez@personal.example', 'personal', 'flat_rate'),
+    (demo_org, 'user_demo_priya', 'cursor', 'demo-ext-org-personal',
+     'demo-acct-priya-personal', 'user_demo_priya_personal',
+     'priya.raman@personal.example', 'personal', 'flat_rate'),
+    (demo_org, 'user_demo_lucas', 'anthropic', 'demo-ext-org-personal',
+     'demo-acct-lucas-personal', 'user_demo_lucas_personal',
+     'lucas.meyer@personal.example', 'personal', 'flat_rate');
+
+  -- MDM inventory (the identity Accounts & devices tab, and the device
+  -- coverage widgets). One Jamf-shaped integration holding the fleet: mostly
+  -- MacBooks, one Windows laptop, and deliberate gaps — a machine whose agent
+  -- has gone quiet, one with no agent at all, and one assigned to an address
+  -- that resolves to nobody. Coverage exists to surface exactly those, and a
+  -- fleet where every row is healthy shows the reader nothing.
+  DELETE FROM mdm_devices WHERE organization_id = demo_org;
+  DELETE FROM device_integration_configs WHERE organization_id = demo_org;
+
+  INSERT INTO device_integration_configs
+    (id, organization_id, provider, credentials_encrypted, settings, enabled)
+  VALUES (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'jamf',
+          'DEMO-ENCRYPTED-CREDENTIAL-NOT-A-SECRET',
+          '{"instance_url": "https://acme-demo.jamfcloud.example"}'::jsonb, TRUE);
+
+  -- user_id is resolved here rather than left to a sync: the seed knows the
+  -- member each address belongs to, and a NULL would put every device in the
+  -- unresolved bucket.
+  INSERT INTO mdm_devices
+    (device_integration_config_id, organization_id, external_id, serial_number,
+     hostname, os_name, os_version, user_email, user_id, mdm_last_check_in_at,
+     first_seen_at, last_seen_at, missing_since)
+  VALUES
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-1',
+     'C02DEMO0001', 'amara-mbp', 'macOS', '15.3', 'amara@demo.getgram.ai',
+     'user_demo_amara', now() - interval '2 hours',
+     now() - interval '11 days', now() - interval '2 hours', NULL),
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-2',
+     'C02DEMO0002', 'jonas-mbp', 'macOS', '15.2', 'jonas@demo.getgram.ai',
+     'user_demo_jonas', now() - interval '5 hours',
+     now() - interval '11 days', now() - interval '5 hours', NULL),
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-3',
+     'C02DEMO0003', 'priya-mbp', 'macOS', '14.7', 'priya@demo.getgram.ai',
+     'user_demo_priya', now() - interval '1 day',
+     now() - interval '11 days', now() - interval '1 day', NULL),
+    -- The contractor's machine: enrolled, but the agent stopped reporting.
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-4',
+     'C02DEMO0004', 'mateo-mbp', 'macOS', '14.6', 'mateo@demo.getgram.ai',
+     'user_demo_mateo', now() - interval '6 days',
+     now() - interval '11 days', now() - interval '6 days', NULL),
+    -- The one Windows machine, and one of the two with no agent at all.
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-5',
+     'WINDEMO0005', 'HANA-WIN11', 'Windows', '11 23H2', 'hana@demo.getgram.ai',
+     'user_demo_hana', now() - interval '8 hours',
+     now() - interval '11 days', now() - interval '8 hours', NULL),
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-6',
+     'C02DEMO0006', 'lucas-mbp', 'macOS', '15.3', 'lucas@demo.getgram.ai',
+     'user_demo_lucas', now() - interval '3 hours',
+     now() - interval '11 days', now() - interval '3 hours', NULL),
+    -- A spare laptop the MDM reports against an address no member holds: the
+    -- unresolved-email bucket, which is a real state and not an error.
+    (demo.det_uuid('gram-demo-mdm-config-jamf'), demo_org, 'gram-demo-mdm-7',
+     'C02DEMO0007', 'acme-spare-01', 'macOS', '14.4',
+     'contractor.pool@demo.getgram.ai', NULL, now() - interval '4 days',
+     now() - interval '11 days', now() - interval '4 days', NULL);
+
+  -- Device-level heartbeats, keyed on the serial the MDM reports. Coverage
+  -- prefers this branch over the email one: a machine's own agent answers for
+  -- that machine, where an email heartbeat only says its owner is running an
+  -- agent somewhere. With none of these rows the fleet could never read
+  -- better than "an agent exists for this person", which is the weaker claim
+  -- the page exists to stop an admin making.
+  INSERT INTO device_agent_device_syncs
+    (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+  VALUES
+    (demo_org, 'C02DEMO0001', 'amara@demo.getgram.ai', 'amara-mbp',
+     now() - interval '11 days', now() - interval '12 minutes'),
+    (demo_org, 'C02DEMO0002', 'jonas@demo.getgram.ai', 'jonas-mbp',
+     now() - interval '11 days', now() - interval '25 minutes'),
+    (demo_org, 'C02DEMO0003', 'priya@demo.getgram.ai', 'priya-mbp',
+     now() - interval '11 days', now() - interval '5 minutes'),
+    -- Installed, then went quiet: the drift case, and the row worth chasing.
+    (demo_org, 'C02DEMO0004', 'mateo@demo.getgram.ai', 'mateo-mbp',
+     now() - interval '11 days', now() - interval '6 days');
 
   -- Enterprise billing contract: without a contracted TUM baseline the
   -- Billing page's Platform+Overage estimate shows "Requires a contracted
@@ -753,6 +850,75 @@ BEGIN
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+
+  -- Live connections spread across the MCP servers, not pooled on one issuer.
+  -- The identity page's connections tab groups by MCP server, and every
+  -- session hanging off the partner gateway collapsed that view to a single
+  -- row — the one shape that makes a grouping control look broken. Each
+  -- person also gets at least one, so no one's tab reads "no connections"
+  -- while their usage panels show a week of traffic.
+  INSERT INTO user_session_clients
+    (id, project_id, user_session_issuer_id, client_id, client_secret_hash,
+     client_name, redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+  VALUES
+    (demo.det_uuid('gram-demo-usc-linear'), proj_a,
+     demo.det_uuid('gram-demo-issuer-linear'), 'gram_demo_client_linear', NULL,
+     'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
+     now() - interval '10 days', 'none'),
+    (demo.det_uuid('gram-demo-usc-slack'), proj_a,
+     demo.det_uuid('gram-demo-issuer-slack'), 'gram_demo_client_slack', NULL,
+     'Cursor', ARRAY['http://127.0.0.1:41294/callback'],
+     now() - interval '8 days', 'none'),
+    (demo.det_uuid('gram-demo-usc-gateway'), proj_a,
+     demo.det_uuid('gram-demo-issuer-gateway'), 'gram_demo_client_gateway', NULL,
+     'Claude Desktop', ARRAY['http://127.0.0.1:41295/callback'],
+     now() - interval '13 days', 'none');
+
+  INSERT INTO user_sessions
+    (id, project_id, user_session_issuer_id, user_session_client_id, subject_urn,
+     jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at,
+     created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-user-session-6'), proj_a,
+     demo.det_uuid('gram-demo-issuer-linear'), demo.det_uuid('gram-demo-usc-linear'),
+     'user:' || demo_user_ids[1], 'demo-jti-6',
+     demo.det_uuid('gram-demo-user-session-refresh-6')::text,
+     now() + interval '11 days', now() + interval '6 hours',
+     now() - interval '40 minutes', now() - interval '10 days'),
+    (demo.det_uuid('gram-demo-user-session-7'), proj_a,
+     demo.det_uuid('gram-demo-issuer-linear'), demo.det_uuid('gram-demo-usc-linear'),
+     'user:' || demo_user_ids[3], 'demo-jti-7',
+     demo.det_uuid('gram-demo-user-session-refresh-7')::text,
+     now() + interval '9 days', now() + interval '4 hours',
+     now() - interval '3 hours', now() - interval '9 days'),
+    (demo.det_uuid('gram-demo-user-session-8'), proj_a,
+     demo.det_uuid('gram-demo-issuer-slack'), demo.det_uuid('gram-demo-usc-slack'),
+     'user:' || demo_user_ids[2], 'demo-jti-8',
+     demo.det_uuid('gram-demo-user-session-refresh-8')::text,
+     now() + interval '12 days', now() + interval '9 hours',
+     now() - interval '1 hour', now() - interval '8 days'),
+    (demo.det_uuid('gram-demo-user-session-9'), proj_a,
+     demo.det_uuid('gram-demo-issuer-slack'), demo.det_uuid('gram-demo-usc-slack'),
+     'user:' || demo_user_ids[5], 'demo-jti-9',
+     demo.det_uuid('gram-demo-user-session-refresh-9')::text,
+     now() + interval '10 days', now() + interval '2 hours',
+     now() - interval '20 hours', now() - interval '7 days'),
+    -- The engineering manager reaches everything through the gateway, which
+    -- is the whole point of a meta server; without this he was the one person
+    -- with no connection at all.
+    (demo.det_uuid('gram-demo-user-session-10'), proj_a,
+     demo.det_uuid('gram-demo-issuer-gateway'), demo.det_uuid('gram-demo-usc-gateway'),
+     'user:' || demo_user_ids[6], 'demo-jti-10',
+     demo.det_uuid('gram-demo-user-session-refresh-10')::text,
+     now() + interval '13 days', now() + interval '7 hours',
+     now() - interval '2 hours', now() - interval '13 days'),
+    (demo.det_uuid('gram-demo-user-session-11'), proj_a,
+     demo.det_uuid('gram-demo-issuer-gateway'), demo.det_uuid('gram-demo-usc-gateway'),
+     'user:' || demo_user_ids[4], 'demo-jti-11',
+     demo.det_uuid('gram-demo-user-session-refresh-11')::text,
+     now() + interval '5 days', now() + interval '1 hour',
+     now() - interval '5 hours', now() - interval '12 days');
+
 
   ------------------------------------------------------------------
   -- Killswitches. Six stable aggregates exercise every customer status and
@@ -2090,9 +2256,37 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     UNION ALL
     SELECT 1 FROM directory_users
     WHERE organization_id = demo_org AND user_id NOT LIKE 'user\_demo\_%'
+    UNION ALL
+    -- A device may legitimately resolve to nobody (the unresolved-email
+    -- bucket); one that resolves to somebody must resolve to the roster.
+    SELECT 1 FROM mdm_devices
+    WHERE organization_id = demo_org AND user_id IS NOT NULL
+      AND user_id NOT LIKE 'user\_demo\_%'
   ) x;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo users', stray;
+  END IF;
+
+  -- The MDM fleet: seven devices under one integration. Counted because the
+  -- coverage buckets are the point — a rerun that dropped the unresolved or
+  -- agentless rows would leave the widgets showing a uniformly healthy fleet.
+  SELECT count(*) INTO stray FROM mdm_devices WHERE organization_id = demo_org;
+  IF stray <> 7 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 7 mdm devices, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM device_integration_configs
+  WHERE organization_id = demo_org AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 device integration config, found %', stray;
+  END IF;
+
+  -- Personal accounts are the reading the governance note exists for; one
+  -- surviving row would make the pattern look like an edge case.
+  SELECT count(*) INTO stray FROM user_accounts
+  WHERE organization_id = demo_org AND account_type = 'personal';
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 personal accounts, found %', stray;
   END IF;
 
   -- The seed never creates API keys: any row left here was minted by a demo
@@ -2116,14 +2310,33 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM user_session_clients
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 registered agents, found %', stray;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 MCP connections, found %', stray;
+  IF stray <> 11 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 11 MCP connections, found %', stray;
+  END IF;
+
+  -- Spread across servers, not pooled on one: the connections tab groups by
+  -- MCP server, and a single group makes that view look broken.
+  SELECT count(DISTINCT user_session_issuer_id) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: connections span % MCP servers, expected 4', stray;
+  END IF;
+
+  -- Everyone holds one. A person whose usage panels show a week of traffic
+  -- beside an empty connections tab reads as a broken join.
+  SELECT count(*) INTO stray FROM unnest(demo_user_ids) AS u(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM user_sessions s
+    WHERE s.project_id = proj_a AND s.deleted IS FALSE
+      AND s.subject_urn = 'user:' || u.id);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % demo users hold no MCP connection', stray;
   END IF;
 
   -- Every seeded connection hangs off a registration. One with none would be

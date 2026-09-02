@@ -248,7 +248,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText(/Speakeasy tools only/)).toBeDefined();
+    expect(screen.getByText(/no upstreams/)).toBeDefined();
   });
 
   it("groups connections by person and can regroup by provider", () => {

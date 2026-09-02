@@ -1,7 +1,19 @@
 import {
   buildEmployees,
   type Employee,
+  type EmployeeAccount,
 } from "@/components/observe/insightsEmployeesData";
+import { AccountRow } from "@/components/observe/account-display";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+import { Icon } from "@/components/ui/Icon";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { cn } from "@/lib/utils";
+import { Info } from "lucide-react";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
 import { useOrganization } from "@/contexts/Auth";
@@ -16,7 +28,7 @@ import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -44,35 +56,21 @@ export function IdentitiesRoot(): JSX.Element {
 }
 
 /**
- * The project-level Employee Enrollment index moved to the org-level Identities
- * list. Existing links land here and are sent on.
- */
-/**
  * The bare detail URL has no content of its own — every panel lives on a tab —
  * so send it to the overview rather than render a header over an empty pane.
  * Hand-typed and truncated links land here.
  */
 export function IdentityDetailIndexRedirect(): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
   const { identityUrn = "" } = useParams<{ identityUrn: string }>();
   return (
     <Navigate
-      to={`${orgRoutes.identities.detail.overview.href(
+      to={`${routes.identities.detail.overview.href(
         encodeIdentityUrn(identityUrn),
       )}${location.search}`}
       replace
     />
-  );
-}
-
-export function IdentitiesIndexRedirect(): JSX.Element {
-  const orgRoutes = useOrgRoutes();
-  const location = useLocation();
-  // Carry the query string: a link from a dashboard widget picks the window,
-  // and dropping it lands the reader on a different period than they chose.
-  return (
-    <Navigate to={`${orgRoutes.identities.href()}${location.search}`} replace />
   );
 }
 
@@ -88,7 +86,19 @@ const IDENTITY_FILTERS = defineFilters([
     pinned: true,
     description: "People and agents.",
   },
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
+  },
 ]);
+
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "personal", label: "Personal" },
+  { value: "team", label: "Team" },
+];
 
 const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
   value: kind,
@@ -153,16 +163,33 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
     ),
   },
   {
+    key: "accounts",
+    header: (
+      <span className="flex items-center gap-1">
+        Accounts
+        <SimpleTooltip
+          tooltip={`The AI provider accounts (Claude, Codex, Cursor) each identity has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an identity is seen using a recognized account. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`}
+        >
+          <Info className="text-muted-foreground size-3 shrink-0" />
+        </SimpleTooltip>
+      </span>
+    ),
+    width: "1fr",
+    sortable: true,
+    sortLabel: "Accounts",
+    // Personal-holders first (ascending), then more accounts before fewer, so
+    // the rows worth a second look group at the top.
+    sortValue: (identity) =>
+      (identity.hasPersonalAccount ? 0 : 1_000_000) - identity.accounts.length,
+    render: (identity) => <AccountsCell identity={identity} />,
+  },
+  {
     key: "lastActivity",
     header: "Last activity",
     width: "200px",
     sortable: true,
     sortValue: (identity) => identity.lastActivityTimestamp ?? 0,
-    render: (identity) => (
-      <Text muted small className="truncate">
-        {identity.lastActivity}
-      </Text>
-    ),
+    render: (identity) => <LastActivityCell identity={identity} />,
   },
   {
     key: "tokens",
@@ -180,7 +207,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
 
 export default function IdentitiesIndex(): JSX.Element {
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
+    <RequireScope scope={["project:read"]} level="page">
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs />
@@ -194,7 +221,7 @@ export default function IdentitiesIndex(): JSX.Element {
 }
 
 function IdentitiesIndexContent(): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const organization = useOrganization();
   const projectSlug = useProjectSlugForRequests();
   const navigate = useNavigate();
@@ -251,6 +278,7 @@ function IdentitiesIndexContent(): JSX.Element {
   // Joined rather than held as an array: the filter state hands back a fresh
   // array each render, which would defeat the memo below.
   const kindKey = (values.kind ?? []).join(",");
+  const accountType = (values.account_type as string | undefined) ?? "";
   const rows = useMemo(() => {
     const selectedKinds = kindKey ? kindKey.split(",") : [];
     const query = search.trim().toLowerCase();
@@ -261,13 +289,22 @@ function IdentitiesIndexContent(): JSX.Element {
       ) {
         return false;
       }
+      // Each value matches an identity holding at least one account of that
+      // type; someone with both a team and a personal account shows under
+      // either.
+      if (
+        accountType &&
+        !identity.accounts.some((a) => a.accountType === accountType)
+      ) {
+        return false;
+      }
       if (!query) return true;
       return (
         identity.name.toLowerCase().includes(query) ||
         identity.email.toLowerCase().includes(query)
       );
     });
-  }, [identities, search, kindKey]);
+  }, [identities, search, kindKey, accountType]);
 
   const sortedRows = useMemo(
     () => sortTableData(rows, IDENTITY_COLUMNS, sort) as Employee[],
@@ -278,7 +315,7 @@ function IdentitiesIndexContent(): JSX.Element {
   // something they have not seen page one of.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, kindKey, sort]);
+  }, [search, kindKey, accountType, sort]);
 
   return (
     <Page.Section>
@@ -328,7 +365,10 @@ function IdentitiesIndexContent(): JSX.Element {
           <Page.Toolbar.Filters
             schema={IDENTITY_FILTERS}
             values={values}
-            optionsById={{ kind: KIND_OPTIONS }}
+            optionsById={{
+              kind: KIND_OPTIONS,
+              account_type: ACCOUNT_TYPE_OPTIONS,
+            }}
             onChange={setValue as (id: string, value: unknown) => void}
             onClear={clearValue as (id: string) => void}
             onClearAll={clearAll}
@@ -346,7 +386,7 @@ function IdentitiesIndexContent(): JSX.Element {
           rowKey={(row) => row.id}
           onRowClick={(row) =>
             void navigate(
-              orgRoutes.identities.detail.overview.href(
+              routes.identities.detail.overview.href(
                 encodeIdentityUrn(identityUrnForEmployee(row)),
               ),
             )
@@ -355,6 +395,103 @@ function IdentitiesIndexContent(): JSX.Element {
         />
       </Page.Section.Body>
     </Page.Section>
+  );
+}
+
+/**
+ * When the directory knows which account produced the most recent activity,
+ * the timestamp names it — the workspace this identity was last working in.
+ * Plain text otherwise.
+ */
+function LastActivityCell({ identity }: { identity: Employee }): JSX.Element {
+  if (!identity.mostRecentAccount) {
+    return (
+      <Text muted small className="truncate">
+        {identity.lastActivity}
+      </Text>
+    );
+  }
+
+  return (
+    <AccountsPopover
+      label={identity.lastActivity}
+      labelClassName="text-xs"
+      title="Most recent account"
+      accounts={[identity.mostRecentAccount]}
+    />
+  );
+}
+
+/**
+ * The linked accounts behind one row: a count that opens the list, because the
+ * addresses themselves are too long to sit in a column and the question a
+ * reader has here is "how many, and are any personal".
+ */
+function AccountsCell({ identity }: { identity: Employee }): JSX.Element {
+  const { accounts } = identity;
+  if (accounts.length === 0) {
+    return <span className="text-muted-foreground/50 text-sm">&mdash;</span>;
+  }
+
+  return (
+    <AccountsPopover
+      label={`${accounts.length} account${accounts.length === 1 ? "" : "s"}`}
+      labelClassName="text-xs"
+      title="Linked accounts"
+      accounts={accounts}
+    />
+  );
+}
+
+/**
+ * The popover shell both account cells use: a trigger that says how many, and
+ * a list naming each one with its provider and team/personal label.
+ */
+function AccountsPopover({
+  label,
+  labelClassName,
+  title,
+  accounts,
+}: {
+  label: string;
+  labelClassName?: string;
+  title: string;
+  accounts: EmployeeAccount[];
+}): JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          // The row navigates on click; opening the popover is not that.
+          onClick={(event) => event.stopPropagation()}
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 px-1.5 py-1 transition-colors"
+        >
+          <span className={cn("text-muted-foreground", labelClassName)}>
+            {label}
+          </span>
+          <Icon
+            name="chevron-down"
+            className="text-muted-foreground/60 size-3"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-xs font-medium">{title}</p>
+        </div>
+        <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
+          {accounts.map((account, index) => (
+            <li
+              key={`${account.provider}:${account.email}:${index}`}
+              className="px-3 py-2"
+            >
+              <AccountRow account={account} />
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -372,12 +509,11 @@ function personInitials(name: string): string {
 /**
  * The leading cell. Every person reads as a person — photo or initials, name in
  * the same weight — and only an agent gets a different face, because a bare id
- * it chose for itself may name no one. Whether a person is linked to an account
- * here is said beside the name, not by drawing them differently.
+ * it chose for itself may name no one. Whether they hold a linked account is
+ * the Accounts column's job, which says it once and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
   const isAgent = identityKindOf(identity) === "agent";
-  const hasAccount = identityHasAccount(identity);
   // A person with no member row has only their address, which is already the
   // name; repeating it underneath would be noise.
   const secondary = identity.email === identity.name ? "" : identity.email;
@@ -405,9 +541,6 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
               {identity.name}
             </IdentityLink>
           </Text>
-          {!isAgent && !hasAccount && (
-            <Badge variant="neutral">No linked account</Badge>
-          )}
         </div>
         {secondary && (
           <Text muted small className="truncate text-xs">

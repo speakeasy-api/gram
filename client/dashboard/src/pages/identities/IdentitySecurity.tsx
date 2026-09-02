@@ -21,7 +21,6 @@ import {
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityMember,
-  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -34,11 +33,7 @@ export default function IdentitySecurity(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const location = useLocation();
-  const project = useIdentityProject();
-  // Project routes resolve against the project this page is filtered to: the
-  // page is org-level, so the router has no :projectSlug of its own to fill in
-  // and every handoff would otherwise resolve to a path with the slug missing.
-  const routes = useRoutes({ projectSlug: project.slug });
+  const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   const { member } = useIdentityMember(identity);
   const handoffs = identityHandoffs(

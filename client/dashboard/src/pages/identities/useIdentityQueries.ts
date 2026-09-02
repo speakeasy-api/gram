@@ -7,7 +7,6 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { fetchIdentityPeers, identityPeersQueryKey } from "./identityPeers";
 
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
-import { useSearchParams } from "react-router";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
@@ -36,48 +35,13 @@ export function useIdentityWindow(): { from: Date; to: Date } {
 /**
  * The project the telemetry panels read.
  *
- * The page is org-level, but usage, chats, cost and risk are recorded per
- * project, so the project is a filter here rather than a route segment. It
- * lives in the URL so a link carries the slice the sender was looking at, and
- * falls back to the project the reader most recently worked in.
+ * The page lives under a project, so this is the route's project rather than a
+ * filter of its own. Usage, chats, cost and risk are all recorded per project,
+ * and the segment in the address is what says which slice is on screen.
  */
-export function useIdentityProject(): {
-  slug: string;
-  id: string;
-  setSlug: (slug: string) => void;
-  options: { slug: string; name: string }[];
-} {
-  const organization = useOrganization();
-  const currentProject = useProject();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const options = organization.projects.map((project) => ({
-    slug: project.slug,
-    name: project.name,
-  }));
-  const fromUrl = searchParams.get("project");
-  const slug =
-    (fromUrl && options.some((option) => option.slug === fromUrl)
-      ? fromUrl
-      : "") ||
-    currentProject.slug ||
-    options[0]?.slug ||
-    "";
-
-  return {
-    slug,
-    id:
-      organization.projects.find((project) => project.slug === slug)?.id ?? "",
-    options,
-    setSlug: (next) =>
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.set("project", next);
-          return params;
-        },
-        { replace: true },
-      ),
-  };
+export function useIdentityProject(): { slug: string; id: string } {
+  const project = useProject();
+  return { slug: project.slug, id: project.id };
 }
 
 /**

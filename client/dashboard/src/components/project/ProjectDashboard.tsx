@@ -599,7 +599,7 @@ export function ProjectDashboard(): JSX.Element {
                         }
                       />
                       <ViewAllLink
-                        to={withRange(routes.employees.href(), {
+                        to={withRange(routes.identities.href(), {
                           sort: "tokenCount:desc",
                         })}
                       />

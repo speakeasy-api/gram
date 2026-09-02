@@ -99,7 +99,6 @@ export function OrgSidebar({
   ].some((r) => r.active);
 
   const identityActive = [
-    orgRoutes.identities,
     orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
@@ -125,7 +124,6 @@ export function OrgSidebar({
 
   const allOrgNavRoutes = [
     orgRoutes.home,
-    orgRoutes.identities,
     orgRoutes.team,
     orgRoutes.billing,
     orgRoutes.apiKeys,
@@ -256,9 +254,6 @@ export function OrgSidebar({
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
-                  // First in the group: an identity is the subject the rest of
-                  // this section is about.
-                  { item: orgRoutes.identities, scope: orgReadOrAdmin },
                   ...(isUserSessionsEnabled
                     ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),

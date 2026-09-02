@@ -5,7 +5,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useOrgRoutes, useRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
@@ -411,7 +411,7 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
  * — far too heavy for a surface that has to answer on every keystroke.
  */
 function PeopleGroup({ onNavigate }: GroupProps) {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { data } = useMembersSuspense();
   const members = data?.members ?? [];
   if (!members.length) return null;
@@ -425,7 +425,7 @@ function PeopleGroup({ onNavigate }: GroupProps) {
           sublabel={member.email}
           icon="user"
           onSelect={() => {
-            orgRoutes.identities.detail.overview.goTo(
+            routes.identities.detail.overview.goTo(
               encodeIdentityUrn(`user:${member.id}`),
             );
             onNavigate();

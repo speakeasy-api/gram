@@ -775,10 +775,19 @@ FROM (
   FROM numbers(180)
 );
 
--- Authz challenges (org home "Recent challenges" panel + /access/challenges).
+-- Authz challenges (org home "Recent challenges" panel, /access/challenges, and
+-- the per-identity Access and Security tabs).
+--
 -- user_id values are demo members (organization_user_relationships rows exist,
 -- so the member-suppression filter keeps them visible); one api_key bucket
 -- stays visible regardless of membership.
+--
+-- The subject and the scope are drawn from DIFFERENT hashes on purpose. Keying
+-- both off `number % 3` locked each person to a single scope forever, so every
+-- identity's Access tab listed one action repeated N times and the whole panel
+-- read as a stuck query. Outcomes are mixed for the same reason: a log that is
+-- 100% denials says nothing about which denials matter, and the donut on the
+-- Access tab has only one segment to draw.
 INSERT INTO authz_challenges
   (timestamp, organization_id, project_id, trace_id, span_id, request_id,
    principal_urn, principal_type, user_id, user_email, api_key_id,
@@ -796,34 +805,56 @@ SELECT
   lower(hex(MD5(concat('gram-demo-chal-', toString(number))))),
   substring(lower(hex(MD5(concat('gram-demo-chalspan-', toString(number))))), 1, 16),
   concat('req_', substring(lower(hex(MD5(concat('gram-demo-chalreq-', toString(number))))), 1, 16)),
-  if(number % 5 = 4, 'api_key:akey_demo0000000001',
-     concat('user:', arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3)))),
-  if(number % 5 = 4, 'api_key', 'user'),
-  if(number % 5 = 4, NULL,
-     arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3))),
-  if(number % 5 = 4, NULL,
-     arrayElement(['jonas@demo.getgram.ai', 'priya@demo.getgram.ai', 'hana@demo.getgram.ai'], 1 + (number % 3))),
-  if(number % 5 = 4, 'akey_demo0000000001', NULL),
+  if(number % 7 = 6, 'api_key:akey_demo0000000001',
+     concat('user:', arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                                  1 + toUInt32(cityHash64('chal-user', number) % 6)))),
+  if(number % 7 = 6, 'api_key', 'user'),
+  if(number % 7 = 6, NULL,
+     arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, NULL,
+     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, 'akey_demo0000000001', NULL),
   [],
   'require',
-  'deny',
-  if(number % 2 = 0, 'scope_unsatisfied', 'no_grants'),
-  arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3)),
-  arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3)),
+  -- Roughly one in three is refused: enough denials to be worth reading,
+  -- not so many that the org looks locked out of its own tools.
+  if(cityHash64('chal-outcome', number) % 3 = 0, 'deny', 'allow'),
+  -- reason is a closed enum on the wire: an allow that carries an empty
+  -- reason fails response validation and the client discards the whole page,
+  -- which reads in the UI as "no authorization checks recorded".
+  if(cityHash64('chal-outcome', number) % 3 <> 0, 'grant_matched',
+     if(number % 2 = 0, 'scope_unsatisfied', 'no_grants')),
+  arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
+  arrayElement(['toolset', 'project', 'environment',
+                'environment', 'mcp', 'skill', 'chat'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
   arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                 'dec0de00-0000-4000-a000-000000000001',
                 'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3)),
   '{"project":"dec0de00-0000-4000-a000-000000000001"}',
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset', 'project', 'environment',
+                 'environment', 'mcp', 'skill', 'chat'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
   [arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                  'dec0de00-0000-4000-a000-000000000001',
                  'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3))],
   ['{"project":"dec0de00-0000-4000-a000-000000000001"}'],
   [], [], [], [],
   toUInt32(3 + number % 5)
-FROM numbers(13);
+FROM numbers(64);
 
 -- Risk findings mirror (the ClickHouse read path behind the risk overview,
 -- the Risk Events listing and the Watchdog): one row per Postgres finding,

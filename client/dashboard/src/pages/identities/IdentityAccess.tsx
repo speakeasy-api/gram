@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -10,13 +11,11 @@ import {
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
-import { Badge } from "@/components/ui/Badge";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityChallenges,
   useIdentityMember,
-  useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
 
@@ -24,11 +23,7 @@ const RECENT_CHALLENGES = 5;
 
 export default function IdentityAccess(): JSX.Element {
   const location = useLocation();
-  const project = useIdentityProject();
-  // Project routes resolve against the project this page is filtered to: the
-  // page is org-level, so the router has no :projectSlug of its own to fill in
-  // and every handoff would otherwise resolve to a path with the slug missing.
-  const routes = useRoutes({ projectSlug: project.slug });
+  const routes = useRoutes();
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const orgRoutes = useOrgRoutes();
@@ -55,7 +50,7 @@ export default function IdentityAccess(): JSX.Element {
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
   );
   const roles = (member?.roleIds ?? []).map(
-    (id) => rolesById.get(id) ?? { id, name: id, slug: id },
+    (id) => rolesById.get(id) ?? { id, name: id, slug: id, description: "" },
   );
   // A scope slug is "<family>:<action>" (org:read, chat:read). Grouping by
   // family turns a flat list of twenty slugs into the handful of areas this
@@ -89,7 +84,7 @@ export default function IdentityAccess(): JSX.Element {
         { count: denied.length, singular: "denied", plural: "denied" },
       ])}
     >
-      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
           title="Roles"
           handoffLabel="Roles & Permissions"
@@ -105,15 +100,26 @@ export default function IdentityAccess(): JSX.Element {
               No roles assigned in this organization.
             </IdentityPanelEmpty>
           ) : (
-            <ul className="flex flex-wrap gap-2 px-4 py-4">
-              {roles.map((role) => (
-                <li key={role.id}>
+            // A row each, laid out like the permissions beside it: the badge
+            // holds the left column and what the role is for runs alongside
+            // it. As badges alone they were three words in a corner of an
+            // otherwise empty card, and said nothing about what holding one
+            // means.
+            roles.map((role) => (
+              <div
+                key={role.id}
+                className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0"
+              >
+                <span className="w-28 shrink-0">
                   <Badge variant="neutral" title={role.slug}>
                     {role.name}
                   </Badge>
-                </li>
-              ))}
-            </ul>
+                </span>
+                <span className="text-muted-foreground min-w-0 flex-1 text-xs">
+                  {role.description || role.slug}
+                </span>
+              </div>
+            ))
           )}
         </IdentityPanel>
 
