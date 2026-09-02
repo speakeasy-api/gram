@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -26,6 +27,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +46,7 @@ func (s *Service) mirrorToolset(ctx context.Context, dbtx pgx.Tx, authCtx *conte
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		deadDomains, err := s.lockLiveCustomDomains(ctx, dbtx, []uuid.NullUUID{toolset.CustomDomainID})
+		deadDomains, err := s.lockLiveCustomDomains(ctx, dbtx, toolset.OrganizationID, []uuid.NullUUID{toolset.CustomDomainID})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 		}
@@ -88,7 +90,7 @@ func (s *Service) mirrorToolset(ctx context.Context, dbtx pgx.Tx, authCtx *conte
 	if primary := mcpendpoints.PrimaryEndpoint(endpoints); primary != nil {
 		domainIDs = append(domainIDs, primary.CustomDomainID)
 	}
-	deadDomains, err := s.lockLiveCustomDomains(ctx, dbtx, domainIDs)
+	deadDomains, err := s.lockLiveCustomDomains(ctx, dbtx, toolset.OrganizationID, domainIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 	}
@@ -126,12 +128,13 @@ func (s *Service) mirrorToolset(ctx context.Context, dbtx pgx.Tx, authCtx *conte
 	return append(cleared, more...), nil
 }
 
-// lockLiveCustomDomains locks the given domains in id order and reports the
-// ones that no longer exist, which an address projection must skip.
-func (s *Service) lockLiveCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.NullUUID) (map[uuid.UUID]bool, error) {
+// lockLiveCustomDomains locks the given domains in id order, scoped to the
+// owning organization, and reports the ones that are gone or foreign, which
+// an address projection must skip.
+func (s *Service) lockLiveCustomDomains(ctx context.Context, dbtx pgx.Tx, organizationID string, domainIDs []uuid.NullUUID) (map[uuid.UUID]bool, error) {
 	dead := map[uuid.UUID]bool{}
 	for _, id := range mcpendpoints.UniqueIDs(domainIDs...) {
-		if _, err := s.domainsRepo.WithTx(dbtx).LockCustomDomainByID(ctx, id); err != nil {
+		if _, err := s.domainsRepo.WithTx(dbtx).LockCustomDomainByIDAndOrganization(ctx, domainsRepo.LockCustomDomainByIDAndOrganizationParams{ID: id, OrganizationID: organizationID}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				dead[id] = true
 				continue
@@ -149,7 +152,10 @@ func (s *Service) reconcileWrapper(ctx context.Context, dbtx pgx.Tx, logger *slo
 	var cleared []uuid.UUID
 
 	var name *string
-	if syncName && conv.FromPGTextOrEmpty[string](current.Name) != toolset.Name && len(toolset.Name) <= 256 && !strings.ContainsAny(toolset.Name, "\r\n") {
+	if syncName && conv.FromPGTextOrEmpty[string](current.Name) != toolset.Name {
+		if len(toolset.Name) > 256 || strings.ContainsAny(toolset.Name, "\r\n") {
+			return current, nil, oops.E(oops.CodeInvalid, nil, "toolset name must be at most 256 characters on one line").LogWarn(ctx, logger)
+		}
 		name = &toolset.Name
 	}
 	if name != nil || current.Visibility != wantVisibility || current.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
@@ -185,6 +191,7 @@ func (s *Service) reconcileWrapper(ctx context.Context, dbtx pgx.Tx, logger *slo
 	}
 
 	if current.UserSessionIssuerID != toolset.UserSessionIssuerID {
+		previousIssuer := current.UserSessionIssuerID
 		updated, err := mcpserversrepo.New(dbtx).SetMCPServerUserSessionIssuer(ctx, mcpserversrepo.SetMCPServerUserSessionIssuerParams{
 			UserSessionIssuerID: toolset.UserSessionIssuerID,
 			ID:                  current.ID,
@@ -194,9 +201,26 @@ func (s *Service) reconcileWrapper(ctx context.Context, dbtx pgx.Tx, logger *slo
 			return current, nil, oops.E(oops.CodeUnexpected, err, "set mcp server issuer for toolset").LogError(ctx, logger)
 		}
 		current = updated
+		// The derived remote_session_issuer_id keys off the user issuer; recompute for both.
+		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, toolset.OrganizationID, toolset.ProjectID, mcpendpoints.UniqueIDs(previousIssuer, toolset.UserSessionIssuerID)); err != nil {
+			return current, nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuer").LogError(ctx, logger)
+		}
 	}
 
 	return current, cleared, nil
+}
+
+// claimAddress locks and probes one destination address for the toolset and
+// its wrapper before any endpoint write lands on it.
+func claimAddress(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, toolset repo.Toolset, wrapperID uuid.UUID, domain uuid.NullUUID) error {
+	err := hostedmcp.ClaimAddress(ctx, dbtx, toolset.OrganizationID, toolset.ID, wrapperID, domain, toolset.McpSlug.String)
+	switch {
+	case errors.Is(err, hostedmcp.ErrAddressTaken):
+		return oops.E(oops.CodeConflict, err, "this slug is already taken").LogWarn(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "claim mcp address for toolset").LogError(ctx, logger)
+	}
+	return nil
 }
 
 // mirrorToolsetAddress makes the wrapper's endpoints carry the toolset's
@@ -213,6 +237,20 @@ func (s *Service) mirrorToolsetAddress(ctx context.Context, dbtx pgx.Tx, logger 
 	}
 	held := slices.ContainsFunc(endpoints, holdsWanted)
 
+	// Every destination scope is claimed under the slug lock and unified
+	// availability check before an endpoint lands on it.
+	claimed := map[uuid.NullUUID]bool{}
+	claim := func(domain uuid.NullUUID) error {
+		if claimed[domain] {
+			return nil
+		}
+		if err := claimAddress(ctx, dbtx, logger, toolset, wrapper.ID, domain); err != nil {
+			return err
+		}
+		claimed[domain] = true
+		return nil
+	}
+
 	var cleared []uuid.UUID
 	moved := false
 	for i := range endpoints {
@@ -224,11 +262,15 @@ func (s *Service) mirrorToolsetAddress(ctx context.Context, dbtx pgx.Tx, logger 
 		var err error
 		switch {
 		case endpoint.CustomDomainID != previous.CustomDomainID:
-			ids, err = s.rekeyEndpoint(ctx, dbtx, logger, authCtx, toolset, endpoint, endpoint.CustomDomainID)
+			if err = claim(endpoint.CustomDomainID); err == nil {
+				ids, err = s.rekeyEndpoint(ctx, dbtx, logger, authCtx, toolset, endpoint, endpoint.CustomDomainID)
+			}
 		case held:
 			ids, err = s.tombstoneEndpoint(ctx, dbtx, logger, authCtx, toolset, endpoint)
 		default:
-			ids, err = s.rekeyEndpoint(ctx, dbtx, logger, authCtx, toolset, endpoint, toolset.CustomDomainID)
+			if err = claim(toolset.CustomDomainID); err == nil {
+				ids, err = s.rekeyEndpoint(ctx, dbtx, logger, authCtx, toolset, endpoint, toolset.CustomDomainID)
+			}
 			moved = true
 		}
 		if err != nil {
@@ -240,6 +282,9 @@ func (s *Service) mirrorToolsetAddress(ctx context.Context, dbtx pgx.Tx, logger 
 		return cleared, nil
 	}
 
+	if err := claim(toolset.CustomDomainID); err != nil {
+		return nil, err
+	}
 	primary := mcpendpoints.PrimaryEndpoint(endpoints)
 	if primary != nil {
 		return s.rekeyEndpoint(ctx, dbtx, logger, authCtx, toolset, primary, toolset.CustomDomainID)

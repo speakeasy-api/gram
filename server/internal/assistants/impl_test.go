@@ -572,4 +572,5 @@ func TestServiceCreateAssistantLiftsDisabledWrapper(t *testing.T) {
 	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: wrapper.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
+	require.Equal(t, ts.McpSlug.String, endpoints[0].Slug)
 }

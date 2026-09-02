@@ -2232,8 +2232,9 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % gateway members are not servable', stray;
   END IF;
 
-  -- Every hosted toolset with an address has a wrapper whose primary endpoint
-  -- carries that address; the mirror holds this invariant for API writes.
+  -- Every hosted toolset with an address has a wrapper whose PRIMARY endpoint
+  -- (root > custom domain > platform, then age, then id — the PrimaryEndpoint
+  -- ranking) carries that address; the mirror holds this invariant for API writes.
   SELECT count(*) INTO stray
   FROM toolsets t
   WHERE t.organization_id = demo_org AND t.project_id = proj_a AND t.deleted IS FALSE
@@ -2241,10 +2242,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND NOT EXISTS (
       SELECT 1
       FROM mcp_servers s
-      JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.deleted IS FALSE
+      JOIN LATERAL (
+        SELECT e.slug, e.custom_domain_id
+        FROM mcp_endpoints e
+        WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+        ORDER BY (e.is_domain_root IS TRUE) DESC, (e.custom_domain_id IS NOT NULL) DESC, e.created_at, e.id
+        LIMIT 1
+      ) primary_ep ON TRUE
       WHERE s.toolset_id = t.id AND s.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id);
+        AND primary_ep.slug = t.mcp_slug
+        AND primary_ep.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id);
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % hosted toolsets lack a mirrored endpoint', stray;
   END IF;

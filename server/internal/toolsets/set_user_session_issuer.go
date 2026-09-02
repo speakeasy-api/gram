@@ -65,6 +65,10 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
 	}
+	// The slug was authorized against a specific toolset; a recreated slug is a different one.
+	if before.ID.String() != beforeView.ID {
+		return nil, oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request").LogError(ctx, s.logger)
+	}
 
 	// Validate that the target USI lives in the caller's project before
 	// writing the FK so a request can't graft an unrelated tenant's USI
@@ -93,7 +97,8 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
 	}
-	if _, err := s.mirrorToolset(ctx, dbtx, authCtx, before, updated); err != nil {
+	clearedDomainIDs, err := s.mirrorToolset(ctx, dbtx, authCtx, before, updated)
+	if err != nil {
 		return nil, err
 	}
 
@@ -125,6 +130,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
+		return nil, err
 	}
 
 	return afterView, nil

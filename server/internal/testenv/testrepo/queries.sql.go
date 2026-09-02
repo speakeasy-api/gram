@@ -63,6 +63,31 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countMCPEndpointsByDeletedFixture = `-- name: CountMCPEndpointsByDeletedFixture :one
+SELECT
+    count(*) FILTER (WHERE deleted IS FALSE)::int AS live,
+    count(*) FILTER (WHERE deleted)::int AS tombstoned
+FROM mcp_endpoints
+WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type CountMCPEndpointsByDeletedFixtureParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+type CountMCPEndpointsByDeletedFixtureRow struct {
+	Live       int32
+	Tombstoned int32
+}
+
+func (q *Queries) CountMCPEndpointsByDeletedFixture(ctx context.Context, arg CountMCPEndpointsByDeletedFixtureParams) (CountMCPEndpointsByDeletedFixtureRow, error) {
+	row := q.db.QueryRow(ctx, countMCPEndpointsByDeletedFixture, arg.McpServerID, arg.ProjectID)
+	var i CountMCPEndpointsByDeletedFixtureRow
+	err := row.Scan(&i.Live, &i.Tombstoned)
+	return i, err
+}
+
 const countOrganizationFeaturesFixture = `-- name: CountOrganizationFeaturesFixture :one
 SELECT count(*)
 FROM organization_features
@@ -637,6 +662,26 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getMCPServerDeletedFixture = `-- name: GetMCPServerDeletedFixture :one
+SELECT deleted
+FROM mcp_servers
+WHERE id = $1 AND project_id = $2
+`
+
+type GetMCPServerDeletedFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Reads the tombstone flag regardless of deleted, which the service queries
+// filter out.
+func (q *Queries) GetMCPServerDeletedFixture(ctx context.Context, arg GetMCPServerDeletedFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getMCPServerDeletedFixture, arg.ID, arg.ProjectID)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
 }
 
 const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
