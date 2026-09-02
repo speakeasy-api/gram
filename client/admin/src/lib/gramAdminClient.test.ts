@@ -4,6 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const useMutation = vi.hoisted(() => vi.fn());
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return { ...actual, useMutation };
+});
+
 import { isRedirectingToLogin as predecessorLatch } from "@/lib/gramAdminApi";
 import * as boundary from "@/lib/gramAdminClient";
 
@@ -17,6 +24,7 @@ const unauthorizedBody = JSON.stringify({
 });
 
 afterEach(() => {
+  useMutation.mockClear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -41,6 +49,26 @@ describe("generated admin boundary", () => {
         { credentials: "include", headers: { Authorization: "Bearer x" } },
       );
     }
+  });
+
+  it("does not allow forged mutation options to replace its key or function", () => {
+    const forgedMutationFn = vi.fn();
+
+    boundary.useSetAdminOrganizationFeatureMutation({
+      mutationKey: ["forged"],
+      mutationFn: forgedMutationFn,
+    } as never);
+
+    expect(useMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mutationKey: [
+          "@gram/admin-client",
+          "admin",
+          "adminSetOrganizationFeature",
+        ],
+        mutationFn: boundary.setAdminOrganizationFeature,
+      }),
+    );
   });
 
   it("always calls the generated session operation at this origin with ambient cookie behavior", async () => {
@@ -96,6 +124,8 @@ describe("generated admin boundary", () => {
   });
 
   it("surfaces a feature mutation 401 without redirecting", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -105,17 +135,18 @@ describe("generated admin boundary", () => {
         }),
       ),
     );
-    const before = window.location.href;
+    const href = vi.spyOn(window.location, "href", "set");
 
     await expect(
-      boundary.setAdminOrganizationFeature({
+      freshBoundary.setAdminOrganizationFeature({
         organizationId: "org_1",
         featureName: "sso",
         enabled: true,
       }),
     ).rejects.toMatchObject({ statusCode: 401 });
 
-    expect(window.location.href).toBe(before);
+    expect(freshBoundary.isRedirectingToLogin()).toBe(false);
+    expect(href).not.toHaveBeenCalled();
   });
 
   it("keeps global query retries disabled and dashboard handoff as form POST navigation", () => {

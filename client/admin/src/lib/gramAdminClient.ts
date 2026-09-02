@@ -95,8 +95,8 @@ export function useSetAdminOrganizationFeatureMutation(
   options?: SetFeatureMutationOptions,
 ) {
   return useMutation({
+    ...options,
     mutationKey: ["@gram/admin-client", "admin", "adminSetOrganizationFeature"],
     mutationFn: setAdminOrganizationFeature,
-    ...options,
   });
 }
