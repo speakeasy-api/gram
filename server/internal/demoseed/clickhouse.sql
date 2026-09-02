@@ -1241,6 +1241,7 @@ SELECT
     if(toolset_slug != '', concat(',"gram.toolset.slug":"', toolset_slug, '"'), ''),
     ',"gram.event.source":"tool_call"',
     ',"gram.mcp_server.id":"', member, '"',
+    if(toolset_slug = '', concat(',"gram.remote_mcp_server.id":"', remote, '"'), ''),
     ',"gram.meta_mcp_server.id":"', gateway, '"',
     ',"http.response.status_code":', toString(status),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64('gwc', i) % 300) / 100, 3)),

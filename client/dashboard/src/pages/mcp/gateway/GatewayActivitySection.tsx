@@ -67,9 +67,23 @@ const memberColumns: Column<MemberUsageRow>[] = [
   },
 ];
 
+function LoadError({ what }: { what: string }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center justify-center border p-8 text-center">
+      <Text muted className="mb-1 block">
+        Could not load {what}
+      </Text>
+      <Text muted small>
+        Try refreshing the page or changing the time range.
+      </Text>
+    </div>
+  );
+}
+
 // Gateway-attributed usage for the selected range: the shared overview
 // metrics scoped to calls dispatched through this gateway, the discovery
-// funnel, and the per-member breakdown.
+// funnel, and the per-member breakdown. The two queries fail independently so
+// one failing never hides what the other loaded.
 export function GatewayActivitySection({
   metaMcpServerId,
   memberRows,
@@ -127,9 +141,9 @@ export function GatewayActivitySection({
 
   const isLogsDisabled = overview.isLogsDisabled || usage.isLogsDisabled;
   // With keepPreviousData a failed refetch still has stale data to show, so
-  // only fall back to the error state when there is nothing to render at all.
-  const showQueryError =
-    (overview.isError && !overview.data) || (usage.isError && !usage.data);
+  // each block falls back to its error state only with nothing to render.
+  const overviewFailed = overview.isError && !overview.data;
+  const usageFailed = usage.isError && !usage.data;
 
   const summary = overview.data?.summary;
   const comparison = overview.data?.comparison;
@@ -149,108 +163,107 @@ export function GatewayActivitySection({
 
   return (
     <Page.Section>
-      <Page.Section.Title>Activity</Page.Section.Title>
+      {/* Section heading under the Overview page title: no eyebrow, smaller
+          serif, matching the Members section below. */}
+      <Page.Section.Title area="" className="text-display-xs">
+        Activity
+      </Page.Section.Title>
       <Page.Section.Description>
         Calls dispatched through this gateway, the discovery steps agents took
         to reach them, and how the load spread across members.
       </Page.Section.Description>
+      <Page.Section.CTA>
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={setDateRangeParam}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+        />
+      </Page.Section.CTA>
       <Page.Section.Body>
-        <div className="@container flex flex-col gap-6">
-          <div className="flex justify-end">
-            <TimeRangePicker
-              preset={customRange ? null : dateRange}
-              customRange={customRange}
-              customRangeLabel={customRangeLabel}
-              onPresetChange={setDateRangeParam}
-              onCustomRangeChange={setCustomRangeParam}
-              onClearCustomRange={clearCustomRange}
-            />
+        {isLogsDisabled ? (
+          <div className="flex flex-col items-center justify-center border p-12 text-center">
+            <Text muted className="mb-1 block">
+              Observability is not enabled
+            </Text>
+            <Text muted small>
+              Enable logs for this organization to see usage for this gateway.
+            </Text>
           </div>
+        ) : (
+          <div className="@container flex flex-col gap-6">
+            {overviewFailed ? (
+              <LoadError what="usage metrics" />
+            ) : (
+              <>
+                <StatTileGroup>
+                  {overview.isLoading && !summary ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-[116px] flex-1" />
+                    ))
+                  ) : (
+                    <>
+                      <StatTile
+                        title="Tool calls"
+                        value={summary?.totalToolCalls ?? 0}
+                        tone="information"
+                        previousValue={comparison?.totalToolCalls}
+                        format="compact"
+                        comparisonLabel="vs previous period"
+                      />
+                      <StatTile
+                        title="Failed calls"
+                        value={summary?.failedToolCalls ?? 0}
+                        tone={
+                          (summary?.failedToolCalls ?? 0) > 0
+                            ? "destructive"
+                            : "neutral"
+                        }
+                        previousValue={comparison?.failedToolCalls}
+                        format="compact"
+                        invertDelta
+                        comparisonLabel="vs previous period"
+                      />
+                      <StatTile
+                        title="Error rate"
+                        value={summary ? errorRate(summary) : 0}
+                        previousValue={
+                          comparison ? errorRate(comparison) : undefined
+                        }
+                        format="percent"
+                        invertDelta
+                        thresholds={{ red: 10, amber: 5, inverted: true }}
+                        comparisonLabel="vs previous period"
+                      />
+                      <StatTile
+                        title="Avg latency"
+                        value={summary?.avgLatencyMs ?? 0}
+                        tone="information"
+                        previousValue={comparison?.avgLatencyMs}
+                        format="ms"
+                        invertDelta
+                        comparisonLabel="vs previous period"
+                      />
+                    </>
+                  )}
+                </StatTileGroup>
 
-          {isLogsDisabled && (
-            <div className="flex flex-col items-center justify-center border p-12 text-center">
-              <Text muted className="mb-1 block">
-                Observability is not enabled
-              </Text>
-              <Text muted small>
-                Enable logs for this organization to see usage for this gateway.
-              </Text>
-            </div>
-          )}
-          {!isLogsDisabled && showQueryError && (
-            <div className="flex flex-col items-center justify-center border p-12 text-center">
-              <Text muted className="mb-1 block">
-                Could not load usage data
-              </Text>
-              <Text muted small>
-                Something went wrong loading metrics for this gateway. Try
-                refreshing the page or changing the time range.
-              </Text>
-            </div>
-          )}
-          {!isLogsDisabled && !showQueryError && (
-            <>
-              <StatTileGroup>
-                {overview.isLoading && !summary ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-[116px] flex-1" />
-                  ))
-                ) : (
-                  <>
-                    <StatTile
-                      title="Tool calls"
-                      value={summary?.totalToolCalls ?? 0}
-                      tone="information"
-                      previousValue={comparison?.totalToolCalls}
-                      format="compact"
-                      comparisonLabel="vs previous period"
-                    />
-                    <StatTile
-                      title="Failed calls"
-                      value={summary?.failedToolCalls ?? 0}
-                      tone={
-                        (summary?.failedToolCalls ?? 0) > 0
-                          ? "destructive"
-                          : "neutral"
-                      }
-                      previousValue={comparison?.failedToolCalls}
-                      format="compact"
-                      invertDelta
-                      comparisonLabel="vs previous period"
-                    />
-                    <StatTile
-                      title="Error rate"
-                      value={summary ? errorRate(summary) : 0}
-                      previousValue={
-                        comparison ? errorRate(comparison) : undefined
-                      }
-                      format="percent"
-                      invertDelta
-                      thresholds={{ red: 10, amber: 5, inverted: true }}
-                      comparisonLabel="vs previous period"
-                    />
-                    <StatTile
-                      title="Avg latency"
-                      value={summary?.avgLatencyMs ?? 0}
-                      tone="information"
-                      previousValue={comparison?.avgLatencyMs}
-                      format="ms"
-                      invertDelta
-                      comparisonLabel="vs previous period"
-                    />
-                  </>
-                )}
-              </StatTileGroup>
+                <ToolCallsTimeSeriesChart
+                  title="Tool calls over time"
+                  chartId="gateway-overview-tool-calls"
+                  timeSeries={timeSeries}
+                  timeRangeMs={timeRangeMs}
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                />
+              </>
+            )}
 
-              <ToolCallsTimeSeriesChart
-                title="Tool calls over time"
-                chartId="gateway-overview-tool-calls"
-                timeSeries={timeSeries}
-                timeRangeMs={timeRangeMs}
-                expandedChart={expandedChart}
-                onExpand={setExpandedChart}
-              />
-
+            {usageFailed ? (
+              <LoadError what="the discovery funnel and member breakdown" />
+            ) : (
               <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
                 <div className="border p-5">
                   <h3 className="text-eyebrow mb-3">Discovery funnel</h3>
@@ -278,9 +291,9 @@ export function GatewayActivitySection({
                   )}
                 </div>
               </div>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </Page.Section.Body>
     </Page.Section>
   );
