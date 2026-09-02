@@ -407,6 +407,9 @@ const (
 	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
 	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
 	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
+	EmbeddingInputCountKey            = attribute.Key("gram.openrouter.embedding.input_count")
+	EmbeddingFallbackStrategyKey      = attribute.Key("gram.openrouter.embedding.fallback_strategy")
+	EmbeddingTruncatedInputCountKey   = attribute.Key("gram.openrouter.embedding.truncated_input_count")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -461,6 +464,9 @@ const (
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
+	// remote session's access token.
+	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
 	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
@@ -731,6 +737,8 @@ const (
 	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
 	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
 	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
+
+	MeteringStripeExportDispositionKey = attribute.Key("gram.metering.stripe_export.disposition")
 )
 
 const (
@@ -1618,6 +1626,26 @@ func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
 	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
 }
 
+func EmbeddingInputCount(v int) attribute.KeyValue {
+	return EmbeddingInputCountKey.Int(v)
+}
+func SlogEmbeddingInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingInputCountKey), v)
+}
+func EmbeddingFallbackStrategy(v string) attribute.KeyValue {
+	return EmbeddingFallbackStrategyKey.String(v)
+}
+func SlogEmbeddingFallbackStrategy(v string) slog.Attr {
+	return slog.String(string(EmbeddingFallbackStrategyKey), v)
+}
+
+func EmbeddingTruncatedInputCount(v int) attribute.KeyValue {
+	return EmbeddingTruncatedInputCountKey.Int(v)
+}
+func SlogEmbeddingTruncatedInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingTruncatedInputCountKey), v)
+}
+
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
@@ -1766,6 +1794,10 @@ func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
 func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
 
+func MeteringStripeExportDisposition[V ~string](v V) attribute.KeyValue {
+	return MeteringStripeExportDispositionKey.String(string(v))
+}
+
 func PackageName(v string) attribute.KeyValue { return PackageNameKey.String(v) }
 func SlogPackageName(v string) slog.Attr      { return slog.String(string(PackageNameKey), v) }
 
@@ -1833,6 +1865,13 @@ func RemoteSessionRevokeDroppedCount(v int) attribute.KeyValue {
 
 func SlogRemoteSessionRevokeDroppedCount(v int) slog.Attr {
 	return slog.Int(string(RemoteSessionRevokeDroppedCountKey), v)
+}
+
+func RemoteSessionAccessExpiresAt(v time.Time) attribute.KeyValue {
+	return RemoteSessionAccessExpiresAtKey.String(v.UTC().Format(time.RFC3339))
+}
+func SlogRemoteSessionAccessExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(RemoteSessionAccessExpiresAtKey), v)
 }
 
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {

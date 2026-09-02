@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useSeriesColors } from "./useSeriesColors";
 
 export type DailyActivitySeries = {
@@ -14,6 +15,15 @@ function startOfDay(date: Date): number {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
   return copy.getTime();
+}
+
+// Calendar-day arithmetic, not fixed 24-hour hops: a window crossing a DST
+// transition contains a 23- or 25-hour day, and adding DAY_MS across it lands
+// back on the previous date and shifts every later label by a day.
+function addDays(startOfFirstDay: number, days: number): Date {
+  const date = new Date(startOfFirstDay);
+  date.setDate(date.getDate() + days);
+  return date;
 }
 
 /**
@@ -41,7 +51,10 @@ export function DailyActivityChart({
   const colors = useSeriesColors();
 
   const firstDay = startOfDay(from);
-  const lastDay = startOfDay(to);
+  // The window is half-open, `[from, to)`, so a `to` of exactly midnight
+  // belongs to the day before it. Taken as an inclusive endpoint it would add
+  // a column for a day the window cannot hold any events on.
+  const lastDay = startOfDay(new Date(to.getTime() - 1));
   const dayCount = Math.round((lastDay - firstDay) / DAY_MS) + 1;
   // A window that resolves to no whole day (or an inverted one) has no axis to
   // draw against; the panel's own empty state covers it.
@@ -65,21 +78,33 @@ export function DailyActivityChart({
   );
   const busiest = Math.max(1, ...dayTotals);
   const dayLabel = (day: number) =>
-    new Date(firstDay + day * DAY_MS).toLocaleDateString(undefined, {
+    addDays(firstDay, day).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
     });
+  // A 90-day window at the roomy column size needs ~1000px of bars and gaps,
+  // which no identity panel has; past a month the columns and their gutters
+  // both drop to a hairline so the whole window still fits the panel.
+  const dense = dayCount > 31;
 
   return (
     <div>
       {/* Spread across the full width so the first and last columns sit under
           the date labels below them; capped so a short window does not turn
           each day into a colour block. */}
-      <div className="flex h-20 items-end justify-between gap-1.5">
+      <div
+        className={cn(
+          "flex h-20 items-end justify-between",
+          dense ? "gap-px" : "gap-1.5",
+        )}
+      >
         {dayTotals.map((total, day) => (
           <div
             key={day}
-            className="flex h-full max-w-8 min-w-1.5 flex-1 flex-col justify-end"
+            className={cn(
+              "flex h-full max-w-8 flex-1 flex-col justify-end",
+              dense ? "min-w-px" : "min-w-1.5",
+            )}
             // The column is the only affordance here, so the whole day —
             // including its empty headroom — carries the readout.
             title={`${dayLabel(day)}: ${series

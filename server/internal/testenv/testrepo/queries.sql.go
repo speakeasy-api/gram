@@ -63,6 +63,20 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countOrganizationFeaturesFixture = `-- name: CountOrganizationFeaturesFixture :one
+SELECT count(*)
+FROM organization_features
+WHERE organization_id = $1
+`
+
+// Test-only fixture: verifies entitlement writes roll back with trial provisioning.
+func (q *Queries) CountOrganizationFeaturesFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationFeaturesFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOrganizationsForWorkosIDFixture = `-- name: CountOrganizationsForWorkosIDFixture :one
 SELECT count(*)
 FROM organization_metadata
@@ -699,6 +713,28 @@ func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id st
 	return i, err
 }
 
+const getOrganizationRoleAssignmentMembershipIDFixture = `-- name: GetOrganizationRoleAssignmentMembershipIDFixture :one
+SELECT workos_membership_id::text
+FROM organization_role_assignments
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted_at IS NULL
+LIMIT 1
+`
+
+type GetOrganizationRoleAssignmentMembershipIDFixtureParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture: reads the external membership attached during reconciliation.
+func (q *Queries) GetOrganizationRoleAssignmentMembershipIDFixture(ctx context.Context, arg GetOrganizationRoleAssignmentMembershipIDFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleAssignmentMembershipIDFixture, arg.OrganizationID, arg.UserID)
+	var workos_membership_id string
+	err := row.Scan(&workos_membership_id)
+	return workos_membership_id, err
+}
+
 const getOutboxEntry = `-- name: GetOutboxEntry :one
 SELECT id FROM outbox WHERE id = $1
 `
@@ -1211,6 +1247,42 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 		arg.MissingSince,
 	)
 	return err
+}
+
+const insertOrganizationTierUserSessionIssuerFixture = `-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, $1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertOrganizationTierUserSessionIssuerFixtureParams struct {
+	OrganizationID     pgtype.Text
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+// Writes an issuer that belongs to an organization and to no project. No
+// production surface creates one: CreateUserSessionIssuer always writes a
+// project_id. Tests need such a row to exercise the organization-tier arm of
+// the issuer predicates, the delete path's sweep for owners in a project other
+// than the caller's included.
+func (q *Queries) InsertOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg InsertOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertOrganizationTierUserSessionIssuerFixture,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
@@ -2361,6 +2433,23 @@ type SetRemoteSessionResourceFixtureParams struct {
 // Test-only fixture stamping a stored RFC 8707 resource binding on a row.
 func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRemoteSessionResourceFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRemoteSessionResourceFixture, arg.Resource, arg.SubjectUrn, arg.RemoteSessionClientID)
+	return err
+}
+
+const setUserPlatformAdminFixture = `-- name: SetUserPlatformAdminFixture :exec
+UPDATE users
+SET admin = $1
+WHERE id = $2
+`
+
+type SetUserPlatformAdminFixtureParams struct {
+	Admin bool
+	ID    string
+}
+
+// Test-only fixture: controls platform-admin eligibility for invitation flows.
+func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPlatformAdminFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserPlatformAdminFixture, arg.Admin, arg.ID)
 	return err
 }
 

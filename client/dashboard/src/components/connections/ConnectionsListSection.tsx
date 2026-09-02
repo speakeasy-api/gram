@@ -18,9 +18,21 @@ import type { UserSessionClient } from "@gram/client/models/components/usersessi
 
 const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
   { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
+  { value: "issuer", label: CONNECTION_GROUPING_LABELS.issuer },
   { value: "provider", label: CONNECTION_GROUPING_LABELS.provider },
   { value: "client", label: CONNECTION_GROUPING_LABELS.client },
 ];
+
+/**
+ * Groupings worth offering for the scope a caller is showing.
+ *
+ * A grouping the caller has already fixed sorts a list of one: the MCP server
+ * detail lists that server's own sessions, so filing them by MCP server draws
+ * a single group and an option that appears to do nothing.
+ */
+function groupingOptions(hide: ConnectionGrouping[]) {
+  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
+}
 
 /**
  * Connections plus their grouping control and the loading / error / empty
@@ -37,6 +49,9 @@ export function ConnectionsListSection({
   onRetry,
   onRevoked,
   defaultGrouping = "subject",
+  showGroupingControl = true,
+  hideGroupings,
+  bordered = true,
   emptyHeading = "No connections yet",
   emptyDescription = "Connections agents establish will appear here.",
   clients,
@@ -49,6 +64,21 @@ export function ConnectionsListSection({
   onRetry: () => void;
   onRevoked: () => void;
   defaultGrouping?: ConnectionGrouping;
+  /**
+   * Whether the reader can regroup the list.
+   *
+   * Off for a surface whose scope has already answered the question the
+   * control asks — one person's page groups by provider, and offering to
+   * group that by person would sort a list of one.
+   */
+  showGroupingControl?: boolean;
+  /**
+   * Groupings to leave out because this surface has already fixed them — see
+   * `groupingOptions`.
+   */
+  hideGroupings?: ConnectionGrouping[];
+  /** Passed through to the list; see `ConnectionsList`. */
+  bordered?: boolean;
   emptyHeading?: string;
   emptyDescription?: string;
 }): JSX.Element {
@@ -104,15 +134,20 @@ export function ConnectionsListSection({
     // list is, so it has to read as sitting above the table rather than as its
     // first row.
     <Stack gap={6}>
-      <Stack direction="horizontal" justify="end">
-        <SegmentedControl
-          value={grouping}
-          onChange={(value: string) => setGrouping(value as ConnectionGrouping)}
-          options={GROUPING_OPTIONS}
-        />
-      </Stack>
+      {showGroupingControl && (
+        <Stack direction="horizontal" justify="end">
+          <SegmentedControl
+            value={grouping}
+            onChange={(value: string) =>
+              setGrouping(value as ConnectionGrouping)
+            }
+            options={groupingOptions(hideGroupings ?? [])}
+          />
+        </Stack>
+      )}
       <ConnectionsList
         sessions={sessions}
+        bordered={bordered}
         grouping={grouping}
         canRevoke={canRevoke}
         onRevoked={onRevoked}

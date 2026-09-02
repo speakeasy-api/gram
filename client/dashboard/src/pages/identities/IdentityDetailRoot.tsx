@@ -11,24 +11,17 @@ import {
 } from "@/components/route-not-found-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { useIdentity } from "@gram/client/react-query/identity.js";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
-import { useIdentityIsKnown, useIdentityProject } from "./useIdentityQueries";
+import { useIdentityIsKnown } from "./useIdentityQueries";
 
 /** How each resolved subject kind reads in the header chip. */
 /**
@@ -65,9 +58,13 @@ function hasNoLinkedAccount(identity: IdentityModel): boolean {
 
 export default function IdentityDetailRoot(): JSX.Element {
   return (
-    // org:read, matching both the index and the server gate on
-    // identity.resolve. The admin-only panels gate themselves.
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
+    // org:read, matching the server gate on identity.resolve — which is what
+    // this page opens with, so a project:read-only reader would otherwise get
+    // a rendered page that fails its first request rather than a straight
+    // answer about access. The roster stays on project:read: it reads project
+    // telemetry, not the directory. org:admin carries org:read as a sub-scope,
+    // and the admin-only panels gate themselves.
+    <RequireScope scope={["org:read"]} level="page">
       <IdentityDetailContent />
     </RequireScope>
   );
@@ -78,7 +75,7 @@ function IdentityDetailContent(): JSX.Element {
   // corrupt an identifier that legitimately contains a percent escape.
   const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
   const encodedUrn = urn ? encodeIdentityUrn(urn) : undefined;
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
 
   const identityQuery = useIdentity({ urn }, undefined, {
@@ -93,13 +90,10 @@ function IdentityDetailContent(): JSX.Element {
   const subject = useIdentityIsKnown(identityQuery.data);
 
   // The bare route carries no panels of its own; overview is the landing view.
-  if (
-    encodedUrn &&
-    location.pathname === orgRoutes.identities.href(encodedUrn)
-  ) {
+  if (encodedUrn && location.pathname === routes.identities.href(encodedUrn)) {
     return (
       <Navigate
-        to={orgRoutes.identities.detail.overview.href(encodedUrn)}
+        to={routes.identities.detail.overview.href(encodedUrn)}
         replace
       />
     );
@@ -131,9 +125,9 @@ function IdentityDetailContent(): JSX.Element {
             title="Identity not found"
             description="No activity in this organization resolves to that identifier."
             action={
-              <orgRoutes.identities.Link>
+              <routes.identities.Link>
                 <SecondaryRouteAction>Back to identities</SecondaryRouteAction>
-              </orgRoutes.identities.Link>
+              </routes.identities.Link>
             }
           />
         </Page.Body>
@@ -166,13 +160,12 @@ function IdentityDetailContent(): JSX.Element {
         {/* Rail beside the content, not in the app sidebar: the reader keeps
             the project nav they arrived with. The recessed ground separates
             the navigation from the panels, which carry the card surface. */}
-        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 py-8 lg:flex-row lg:gap-8">
+        {/* pb-16, not py-8: the body is the scroll container, so a symmetric
+            inset leaves the last panel sitting flush against the bottom edge
+            of the viewport with nothing under it. */}
+        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
           <IdentityRail
-            items={identityRailItems(
-              orgRoutes,
-              encodedUrn ?? "",
-              location.search,
-            )}
+            items={identityRailItems(routes, encodedUrn ?? "", location.search)}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
@@ -191,7 +184,6 @@ function IdentityHeader({
 }: {
   identity: IdentityModel;
 }): JSX.Element {
-  const project = useIdentityProject();
   const {
     dateRange,
     customRange,
@@ -251,22 +243,6 @@ function IdentityHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {/* Usage, cost and risk are recorded per project, so the project is a
-              filter on an org-level page rather than part of its address. */}
-          {project.options.length > 1 && (
-            <Select value={project.slug} onValueChange={project.setSlug}>
-              <SelectTrigger className="h-9 w-[180px]">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent>
-                {project.options.map((option) => (
-                  <SelectItem key={option.slug} value={option.slug}>
-                    {option.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           <TimeRangePicker
             preset={customRange ? null : dateRange}
             customRange={customRange}

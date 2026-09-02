@@ -1049,6 +1049,10 @@ function LogsToolsTraceRow({
         tabIndex={0}
         onClick={onToggle}
         onKeyDown={(e) => {
+          // The row holds focusable children (the identity link): a key press
+          // aimed at one of those must act on it alone rather than also
+          // toggling the row it bubbles through.
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") onToggle();
         }}
         className="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left"

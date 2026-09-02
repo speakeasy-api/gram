@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
@@ -9,9 +13,10 @@ import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  hasMetricsSubject,
+  retryFailed,
   useIdentityMetrics,
   useIdentityPeers,
-  useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
 
@@ -19,11 +24,7 @@ export default function IdentityCost(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const location = useLocation();
-  const project = useIdentityProject();
-  // Project routes resolve against the project this page is filtered to: the
-  // page is org-level, so the router has no :projectSlug of its own to fill in
-  // and every handoff would otherwise resolve to a path with the slug missing.
-  const routes = useRoutes({ projectSlug: project.slug });
+  const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
@@ -38,6 +39,18 @@ export default function IdentityCost(): JSX.Element {
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
+  // Zero is a finding, and neither of these earned it: an unsupported subject
+  // was never asked about, and a failed read did not come back. Both would
+  // otherwise render "$0" and "no token usage in this window" — a bill this
+  // person did not run up.
+  const unsupported = !hasMetricsSubject(identity);
+  const metricsUnavailable = unsupported || metricsQuery.isError;
+  const tileValue = metricsUnavailable ? "—" : undefined;
+  const tileTooltip = unsupported
+    ? "This identity carries no identifier the usage endpoint can key on."
+    : metricsQuery.isError
+      ? "Usage could not be loaded."
+      : undefined;
 
   const { peers } = useIdentityPeers(identity, from, to);
   const spend = metrics?.totalCost ?? 0;
@@ -66,11 +79,18 @@ export default function IdentityCost(): JSX.Element {
       value: metrics?.cacheCreationInputTokens ?? 0,
     },
   ].filter((segment) => segment.value > 0);
-  const tokenTotal = tokenSegments.reduce((sum, s) => sum + s.value, 0);
   const cacheRead = metrics?.cacheReadInputTokens ?? 0;
+  // Against the prompt side only. "Served from cache" is a claim about what
+  // went INTO the model, and output tokens are never served from a cache, so
+  // counting them in the denominator understates the share by however much
+  // the model wrote back.
+  const promptTokens =
+    (metrics?.totalInputTokens ?? 0) +
+    cacheRead +
+    (metrics?.cacheCreationInputTokens ?? 0);
   const cacheShareLabel =
-    tokenTotal > 0 && cacheRead > 0
-      ? `${Math.round((cacheRead / tokenTotal) * 100)}% served from cache`
+    promptTokens > 0 && cacheRead > 0
+      ? `${Math.round((cacheRead / promptTokens) * 100)}% of prompt tokens served from cache`
       : undefined;
 
   return (
@@ -80,35 +100,54 @@ export default function IdentityCost(): JSX.Element {
     >
       <div className="flex flex-col gap-6">
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          <StatTile
-            title="Spend"
-            subtext={costStanding}
-            value={metrics?.totalCost ?? 0}
-            format="currency"
-            tone="neutral"
-            icon="credit-card"
-          />
-          <StatTile
-            title="Input tokens"
-            value={metrics?.totalInputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="arrow-down-to-line"
-          />
-          <StatTile
-            title="Output tokens"
-            value={metrics?.totalOutputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="arrow-up-from-line"
-          />
-          <StatTile
-            title="Cache reads"
-            value={metrics?.cacheReadInputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="database"
-          />
+          {metricsQuery.isLoading ? (
+            <>
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+            </>
+          ) : (
+            <>
+              <StatTile
+                title="Spend"
+                subtext={metricsUnavailable ? undefined : costStanding}
+                value={metrics?.totalCost ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
+                format="currency"
+                tone="neutral"
+                icon="credit-card"
+              />
+              <StatTile
+                title="Input tokens"
+                value={metrics?.totalInputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
+                format="compact"
+                tone="neutral"
+                icon="arrow-down-to-line"
+              />
+              <StatTile
+                title="Output tokens"
+                value={metrics?.totalOutputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
+                format="compact"
+                tone="neutral"
+                icon="arrow-up-from-line"
+              />
+              <StatTile
+                title="Cache reads"
+                value={metrics?.cacheReadInputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
+                format="compact"
+                tone="neutral"
+                icon="database"
+              />
+            </>
+          )}
         </StatTileGroup>
 
         {/* Two compositions rather than two lists. Where the tokens went is
@@ -120,11 +159,18 @@ export default function IdentityCost(): JSX.Element {
             title="Where the tokens went"
             handoffLabel="Costs"
             handoffHref={handoffs.costs}
+            loading={metricsQuery.isLoading}
+            loadingVariant="block"
+            error={metricsQuery.isError && tokenSegments.length === 0}
+            refreshFailed={metricsQuery.isError && tokenSegments.length > 0}
+            onRetry={retryFailed(metricsQuery)}
             footer={cacheShareLabel}
           >
             {tokenSegments.length === 0 ? (
               <IdentityPanelEmpty>
-                No token usage in this window.
+                {unsupported
+                  ? "Token usage is not recorded for this kind of identity."
+                  : "No token usage in this window."}
               </IdentityPanelEmpty>
             ) : (
               <div className="px-4 py-4">
@@ -140,6 +186,11 @@ export default function IdentityCost(): JSX.Element {
             title="Model mix"
             handoffLabel="Costs"
             handoffHref={handoffs.costs}
+            loading={metricsQuery.isLoading}
+            loadingVariant="block"
+            error={metricsQuery.isError && models.length === 0}
+            refreshFailed={metricsQuery.isError && models.length > 0}
+            onRetry={retryFailed(metricsQuery)}
             footer={
               // Cost aggregates over every address the subject is known by,
               // which is why this can exceed what one address alone would show.
@@ -150,7 +201,9 @@ export default function IdentityCost(): JSX.Element {
           >
             {models.length === 0 ? (
               <IdentityPanelEmpty>
-                No model usage in this window.
+                {unsupported
+                  ? "Model usage is not recorded for this kind of identity."
+                  : "No model usage in this window."}
               </IdentityPanelEmpty>
             ) : (
               <div className="px-4 py-4">

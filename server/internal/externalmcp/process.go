@@ -186,7 +186,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	} else if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).LogError(ctx, logger)
 	} else {
-		defer o11y.LogDefer(ctx, logger, mcpClient.Close)
+		defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", mcpClient.Close)
 	}
 
 	// Build OAuth metadata params

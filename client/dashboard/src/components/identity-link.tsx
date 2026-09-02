@@ -1,15 +1,21 @@
 import type { IdentityRef } from "@/lib/identity-urn";
+import { withIdentityWindow } from "@/lib/identity-urn";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
-/** The single-reference form of `useIdentityHrefBuilder`. */
+/**
+ * The single-reference form of `useIdentityHrefBuilder`, carrying the window
+ * the reader has open onto the destination.
+ */
 function useIdentityHref(
   identifier: IdentityRef | null | undefined,
 ): string | null {
-  return useIdentityHrefBuilder()(identifier);
+  const href = useIdentityHrefBuilder()(identifier);
+  const { search } = useLocation();
+  return href ? withIdentityWindow(href, search) : null;
 }
 
 /**
@@ -54,10 +60,17 @@ export function IdentityLink({
   identifier,
   children,
   className,
+  "aria-label": ariaLabel,
 }: {
   identifier: IdentityRef | null | undefined;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Accessible name, for a link whose visible text is a bare verb. A column of
+   * rows each announcing "View" gives a screen reader no way to tell them
+   * apart.
+   */
+  "aria-label"?: string;
 }): React.JSX.Element {
   const href = useIdentityHref(identifier);
 
@@ -68,6 +81,7 @@ export function IdentityLink({
   return (
     <Link
       to={href}
+      aria-label={ariaLabel}
       // Person references sit inside clickable rows on several surfaces; the
       // link must win over the row rather than firing both.
       onClick={(event) => event.stopPropagation()}

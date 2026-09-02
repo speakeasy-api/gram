@@ -67,9 +67,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({
-  // The owner cell links to the identity page, which reads the project to
-  // scope that link to.
-  useProject: () => ({ id: "project-1", slug: "default" }),
   useSession: () => ({
     // Distinct from the chat owner so ChatOwnerLabel resolves the member name
     // instead of collapsing to "You".

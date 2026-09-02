@@ -32,7 +32,7 @@ const routes = {
   costs: route("Costs", "costs"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  employees: route("Employees", "employees"),
+  identities: route("Identities", "identities"),
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),

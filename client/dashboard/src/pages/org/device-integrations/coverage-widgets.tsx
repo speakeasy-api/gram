@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { isEmailAddress } from "@/lib/identity-urn";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Page } from "@/components/page-layout";
 import {
@@ -376,10 +377,14 @@ function AssignedUserCell({ device }: { device: ManagedDevice }) {
     );
   }
   // The MDM's reported address is enough for the resolver, whether or not it
-  // resolved to a member on the server side.
+  // resolved to a member on the server side. What it reports is freeform
+  // though, so a value that is not an address stays plain text rather than
+  // becoming a URN the resolver rejects.
   return (
     <IdentityLink
-      identifier={{ email: device.userEmail }}
+      identifier={
+        isEmailAddress(device.userEmail) ? { email: device.userEmail } : null
+      }
       className="text-muted-foreground hover:text-foreground block truncate text-sm underline-offset-2"
     >
       {device.userEmail}

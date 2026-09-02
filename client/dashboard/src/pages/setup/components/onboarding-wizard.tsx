@@ -70,6 +70,11 @@ const PLATFORM_MCP_STEP: Step = {
   badge: "Optional",
 };
 
+function indexOfStep(steps: Step[], id: string): number {
+  const index = steps.findIndex((step) => step.id === id);
+  return index === -1 ? 0 : index;
+}
+
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
@@ -115,11 +120,11 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → instrument-agents
+      resumeStep = indexOfStep(steps, "instrument-agents");
     } else if (onboardingStatus?.dsyncConfigured) {
-      resumeStep = 2; // dsync done → create-marketplace
+      resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
-      resumeStep = 1; // sso done → directory-sync
+      resumeStep = indexOfStep(steps, "directory-sync");
     }
     setSearchParams(
       (prev) => {

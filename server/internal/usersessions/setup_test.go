@@ -26,10 +26,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -405,4 +408,146 @@ func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string
 	})
 	require.NoError(t, err)
 	return uuid.MustParse(issuer.ID)
+}
+
+// createSiblingProject creates a second project inside the auth context's own
+// organization. Two projects sharing an organization is the boundary that
+// matters for the organization-tier predicate: its second arm admits rows
+// whose project_id is NULL and whose organization matches, so a predicate
+// that dropped the project_id IS NULL guard would start matching every
+// sibling project's rows rather than only genuine organization-tier ones.
+func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	return project.ID
+}
+
+// seedIssuerInProject creates a project-tier issuer owned by an arbitrary
+// project rather than the one on the auth context. organization_id is written
+// the way the production create handler writes it, so the row is a faithful
+// project-tier row (both columns set) rather than one that predates the
+// dual-write.
+func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// seedOrganizationTierIssuer writes an issuer that belongs to the caller's
+// organization and to no project. No handler creates one: the create query
+// always writes a project_id, so the row has to be seeded directly. It is what
+// gives the second arm of the tier predicate a real subject, and it is the only
+// way to cover an issuer whose owners are allowed to live in a project other
+// than the caller's.
+func seedOrganizationTierIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	id, err := testrepo.New(conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return id
+}
+
+// siblingProject is a second project in the caller's OWN organization, holding
+// a complete issuer subtree. It is the boundary the organization-tier
+// predicate has to keep: that predicate reads
+//
+//	project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)
+//
+// and every row written today carries BOTH columns, so the project_id IS NULL
+// guard is the only thing confining the second arm to genuine
+// organization-tier rows. Drop it and the arm matches this project's rows too,
+// which is a cross-project read on the listings and a cross-project write on
+// the revoke and delete paths.
+type siblingProject struct {
+	projectID  uuid.UUID
+	issuerID   uuid.UUID
+	issuerSlug string
+	clientID   uuid.UUID
+	sessionID  uuid.UUID
+	consentID  uuid.UUID
+	cimdID     uuid.UUID
+	subject    urn.SessionSubject
+}
+
+// seedSiblingProject builds that project and fills it with one of every row
+// that hangs off an issuer. The children take their tenancy from the issuer
+// inside SQL, so seeding through the issuer is what makes them the sibling
+// project's rows rather than the caller's.
+func seedSiblingProject(t *testing.T, ctx context.Context, ti *testInstance, slug string) siblingProject {
+	t.Helper()
+
+	projectID := createSiblingProject(t, ctx, ti.conn, slug)
+	issuerSlug := slug + "-issuer"
+	issuerID := seedIssuerInProject(t, ctx, ti.conn, projectID, issuerSlug)
+	subject := urn.NewUserSubject(slug + "-subject")
+
+	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, slug+"-client")
+	require.NoError(t, err)
+
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+
+	cimd, err := repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, repo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID:           projectID,
+		ClientIDMetadataUri: "https://" + slug + ".example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+
+	return siblingProject{
+		projectID:  projectID,
+		issuerID:   issuerID,
+		issuerSlug: issuerSlug,
+		clientID:   client.ID,
+		sessionID:  session.ID,
+		consentID:  consent.ID,
+		cimdID:     cimd.ID,
+		subject:    subject,
+	}
+}
+
+// requireSiblingIssuerLive re-reads the sibling project's issuer under its own
+// project id. A mutation that leaked across the boundary soft-deletes the row,
+// so this is what turns a silent cross-project write into a failure.
+func requireSiblingIssuerLive(t *testing.T, ctx context.Context, ti *testInstance, sp siblingProject) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:             sp.issuerID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's issuer must survive the caller's mutation")
 }

@@ -1,5 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
-import type { IdentityRef } from "@/lib/identity-urn";
+import { isEmailAddress, type IdentityRef } from "@/lib/identity-urn";
 import {
   type CSSProperties,
   type JSX,
@@ -1192,7 +1192,15 @@ function DisplayItemView({
           author={item.author}
           userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
-          ownerIdentifier={ctx.ownerIdentifier}
+          // The header links whatever name it shows. On a session run from a
+          // personal AI account the override is that account's address, which
+          // is a different subject from the chat's attributed owner, so the
+          // link follows the address rather than the owner.
+          ownerIdentifier={
+            ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
+              ? { email: ctx.userLabelOverride }
+              : ctx.ownerIdentifier
+          }
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],

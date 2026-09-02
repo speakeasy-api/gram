@@ -365,6 +365,27 @@ VALUES (@plugin_id, @organization_id, @principal_urn);
 INSERT INTO users (id, email, display_name)
 VALUES (@id, @email, @display_name);
 
+-- name: SetUserPlatformAdminFixture :exec
+-- Test-only fixture: controls platform-admin eligibility for invitation flows.
+UPDATE users
+SET admin = @admin
+WHERE id = @id;
+
+-- name: GetOrganizationRoleAssignmentMembershipIDFixture :one
+-- Test-only fixture: reads the external membership attached during reconciliation.
+SELECT workos_membership_id::text
+FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: CountOrganizationFeaturesFixture :one
+-- Test-only fixture: verifies entitlement writes roll back with trial provisioning.
+SELECT count(*)
+FROM organization_features
+WHERE organization_id = @organization_id;
+
 -- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES (@organization_id, @email, @seen_at, @seen_at);
@@ -818,3 +839,19 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+-- Writes an issuer that belongs to an organization and to no project. No
+-- production surface creates one: CreateUserSessionIssuer always writes a
+-- project_id. Tests need such a row to exercise the organization-tier arm of
+-- the issuer predicates, the delete path's sweep for owners in a project other
+-- than the caller's included.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
+RETURNING id;

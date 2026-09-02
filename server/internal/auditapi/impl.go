@@ -105,7 +105,19 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
 		IncludeAssistantEvents: false,
+		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
+
+	// The window is a filter, not a required frame: a caller that sends
+	// neither bound still gets the whole history, which is what every existing
+	// caller of this endpoint expects.
+	createdFrom, createdTo, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
+	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := audit.DecodeCursor(*payload.Cursor)

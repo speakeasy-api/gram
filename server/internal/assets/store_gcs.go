@@ -237,7 +237,7 @@ func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("create range reader: %w", err)
 	}
-	defer o11y.LogDefer(ctx, g.logger, func() error {
+	defer o11y.LogDefer(ctx, g.logger, "failed to close gcs range reader", func() error {
 		return rdr.Close()
 	})
 
