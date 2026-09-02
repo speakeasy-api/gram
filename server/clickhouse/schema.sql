@@ -619,8 +619,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- admitted. Claude Code and Codex data comes exclusively from their raw OTEL
 -- log streams (Claude api_request / Codex response.completed rows for usage,
 -- Claude tool_result rows for tool calls); Cursor comes from its
--- usage-metrics rows; LiteLLM comes from its normalized model spans; opencode comes from its unified-ingest
--- assistant.responded rows; Codex/Cursor/opencode tool calls arrive as
+-- usage-metrics rows; LiteLLM comes from its normalized model spans; opencode/openclaw come from their unified-ingest
+-- assistant.responded rows; Codex/Cursor/opencode/openclaw tool calls arrive as
 -- completed tool-call hook rows; Claude Chat (web/desktop) usage and cost
 -- arrive as claude_chat:usage / claude_chat:cost rows polled from the Admin
 -- Analytics API. Everything else —
@@ -688,20 +688,24 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode reports per-turn tokens and cost on its unified-ingest
-    -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
-    -- every fallback branch below already reads. It has no OTEL stream and the
-    -- unified ingest path stamps no gram_urn, so provenance anchors on
-    -- hook_source instead. The AfterAgentResponse event guard scopes this to the
-    -- turn-closing row: a session's other opencode rows (thoughts,
-    -- usage.reported, tool calls, session lifecycle) are excluded even if they
-    -- carry gen_ai.usage.* fields, so usage is counted once per turn. Cost is
-    -- part of the guard so a cost-only turn (no token fields) still counts.
+    -- opencode and openclaw report per-turn tokens and cost on their
+    -- unified-ingest assistant.responded rows, under the canonical
+    -- gen_ai.usage.* keys that every fallback branch below already reads.
+    -- Neither has an OTEL stream and the unified ingest path stamps no
+    -- gram_urn, so provenance anchors on hook_source instead. The
+    -- AfterAgentResponse event guard scopes this to the turn-closing row: a
+    -- session's other rows (thoughts, usage.reported, tool calls, session
+    -- lifecycle) are excluded even if they carry gen_ai.usage.* fields, so
+    -- usage is counted once per turn. Cost is part of the guard so a cost-only
+    -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
+    -- KindStop, with usage spliced from the cached llm_output frame; it has no
+    -- raw-vocabulary parser, so it resolves through the canonical event map to
+    -- the same AfterAgentResponse name.
     (
-        toString(attributes.gram.hook.source) = 'opencode'
+        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_opencode_usage_row,
+    ) AS is_hook_turn_usage_row,
     -- LiteLLM usage is authoritative only on normalized client model spans.
     -- The resource URN anchors provenance and the closed event-URN set excludes
     -- guardrail, auth, cache, database, metric, and other operational rows.
@@ -714,15 +718,15 @@ WITH
         )
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    -- Codex/Cursor/opencode tool calls arrive as hook rows, one
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    -- Codex/Cursor/opencode/openclaw tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -834,11 +838,11 @@ SELECT
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed and LiteLLM model-span usage rows, Cursor/Claude-Chat usage
--- and cost rows, opencode unified-ingest usage rows, and
--- Codex/Cursor/opencode completed tool-call hook rows. Tool rows carry no
+-- and cost rows, opencode/openclaw unified-ingest usage rows, and
+-- Codex/Cursor/opencode/openclaw completed tool-call hook rows. Tool rows carry no
 -- token/cost fields, so they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_work_units_score)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -1038,7 +1042,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session
 -- Claude OTEL api_request rows and Codex OTEL response.completed rows for
 -- usage, Claude tool_result rows for tool calls, LiteLLM model-span usage,
 -- Cursor/Claude-Chat usage
--- rows, opencode unified-ingest usage rows, and Codex/Cursor/opencode
+-- rows, opencode/openclaw unified-ingest usage rows, and Codex/Cursor/opencode/openclaw
 -- completed tool-call hook rows. Keep the predicates
 -- in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go and with
@@ -1083,15 +1087,16 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode usage rides on its unified-ingest assistant.responded rows,
-    -- anchored on hook_source because that path stamps no gram_urn, and gated on
-    -- the AfterAgentResponse event so thoughts/usage.reported/tool-call rows are
-    -- not double-counted as usage turns; see attribute_metrics_summaries_mv above.
+    -- opencode and openclaw usage rides on their unified-ingest
+    -- assistant.responded rows, anchored on hook_source because that path
+    -- stamps no gram_urn, and gated on the AfterAgentResponse event so
+    -- thoughts/usage.reported/tool-call rows are not double-counted as usage
+    -- turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source = 'opencode'
+        hook_source IN ('opencode', 'openclaw')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_opencode_usage_row,
+    ) AS is_hook_turn_usage_row,
     (
         gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
@@ -1101,13 +1106,13 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode')
+        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -1129,7 +1134,7 @@ WITH
         is_claude_api_request, toString(attributes.prompt.id),
         is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
         is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
-        is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+        is_codex_api_request OR is_hook_turn_usage_row OR is_litellm_usage_row, toString(id),
         toString(attributes.gen_ai.response.id)
     ) AS session_message_id,
     -- Per-row effective model: Claude api_request rows put it on
@@ -1193,7 +1198,7 @@ SELECT
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
