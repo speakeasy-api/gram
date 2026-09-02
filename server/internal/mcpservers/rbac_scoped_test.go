@@ -421,10 +421,10 @@ func TestUpdateMcpServer_RBAC_ToolsetScopedGrantAllows(t *testing.T) {
 	require.Equal(t, name, conv.PtrValOr(updated.Name, ""))
 }
 
-// A grant on the server's existing backing authorizes an update that switches
-// the backing to a target the caller has no grant on — authorization keys on
-// the row as it exists, not the payload's new backing.
-func TestUpdateMcpServer_RBAC_AuthorizesOnExistingBackingAllowsSwitch(t *testing.T) {
+// Authorization keys on the row as it exists, not the payload's new backing:
+// a grant on the existing toolset gets past authz, and the switch itself is
+// then refused because a toolset binds its wrapper for life.
+func TestUpdateMcpServer_RBAC_AuthorizesOnExistingBackingThenRefusesSwitch(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -437,7 +437,7 @@ func TestUpdateMcpServer_RBAC_AuthorizesOnExistingBackingAllowsSwitch(t *testing
 	// Grant is on the existing toolset backing only, not the remote target.
 	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, toolsetID.String()))
 
-	updated, err := ti.service.UpdateMcpServer(scoped, &gen.UpdateMcpServerPayload{
+	_, err := ti.service.UpdateMcpServer(scoped, &gen.UpdateMcpServerPayload{
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -451,9 +451,7 @@ func TestUpdateMcpServer_RBAC_AuthorizesOnExistingBackingAllowsSwitch(t *testing
 		ToolVariationsGroupID: nil,
 		Visibility:            types.McpServerVisibility("private"),
 	})
-	require.NoError(t, err)
-	require.NotNil(t, updated.RemoteMcpServerID)
-	require.Equal(t, newBackend, *updated.RemoteMcpServerID)
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 // A grant on the payload's target backing does NOT authorize an update of a

@@ -670,7 +670,7 @@ BEGIN
      'Support workflows: logs, refunds, customer lookups.',
      'acme-demo-support', TRUE, FALSE),
     (toolset_2, demo_org, proj_a, 'Acme Ops', 'acme-ops',
-     'Operational checks and deploy tooling.', NULL, TRUE, FALSE),
+     'Operational checks and deploy tooling.', 'acme-demo-ops', TRUE, FALSE),
     -- The OAuth-protected server, kept separate from the two above: attaching
     -- a session issuer changes what a server's authentication tab and install
     -- instructions say, and the support server is the one a visitor meets
@@ -817,6 +817,10 @@ BEGIN
      'acme-support-tools', toolset_1, NULL, NULL, 'private'),
     (demo.det_uuid('gram-demo-mcpserver-ops'), proj_a, 'Acme Ops', 'acme-ops',
      toolset_2, NULL, NULL, 'private'),
+    -- Hosted wrappers copy the toolset's issuer: the partner gateway is the
+    -- OAuth-gated one.
+    (demo.det_uuid('gram-demo-mcpserver-partner'), proj_a, 'Acme Partner Gateway',
+     'acme-partner-gateway', toolset_3, NULL, us_issuer, 'private'),
     (demo.det_uuid('gram-demo-mcpserver-linear'), proj_a, 'Linear', 'linear',
      NULL, demo.det_uuid('gram-demo-remotemcp-linear'),
      demo.det_uuid('gram-demo-issuer-linear'), 'private'),
@@ -849,7 +853,15 @@ BEGIN
     (demo.det_uuid('gram-demo-endpoint-linear'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
-     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack'),
+    -- Hosted servers carry their toolset's mcp_slug as the primary endpoint,
+    -- the shape the toolset<->wrapper mirror keeps in sync.
+    (demo.det_uuid('gram-demo-endpoint-support'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-support'), 'acme-demo-support'),
+    (demo.det_uuid('gram-demo-endpoint-ops'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-ops'), 'acme-demo-ops'),
+    (demo.det_uuid('gram-demo-endpoint-partner'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-partner'), 'acme-demo-partner');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -2218,6 +2230,30 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                          s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % gateway members are not servable', stray;
+  END IF;
+
+  -- Every hosted toolset with an address has a wrapper whose PRIMARY endpoint
+  -- (root > custom domain > platform, then age, then id — the PrimaryEndpoint
+  -- ranking) carries that address; the mirror holds this invariant for API writes.
+  SELECT count(*) INTO stray
+  FROM toolsets t
+  WHERE t.organization_id = demo_org AND t.project_id = proj_a AND t.deleted IS FALSE
+    AND t.mcp_slug IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers s
+      JOIN LATERAL (
+        SELECT e.slug, e.custom_domain_id
+        FROM mcp_endpoints e
+        WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+        ORDER BY (e.is_domain_root IS TRUE) DESC, (e.custom_domain_id IS NOT NULL) DESC, e.created_at, e.id
+        LIMIT 1
+      ) primary_ep ON TRUE
+      WHERE s.toolset_id = t.id AND s.deleted IS FALSE
+        AND primary_ep.slug = t.mcp_slug
+        AND primary_ep.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % hosted toolsets lack a mirrored endpoint', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM session_quarantines

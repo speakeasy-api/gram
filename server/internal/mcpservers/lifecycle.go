@@ -95,14 +95,16 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 		if err != nil {
 			return MCPServerVisibilityResult{}, fmt.Errorf("clear MCP server root endpoints: %w", err)
 		}
-		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
+		if err := LogMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
 			return MCPServerVisibilityResult{}, err
 		}
 	}
-	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: rootDomainIDs(cleared)}, nil
+	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: RootDomainIDs(cleared)}, nil
 }
 
-func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
+// LogMCPServerRootAutoClears audits, per domain, a root endpoint that a server
+// mutation cleared implicitly.
+func LogMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
 	if auditLogger == nil || organizationID == "" {
 		return fmt.Errorf("invalid MCP root cleanup audit input")
 	}
@@ -148,7 +150,7 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		}
 		name = conv.ToPGText(trimmed)
 	}
-	slug, err := computeServerSlug(conv.FromPGTextOrEmpty[string](name), existing.ID)
+	slug, err := ComputeServerSlug(conv.FromPGTextOrEmpty[string](name), existing.ID)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}

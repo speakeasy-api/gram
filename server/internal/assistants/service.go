@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1072,6 +1073,7 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 func writeAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
+	mirror hostedmcp.Mirror,
 	assistantID, projectID uuid.UUID,
 	resolved []resolvedToolsetInsert,
 ) error {
@@ -1099,15 +1101,20 @@ func writeAssistantToolsets(
 	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
 		return fmt.Errorf("insert assistant toolsets: %w", err)
 	}
-	// The runtime startup config requires every assistant-attached toolset
-	// to be MCP-reachable; assistants address tools via the MCP server.
-	// Auto-enable on attach so the user doesn't have to toggle it
-	// separately on each toolset.
-	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
-		ToolsetIds: toolsetIDs,
-		ProjectID:  projectID,
-	}); err != nil {
-		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
+	// The runtime reaches attached toolsets through their MCP server, so attach
+	// enables it. All toolset locks are taken in id order before any wrapper
+	// write so this cannot deadlock with another mirror operation.
+	lockIDs := make([]uuid.NullUUID, 0, len(toolsetIDs))
+	for _, id := range toolsetIDs {
+		lockIDs = append(lockIDs, uuid.NullUUID{UUID: id, Valid: true})
+	}
+	if err := hostedmcp.LockToolsets(ctx, tx, projectID, lockIDs...); err != nil {
+		return fmt.Errorf("lock assistant toolsets: %w", err)
+	}
+	for _, toolsetID := range toolsetIDs {
+		if err := mirror.EnableToolsetMCP(ctx, tx, projectID, toolsetID); err != nil {
+			return fmt.Errorf("enable mcp for assistant toolset: %w", err)
+		}
 	}
 	return nil
 }
@@ -1211,6 +1218,7 @@ func (s *ServiceCore) CreateAssistant(
 	organizationID string,
 	projectID uuid.UUID,
 	createdByUserID string,
+	createdByEmail *string,
 	name string,
 	model string,
 	instructions string,
@@ -1256,7 +1264,8 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	record := assistantRecordFromCreateRow(created)
 
-	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+	mirror := hostedmcp.Mirror{Audit: s.audit, ActorUserID: createdByUserID, ActorEmail: createdByEmail}
+	if err := writeAssistantToolsets(ctx, tx, mirror, record.ID, projectID, resolved); err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
@@ -1341,6 +1350,8 @@ func (s *ServiceCore) UpdateAssistant(
 	ctx context.Context,
 	projectID uuid.UUID,
 	assistantID uuid.UUID,
+	actorUserID string,
+	actorEmail *string,
 	name *string,
 	model *string,
 	instructions *string,
@@ -1390,7 +1401,8 @@ func (s *ServiceCore) UpdateAssistant(
 	record := assistantRecordFromUpdateRow(updated)
 
 	if toolsets != nil {
-		if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+		mirror := hostedmcp.Mirror{Audit: s.audit, ActorUserID: actorUserID, ActorEmail: actorEmail}
+		if err := writeAssistantToolsets(ctx, tx, mirror, record.ID, projectID, resolved); err != nil {
 			return assistantRecord{}, err
 		}
 	}

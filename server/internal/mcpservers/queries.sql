@@ -415,3 +415,14 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
                 AND p.organization_id = @organization_id::text)
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
+
+-- name: SetMCPServerUserSessionIssuer :one
+-- Clearing the issuer clears the derived remote issuer too: the resync only
+-- reaches servers still on the old issuer, so it cannot repair this row.
+UPDATE mcp_servers
+SET
+    user_session_issuer_id = @user_session_issuer_id,
+    remote_session_issuer_id = CASE WHEN sqlc.narg('user_session_issuer_id')::uuid IS NULL THEN NULL ELSE remote_session_issuer_id END,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;

@@ -413,3 +413,47 @@ WHERE t.project_id = @project_id
     WHERE tv2.toolset_id = t.id
       AND tv2.deleted IS FALSE
   );
+
+-- name: LockToolset :one
+SELECT *
+FROM toolsets
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockToolsetByID :one
+SELECT *
+FROM toolsets
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: SyncToolsetHostingFromWrapper :one
+UPDATE toolsets
+SET
+    mcp_enabled = @mcp_enabled
+  , mcp_is_public = @mcp_is_public
+  , user_session_issuer_id = @user_session_issuer_id
+  , tool_variations_group_id = @tool_variations_group_id
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetToolsetHostedAddress :one
+UPDATE toolsets
+SET
+    mcp_slug = @mcp_slug
+  , custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: ClearToolsetHosting :one
+UPDATE toolsets
+SET
+    mcp_slug = NULL
+  , mcp_enabled = FALSE
+  , mcp_is_public = FALSE
+  , custom_domain_id = NULL
+  , user_session_issuer_id = NULL
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;

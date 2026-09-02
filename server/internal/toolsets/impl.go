@@ -228,6 +228,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
 
+	if _, err := s.mirrorToolset(ctx, dbtx, authCtx, createdToolset, createdToolset); err != nil {
+		return nil, err
+	}
+
 	var pluginCreated bool
 	if createToolParams.McpEnabled {
 		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
@@ -415,8 +419,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	tr := s.repo.WithTx(dbtx)
 	clearedOAuth := false
 
-	// First get the existing toolset
-	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	// The toolset row lock is taken before any wrapper, domain, or endpoint
+	// lock so this write serializes with wrapper writes projecting back.
+	existingToolset, err := tr.LockToolset(ctx, repo.LockToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -495,6 +500,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			domainID = uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true}
 		}
 
+		// Domain rows lock before the slug scope, the order the endpoint writers use.
+		if _, err := s.lockLiveCustomDomains(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.NullUUID{domainID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
+		}
 		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
 		}
@@ -575,6 +584,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
+	clearedDomainIDs, err := s.mirrorToolset(ctx, dbtx, authCtx, existingToolset, updatedToolset)
+	if err != nil {
+		return nil, err
+	}
+
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
@@ -623,6 +637,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
+		return nil, err
+	}
 
 	return toolsetDetails, nil
 }
@@ -643,7 +660,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 
 	tr := s.repo.WithTx(dbtx)
 
-	toDelete, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	toDelete, err := tr.LockToolset(ctx, repo.LockToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -682,11 +699,16 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to log toolset delete").LogError(ctx, logger)
 	}
 
+	clearedDomainIDs, err := s.tombstoneToolsetWrapper(ctx, dbtx, authCtx, toDelete)
+	if err != nil {
+		return err
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").LogError(ctx, logger)
 	}
 
-	return nil
+	return s.reconcileCustomDomains(ctx, clearedDomainIDs)
 }
 
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {
@@ -865,6 +887,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ToolsetSlug:      clonedToolset.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset create audit event").LogError(ctx, logger)
+	}
+
+	if _, err := s.mirrorToolset(ctx, dbtx, authCtx, clonedToolset, clonedToolset); err != nil {
+		return nil, err
 	}
 
 	// Clone the latest toolset version
