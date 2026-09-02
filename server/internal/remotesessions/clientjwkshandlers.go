@@ -336,17 +336,12 @@ func (s *Service) settleClientKeySet(
 		return view, nil
 	}
 
+	var adopted bool
 	if target.Valid {
-		adopted, err := adoptClientOrganization(ctx, logger, txRepo, &existing, authCtx.ActiveOrganizationID)
+		var err error
+		adopted, err = adoptClientOrganization(ctx, logger, txRepo, &existing, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return nil, err
-		}
-		if adopted {
-			// Deliberately not an audit event: adopting the row is a migration
-			// detail of Gram's own making, not an action the administrator took
-			// or needs to answer for. The attach they did perform is audited.
-			logger.InfoContext(ctx, "backfilled remote session client organization from its project during key set attach",
-				attr.SlogRemoteSessionClientID(existing.ID.String()))
 		}
 
 		if err := resolveAttachableKeySet(ctx, logger, txRepo, target.UUID, authCtx.ActiveOrganizationID); err != nil {
@@ -401,6 +396,19 @@ func (s *Service) settleClientKeySet(
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Logged after the commit, not at the point of the write: set resolution,
+	// the write, the audit insert, or the commit itself can still fail, and a
+	// rollback takes the adoption with it. Claiming it happened before it is
+	// durable is the same false record that kept it out of the audit trail.
+	//
+	// Deliberately not an audit event: adopting the row is a migration detail of
+	// Gram's own making, not an action the administrator took or needs to answer
+	// for. The attach they did perform is audited.
+	if adopted {
+		logger.InfoContext(ctx, "backfilled remote session client organization from its project during key set attach",
+			attr.SlogRemoteSessionClientID(updated.ID.String()))
 	}
 
 	return view, nil
