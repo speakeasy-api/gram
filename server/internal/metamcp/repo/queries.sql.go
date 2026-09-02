@@ -705,7 +705,8 @@ const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersFor
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
-    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -739,6 +740,7 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 	McpServerID         uuid.UUID
 	McpServerVisibility string
 	UpstreamUrl         string
+	Tunneled            bool
 }
 
 // The meta MCP's proxied (remote or tunneled) members that authenticate
@@ -763,7 +765,12 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 	var items []ListMetaMCPMembersForRemoteSessionIssuerRow
 	for rows.Next() {
 		var i ListMetaMCPMembersForRemoteSessionIssuerRow
-		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerVisibility,
+			&i.UpstreamUrl,
+			&i.Tunneled,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
