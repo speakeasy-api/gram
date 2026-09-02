@@ -124,23 +124,17 @@ type CountRemoteSessionClientsForJsonWebKeySetParams struct {
 	JsonWebKeySetID uuid.UUID
 }
 
-// Counts the live remote_session_clients still pointing at a set. Backs both the
-// delete preflight and the refusal inside DeleteSet, which run the same query so
-// the preflight cannot disagree with the mutation it predicts.
+// Live clients still pointing at a set. Backs both the delete preflight and the
+// refusal inside DeleteSet, over the same predicate, so the preflight cannot
+// disagree with the mutation it predicts.
 //
-// Run inside the delete transaction, after LockJsonWebKeySetForKeyWrite. The
-// attach side takes FOR SHARE on the same row (LockJsonWebKeySetForClientAttach
-// in remotesessions), so an attach either lands before this count sees it or
-// blocks until the delete commits and then fails its own live-set lookup.
+// Runs after LockJsonWebKeySetForKeyWrite; the attach side takes FOR SHARE on
+// that row, so an attach either lands before this count or blocks and then
+// finds the set gone. The database cannot enforce this itself: the foreign key
+// is NO ACTION and `deleted` is generated, so soft deletes never fire it.
 //
-// The database will not enforce this. remote_session_clients_json_web_key_set_tenant_fkey
-// omits ON DELETE, which is NO ACTION, and `deleted` is a generated column, so
-// nothing fires on the soft-delete path. Soft-deleted clients do not count: a
-// tombstoned client never authenticates again and must not pin a set forever.
-//
-// A count rather than EXISTS because the preflight needs the number anyway, and
-// COUNT(*) types as a non-nullable int64 — no fail-open reading of an unset
-// pgtype.Bool, which is the trap the externalkeys guard documents.
+// COUNT(*) rather than EXISTS: the preflight needs the number, and it types as
+// a non-nullable int64, which cannot fail open the way an unset pgtype.Bool can.
 func (q *Queries) CountRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg CountRemoteSessionClientsForJsonWebKeySetParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionClientsForJsonWebKeySet, arg.OrganizationID, arg.JsonWebKeySetID)
 	var count int64
@@ -830,34 +824,16 @@ type SummarizeRemoteSessionClientsForJsonWebKeySetRow struct {
 	ClientIds   []string
 }
 
-// The impact summary the delete preflight reports: how many live clients
-// reference the set, and a capped list of them to name.
+// The delete preflight's impact summary: how many live clients reference the
+// set, plus a capped list to name them. The count is authoritative; the list
+// truncates past the cap. Oldest first so it is stable across calls, and
+// COALESCE because array_agg is NULL over an empty group.
 //
-// One statement rather than a count plus a listing. Two statements cannot be
-// made consistent by wrapping them in a transaction, because PostgreSQL's
-// default READ COMMITTED gives every statement its own snapshot, so a client
-// attaching or detaching between them would let the preflight report a count
-// its own list contradicts. Raising the isolation level would also work, but
-// then the guarantee lives in the caller and silently disappears if anyone
-// changes how the transaction is opened; here it is structural.
-//
-// The count is unbounded and authoritative while the list is capped, so a set
-// referenced by more clients than the cap reports a truncated list against a
-// full count. array_agg returns NULL over an empty group, hence the COALESCE.
-// Ordered oldest first so the listing is stable across calls.
-//
-// The slice is applied to the finished aggregate, so array_agg does build all N
-// elements before 50 survive. That is deliberate. Capping inside instead (a
-// LIMIT 50 subquery beside a separate COUNT) was measured and is worse: the
-// index is (organization_id, json_web_key_set_id) and does not cover
-// created_at/id, so the ordered listing sorts every matching row either way,
-// and the capped form pays a second scan of the same rows to do it. At 5000
-// references it ran 2.75ms against 0.96ms with double the buffer reads; at a
-// realistic 5 it was a wash on time and still double the buffers. The only
-// thing it improves is sort memory, 458kB down to 28kB, and N cannot get large
-// here: json_web_key_set_id is only ever set by attachKeySet, one client per
-// call, behind the customer_managed_encryption_keys entitlement, so references
-// accrue one deliberate administrator action at a time.
+// One statement, because READ COMMITTED snapshots per statement: a count and a
+// listing run separately could disagree, and a transaction around them does not
+// help. The cap is applied to the finished aggregate on purpose. Capping inside
+// reads better and measures worse, since the index cannot order this and the
+// sibling COUNT(*) scans everything regardless; see 94918ed for the numbers.
 func (q *Queries) SummarizeRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg SummarizeRemoteSessionClientsForJsonWebKeySetParams) (SummarizeRemoteSessionClientsForJsonWebKeySetRow, error) {
 	row := q.db.QueryRow(ctx, summarizeRemoteSessionClientsForJsonWebKeySet, arg.LimitValue, arg.OrganizationID, arg.JsonWebKeySetID)
 	var i SummarizeRemoteSessionClientsForJsonWebKeySetRow

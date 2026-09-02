@@ -664,30 +664,18 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- Serializes the two halves of the private_key_jwt coupling, which live in
--- different handlers and would otherwise each decide from a stale read.
---
--- requirePrivateKeyJWTKeySet (on the update paths) reads the client's
--- json_web_key_set_id to allow the method; requireDetachableKeySet (on the
--- detach path) reads the client's token_endpoint_auth_method to allow the
--- clear. Under READ COMMITTED, both can pass against the same starting row and
--- then commit: the update's WHERE mentions neither column, so it re-qualifies
--- happily against the detached row and the pair lands
+-- different handlers and each read a column the other writes. Under READ
+-- COMMITTED both can pass against the same starting row and commit, landing
 -- token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id,
--- exactly the row both rules exist to prevent. Every handler that evaluates
--- either rule takes this lock first, so one of the two blocks and re-reads.
+-- the row both rules exist to prevent. Every handler evaluating either rule
+-- takes this lock first. The key set lock does not cover it: that one guards
+-- attach against set deletion, not method against link.
 --
--- The JSON Web Key Set lock does not cover this: it serializes attach against
--- set deletion on json_web_key_sets, not method against link on
--- remote_session_clients.
+-- Lock order is client, then set. DeleteSet takes the set lock and reads
+-- clients unlocked, so there is no cycle.
 --
--- Locking order is client first, then set (LockJsonWebKeySetForClientAttach).
--- DeleteSet takes the set lock and then only reads remote_session_clients
--- unlocked, so there is no cycle.
---
--- Tenancy-scoped, matching the surface's own read. An unscoped lock by id would
--- let any authenticated caller take a row lock on another tenant's client for
--- the length of a transaction before the ownership check rejects them, which is
--- a cross-tenant side effect for no benefit.
+-- Tenancy-scoped rather than by id alone, so a caller cannot lock another
+-- tenant's client for a transaction before the ownership check rejects them.
 -- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients
@@ -712,21 +700,14 @@ WHERE c.id = @id
 FOR UPDATE OF c;
 
 -- Adopts a legacy client into the organization that owns its project, so it can
--- hold a JSON Web Key Set. remote_session_clients.organization_id was added
--- without a backfill (20260625174452), and
--- remote_session_clients_json_web_key_set_id_check forbids a set on any row
--- where it is still NULL, so these clients could otherwise never opt into
--- private_key_jwt.
+-- hold a key set at all: organization_id was added without a backfill
+-- (20260625174452), and the json_web_key_set_id CHECK forbids a set while it is
+-- NULL.
 --
--- The statement is its own tenancy check: it writes only when the client's
--- project belongs to the caller's organization, so a zero row count means the
--- organization could not be established and the caller is refused. A client
--- with no project (the platform-owned global tier) matches nothing here and is
--- never adopted, which is the intended outcome: those rows are not a tenant's
--- to claim.
---
--- Runs under LockRemoteSessionClientForAuthMethodWrite, so two concurrent
--- attaches cannot both adopt the same row.
+-- The statement is its own tenancy check, writing only when the client's
+-- project belongs to the caller's organization, so zero rows means refuse. A
+-- client with no project (the platform-owned global tier) matches nothing and
+-- is never adopted. Runs under LockRemoteSessionClientForAuthMethodWrite.
 -- name: BackfillRemoteSessionClientOrganization :execrows
 UPDATE remote_session_clients AS c
 SET organization_id = p.organization_id,
@@ -738,19 +719,15 @@ WHERE c.id = @id
   AND p.organization_id = @organization_id
   AND c.deleted IS FALSE;
 
--- Takes the JSON Web Key Set row in FOR SHARE while a client attaches to it, so
--- the set cannot be soft-deleted out from under the attach. jsonWebKeySets'
--- DeleteSet takes FOR UPDATE on the same row before counting referencing
--- clients, so one of the two blocks and neither commits on a stale read. Without
--- it the interleave attach-sees-live-set / delete-sees-no-references lets both
--- commit, stranding a client pointed at a deleted set — the foreign key does not
--- catch it because `deleted` is a generated column and soft deletes never fire
--- it. FOR SHARE rather than FOR UPDATE so two clients can attach to the same set
--- concurrently, mirroring the FOR SHARE / FOR UPDATE pairing externalkeys uses
--- for the same problem one layer down.
+-- Holds the key set while a client attaches to it, against DeleteSet's
+-- FOR UPDATE on the same row. Without it, attach-sees-live-set racing
+-- delete-sees-no-references lets both commit and strands a client on a deleted
+-- set; the foreign key misses it because `deleted` is generated. FOR SHARE, not
+-- FOR UPDATE, so concurrent attaches to one set still work, mirroring the
+-- pairing externalkeys uses a layer down.
 --
--- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are an
--- organization-tier resource, and a project-tier set is not a thing that exists.
+-- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
+-- organization-tier only.
 -- name: LockJsonWebKeySetForClientAttach :one
 SELECT id
 FROM json_web_key_sets
@@ -760,17 +737,14 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR SHARE;
 
--- Sets or clears a project-tier client's JSON Web Key Set. A NULL
--- json_web_key_set_id is the detach; unlike the COALESCE patches in
--- UpdateRemoteSessionClient this is an unconditional assignment, which is the
--- whole reason the link gets its own methods instead of riding the update form.
+-- Sets or clears a project-tier client's key set; a NULL target is the detach.
+-- Unconditional assignment rather than the COALESCE patches
+-- UpdateRemoteSessionClient uses, which is why the link has its own methods.
 --
--- project_id = @project_id matches UpdateRemoteSessionClient rather than the
--- org-level-inclusive predicate the reads use: an organization-level client is
--- not mutable from the project surface. organization_id is matched as well
--- because the composite foreign key to json_web_key_sets is MATCH SIMPLE and
--- skips its check entirely on a NULL organization_id; the handler rejects those
--- rows before reaching here, and this predicate is the backstop.
+-- project_id alone, matching UpdateRemoteSessionClient: an organization-level
+-- client is not mutable from the project surface. organization_id is matched
+-- too as a backstop, since the composite foreign key is MATCH SIMPLE and skips
+-- its check on a NULL one.
 -- name: SetRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients
 SET
