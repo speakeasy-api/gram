@@ -9,7 +9,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,9 +36,11 @@ type hostedMCPWrappersSummary struct {
 	ReportPath string                             `json:"report_path,omitempty"`
 }
 
-func parseHostedMCPWrappersFlags(args []string, getenv func(string) string) (hostedMCPWrappersConfig, error) {
+// parseHostedMCPWrappersFlags returns flag.ErrHelp, with usage written to
+// helpOut, when -h is passed.
+func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, helpOut io.Writer) (hostedMCPWrappersConfig, error) {
 	fs := flag.NewFlagSet("hosted-mcp-wrappers", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(helpOut)
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
 	ackMirror := fs.Bool("acknowledge-mirror-deployed", false, "required with -apply; see guide")
 	moveDependents := fs.Bool("move-dependents", false, "dependent-move phase; see guide")
@@ -47,6 +51,9 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string) (hos
 	aliases := fs.String("aliases", "", "comma-separated slug@custom_domain_id platform-alias allowlist")
 	reportPath := fs.String("report", "", "per-row JSON report path")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return hostedMCPWrappersConfig{}, fmt.Errorf("parse flags: %w", err)
+		}
 		return hostedMCPWrappersConfig{}, errors.New("invalid hosted-mcp-wrappers flags")
 	}
 	if fs.NArg() != 0 {
@@ -113,12 +120,15 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string) (hos
 }
 
 func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) string) int {
-	cfg, err := parseHostedMCPWrappersFlags(args, getenv)
+	cfg, err := parseHostedMCPWrappersFlags(args, getenv, stdout)
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
 	if err != nil {
 		log.Printf("invalid hosted-mcp-wrappers configuration: %v", err)
 		return 2
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, cfg.dbURL)
 	if err != nil {
@@ -128,12 +138,6 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	defer pool.Close()
 
 	report, runErr := hostedmcpbackfill.NewRunner(pool, cfg.options).Run(ctx)
-	if cfg.reportPath != "" {
-		if err := writeHostedMCPWrappersReport(cfg.reportPath, report); err != nil {
-			log.Printf("write hosted-mcp-wrappers report: %v", err)
-			return 1
-		}
-	}
 	summary := hostedMCPWrappersSummary{
 		Mode: report.Mode, Phase: report.Phase, Scanned: report.Scanned, Outcomes: report.Outcomes,
 		OauthProxy: report.OauthProxy, LastCursor: report.LastCursor, ReportPath: cfg.reportPath,
@@ -142,17 +146,32 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		log.Printf("write hosted-mcp-wrappers summary: %v", err)
 		return 1
 	}
+	code := 0
 	if runErr != nil {
-		log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s", runErr, report.LastCursor)
-		return 1
+		code = 1
+		if cfg.options.Apply {
+			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s", runErr, report.LastCursor)
+		} else {
+			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
+		}
 	}
-	return 0
+	if cfg.reportPath != "" {
+		if err := writeHostedMCPWrappersReport(cfg.reportPath, report); err != nil {
+			log.Printf("write hosted-mcp-wrappers report: %v", err)
+			code = 1
+		}
+	}
+	return code
 }
 
 func writeHostedMCPWrappersReport(path string, report hostedmcpbackfill.Report) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- operator-supplied report path
 	if err != nil {
 		return fmt.Errorf("open report: %w", err)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("chmod report: %w", err)
 	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")

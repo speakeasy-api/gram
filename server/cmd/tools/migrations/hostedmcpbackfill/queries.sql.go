@@ -736,7 +736,7 @@ func (q *Queries) MoveAssistantToolsets(ctx context.Context, arg MoveAssistantTo
 
 const moveCollectionAttachments = `-- name: MoveCollectionAttachments :execrows
 UPDATE organization_mcp_collection_server_attachments AS a
-SET mcp_server_id = $1, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = $1, toolset_id = NULL
 FROM organization_mcp_collections AS c
 WHERE a.collection_id = c.id
   AND c.organization_id = $2
@@ -763,7 +763,14 @@ func (q *Queries) MoveCollectionAttachments(ctx context.Context, arg MoveCollect
 
 const moveEndpointAddress = `-- name: MoveEndpointAddress :exec
 UPDATE mcp_endpoints
-SET custom_domain_id = $1, slug = $2, deleted_at = $3, updated_at = clock_timestamp()
+SET custom_domain_id = $1,
+    slug = $2,
+    is_domain_root = CASE
+      WHEN custom_domain_id IS NOT DISTINCT FROM $1 AND $3::timestamptz IS NULL THEN is_domain_root
+      ELSE NULL
+    END,
+    deleted_at = $3::timestamptz,
+    updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5
 `
 
@@ -775,6 +782,7 @@ type MoveEndpointAddressParams struct {
 	ProjectID      uuid.UUID
 }
 
+// The root marker only survives a move that keeps the domain and stays live.
 func (q *Queries) MoveEndpointAddress(ctx context.Context, arg MoveEndpointAddressParams) error {
 	_, err := q.db.Exec(ctx, moveEndpointAddress,
 		arg.CustomDomainID,
@@ -788,7 +796,7 @@ func (q *Queries) MoveEndpointAddress(ctx context.Context, arg MoveEndpointAddre
 
 const moveMcpMetadata = `-- name: MoveMcpMetadata :execrows
 UPDATE mcp_metadata AS m
-SET mcp_server_id = $1, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = $1, toolset_id = NULL
 WHERE m.toolset_id = $2 AND m.project_id = $3
   AND NOT EXISTS (SELECT 1 FROM mcp_metadata AS d WHERE d.mcp_server_id = $1)
 `
@@ -809,7 +817,7 @@ func (q *Queries) MoveMcpMetadata(ctx context.Context, arg MoveMcpMetadataParams
 
 const movePluginServers = `-- name: MovePluginServers :execrows
 UPDATE plugin_servers AS ps
-SET mcp_server_id = $1, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = $1, toolset_id = NULL
 FROM plugins AS p
 WHERE ps.plugin_id = p.id
   AND p.project_id = $2
@@ -1122,6 +1130,7 @@ func (q *Queries) SeedMcpMetadataFixture(ctx context.Context, arg SeedMcpMetadat
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
+
 INSERT INTO organization_metadata (id, name, slug)
 VALUES ($1, $2, $3)
 `
@@ -1132,6 +1141,7 @@ type SeedOrganizationFixtureParams struct {
 	Slug string
 }
 
+// TEST FIXTURE ONLY: every query below is for package tests and may create impossible states or take exclusive locks.
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, arg SeedOrganizationFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, arg.ID, arg.Name, arg.Slug)
 	return err
@@ -1296,12 +1306,35 @@ func (q *Queries) SeedWrapperFixture(ctx context.Context, arg SeedWrapperFixture
 	return err
 }
 
+const setEndpointRootFixture = `-- name: SetEndpointRootFixture :exec
+UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1
+`
+
+func (q *Queries) SetEndpointRootFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setEndpointRootFixture, id)
+	return err
+}
+
 const softDeleteWrapperFixture = `-- name: SoftDeleteWrapperFixture :exec
 UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
 `
 
 func (q *Queries) SoftDeleteWrapperFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteWrapperFixture, id)
+	return err
+}
+
+const updateToolsetDomainFixture = `-- name: UpdateToolsetDomainFixture :exec
+UPDATE toolsets SET custom_domain_id = $1 WHERE id = $2
+`
+
+type UpdateToolsetDomainFixtureParams struct {
+	CustomDomainID uuid.NullUUID
+	ID             uuid.UUID
+}
+
+func (q *Queries) UpdateToolsetDomainFixture(ctx context.Context, arg UpdateToolsetDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, updateToolsetDomainFixture, arg.CustomDomainID, arg.ID)
 	return err
 }
 
@@ -1316,6 +1349,20 @@ type UpdateToolsetSlugFixtureParams struct {
 
 func (q *Queries) UpdateToolsetSlugFixture(ctx context.Context, arg UpdateToolsetSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, updateToolsetSlugFixture, arg.McpSlug, arg.ID)
+	return err
+}
+
+const updateWrapperSlugFixture = `-- name: UpdateWrapperSlugFixture :exec
+UPDATE mcp_servers SET slug = $1 WHERE id = $2
+`
+
+type UpdateWrapperSlugFixtureParams struct {
+	Slug pgtype.Text
+	ID   uuid.UUID
+}
+
+func (q *Queries) UpdateWrapperSlugFixture(ctx context.Context, arg UpdateWrapperSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, updateWrapperSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

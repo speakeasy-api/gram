@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"flag"
+	"io"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,7 +22,7 @@ func hostedMCPWrappersGetenv(key string) string {
 func TestParseHostedMCPWrappersFlagsDefaultsToDryRun(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := parseHostedMCPWrappersFlags(nil, hostedMCPWrappersGetenv)
+	cfg, err := parseHostedMCPWrappersFlags(nil, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
 	require.False(t, cfg.options.Apply)
 	require.Equal(t, hostedmcpbackfill.PhaseWrappers, cfg.options.Phase)
@@ -33,7 +36,7 @@ func TestParseHostedMCPWrappersFlagsParsesScopeAndAllowlist(t *testing.T) {
 	cfg, err := parseHostedMCPWrappersFlags([]string{
 		"-apply", "-acknowledge-mirror-deployed", "-move-dependents", "-project=" + project.String(), "-cursor=" + cursor.String(),
 		"-limit=5", "-aliases= a-slug@" + domain.String() + " ,", "-report=/tmp/r.json",
-	}, hostedMCPWrappersGetenv)
+	}, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
 	require.True(t, cfg.options.Apply)
 	require.Equal(t, hostedmcpbackfill.PhaseDependents, cfg.options.Phase)
@@ -43,7 +46,7 @@ func TestParseHostedMCPWrappersFlagsParsesScopeAndAllowlist(t *testing.T) {
 	require.Equal(t, []hostedmcpbackfill.AliasKey{{Slug: "a-slug", CustomDomainID: domain}}, cfg.options.Aliases)
 	require.Equal(t, "/tmp/r.json", cfg.reportPath)
 
-	cfg, err = parseHostedMCPWrappersFlags([]string{"-retire-toolset-grants"}, hostedMCPWrappersGetenv)
+	cfg, err = parseHostedMCPWrappersFlags([]string{"-retire-toolset-grants"}, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, hostedmcpbackfill.PhaseRetireGrants, cfg.options.Phase)
 }
@@ -51,18 +54,28 @@ func TestParseHostedMCPWrappersFlagsParsesScopeAndAllowlist(t *testing.T) {
 func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseHostedMCPWrappersFlags(nil, func(string) string { return "" })
+	_, err := parseHostedMCPWrappersFlags(nil, func(string) string { return "" }, io.Discard)
 	require.ErrorContains(t, err, "GRAM_DATABASE_URL")
-	_, err = parseHostedMCPWrappersFlags([]string{"-apply"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"-apply"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "acknowledge-mirror-deployed")
-	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-retire-toolset-grants"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-retire-toolset-grants"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "choose one")
-	_, err = parseHostedMCPWrappersFlags([]string{"-project=nope"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"-project=nope"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "invalid -project")
-	_, err = parseHostedMCPWrappersFlags([]string{"-cursor=nope"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"-cursor=nope"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "invalid -cursor")
-	_, err = parseHostedMCPWrappersFlags([]string{"-aliases=bare-slug"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"-aliases=bare-slug"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "slug@custom_domain_id")
-	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv)
+	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "positional")
+}
+
+func TestParseHostedMCPWrappersFlagsHelpPrintsUsage(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	_, err := parseHostedMCPWrappersFlags([]string{"-h"}, hostedMCPWrappersGetenv, &out)
+	require.ErrorIs(t, err, flag.ErrHelp)
+	require.Contains(t, out.String(), "-acknowledge-mirror-deployed")
+	require.Equal(t, 0, runHostedMCPWrappers([]string{"-h"}, io.Discard, hostedMCPWrappersGetenv))
 }

@@ -24,15 +24,17 @@ The toolset↔wrapper mirror (AIS-635) must be deployed before `-apply`. Once a 
 
 A toolset bound to a soft-deleted custom domain gets an endpoint tombstoned at the domain's `deleted_at`. `-aliases slug@custom_domain_id,...` adds a platform-scope twin for the listed custom-domain toolsets; the allowlist lives in the ticket, not the repo. `oauth_proxy_server_id` is ignored; its counts are in every report.
 
-A dry run cannot see address collisions between two candidates in the same run; those surface under `-apply` as `blocked_collision`.
+A dry run cannot see an endpoint collision between two candidates that would both be inserted in the same run; those surface under `-apply` as `blocked_collision`. Collisions with existing rows and with live toolsets are reported by the dry run.
 
 ## Run book
 
-1. Dev: dry run, then `-apply -acknowledge-mirror-deployed`; rerun and confirm every row reports `already_complete`.
+Every `-apply` below also carries `-acknowledge-mirror-deployed`.
+
+1. Dev: dry run, then `-apply`; rerun and confirm every row reports `already_complete`.
 2. Prod: dry run with `-report`; review outcome counts and every `blocked_*` row.
 3. Prod: `-apply -project <canary>`; verify the canary serves through its endpoint and `mcp.toolset_slug_fallback` drops for it.
 4. Prod: `-apply` in batches (`-limit`, resume with `-cursor` from the summary's `last_cursor`), then a final unfiltered `-apply` that writes nothing.
 5. After AIS-638 deploys: repeat 1–4 with `-move-dependents`.
 6. After AIS-637/AIS-638 deploy: repeat 1–4 with `-retire-toolset-grants`.
 
-Failed runs exit nonzero and print the resume cursor; rows commit one toolset at a time. Stdout carries counts only; the `-report` file holds ids and slugs, never names or emails.
+Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run prints the resume cursor (a dry run commits nothing, so its cursor is never reused). Stdout carries the mode, phase, outcome counts, the last toolset id processed, and the report path; the `-report` file holds ids and slugs, never names or emails.

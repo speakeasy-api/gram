@@ -140,6 +140,42 @@ func TestRun_AdoptsExistingWrapper(t *testing.T) {
 	requireOnlyOutcome(t, f.apply(t), OutcomeAlreadyComplete)
 }
 
+func TestRun_AdoptRepairsStaleWrapperSlug(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-stale", public: true, enabled: true})
+	foreignID := f.seedForeignWrapper(t, toolsetID)
+	f.apply(t)
+	require.NoError(t, New(f.pool).UpdateWrapperSlugFixture(t.Context(), UpdateWrapperSlugFixtureParams{Slug: conv.ToPGText("stale-slug"), ID: foreignID}))
+
+	report := f.apply(t)
+
+	requireOnlyOutcome(t, report, OutcomeAdopted)
+	require.Equal(t, "slug_drift", report.Rows[0].Reason)
+	require.Equal(t, "hosted-org-stale-"+foreignID.String()[len(foreignID.String())-4:], f.wrapper(t, toolsetID).Slug.String)
+	requireOnlyOutcome(t, f.apply(t), OutcomeAlreadyComplete)
+}
+
+func TestRun_MoveToPlatformScopeClearsDomainRoot(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	domainID := f.seedDomain(t, nil)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-move", enabled: true, domainID: uuid.NullUUID{UUID: domainID, Valid: true}})
+	f.apply(t)
+	q := New(f.pool)
+	endpointID := f.endpoints(t, f.wrapper(t, toolsetID).ID)[0].ID
+	require.NoError(t, q.SetEndpointRootFixture(t.Context(), endpointID))
+	require.NoError(t, q.UpdateToolsetDomainFixture(t.Context(), UpdateToolsetDomainFixtureParams{CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ID: toolsetID}))
+
+	report := f.apply(t)
+
+	requireOnlyOutcome(t, report, OutcomeAdopted)
+	eps := f.endpoints(t, f.wrapper(t, toolsetID).ID)
+	require.Len(t, eps, 1)
+	require.False(t, eps[0].CustomDomainID.Valid)
+	require.False(t, eps[0].IsDomainRoot.Valid, "root marker cleared on scope change")
+}
+
 func TestRun_AdoptToDisabledClearsDomainRoot(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

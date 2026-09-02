@@ -92,8 +92,16 @@ INSERT INTO mcp_endpoints (id, project_id, custom_domain_id, mcp_server_id, slug
 VALUES (@id, @project_id, @custom_domain_id, @mcp_server_id, @slug, @deleted_at);
 
 -- name: MoveEndpointAddress :exec
+-- The root marker only survives a move that keeps the domain and stays live.
 UPDATE mcp_endpoints
-SET custom_domain_id = @custom_domain_id, slug = @slug, deleted_at = @deleted_at, updated_at = clock_timestamp()
+SET custom_domain_id = @custom_domain_id,
+    slug = @slug,
+    is_domain_root = CASE
+      WHEN custom_domain_id IS NOT DISTINCT FROM @custom_domain_id AND sqlc.narg(deleted_at)::timestamptz IS NULL THEN is_domain_root
+      ELSE NULL
+    END,
+    deleted_at = sqlc.narg(deleted_at)::timestamptz,
+    updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: CopyMCPGrantsToWrapper :execrows
@@ -129,7 +137,7 @@ WHERE oauth_proxy_server_id IS NOT NULL;
 
 -- name: MoveMcpMetadata :execrows
 UPDATE mcp_metadata AS m
-SET mcp_server_id = @mcp_server_id, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = @mcp_server_id, toolset_id = NULL
 WHERE m.toolset_id = @toolset_id AND m.project_id = @project_id
   AND NOT EXISTS (SELECT 1 FROM mcp_metadata AS d WHERE d.mcp_server_id = @mcp_server_id);
 
@@ -138,7 +146,7 @@ SELECT count(*) FROM mcp_metadata WHERE toolset_id = @toolset_id AND project_id 
 
 -- name: MoveCollectionAttachments :execrows
 UPDATE organization_mcp_collection_server_attachments AS a
-SET mcp_server_id = @mcp_server_id, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = @mcp_server_id, toolset_id = NULL
 FROM organization_mcp_collections AS c
 WHERE a.collection_id = c.id
   AND c.organization_id = @organization_id
@@ -156,7 +164,7 @@ WHERE c.organization_id = @organization_id AND a.toolset_id = @toolset_id;
 
 -- name: MovePluginServers :execrows
 UPDATE plugin_servers AS ps
-SET mcp_server_id = @mcp_server_id, toolset_id = NULL, updated_at = clock_timestamp()
+SET mcp_server_id = @mcp_server_id, toolset_id = NULL
 FROM plugins AS p
 WHERE ps.plugin_id = p.id
   AND p.project_id = @project_id
@@ -186,6 +194,8 @@ WHERE id = ANY(@ids::uuid[]) AND toolset_id = @toolset_id AND project_id = @proj
 
 -- name: CountSkippedAssistantToolsets :one
 SELECT count(*) FROM assistant_toolsets WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states or take exclusive locks.
 
 -- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug)
@@ -258,6 +268,15 @@ VALUES (@id, @assistant_id, @mcp_server_id, @project_id);
 
 -- name: UpdateToolsetSlugFixture :exec
 UPDATE toolsets SET mcp_slug = @mcp_slug WHERE id = @id;
+
+-- name: UpdateToolsetDomainFixture :exec
+UPDATE toolsets SET custom_domain_id = @custom_domain_id WHERE id = @id;
+
+-- name: UpdateWrapperSlugFixture :exec
+UPDATE mcp_servers SET slug = @slug WHERE id = @id;
+
+-- name: SetEndpointRootFixture :exec
+UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = @id;
 
 -- name: SoftDeleteWrapperFixture :exec
 UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;

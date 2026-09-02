@@ -320,7 +320,8 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 			return false, fmt.Errorf("compute wrapper slug: %w", err)
 		}
 		wantName := conv.ToPGText(toolset.Name)
-		if existing.Name != wantName {
+		identityDrift := existing.Name != wantName || existing.Slug.String != slug
+		if identityDrift {
 			taken, err := q.WrapperSlugTaken(ctx, WrapperSlugTakenParams{ProjectID: toolset.ProjectID, Slug: conv.ToPGText(slug), ID: wrapperID})
 			if err != nil {
 				return false, fmt.Errorf("check wrapper slug: %w", err)
@@ -328,9 +329,9 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 			if taken {
 				return false, blocked(row, OutcomeBlockedCollision, "wrapper slug already used in project")
 			}
-			row.Reason = "name_drift"
+			row.Reason = conv.Ternary(existing.Name != wantName, "name_drift", "slug_drift")
 		}
-		if existing.Name != wantName || existing.Visibility != wantVisibility || existing.UserSessionIssuerID != toolset.UserSessionIssuerID || existing.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
+		if identityDrift || existing.Visibility != wantVisibility || existing.UserSessionIssuerID != toolset.UserSessionIssuerID || existing.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
 			if err := q.ReconcileWrapper(ctx, ReconcileWrapperParams{
 				Name:                  wantName,
 				Slug:                  conv.ToPGText(slug),
