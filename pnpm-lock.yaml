@@ -480,7 +480,7 @@ importers:
         version: 1.99.1
       svix-react:
         specifier: ^1.13.9
-        version: 1.13.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(svix@1.99.1)
+        version: 1.13.9(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(svix@1.99.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -601,10 +601,10 @@ importers:
     devDependencies:
       '@gram-ai/functions':
         specifier: workspace:^
-        version: link:../functions
+        version: 0.18.1
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
-        version: 1.30.0(zod@4.4.3)
+        version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       '@types/node':
         specifier: ~22.20.0
         version: 22.20.0
@@ -621,11 +621,11 @@ importers:
         specifier: ^1.7.0
         version: 1.7.0
       '@logtape/logtape':
-        specifier: ^2.3.1
-        version: 2.3.1
+        specifier: ^2.3.2
+        version: 2.3.2
       '@logtape/pretty':
-        specifier: ^2.3.1
-        version: 2.3.1(@logtape/logtape@2.3.1)
+        specifier: ^2.3.2
+        version: 2.3.2(@logtape/logtape@2.3.2)
       '@stricli/core':
         specifier: ^1.3.0
         version: 1.3.0
@@ -644,7 +644,7 @@ importers:
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
-        version: 1.30.0(zod@4.4.3)
+        version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       '@types/archiver':
         specifier: ^8.0.0
         version: 8.0.0
@@ -1359,13 +1359,13 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@logtape/logtape@2.3.1':
-    resolution: {integrity: sha512-nYLsBWMKk0Llp62U6cDbQxNcEKc0E0s5hWbAxkmUM8ax6VchGkPSjPrVp3ixFQUuvUB9ku7MSgPzFhmVTSh2Jw==}
+  '@logtape/logtape@2.3.2':
+    resolution: {integrity: sha512-SfxHfSdDlTp6tLpYP5uezNitSCTQUB3FZ1MXDbgDBN9t9kvF+XL0rOGTIa/pJcDMy1o9FELaZ25E/Ypmsf5fNQ==}
 
-  '@logtape/pretty@2.3.1':
-    resolution: {integrity: sha512-R55izCqvaYGxXu1bfAkG0ABu3Ug/wpncIgMEvchbBtNzJgacvvmT/mdYqB7ouGI57Tcu6b3mIMKi+mbURNT7mg==}
+  '@logtape/pretty@2.3.2':
+    resolution: {integrity: sha512-tRB7boZV5fAC21vtqwhcSr7Nztk+0uwTXLUasSeZy57ELmW7Qf4DviJ0Ek2ykUH1utwxnifQlciiyBwiRx9rDQ==}
     peerDependencies:
-      '@logtape/logtape': ^2.3.1
+      '@logtape/logtape': ^2.3.2
 
   '@manypkg/find-root@3.1.0':
     resolution: {integrity: sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA==}
@@ -8323,11 +8323,11 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@logtape/logtape@2.3.1': {}
+  '@logtape/logtape@2.3.2': {}
 
-  '@logtape/pretty@2.3.1(@logtape/logtape@2.3.1)':
+  '@logtape/pretty@2.3.2(@logtape/logtape@2.3.2)':
     dependencies:
-      '@logtape/logtape': 2.3.1
+      '@logtape/logtape': 2.3.2
 
   '@manypkg/find-root@3.1.0':
     dependencies:
@@ -8379,28 +8379,6 @@ snapshots:
   '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)':
     dependencies:
       '@cfworker/json-schema': 4.1.1
-      '@hono/node-server': 1.19.15(hono@4.12.34)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.1.0
-      express: 5.2.1
-      express-rate-limit: 8.6.2(express@5.2.1)
-      hono: 4.12.34
-      jose: 6.1.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
-    dependencies:
       '@hono/node-server': 1.19.15(hono@4.12.34)
       ajv: 8.20.0
       ajv-formats: 3.0.1
@@ -14008,7 +13986,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svix-react@1.13.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(svix@1.99.1):
+  svix-react@1.13.9(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(svix@1.99.1):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
