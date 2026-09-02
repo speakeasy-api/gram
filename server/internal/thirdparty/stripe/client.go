@@ -18,15 +18,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-// Metadata keys stamped on Stripe objects. organization_name and account_type go on
-// the Customer only: Checkout requests are replayed under their original idempotency
+// Metadata keys stamped on Stripe objects. Checkout Sessions and Subscriptions belong to
+// this product and carry speakeasy_product. A Customer can be shared with the SDK
+// product (same organization id), so its product-specific key is namespaced and
+// speakeasy_product is never written on a Customer; Stripe merges metadata on update,
+// so each product only touches its own keys. organization_name and the account type go
+// on the Customer only: Checkout requests are replayed under their original idempotency
 // key and Stripe rejects a replay whose parameters differ.
 const (
 	organizationIDMetadataKey   = "organization_id"
 	organizationSlugMetadataKey = "organization_slug"
 	organizationNameMetadataKey = "organization_name"
 	speakeasyProductMetadataKey = "speakeasy_product"
-	accountTypeMetadataKey      = "account_type"
+	accountTypeMetadataKey      = "aicp_account_type"
 	meterCustomerPayloadKey     = "stripe_customer_id"
 	meterValuePayloadKey        = "value"
 	allocationMetadataKey       = "gram_billing_allocation"
@@ -158,9 +162,11 @@ func contractMetadata(org organizationIdentity) map[string]string {
 }
 
 func customerMetadata(org organizationIdentity, name string) map[string]string {
-	metadata := contractMetadata(org)
-	metadata[organizationNameMetadataKey] = name
-	return metadata
+	return map[string]string{
+		organizationIDMetadataKey:   org.id,
+		organizationSlugMetadataKey: org.slug,
+		organizationNameMetadataKey: name,
+	}
 }
 
 // validAccountType returns the account type to stamp, or "" when it is outside

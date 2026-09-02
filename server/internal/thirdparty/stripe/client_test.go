@@ -1215,12 +1215,13 @@ func TestCreateCustomerSetsIdentityAndContractMetadata(t *testing.T) {
 	params := api.customerParams
 	require.Equal(t, "The Customer, Inc.", stripesdk.StringValue(params.Name))
 	require.Equal(t, "billing@the-customer.test", stripesdk.StringValue(params.Email))
+	// A Stripe Customer can be shared with the SDK product (same organization id), so
+	// product-specific keys are namespaced and speakeasy_product stays off the customer.
 	require.Equal(t, map[string]string{
-		"speakeasy_product": "aicp",
 		"organization_id":   "<ORG_ID>",
 		"organization_slug": "the-customer",
 		"organization_name": "The Customer, Inc.",
-		"account_type":      "free",
+		"aicp_account_type": "free",
 	}, params.Metadata)
 }
 
@@ -1289,8 +1290,8 @@ func TestUpdateCustomerSetsIdentityAndContractMetadata(t *testing.T) {
 	params := api.customerUpdateParams
 	require.Equal(t, "The Customer, Inc.", stripesdk.StringValue(params.Name))
 	require.Equal(t, "billing@the-customer.test", stripesdk.StringValue(params.Email))
-	require.Equal(t, "aicp", params.Metadata["speakeasy_product"])
-	require.Equal(t, "payg", params.Metadata["account_type"])
+	require.NotContains(t, params.Metadata, "speakeasy_product", "the customer may be shared with another product")
+	require.Equal(t, "payg", params.Metadata["aicp_account_type"])
 	require.Equal(t, "the-customer", params.Metadata["organization_slug"])
 }
 
@@ -1320,7 +1321,7 @@ func TestCreateCustomerOmitsUnknownAccountType(t *testing.T) {
 			IdempotencyKey:   "customer:<ORG_ID>",
 		})
 		require.NoError(t, err)
-		require.NotContains(t, api.customerParams.Metadata, "account_type", "account type %q must not be stamped", accountType)
+		require.NotContains(t, api.customerParams.Metadata, "aicp_account_type", "account type %q must not be stamped", accountType)
 	}
 }
 
@@ -1340,7 +1341,7 @@ func TestUpdateCustomerClearsUnknownAccountType(t *testing.T) {
 		})
 		require.NoError(t, err)
 		// Stripe deletes a metadata key when its value is set to "".
-		value, ok := api.customerUpdateParams.Metadata["account_type"]
+		value, ok := api.customerUpdateParams.Metadata["aicp_account_type"]
 		require.True(t, ok, "account type %q must clear the stale key on update", accountType)
 		require.Empty(t, value)
 	}
