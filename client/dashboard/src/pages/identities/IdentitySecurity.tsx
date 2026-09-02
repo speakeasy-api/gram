@@ -18,6 +18,7 @@ import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityMember,
@@ -43,9 +44,7 @@ export default function IdentitySecurity(): JSX.Element {
     // The same fallback the challenge query uses, so the link filters to the
     // principal the panel counted rather than opening the whole log.
     member?.principalUrn ??
-      (identity.workosUserId || identity.userIds[0]
-        ? `user:${identity.workosUserId ?? identity.userIds[0]}`
-        : undefined),
+      (identity.userIds[0] ? `user:${identity.userIds[0]}` : undefined),
     new URLSearchParams(location.search),
   );
 
@@ -84,8 +83,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
-          error={riskQuery.isError}
-          onRetry={() => void riskQuery.refetch()}
+          error={riskQuery.isError && categories.length === 0}
+          refreshFailed={riskQuery.isError && categories.length > 0}
+          onRetry={retryFailed(riskQuery)}
           footer={
             matchedOn > 0
               ? `Matched on ${matchedOn} identifier${matchedOn === 1 ? "" : "s"}`
@@ -117,8 +117,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
-          error={riskQuery.isError}
-          onRetry={() => void riskQuery.refetch()}
+          error={riskQuery.isError && rules.length === 0}
+          refreshFailed={riskQuery.isError && rules.length > 0}
+          onRetry={retryFailed(riskQuery)}
           footer={
             rules.length > TOP_RULES
               ? `Top ${TOP_RULES} of ${rules.length} rules`
@@ -149,8 +150,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Shadow MCP"
           handoffHref={handoffs.shadowMcp}
           loading={shadowQuery.isLoading}
-          error={shadowQuery.isError}
-          onRetry={() => void shadowQuery.refetch()}
+          error={shadowQuery.isError && shadowServers.length === 0}
+          refreshFailed={shadowQuery.isError && shadowServers.length > 0}
+          onRetry={retryFailed(shadowQuery)}
           footer="Servers this person reached in this window, not the project-wide inventory."
         >
           {shadowServers.length === 0 ? (
@@ -179,8 +181,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
           loading={challengesQuery.isLoading}
-          error={challengesQuery.isError}
-          onRetry={() => void challengesQuery.refetch()}
+          error={challengesQuery.isError && denied.length === 0}
+          refreshFailed={challengesQuery.isError && denied.length > 0}
+          onRetry={retryFailed(challengesQuery)}
           footer={
             denied.length > 0
               ? `${denied.filter((c) => !c.resolvedAt).length} still unresolved`

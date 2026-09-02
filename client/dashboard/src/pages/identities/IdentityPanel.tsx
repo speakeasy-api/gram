@@ -19,6 +19,7 @@ export function IdentityPanel({
   loadingRows,
   loadingVariant,
   error = false,
+  refreshFailed = false,
   onRetry,
   children,
   className,
@@ -52,6 +53,15 @@ export function IdentityPanel({
    * so a failure gets said outright instead.
    */
   error?: boolean;
+  /**
+   * Whether a refresh failed while this panel still holds a previous answer.
+   *
+   * That answer was really returned, so it stays on screen — blanking it would
+   * throw away the only true thing the panel has. It is no longer current
+   * though, and the reader is the one who has to decide whether that matters,
+   * so the panel says so above the rows rather than in place of them.
+   */
+  refreshFailed?: boolean;
   /** Retries the failed request. Omit for a panel with nothing to retry. */
   onRetry?: () => void;
   children: React.ReactNode;
@@ -91,7 +101,10 @@ export function IdentityPanel({
         ) : error ? (
           <IdentityPanelFailed onRetry={onRetry} />
         ) : (
-          children
+          <>
+            {refreshFailed && <IdentityPanelStale onRetry={onRetry} />}
+            {children}
+          </>
         )}
       </div>
       {footer && !loading && !error && (
@@ -145,6 +158,30 @@ function IdentityPanelSkeleton({
           <Skeleton className="h-3 w-12 shrink-0" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The note a panel keeps above rows that are still true but no longer fresh.
+ */
+function IdentityPanelStale({
+  onRetry,
+}: {
+  onRetry?: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="border-border text-muted-foreground flex items-center gap-2 border-b px-4 py-2 text-xs">
+      <span>Showing the last result — refresh failed.</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="hover:text-foreground focus-visible:ring-ring rounded-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Try again
+        </button>
+      )}
     </div>
   );
 }

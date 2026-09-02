@@ -26,6 +26,27 @@ const OFF = { throwOnError: false } as const;
 /** What access.listShadowMCPInventoryServersForUser accepts in one request. */
 const MAX_USER_KEYS = 200;
 
+/** The part of a query a retry button needs. */
+type RetryableQuery = { isError: boolean; refetch: () => unknown };
+
+/**
+ * A retry that re-runs only the reads which actually failed.
+ *
+ * Several queries on these pages are held behind `enabled` — no Gram user id,
+ * no chat:read, no org:admin — and `refetch()` ignores `enabled` and fires
+ * anyway. A retry button that called it blindly would ask for audit logs with
+ * no actor filter, or for chats the caller may not filter by user, and render
+ * either under this identity's name. A query that is disabled never reaches an
+ * error, so having errored is itself proof it was allowed to run.
+ */
+export function retryFailed(...queries: RetryableQuery[]): () => void {
+  return () => {
+    for (const query of queries) {
+      if (query.isError) void query.refetch();
+    }
+  };
+}
+
 /**
  * The window every identity panel reads, kept in the URL so a link to a
  * sub-page carries the range the sender was looking at.
@@ -159,8 +180,14 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   if (identifiers.size === 0) return { known: false, isPending: false };
   if (query.isPending) return { known: false, isPending: true };
   return {
-    known: (query.data ?? []).some((summary) =>
-      identifiers.has((summary.userEmail || summary.userId).toLowerCase()),
+    known: (query.data ?? []).some(
+      (summary) =>
+        // Independently, not `userEmail || userId`: a row can carry both, and
+        // preferring the address there would miss an identity we only know by
+        // the id an agent reported — which renders as "never seen here".
+        (!!summary.userEmail &&
+          identifiers.has(summary.userEmail.toLowerCase())) ||
+        (!!summary.userId && identifiers.has(summary.userId.toLowerCase())),
     ),
     isPending: false,
   };
@@ -291,8 +318,11 @@ export function useIdentityMember(identity: IdentityModel): {
 
 /**
  * Challenges key on the principal URN the authz engine recorded, which the
- * member row states outright; the WorkOS user id is the fallback for a subject
- * with no member row, since RBAC assignments are held against that user.
+ * member row states outright. Without a member row the URN has to be rebuilt,
+ * and it is built from the GRAM user id: the engine resolves principals from
+ * `authCtx.UserID`, which auth sets to the Gram id rather than the WorkOS one.
+ * Falling back to the WorkOS id matches no recorded challenge, and the panel
+ * then reports a clean history for someone who may not have one.
  */
 export function useIdentityChallenges(
   identity: IdentityModel,
@@ -300,7 +330,7 @@ export function useIdentityChallenges(
   to: Date,
 ): ReturnType<typeof useChallenges> {
   const { member } = useIdentityMember(identity);
-  const fallback = identity.workosUserId ?? identity.userIds[0];
+  const fallback = identity.userIds[0];
   const principalUrn =
     member?.principalUrn ?? (fallback ? `user:${fallback}` : "");
   return useChallenges({ principalUrn, limit: 25, from, to }, undefined, {

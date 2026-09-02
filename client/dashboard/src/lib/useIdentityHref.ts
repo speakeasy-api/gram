@@ -17,11 +17,14 @@ export function useIdentityHrefBuilder(): (
 ) => string | null {
   const projectSlug = useProjectSlugForRequests();
   const routes = useRoutes({ projectSlug });
-  // A reader without project:read only reaches "Access restricted", so they
-  // get the name as plain text rather than a link that cannot go anywhere. One
-  // check here covers every call site.
+  // org:read, the same gate IdentityDetailRoot and identity.resolve carry: a
+  // reader without it only reaches "Access restricted", so they get the name
+  // as plain text rather than a link that cannot go anywhere. One check here
+  // covers every call site, and it has to be the destination's gate — checking
+  // project:read would hide the link from org readers who can open the page
+  // and show it to project readers who cannot.
   const { hasAnyScope, isLoading } = useRBAC();
-  const canOpenIdentities = isLoading || hasAnyScope(["project:read"]);
+  const canOpenIdentities = isLoading || hasAnyScope(["org:read"]);
   return (identifier) =>
     identifier && canOpenIdentities
       ? routes.identities.detail.overview.href(

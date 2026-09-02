@@ -19,6 +19,8 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import {
+  hasMetricsSubject,
+  retryFailed,
   useCanReadOthersChats,
   useCanReadRisk,
   useIdentityAuditLogs,
@@ -86,6 +88,7 @@ export default function IdentityOverview(): JSX.Element {
     isError: peersFailed,
     refetch: refetchPeers,
   } = useIdentityPeers(identity, from, to);
+  const peersRetry = { isError: peersFailed, refetch: refetchPeers };
 
   // isLoading rather than isPending throughout: a query held behind `enabled`
   // — no agent identifier, no chat:read — stays pending forever, and showing
@@ -107,13 +110,24 @@ export default function IdentityOverview(): JSX.Element {
     shadowQuery.isError ||
     devicesQuery.isError ||
     peersFailed;
-  const retryAttention = () => {
-    void riskQuery.refetch();
-    void challengesQuery.refetch();
-    void shadowQuery.refetch();
-    void devicesQuery.refetch();
-    refetchPeers();
-  };
+  // The tiles carry the same rule as the Cost and Usage tabs: zero is a
+  // finding, and a read that was refused or never came back has not earned it.
+  const metricsUnavailable =
+    !hasMetricsSubject(identity) || metricsQuery.isError;
+  const metricsValue = metricsUnavailable ? "—" : undefined;
+  const metricsTooltip = !hasMetricsSubject(identity)
+    ? "This identity carries no identifier the usage endpoint can key on."
+    : metricsQuery.isError
+      ? "Usage could not be loaded."
+      : undefined;
+
+  const retryAttention = retryFailed(
+    riskQuery,
+    challengesQuery,
+    shadowQuery,
+    devicesQuery,
+    peersRetry,
+  );
 
   // Which surfaces the work came through. Rides on the roster row, like the
   // accounts below it — the per-user summary carries neither.
@@ -219,7 +233,8 @@ export default function IdentityOverview(): JSX.Element {
           title="Needs attention"
           loading={attentionLoading}
           loadingRows={2}
-          error={attentionFailed}
+          error={attentionFailed && attention.length === 0}
+          refreshFailed={attentionFailed && attention.length > 0}
           onRetry={retryAttention}
           footer={
             attention.length > 0
@@ -259,24 +274,36 @@ export default function IdentityOverview(): JSX.Element {
             <>
               <StatTile
                 title="Spend"
-                subtext={standingFor("totalCost")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalCost")
+                }
                 value={metrics?.totalCost ?? 0}
+                displayValue={metricsValue}
+                tooltip={metricsTooltip}
                 format="currency"
                 tone="neutral"
                 icon="credit-card"
               />
               <StatTile
                 title="Tool calls"
-                subtext={standingFor("totalToolCalls")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalToolCalls")
+                }
                 value={metrics?.totalToolCalls ?? 0}
+                displayValue={metricsValue}
+                tooltip={metricsTooltip}
                 format="compact"
                 tone="information"
                 icon="wrench"
               />
               <StatTile
                 title="Chats"
-                subtext={standingFor("totalChats")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalChats")
+                }
                 value={metrics?.totalChats ?? 0}
+                displayValue={metricsValue}
+                tooltip={metricsTooltip}
                 format="compact"
                 tone="information"
                 icon="message-square"
@@ -290,8 +317,16 @@ export default function IdentityOverview(): JSX.Element {
               <StatTile
                 title="Findings"
                 value={findings}
+                displayValue={riskQuery.isError ? "—" : undefined}
+                tooltip={
+                  riskQuery.isError
+                    ? "Findings could not be loaded."
+                    : undefined
+                }
                 format="compact"
-                tone={findings > 0 ? "destructive" : "neutral"}
+                tone={
+                  !riskQuery.isError && findings > 0 ? "destructive" : "neutral"
+                }
                 icon="flag"
               />
             ))}
@@ -301,10 +336,15 @@ export default function IdentityOverview(): JSX.Element {
             <StatTile
               title="Devices"
               value={devices.length}
+              displayValue={devicesQuery.isError ? "—" : undefined}
               format="compact"
               tone="neutral"
               icon="laptop"
-              tooltip="Current MDM inventory. Unlike the figures beside it, this is not filtered by the selected time range — a device is assigned or it is not."
+              tooltip={
+                devicesQuery.isError
+                  ? "The managed-device inventory could not be loaded."
+                  : "Current MDM inventory. Unlike the figures beside it, this is not filtered by the selected time range — a device is assigned or it is not."
+              }
             />
           )}
         </StatTileGroup>
@@ -321,8 +361,9 @@ export default function IdentityOverview(): JSX.Element {
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"
-            error={peersFailed}
-            onRetry={refetchPeers}
+            error={peersFailed && platforms.length === 0}
+            refreshFailed={peersFailed && platforms.length > 0}
+            onRetry={retryFailed(peersRetry)}
           >
             <ShareBar
               segments={platforms.map((platform) => ({
@@ -341,8 +382,9 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Audit Logs"
             handoffHref={handoffs.auditLogs}
             loading={auditQuery.isLoading}
-            error={auditQuery.isError}
-            onRetry={() => void auditQuery.refetch()}
+            error={auditQuery.isError && logs.length === 0}
+            refreshFailed={auditQuery.isError && logs.length > 0}
+            onRetry={retryFailed(auditQuery)}
             footer={
               logs.length > 0
                 ? `Actor filtered to ${identity.displayName}`
@@ -372,8 +414,9 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Agent Sessions"
             handoffHref={handoffs.agentSessions}
             loading={chatsQuery.isLoading}
-            error={chatsQuery.isError}
-            onRetry={() => void chatsQuery.refetch()}
+            error={chatsQuery.isError && chats.length === 0}
+            refreshFailed={chatsQuery.isError && chats.length > 0}
+            onRetry={retryFailed(chatsQuery)}
             footer={
               chatsQuery.data
                 ? `${chatsQuery.data.total ?? chats.length} session${

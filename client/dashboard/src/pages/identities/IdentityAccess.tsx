@@ -14,6 +14,7 @@ import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useIdentityChallenges,
   useIdentityMember,
   useIdentityWindow,
@@ -35,9 +36,7 @@ export default function IdentityAccess(): JSX.Element {
     // The same fallback the challenge query uses, so the link filters to the
     // principal the panel counted rather than opening the whole log.
     member?.principalUrn ??
-      (identity.workosUserId || identity.userIds[0]
-        ? `user:${identity.workosUserId ?? identity.userIds[0]}`
-        : undefined),
+      (identity.userIds[0] ? `user:${identity.userIds[0]}` : undefined),
     new URLSearchParams(location.search),
   );
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
@@ -48,10 +47,7 @@ export default function IdentityAccess(): JSX.Element {
   // someone's access made from data we never received.
   const rolesLoading = rolesQuery.isLoading || membersQuery.isLoading;
   const rolesFailed = rolesQuery.isError || membersQuery.isError;
-  const retryRoles = () => {
-    void rolesQuery.refetch();
-    void membersQuery.refetch();
-  };
+  const retryRoles = retryFailed(rolesQuery, membersQuery);
 
   const rolesById = new Map(
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
@@ -98,7 +94,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.roles}
           loading={rolesLoading}
           loadingVariant="block"
-          error={rolesFailed}
+          error={rolesFailed && roles.length === 0}
+          refreshFailed={rolesFailed && roles.length > 0}
           onRetry={retryRoles}
           footer={
             member ? undefined : "No org member row resolves to this identity."
@@ -137,7 +134,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.roles}
           loading={rolesLoading}
-          error={rolesFailed}
+          error={rolesFailed && permissions.length === 0}
+          refreshFailed={rolesFailed && permissions.length > 0}
           onRetry={retryRoles}
           footer={
             permissions.length > 0
@@ -172,8 +170,9 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.challenges}
           loading={challengesQuery.isLoading}
           loadingRows={RECENT_CHALLENGES}
-          error={challengesQuery.isError}
-          onRetry={() => void challengesQuery.refetch()}
+          error={challengesQuery.isError && challenges.length === 0}
+          refreshFailed={challengesQuery.isError && challenges.length > 0}
+          onRetry={retryFailed(challengesQuery)}
           footer={
             challenges.length > 0
               ? `${denied.length} denied of ${challenges.length} recorded`

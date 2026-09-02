@@ -14,6 +14,7 @@ import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   hasMetricsSubject,
+  retryFailed,
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
@@ -153,8 +154,9 @@ export default function IdentityCost(): JSX.Element {
             handoffHref={handoffs.costs}
             loading={metricsQuery.isLoading}
             loadingVariant="block"
-            error={metricsQuery.isError}
-            onRetry={() => void metricsQuery.refetch()}
+            error={metricsQuery.isError && tokenSegments.length === 0}
+            refreshFailed={metricsQuery.isError && tokenSegments.length > 0}
+            onRetry={retryFailed(metricsQuery)}
             footer={cacheShareLabel}
           >
             {tokenSegments.length === 0 ? (
@@ -179,8 +181,9 @@ export default function IdentityCost(): JSX.Element {
             handoffHref={handoffs.costs}
             loading={metricsQuery.isLoading}
             loadingVariant="block"
-            error={metricsQuery.isError}
-            onRetry={() => void metricsQuery.refetch()}
+            error={metricsQuery.isError && models.length === 0}
+            refreshFailed={metricsQuery.isError && models.length > 0}
+            onRetry={retryFailed(metricsQuery)}
             footer={
               // Cost aggregates over every address the subject is known by,
               // which is why this can exceed what one address alone would show.
