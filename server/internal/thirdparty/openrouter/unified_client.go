@@ -18,6 +18,7 @@ import (
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
+	or_retry "github.com/OpenRouterTeam/go-sdk/retry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -95,6 +96,26 @@ func (c *ChatClient) checkHostedInference(ctx context.Context, organizationID st
 		return nil
 	}
 	return c.inferenceCheckpoint.Check(ctx, organizationID)
+}
+
+// hostedInferenceHTTPClient puts the checkpoint inside the OpenRouter SDK's
+// retry loop. Every SDK attempt therefore re-evaluates ai_access immediately
+// before the existing Guardian client performs network I/O. Checkpoint errors
+// are permanent so the SDK returns denials and evaluator outages directly
+// instead of retrying them.
+type hostedInferenceHTTPClient struct {
+	delegate       or_base.HTTPClient
+	checkpoint     hostedinference.AttemptCheckpoint
+	organizationID string
+}
+
+func (c *hostedInferenceHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if c.checkpoint != nil {
+		if err := c.checkpoint.Check(req.Context(), c.organizationID); err != nil {
+			return nil, or_retry.Permanent(err)
+		}
+	}
+	return c.delegate.Do(req)
 }
 
 // PreflightHostedInference evaluates the production checkpoint before callers
@@ -948,11 +969,14 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 	}
 	inputs = truncatedInputs
 
-	if err := c.checkHostedInference(ctx, orgID); err != nil {
-		return nil, err
-	}
-
-	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	orClient := or_base.New(
+		or_base.WithSecurity(openrouterKey),
+		or_base.WithClient(&hostedInferenceHTTPClient{
+			delegate:       c.httpClient,
+			checkpoint:     c.inferenceCheckpoint,
+			organizationID: orgID,
+		}),
+	)
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),

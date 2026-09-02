@@ -172,7 +172,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Definition:       DefinitionKeyAIAccess,
 				Surface:          hostedinference.SurfaceGramHostedInference,
-				PrincipalSource:  "Opaque tenant-bound acting-user provenance derived only from a validated ordinary Gram session and revalidated as an active organization member for every provider attempt.",
+				PrincipalSource:  "Opaque tenant-bound acting-user provenance derived from a validated ordinary Gram session or a qualifying signed chat JWT carrying matching ordinary-session provenance, then revalidated as an active organization member for every provider attempt.",
 				ResourceSource:   "Static canonical Gram-hosted-inference identity for an enumerated current governed user call category.",
 				Checkpoint:       "ChatClient before capture and key resolution, then immediately before every completion, stream, object-completion, or embedding provider attempt.",
 				ProtectedWork:    "Governed user chat completion, chat summaries, tool-call summaries, risk authoring, and organization-admin business-memory search embeddings; internal, background, and assistant-owned classes are explicit bypasses.",
