@@ -94,7 +94,7 @@ var _ = Service("metaMcp", func() {
 	})
 
 	Method("updateMetaMcpServer", func() {
-		Description("Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.")
+		Description("Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.")
 
 		Payload(func() {
 			Extend(UpdateMetaMcpServerForm)
@@ -269,12 +269,13 @@ var CreateMetaMcpServerForm = Type("CreateMetaMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Defaults to private, which requires callers to authenticate.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to default to public_only.")
 
 	Required("name")
 })
 
 var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
-	Description("Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.")
+	Description("Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.")
 
 	Attribute("id", String, "The ID of the meta MCP server to update", func() {
 		Format(FormatUUID)
@@ -287,6 +288,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
 	Required("id", "name")
 })
@@ -308,6 +310,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)
@@ -318,7 +321,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
-	Required("id", "organization_id", "project_id", "name", "visibility", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "created_at", "updated_at")
 })
 
 var AddMetaMcpMemberForm = Type("AddMetaMcpMemberForm", func() {

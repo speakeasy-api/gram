@@ -44,6 +44,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -71,7 +72,8 @@ type Service struct {
 	pluginsGitHubEnabled bool
 	assets               *assets.Service
 	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
-	revoker *remotesessions.UpstreamRevoker
+	revoker                  *remotesessions.UpstreamRevoker
+	networkAccessEligibility networkaccess.EligibilityChecker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -89,21 +91,23 @@ func NewService(
 	pluginsGitHubEnabled bool,
 	assetsService *assets.Service,
 	revoker *remotesessions.UpstreamRevoker,
+	networkAccessEligibility networkaccess.EligibilityChecker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
-		logger:               logger,
-		db:                   db,
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		dispositionCache:     dispositionCache,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
-		assets:               assetsService,
-		revoker:              revoker,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
+		logger:                   logger,
+		db:                       db,
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		dispositionCache:         dispositionCache,
+		pluginsGitHubEnabled:     pluginsGitHubEnabled,
+		assets:                   assetsService,
+		revoker:                  revoker,
+		networkAccessEligibility: networkAccessEligibility,
 	}
 }
 
@@ -156,6 +160,14 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, err
 	}
 
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.Storage(networkaccess.ModePublicOnly))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -177,6 +189,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ActorEmail:            authCtx.Email,
 		Name:                  name,
 		Visibility:            string(payload.Visibility),
+		NetworkAccessMode:     mode,
 		EnvironmentID:         ids.EnvironmentID,
 		RemoteMCPServerID:     ids.RemoteMcpServerID,
 		TunneledMCPServerID:   ids.TunneledMcpServerID,
@@ -649,6 +662,17 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, existing.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+		return nil, err
+	}
+
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -694,6 +718,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ServerID:              serverID,
 		Name:                  payload.Name,
 		Visibility:            string(payload.Visibility),
+		NetworkAccessMode:     networkAccessModeUpdate(payload.NetworkAccessMode, mode),
 		EnvironmentID:         ids.EnvironmentID,
 		UserSessionIssuerID:   issuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
@@ -814,6 +839,29 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
+}
+
+func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkaccess.Mode) *networkaccess.Mode {
+	if requested == nil {
+		return nil
+	}
+	return &mode
+}
+
+func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if unproxied {
+		return oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	if s.networkAccessEligibility == nil {
+		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return nil
 }
 
 // ServerDisplayName derives a default plugin-server display name from an

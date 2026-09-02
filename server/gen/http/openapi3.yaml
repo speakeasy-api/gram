@@ -29095,7 +29095,7 @@ paths:
                 name: RemoveMetaMcpMember
     /rpc/metaMcp.update:
         post:
-            description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.
+            description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.
             operationId: updateMetaMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -67266,6 +67266,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -67305,6 +67312,13 @@ components:
                     description: The display name of the meta MCP server
                     minLength: 1
                     maxLength: 100
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
@@ -76232,6 +76246,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 project_id:
                     type: string
                     description: The project ID this MCP server belongs to
@@ -76279,6 +76300,7 @@ components:
                 - id
                 - project_id
                 - visibility
+                - network_access_mode
                 - created_at
                 - updated_at
         McpServerActivity:
@@ -76359,6 +76381,13 @@ components:
                 name:
                     type: string
                     description: The display name of the meta MCP server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 organization_id:
                     type: string
                     description: The organization this meta MCP server belongs to
@@ -76387,6 +76416,7 @@ components:
                 - project_id
                 - name
                 - visibility
+                - network_access_mode
                 - created_at
                 - updated_at
         MigrateIssuerRequestBody:
@@ -87674,6 +87704,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -87746,6 +87783,13 @@ components:
                     description: The display name of the meta MCP server
                     minLength: 1
                     maxLength: 100
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
@@ -87756,7 +87800,7 @@ components:
                     enum:
                         - disabled
                         - private
-            description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
+            description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.
             required:
                 - id
                 - name

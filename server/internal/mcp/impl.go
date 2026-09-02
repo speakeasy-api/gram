@@ -891,10 +891,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	ctx := r.Context()
 	var err error
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx := customdomains.FromContext(ctx); customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	baseURL := s.BaseURLForRequest(r)
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	bodyBytes, bodyReadErr := io.ReadAll(r.Body)

@@ -11,7 +11,8 @@ INSERT INTO mcp_servers (
     toolset_id,
     unproxied_mcp_server_id,
     tool_variations_group_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     @id,
@@ -25,7 +26,8 @@ VALUES (
     @toolset_id,
     @unproxied_mcp_server_id,
     @tool_variations_group_id,
-    @visibility
+    @visibility,
+    sqlc.narg('network_access_mode')
 )
 RETURNING *;
 
@@ -125,7 +127,7 @@ WHERE p.organization_id = @organization_id
 ORDER BY m.created_at DESC;
 
 -- name: ListMCPServersByProjectIDLimited :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = @project_id
   AND deleted IS FALSE
@@ -181,6 +183,10 @@ SET
     unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
+    network_access_mode = CASE
+        WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;

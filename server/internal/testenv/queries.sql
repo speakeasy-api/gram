@@ -839,3 +839,21 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: SetMCPServerNetworkAccessModeFixture :execrows
+-- Test-only fixture for building a pre-existing non-public row so update tests
+-- can prove omitted values fail closed while explicit public_only recovers.
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+-- Test-only equivalent for Meta MCP servers.
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

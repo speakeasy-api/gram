@@ -23,6 +23,8 @@ type MetaMcpServer struct {
 	UserSessionIssuerID *string
 	// The visibility of the gateway.
 	Visibility MetaMcpServerVisibility
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode NetworkAccessMode
 	// When the meta MCP server was created
 	CreatedAt string
 	// When the meta MCP server was last updated

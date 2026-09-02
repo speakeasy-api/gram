@@ -6,6 +6,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
 // BuildMcpServerView converts a repo mcp_servers row into the API response
@@ -24,6 +25,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		UnproxiedMcpServerID:  conv.FromNullableUUID(server.UnproxiedMcpServerID),
 		ToolVariationsGroupID: conv.FromNullableUUID(server.ToolVariationsGroupID),
 		Visibility:            types.McpServerVisibility(server.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}

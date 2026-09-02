@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -71,21 +72,25 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name           string
-		env            string
-		host           string
-		setupDomain    func(t *testing.T) *repo.CustomDomain
-		expectedStatus int
-		expectedCtx    bool
-		description    string
+		name            string
+		env             string
+		host            string
+		setupDomain     func(t *testing.T) *repo.CustomDomain
+		expectedStatus  int
+		expectedCtx     bool
+		expectedSurface requestorigin.Surface
+		expectedBaseURL string
+		description     string
 	}{
 		{
-			name:           "valid_verified_activated_domain",
-			env:            "prod",
-			host:           "custom.example.com",
-			expectedStatus: http.StatusOK,
-			expectedCtx:    true,
-			description:    "Should allow request through with domain context when domain is verified and activated",
+			name:            "valid_verified_activated_domain",
+			env:             "prod",
+			host:            "custom.example.com",
+			expectedStatus:  http.StatusOK,
+			expectedCtx:     true,
+			expectedSurface: requestorigin.SurfaceCustomDomain,
+			expectedBaseURL: "https://custom.example.com",
+			description:     "Should allow request through with domain context when domain is verified and activated",
 			setupDomain: func(t *testing.T) *repo.CustomDomain {
 				t.Helper()
 				domain, err := instance.domainsRepo.CreateCustomDomain(ctx, repo.CreateCustomDomainParams{
@@ -169,21 +174,50 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			setupDomain:    nil,
 		},
 		{
-			name:           "server_url_host_allowed",
-			env:            "prod",
-			host:           "api.speakeasyapi.dev",
-			expectedStatus: http.StatusOK,
-			expectedCtx:    false,
-			description:    "Should allow request through without domain context when host matches server URL",
-			setupDomain:    nil,
+			name:            "server_url_host_allowed",
+			env:             "prod",
+			host:            "api.speakeasyapi.dev",
+			expectedStatus:  http.StatusOK,
+			expectedCtx:     false,
+			expectedSurface: requestorigin.SurfacePlatform,
+			expectedBaseURL: "https://api.speakeasyapi.dev",
+			description:     "Should allow request through without domain context when host matches server URL",
+			setupDomain:     nil,
 		},
 		{
-			name:           "dev_environment_custom_domain",
-			env:            "dev",
-			host:           "custom-dev.example.com",
-			expectedStatus: http.StatusOK,
-			expectedCtx:    true,
-			description:    "Should work in dev environment with custom domains",
+			name:            "server_url_host_case_and_port_are_canonical",
+			env:             "prod",
+			host:            "API.SPEAKEASYAPI.DEV:443",
+			expectedStatus:  http.StatusOK,
+			expectedCtx:     false,
+			expectedSurface: requestorigin.SurfacePlatform,
+			expectedBaseURL: "https://api.speakeasyapi.dev",
+			description:     "Should classify a case-variant platform Host with a legal port",
+			setupDomain:     nil,
+		},
+		{
+			name:           "trailing_dot_is_rejected",
+			env:            "prod",
+			host:           "api.speakeasyapi.dev.",
+			expectedStatus: http.StatusBadRequest,
+			description:    "Should reject trailing-dot Host ambiguity",
+		},
+		{
+			name:           "malformed_port_is_rejected",
+			env:            "prod",
+			host:           "api.speakeasyapi.dev:not-a-port",
+			expectedStatus: http.StatusBadRequest,
+			description:    "Should reject malformed Host ports",
+		},
+		{
+			name:            "dev_environment_custom_domain",
+			env:             "dev",
+			host:            "custom-dev.example.com",
+			expectedStatus:  http.StatusOK,
+			expectedCtx:     true,
+			expectedSurface: requestorigin.SurfaceCustomDomain,
+			expectedBaseURL: "https://custom-dev.example.com",
+			description:     "Should work in dev environment with custom domains",
 			setupDomain: func(t *testing.T) *repo.CustomDomain {
 				t.Helper()
 				domain, err := instance.domainsRepo.CreateCustomDomain(ctx, repo.CreateCustomDomainParams{
@@ -231,8 +265,9 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			// Wrap the test handler with middleware
 			handler := middlewareFunc(testHandler)
 
-			// Create test request
-			req := httptest.NewRequest("GET", "https://"+tt.host+"/test", nil)
+			// Use a valid request URL and set Host separately so malformed Host
+			// inputs reach the middleware instead of failing in httptest setup.
+			req := httptest.NewRequest("GET", "https://example.com/test", nil)
 			req.Host = tt.host
 			req = req.WithContext(ctx)
 
@@ -247,6 +282,10 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			// Verify context if request was successful
 			if tt.expectedStatus == http.StatusOK {
 				domainCtx := customdomains.FromContext(capturedCtx)
+				origin, ok := requestorigin.FromContext(capturedCtx)
+				require.True(t, ok)
+				require.Equal(t, tt.expectedSurface, origin.Surface)
+				require.Equal(t, tt.expectedBaseURL, origin.BaseURL)
 
 				if tt.expectedCtx {
 					require.NotNil(t, domainCtx, "Expected domain context to be set")
@@ -362,5 +401,5 @@ func TestCustomDomainsMiddleware_MissingHost(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
-	require.Contains(t, recorder.Body.String(), "request host is not set")
+	require.Contains(t, recorder.Body.String(), "request host is invalid")
 }

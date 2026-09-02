@@ -37,6 +37,8 @@ type McpServer struct {
 	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility McpServerVisibility
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode NetworkAccessMode
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated
