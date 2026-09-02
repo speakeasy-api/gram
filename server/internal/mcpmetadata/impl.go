@@ -937,6 +937,14 @@ type installContext struct {
 // dual-source phase. For Remote-MCP-backed installs the mcp_server's own
 // visibility flag is authoritative.
 func (ic *installContext) isPublic() bool {
+	// Checked before the toolset arm, which upstream servers otherwise take
+	// (they are toolset-backed by construction). A backing toolset left public
+	// would have rendered the page as needing no credential at all, while
+	// resolveSecurityMode correctly reported OAuth: two contradictory answers
+	// on one page, and the permissive one wins for anything gated on this.
+	if ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityUpstream {
+		return false
+	}
 	if ic.toolset != nil {
 		return ic.toolset.McpIsPublic
 	}

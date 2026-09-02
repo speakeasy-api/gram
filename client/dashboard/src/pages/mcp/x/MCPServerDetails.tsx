@@ -354,12 +354,18 @@ export function MCPServerStatusDropdown({
     options.find((option) => option.value === server.visibility)?.dotClass ??
     "bg-muted-foreground/60";
 
+  // Upstream is not one of the options, so every entry in this dropdown would
+  // silently convert the server away from it, and there is no way back: the
+  // mode selector that can set it is AIM-27. Render the status without a
+  // trigger until that exists.
+  const readOnly = server.visibility === "upstream";
+
   // Unproxied servers have no Gram-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
   // so there's nothing to toggle. Still show the record's actual stored
   // value (not a hardcoded "Public") so this can't drift from what Settings
   // and the readiness checklist report for the same server.
-  if (server.unproxiedMcpServerId) {
+  if (server.unproxiedMcpServerId || readOnly) {
     return (
       <span className="text-foreground border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium">
         <span

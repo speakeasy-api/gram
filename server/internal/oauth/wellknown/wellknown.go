@@ -22,6 +22,7 @@ package wellknown
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -78,6 +79,13 @@ type OAuthServerMetadata struct {
 	GrantTypesSupported               []string `json:"grant_types_supported,omitempty"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported,omitempty"`
+	ServiceDocumentation              string   `json:"service_documentation,omitempty"`
+	OpPolicyURI                       string   `json:"op_policy_uri,omitempty"`
+	OpTosURI                          string   `json:"op_tos_uri,omitempty"`
+	// Pointer so the CIMD draft's member is advertised only when the issuer
+	// actually supports it; false and absent mean the same thing to a client,
+	// and emitting false on every reconstruction would be noise.
+	ClientIDMetadataDocumentSupported *bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 type OAuthServerMetadataResultKind string
@@ -162,6 +170,20 @@ func ResolveOAuthServerMetadataFromToolset(
 	return nil, nil
 }
 
+// cimdSupported returns a pointer only when the issuer advertises CIMD, so the
+// member is omitted rather than emitted as false.
+func cimdSupported(supported bool) *bool {
+	if !supported {
+		return nil
+	}
+	return &supported
+}
+
+// ErrIncompleteIssuerMetadata is a reconstruction that cannot describe a usable
+// authorization server, because the issuer has no captured snapshot and no
+// stored authorization or token endpoint either.
+var ErrIncompleteIssuerMetadata = errors.New("issuer has no authorization or token endpoint to advertise")
+
 // RemoteSessionIssuerMetadata is the part of a remote_session_issuers row the
 // well-known surface needs to describe an upstream authorization server. It is
 // a plain struct rather than the repo row so this package stays independent of
@@ -177,6 +199,10 @@ type RemoteSessionIssuerMetadata struct {
 	GrantTypesSupported               []string
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
+	ServiceDocumentation              string
+	OpPolicyURI                       string
+	OpTosURI                          string
+	ClientIDMetadataDocumentSupported bool
 
 	// Snapshot is remote_session_issuers.metadata: the discovery document as
 	// the issuer served it, filtered to what Gram will republish. Empty for a
@@ -213,6 +239,15 @@ func ResolveOAuthServerMetadataFromRemoteSessionIssuer(issuer RemoteSessionIssue
 		}, true, nil
 	}
 
+	// RFC 8414 makes both of these REQUIRED, and a client cannot start a flow
+	// without them. An issuer that has neither a snapshot nor endpoints is a
+	// row discovery never completed for, so serving 200 with empty strings
+	// would advertise a broken authorization server rather than admit there is
+	// nothing to advertise. The caller turns this into a not-found.
+	if issuer.AuthorizationEndpoint == "" || issuer.TokenEndpoint == "" {
+		return nil, false, ErrIncompleteIssuerMetadata
+	}
+
 	return &OAuthServerMetadataResult{
 		Kind: OAuthServerMetadataResultKindStatic,
 		Static: &OAuthServerMetadata{
@@ -232,6 +267,10 @@ func ResolveOAuthServerMetadataFromRemoteSessionIssuer(issuer RemoteSessionIssue
 			GrantTypesSupported:               issuer.GrantTypesSupported,
 			TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
 			CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
+			ServiceDocumentation:              issuer.ServiceDocumentation,
+			OpPolicyURI:                       issuer.OpPolicyURI,
+			OpTosURI:                          issuer.OpTosURI,
+			ClientIDMetadataDocumentSupported: cimdSupported(issuer.ClientIDMetadataDocumentSupported),
 		},
 		Raw:      nil,
 		ProxyURL: "",

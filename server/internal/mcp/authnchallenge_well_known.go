@@ -252,21 +252,24 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
 
-	if mcpServer.UserSessionIssuerID.Valid {
-		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
-		if err != nil {
-			return fmt.Errorf("build resolved mcp endpoint: %w", err)
-		}
-		return s.ServeGetProtectedResource(w, r, endpoint)
-	}
-
-	// Upstream servers advertise the Gram URL the request arrived at, exactly as
-	// the toolset external-OAuth branch does. The authorization-server document
-	// served from that URL is the upstream's, so a client following this
-	// pointer lands on the upstream's endpoints. Taken before the backend
-	// switch, and before the legacy toolset resolver, which keys on
-	// external_oauth_server_id and would 404 a converted server.
-	if authMode, _ := mcpservers.ResolveAuthorizationMode(mcpServer); authMode == mcpservers.AuthorizationModeUpstream {
+	// Consulted before the issuer-gated branch below. An upstream row that also
+	// carries a user session issuer is one ResolveAuthorizationMode refuses, and
+	// the runtime serves it as not found; reaching the issuer-gated branch here
+	// would advertise Gram as its authorization server instead, which is the
+	// exact split brain between what Gram serves and what Gram advertises that
+	// the mode exists to prevent. Non-hosted upstream rows land here too, rather
+	// than falling through to the backend switch's unexpected-error arm.
+	switch authMode, reason := mcpservers.ResolveAuthorizationMode(mcpServer); authMode {
+	case mcpservers.AuthorizationModeInvalid:
+		logger.ErrorContext(ctx, "refusing well-known metadata for an mcp server with an incoherent authorization configuration",
+			attr.SlogError(errors.New(reason)),
+		)
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpservers.AuthorizationModeUpstream:
+		// Upstream servers advertise the Gram URL the request arrived at,
+		// exactly as the toolset external-OAuth branch does. The
+		// authorization-server document served from that URL is the upstream's,
+		// so a client following this pointer lands on the upstream's endpoints.
 		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
@@ -278,6 +281,19 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 			BearerMethodsSupported: supportedBearerMethods,
 			ResourceDocumentation:  "",
 		})
+	case mcpservers.AuthorizationModeDisabled, mcpservers.AuthorizationModeGram, mcpservers.AuthorizationModeIssuerGated:
+		// Handled below: disabled never reaches here (resolution filters it),
+		// and the other two take the issuer-gated or legacy toolset branches,
+		// which is where their metadata has always come from. Listed rather
+		// than defaulted so a new mode is a compile-time decision here.
+	}
+
+	if mcpServer.UserSessionIssuerID.Valid {
+		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
+		if err != nil {
+			return fmt.Errorf("build resolved mcp endpoint: %w", err)
+		}
+		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
 	switch {
@@ -318,25 +334,41 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
 
+	// Consulted before the issuer-gated branch below. An upstream row that also
+	// carries a user session issuer is one ResolveAuthorizationMode refuses, and
+	// the runtime serves it as not found; reaching the issuer-gated branch here
+	// would advertise Gram as its authorization server instead, which is the
+	// exact split brain between what Gram serves and what Gram advertises that
+	// the mode exists to prevent. Non-hosted upstream rows land here too, rather
+	// than falling through to the backend switch's unexpected-error arm.
+	switch authMode, reason := mcpservers.ResolveAuthorizationMode(mcpServer); authMode {
+	case mcpservers.AuthorizationModeInvalid:
+		logger.ErrorContext(ctx, "refusing well-known metadata for an mcp server with an incoherent authorization configuration",
+			attr.SlogError(errors.New(reason)),
+		)
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpservers.AuthorizationModeUpstream:
+		// An upstream server's authorization server is its own, named by
+		// remote_session_issuer_id: which backend fronts it does not change
+		// whose metadata is served.
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
+		}
+		return s.serveUpstreamAuthorizationServer(ctx, w, r, logger, mcpEndpoint.ProjectID, mcpServer.RemoteSessionIssuerID.UUID, resourceURL)
+	case mcpservers.AuthorizationModeDisabled, mcpservers.AuthorizationModeGram, mcpservers.AuthorizationModeIssuerGated:
+		// Handled below: disabled never reaches here (resolution filters it),
+		// and the other two take the issuer-gated or legacy toolset branches,
+		// which is where their metadata has always come from. Listed rather
+		// than defaulted so a new mode is a compile-time decision here.
+	}
+
 	if mcpServer.UserSessionIssuerID.Valid {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
 		if err != nil {
 			return fmt.Errorf("build resolved mcp endpoint: %w", err)
 		}
 		return s.ServeGetAuthorizationServer(w, r, endpoint)
-	}
-
-	// An upstream server's authorization server is its own, named by
-	// remote_session_issuer_id, so this branch is taken before the backend
-	// switch: which backend fronts it does not change whose metadata is served.
-	// ResolveAuthorizationMode has already refused an upstream row that is not
-	// hosted or that carries a user session issuer.
-	if authMode, _ := mcpservers.ResolveAuthorizationMode(mcpServer); authMode == mcpservers.AuthorizationModeUpstream {
-		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
-		}
-		return s.serveUpstreamAuthorizationServer(ctx, w, r, logger, mcpEndpoint.ProjectID, mcpServer.RemoteSessionIssuerID.UUID, resourceURL)
 	}
 
 	switch {
@@ -434,9 +466,18 @@ func (s *Service) serveUpstreamAuthorizationServer(ctx context.Context, w http.R
 		GrantTypesSupported:               issuer.GrantTypesSupported,
 		TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
 		CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
+		ServiceDocumentation:              conv.FromPGTextOrEmpty[string](issuer.ServiceDocumentation),
+		OpPolicyURI:                       conv.FromPGTextOrEmpty[string](issuer.OpPolicyUri),
+		OpTosURI:                          conv.FromPGTextOrEmpty[string](issuer.OpTosUri),
+		ClientIDMetadataDocumentSupported: issuer.ClientIDMetadataDocumentSupported,
 		Snapshot:                          issuer.Metadata,
 	}, resourceURL)
-	if err != nil {
+	switch {
+	case errors.Is(err, wellknown.ErrIncompleteIssuerMetadata):
+		// Nothing usable to advertise, so say so rather than hand a client a
+		// document it cannot start a flow from.
+		return oops.E(oops.CodeNotFound, err, "no OAuth configuration found").LogWarn(ctx, logger)
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve upstream OAuth server metadata").LogError(ctx, logger)
 	}
 	if !fromSnapshot {

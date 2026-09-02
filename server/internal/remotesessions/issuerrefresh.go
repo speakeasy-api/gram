@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -105,14 +106,22 @@ func sanitizeDiscoverySnapshot(raw []byte) ([]byte, error) {
 		return nil, errors.New("decode discovery document: expected a JSON object")
 	}
 
+	// Matched case-insensitively, and every variant is dropped together.
+	// encoding/json resolves a struct field case-insensitively, so
+	// attemptIssuerProbe validated whichever spelling the upstream sent, while
+	// this map preserves them all verbatim. Filtering only the canonical
+	// spelling therefore republished the exact variants validation had already
+	// looked at: a document carrying REVOCATION_ENDPOINT over plaintext http
+	// passed the probe and survived into the served snapshot untouched.
 	dropUnless := func(key string, allowed func(string) bool) {
-		encoded, ok := fields[key]
-		if !ok {
-			return
-		}
-		var value string
-		if err := json.Unmarshal(encoded, &value); err != nil || !allowed(value) {
-			delete(fields, key)
+		for name, encoded := range fields {
+			if !strings.EqualFold(name, key) {
+				continue
+			}
+			var value string
+			if err := json.Unmarshal(encoded, &value); err != nil || !allowed(value) {
+				delete(fields, name)
+			}
 		}
 	}
 

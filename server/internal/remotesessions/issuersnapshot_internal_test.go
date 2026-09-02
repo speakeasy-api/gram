@@ -92,6 +92,32 @@ func TestSanitizeDiscoverySnapshot(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			// encoding/json matches struct fields case-insensitively, so
+			// attemptIssuerProbe validated this member and let it through;
+			// filtering only the canonical spelling then republished the exact
+			// value validation had rejected, over plaintext, from Gram's origin.
+			name: "drops a filtered field under any capitalization",
+			raw: `{
+				"issuer": "https://idp.example.com",
+				"REVOCATION_ENDPOINT": "http://idp.example.com/revoke",
+				"Service_Documentation": "javascript:alert(1)"
+			}`,
+			want:    map[string]any{"issuer": "https://idp.example.com"},
+			wantErr: "",
+		},
+		{
+			name: "keeps a safe value under a non-canonical capitalization",
+			raw: `{
+				"issuer": "https://idp.example.com",
+				"Revocation_Endpoint": "https://idp.example.com/revoke"
+			}`,
+			want: map[string]any{
+				"issuer":              "https://idp.example.com",
+				"Revocation_Endpoint": "https://idp.example.com/revoke",
+			},
+			wantErr: "",
+		},
+		{
 			// A field whose type is wrong is a document Gram cannot reason
 			// about, so it is dropped rather than re-served to clients.
 			name: "drops a filtered field carrying a non-string value",

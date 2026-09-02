@@ -5002,15 +5002,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
-    -- clients; the columns this statement rewrites are what Gram dials. An
-    -- operator correcting an endpoint, or repointing issuer entirely, would
-    -- otherwise leave Gram serving a document naming the old authorization
-    -- server while every remote session flow used the new one. Refresh keeps
-    -- the two coupled by writing both from one document; a manual edit has no
-    -- document to write, so it drops the snapshot and the well-known surface
-    -- reconstructs from these columns until the next refresh recaptures it.
-    metadata = NULL,
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5228,15 +5251,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
-    -- clients; the columns this statement rewrites are what Gram dials. An
-    -- operator correcting an endpoint, or repointing issuer entirely, would
-    -- otherwise leave Gram serving a document naming the old authorization
-    -- server while every remote session flow used the new one. Refresh keeps
-    -- the two coupled by writing both from one document; a manual edit has no
-    -- document to write, so it drops the snapshot and the well-known surface
-    -- reconstructs from these columns until the next refresh recaptures it.
-    metadata = NULL,
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5485,15 +5531,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
-    -- clients; the columns this statement rewrites are what Gram dials. An
-    -- operator correcting an endpoint, or repointing issuer entirely, would
-    -- otherwise leave Gram serving a document naming the old authorization
-    -- server while every remote session flow used the new one. Refresh keeps
-    -- the two coupled by writing both from one document; a manual edit has no
-    -- document to write, so it drops the snapshot and the well-known surface
-    -- reconstructs from these columns until the next refresh recaptures it.
-    metadata = NULL,
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()

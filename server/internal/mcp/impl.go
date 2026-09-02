@@ -1320,6 +1320,20 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").LogError(ctx, s.logger)
 	}
 
+	// upstreamAuthorized deliberately governs only the no-schemes arm below.
+	//
+	// When the toolset declares per-tool security, a scheme satisfied from the
+	// system environment or an MCP-* request header dispatches the call without
+	// an inbound bearer. That reads like a hole in "upstream requires the
+	// upstream's bearer", and reviewers have filed it as one, but it is the
+	// environment-to-header credential override customers depend on: those
+	// credentials are what authorize the call Gram makes to the tool, while
+	// visibility governs who Gram admits. Requiring a bearer here would break
+	// that override for every upstream server whose toolset carries schemes.
+	//
+	// The behavior is also unchanged from the toolset external-OAuth branch
+	// this mode replaces, which gates identically. Revisit with AIM-25, when
+	// that branch and its assumptions go away together.
 	schemes := describeToolSecurity(described.SecurityVariables)
 	if len(schemes) == 0 {
 		// No per-tool security annotations, but the toolset may still require

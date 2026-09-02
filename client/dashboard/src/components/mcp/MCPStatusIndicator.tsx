@@ -40,8 +40,8 @@ function getStatusConfig(
   // the server is reachable without a Gram credential, but it is not open.
   if (mcpIsUpstream) {
     return {
-      color: "bg-info-default",
-      pulseColor: "bg-info-default",
+      color: "bg-information-default",
+      pulseColor: "bg-information-default",
       label: "Upstream auth",
       animate: true,
     };
