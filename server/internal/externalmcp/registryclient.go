@@ -524,7 +524,7 @@ func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Req
 	if err != nil {
 		return listResponse{}, fmt.Errorf("fetch from registry: %w", err)
 	}
-	defer o11y.LogDefer(ctx, c.logger, func() error {
+	defer o11y.LogDefer(ctx, c.logger, "failed to close mcp registry response body", func() error {
 		return resp.Body.Close()
 	})
 

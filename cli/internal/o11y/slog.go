@@ -94,13 +94,18 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	return nil
 }
 
-func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error {
+// LogDefer runs cb and, when it returns a non-nil error, logs that error at
+// ERROR level under msg. Reserve it for cleanup whose failure is actionable:
+// msg must name the resource that failed to close so the log is diagnosable on
+// its own. Cleanup that is expected to fail, or whose failure is inert, belongs
+// in NoLogDefer instead.
+func LogDefer(ctx context.Context, logger *slog.Logger, msg string, cb func() error) error {
 	err := cb()
 	if err == nil {
 		return nil
 	}
 
-	logger.ErrorContext(ctx, "error", slog.String("error", err.Error()))
+	logger.ErrorContext(ctx, msg, slog.String("error", err.Error()))
 
 	return err
 }
