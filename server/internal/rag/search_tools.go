@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -29,10 +30,11 @@ const (
 	// If you would like to add another embedding model you must modify the table to handle and index embeddings of that dimension
 	defaultEmbeddingModel      = "openai/text-embedding-3-small"
 	defaultFindToolsResultSize = 3
-	// OpenAI embedding limit: 300,000 tokens max per request, 8192 tokens per input
-	// Using ~4 bytes per token approximation: 300k tokens * 4 bytes = 1.2MB
-	// Use conservative 800KB to account for JSON overhead
-	embeddingMaxBatchBytes        = 800 * 1024 // 800KB
+	// OpenAI allows at most 300,000 tokens across an embedding request.
+	// A tokenizer cannot emit more tokens than the input has UTF-8 bytes, so
+	// this byte ceiling guarantees the aggregate token limit without another
+	// tokenization pass. Oversized individual inputs are limited by the client.
+	embeddingMaxBatchBytes        = 300_000
 	embeddingMaxConcurrentBatches = 5
 )
 
@@ -286,10 +288,11 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 }
 
 type embeddingCandidate struct {
-	entryKey string
-	payload  []byte
-	content  string
-	tags     []string
+	entryKey  string
+	payload   []byte
+	content   string
+	fallbacks []string
+	tags      []string
 }
 
 func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
@@ -325,7 +328,9 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 			return nil, fmt.Errorf("marshal tool entry %s: %w", name, err)
 		}
 
-		content := buildEmbeddableContent(&entry)
+		tags := extractTags(tool)
+		schemaSummary, topLevelSchemaSummary := summarizeInputSchemaLevels(entry.InputSchema)
+		content := buildEmbeddableContent(&entry, tags, schemaSummary)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
@@ -334,7 +339,11 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 			entryKey: baseTool.ToolUrn,
 			payload:  payload,
 			content:  content,
-			tags:     extractTags(tool),
+			fallbacks: []string{
+				buildTopLevelEmbeddableContent(&entry, topLevelSchemaSummary),
+				buildNameDescriptionEmbeddableContent(&entry),
+			},
+			tags: tags,
 		})
 	}
 
@@ -407,9 +416,31 @@ type embeddingBatch struct {
 	endIdx   int
 }
 
+func selectEmbeddingCandidateContents(model string, candidates []embeddingCandidate) error {
+	inputs := make([]string, len(candidates))
+	inputFallbacks := make([][]string, len(candidates))
+	for i, candidate := range candidates {
+		inputs[i] = candidate.content
+		inputFallbacks[i] = candidate.fallbacks
+	}
+
+	selected, err := openrouter.SelectEmbeddingInputFallbacks(model, inputs, inputFallbacks)
+	if err != nil {
+		return fmt.Errorf("select embedding input fallbacks: %w", err)
+	}
+	for i, content := range selected {
+		candidates[i].content = content
+	}
+	return nil
+}
+
 func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
 	if len(candidates) == 0 {
 		return nil, nil
+	}
+
+	if err := selectEmbeddingCandidateContents(s.embeddingModel, candidates); err != nil {
+		return nil, err
 	}
 
 	total := len(candidates)
@@ -492,6 +523,10 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 }
 
 func (s *ToolsetVectorStore) createBatchesBySize(candidates []embeddingCandidate) []embeddingBatch {
+	return createBatchesWithinSize(candidates, embeddingMaxBatchBytes)
+}
+
+func createBatchesWithinSize(candidates []embeddingCandidate, maxBatchBytes int) []embeddingBatch {
 	var batches []embeddingBatch
 	currentBatchStart := 0
 	currentBatchBytes := 0
@@ -500,7 +535,7 @@ func (s *ToolsetVectorStore) createBatchesBySize(candidates []embeddingCandidate
 		contentBytes := len(candidate.content)
 
 		// If adding this candidate would exceed the limit, finalize current batch
-		if currentBatchBytes > 0 && currentBatchBytes+contentBytes > embeddingMaxBatchBytes {
+		if currentBatchBytes > 0 && currentBatchBytes+contentBytes > maxBatchBytes {
 			batches = append(batches, embeddingBatch{
 				startIdx: currentBatchStart,
 				endIdx:   i,
@@ -530,27 +565,254 @@ type toolListEntry struct {
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func buildEmbeddableContent(entry *toolListEntry) string {
-	var schema string
-	if len(entry.InputSchema) > 0 {
-		schema = string(entry.InputSchema)
-	}
-
-	var meta string
-	if entry.Meta != nil {
-		if payload, err := json.Marshal(entry.Meta); err == nil {
-			meta = string(payload)
-		}
-	}
-
+func buildEmbeddableContent(entry *toolListEntry, tags []string, schemaSummary string) string {
 	parts := []string{
 		entry.Name,
 		entry.Description,
-		schema,
-		meta,
+	}
+	if len(tags) > 0 {
+		parts = append(parts, "tags: "+strings.Join(tags, ", "))
+	}
+	if schemaSummary != "" {
+		parts = append(parts, "parameters:\n"+schemaSummary)
 	}
 
 	return strings.TrimSpace(strings.Join(filterNonEmpty(parts), "\n"))
+}
+
+func summarizeInputSchema(raw json.RawMessage) string {
+	summary, _ := summarizeInputSchemaLevels(raw)
+	return summary
+}
+
+func summarizeInputSchemaLevels(raw json.RawMessage) (full string, topLevel string) {
+	if len(raw) == 0 {
+		return "", ""
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return string(raw), ""
+	}
+
+	lines := make([]string, 0)
+	appendSchemaSummary(&lines, "input", schema, false, 0)
+	return strings.Join(lines, "\n"), summarizeTopLevelInputSchema(schema)
+}
+
+func summarizeTopLevelInputSchema(schema map[string]any) string {
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	lines := make([]string, 0, len(names))
+	for _, name := range names {
+		line := "- " + name
+		if property, ok := properties[name].(map[string]any); ok {
+			description, _ := property["description"].(string)
+			if description == "" {
+				description, _ = property["title"].(string)
+			}
+			if description = summarizeSchemaText(description, 320); description != "" {
+				line += ": " + description
+			}
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func buildTopLevelEmbeddableContent(entry *toolListEntry, schemaSummary string) string {
+	parts := []string{entry.Name, entry.Description}
+	if schemaSummary != "" {
+		parts = append(parts, "parameters:\n"+schemaSummary)
+	}
+	return strings.TrimSpace(strings.Join(filterNonEmpty(parts), "\n"))
+}
+
+func buildNameDescriptionEmbeddableContent(entry *toolListEntry) string {
+	return strings.TrimSpace(strings.Join(filterNonEmpty([]string{
+		entry.Name,
+		entry.Description,
+	}), "\n"))
+}
+
+func appendSchemaSummary(lines *[]string, path string, schema map[string]any, required bool, depth int) {
+	if depth > 16 {
+		*lines = append(*lines, "- "+path+" (nested schema omitted)")
+		return
+	}
+
+	details := make([]string, 0, 5)
+	if required {
+		details = append(details, "required")
+	}
+	details = append(details, schemaTypes(schema)...)
+	if format, ok := schema["format"].(string); ok && format != "" {
+		details = append(details, "format="+format)
+	}
+	if ref, ok := schema["$ref"].(string); ok && ref != "" {
+		details = append(details, "ref="+ref)
+	}
+	if enum, ok := schema["enum"].([]any); ok && len(enum) > 0 {
+		details = append(details, "enum="+summarizeSchemaValues(enum, 12))
+	}
+	if value, ok := schema["const"]; ok {
+		details = append(details, "const="+summarizeSchemaValue(value))
+	}
+
+	line := "- " + path
+	if len(details) > 0 {
+		line += " (" + strings.Join(details, ", ") + ")"
+	}
+	description, _ := schema["description"].(string)
+	if description == "" {
+		description, _ = schema["title"].(string)
+	}
+	if description = summarizeSchemaText(description, 320); description != "" {
+		line += ": " + description
+	}
+	*lines = append(*lines, line)
+
+	requiredProperties := make(map[string]struct{})
+	if requiredValues, ok := schema["required"].([]any); ok {
+		for _, value := range requiredValues {
+			if name, ok := value.(string); ok {
+				requiredProperties[name] = struct{}{}
+			}
+		}
+	}
+
+	if properties, ok := schema["properties"].(map[string]any); ok {
+		names := make([]string, 0, len(properties))
+		for name := range properties {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			childPath := name
+			if path != "input" {
+				childPath = path + "." + name
+			}
+			_, childRequired := requiredProperties[name]
+			appendSchemaSummaryValue(lines, childPath, properties[name], childRequired, depth+1)
+		}
+	}
+
+	if items, ok := schema["items"]; ok {
+		appendSchemaSummaryValue(lines, path+"[]", items, false, depth+1)
+	}
+	if additional, ok := schema["additionalProperties"].(map[string]any); ok {
+		appendSchemaSummary(lines, path+".*", additional, false, depth+1)
+	}
+
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		alternatives, ok := schema[keyword].([]any)
+		if !ok {
+			continue
+		}
+		for i, alternative := range alternatives {
+			appendSchemaSummaryValue(
+				lines,
+				fmt.Sprintf("%s %s[%d]", path, keyword, i+1),
+				alternative,
+				false,
+				depth+1,
+			)
+		}
+	}
+
+	for _, keyword := range []string{"$defs", "definitions"} {
+		definitions, ok := schema[keyword].(map[string]any)
+		if !ok {
+			continue
+		}
+		names := make([]string, 0, len(definitions))
+		for name := range definitions {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			appendSchemaSummaryValue(lines, "definition "+name, definitions[name], false, depth+1)
+		}
+	}
+}
+
+func appendSchemaSummaryValue(lines *[]string, path string, value any, required bool, depth int) {
+	switch schema := value.(type) {
+	case map[string]any:
+		appendSchemaSummary(lines, path, schema, required, depth)
+	case bool:
+		*lines = append(*lines, fmt.Sprintf("- %s (allowed=%t)", path, schema))
+	}
+}
+
+func schemaTypes(schema map[string]any) []string {
+	switch value := schema["type"].(type) {
+	case string:
+		if value != "" {
+			return []string{value}
+		}
+	case []any:
+		types := make([]string, 0, len(value))
+		for _, item := range value {
+			if schemaType, ok := item.(string); ok && schemaType != "" {
+				types = append(types, schemaType)
+			}
+		}
+		if len(types) > 0 {
+			return []string{strings.Join(types, "|")}
+		}
+	}
+
+	if _, ok := schema["properties"]; ok {
+		return []string{"object"}
+	}
+	if _, ok := schema["items"]; ok {
+		return []string{"array"}
+	}
+	return nil
+}
+
+func summarizeSchemaValues(values []any, limit int) string {
+	summaries := make([]string, 0, min(len(values), limit))
+	for _, value := range values[:min(len(values), limit)] {
+		summaries = append(summaries, summarizeSchemaValue(value))
+	}
+	result := "[" + strings.Join(summaries, ", ") + "]"
+	if remaining := len(values) - len(summaries); remaining > 0 {
+		result += fmt.Sprintf(" +%d more", remaining)
+	}
+	return result
+}
+
+func summarizeSchemaValue(value any) string {
+	switch value := value.(type) {
+	case string:
+		return summarizeSchemaText(value, 80)
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return ""
+		}
+		return summarizeSchemaText(string(encoded), 80)
+	}
+}
+
+func summarizeSchemaText(value string, maxRunes int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes]) + "…"
 }
 
 func filterNonEmpty(values []string) []string {
