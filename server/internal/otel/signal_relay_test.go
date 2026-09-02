@@ -323,7 +323,7 @@ func TestSignalRelayDestinationDrainsFailedResponses(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 	relay := newSignalRelay(nil, nil, policy, "/v1/traces", "trace")
-	destination, err := relay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, true)
+	destination, err := relay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, false)
 	require.NoError(t, err)
 
 	require.Error(t, destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))

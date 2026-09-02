@@ -123,7 +123,7 @@ func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey
 	value, err, _ := r.destinationLoads.Do(relayRouteLoadKey(key), func() (any, error) {
 		now := r.now()
 		if cached, ok := r.cachedDestination(key, now); ok {
-			return cachedRelayDestination{destination: cached}, nil
+			return cachedRelayDestination{destination: cached, expiresAt: time.Time{}}, nil
 		}
 
 		destination, err := r.loadDestination(ctx, key)
@@ -131,7 +131,7 @@ func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey
 			return nil, err
 		}
 
-		cached := cachedRelayDestination{destination: destination}
+		cached := cachedRelayDestination{destination: destination, expiresAt: time.Time{}}
 		// Only exclude and missing destinations are safe to reuse: stale include
 		// policy could disclose data after an include-to-exclude change.
 		if destination == nil || !destination.includeSensitiveData {
