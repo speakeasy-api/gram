@@ -1,0 +1,14 @@
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 418,423,474,476-477,480-481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9cf080f89b08b6defb9aa1e79484d7bd84fbe957",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
