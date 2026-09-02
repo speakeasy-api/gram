@@ -65,6 +65,7 @@ sdk-gen:
   - "server/internal/constants/spend_cap.go"
   - "server/internal/constants/trials.go"
   - "server/internal/conv/from.go"
+  - "server/internal/oops/codes.go"
   - "server/internal/productfeatures/features.go"
   - "server/gen/http/openapi3.yaml"
 
