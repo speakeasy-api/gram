@@ -2,46 +2,32 @@ package dialect
 
 import "strings"
 
-type SensitivityClass uint8
-
-const (
-	SensitivityNone SensitivityClass = iota
-	SensitivityContent
-	SensitivityIdentity
-	SensitivitySecret
-)
-
-type sensitivityPrefix struct {
-	prefix string
-	class  SensitivityClass
+var sensitiveDataExactKeys = map[string]struct{}{
+	"assistant":                  {},
+	"content":                    {},
+	"gen_ai.system_instructions": {},
+	"prompt":                     {},
+	"tool.args":                  {},
+	"tool_result":                {},
+	"user_prompt":                {},
 }
 
-var sensitiveDataExactKeys = map[string]SensitivityClass{
-	"assistant":                  SensitivityContent,
-	"content":                    SensitivityContent,
-	"gen_ai.system_instructions": SensitivityContent,
-	"prompt":                     SensitivityContent,
-	"tool.args":                  SensitivityContent,
-	"tool_result":                SensitivityContent,
-	"user_prompt":                SensitivityContent,
+var sensitiveDataPrefixes = [...]string{
+	"gen_ai.input.",
+	"gen_ai.output.",
+	"gen_ai.tool.call.",
+	"enduser.",
+	"user.",
 }
 
-var sensitiveDataPrefixes = [...]sensitivityPrefix{
-	{prefix: "gen_ai.input.", class: SensitivityContent},
-	{prefix: "gen_ai.output.", class: SensitivityContent},
-	{prefix: "gen_ai.tool.call.", class: SensitivityContent},
-	{prefix: "enduser.", class: SensitivityIdentity},
-	{prefix: "user.", class: SensitivityIdentity},
-}
-
-func ClassifySensitiveDataKey(key string) SensitivityClass {
-	if class, ok := sensitiveDataExactKeys[key]; ok {
-		return class
+func IsSensitiveDataKey(key string) bool {
+	if _, ok := sensitiveDataExactKeys[key]; ok {
+		return true
 	}
-	for _, candidate := range sensitiveDataPrefixes {
-		if strings.HasPrefix(key, candidate.prefix) {
-			return candidate.class
+	for _, prefix := range sensitiveDataPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
 		}
 	}
-	return SensitivityNone
+	return false
 }

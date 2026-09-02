@@ -20,7 +20,7 @@ func redactSensitiveOTLP(message proto.Message) {
 	case *logsv1.LogRecord:
 		redactUnkeyedLogBody(value.GetBody())
 	case *commonv1.KeyValue:
-		if dialect.ClassifySensitiveDataKey(value.GetKey()) != dialect.SensitivityNone {
+		if dialect.IsSensitiveDataKey(value.GetKey()) {
 			value.Value = &commonv1.AnyValue{
 				Value: &commonv1.AnyValue_StringValue{StringValue: redactedSensitiveDataValue},
 			}
