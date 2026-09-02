@@ -1,0 +1,97 @@
+uv.lock
+  s_b390d6ce53b276::t_d8e33f935ba83a 310-322,1084,1092,1115,1123,1185-1193
+pystreams/src/pystreams/risk/replywriter.py
+  s_b390d6ce53b276::t_84bf81b7233f9e 31,34
+  s_b390d6ce53b276::t_2e7019d0149fea 3,18-20
+  s_b390d6ce53b276::t_b693924e9af08a 12,15
+  s_b390d6ce53b276::t_79c0557c9bc059 1-2,4-11,13-14,16-17,21-28,30,32-33,35-51,53-58,60-68
+  s_b390d6ce53b276::t_35e5e57fcbf34c 52
+  s_b390d6ce53b276::t_6ffa9f3689fddc 59
+  s_b390d6ce53b276::t_c9f01682304db7 29
+server/internal/risk/enforcereply/inbox_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 16-19
+server/internal/risk/enforcereply/dispatch.go
+  s_b390d6ce53b276::t_87e9c0cb8b75cc 86
+  s_b390d6ce53b276::t_e7638e3417baaf 73,97-98,100-102,120,125
+  s_b390d6ce53b276::t_93978cee6b505f 123
+  s_b390d6ce53b276::t_2f863140652656 170,172-192
+  s_b390d6ce53b276::t_6d20da7c659312 103-116,118-119,121-122
+  s_b390d6ce53b276::t_b414e51f1664ce 171
+  s_b390d6ce53b276::t_9447b58bb6876e 150-152
+  s_b390d6ce53b276::t_91f9ab9066a303 90-91,95-96
+  s_b390d6ce53b276::t_9878bb811777e3 117,124
+  s_b390d6ce53b276::t_c3d6bd2462d5d4 92-94
+infra/pkg/topics/topics_gen.go
+  s_b390d6ce53b276::t_62eaeefba94cfd 56-57,85,124-125,173-174
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_380a0ea4453808 45-46,70,96-105,137-138,144-187,221-222
+  s_b390d6ce53b276::t_6189f9eb42edde 251,265
+pystreams/pyproject.toml
+  s_b390d6ce53b276::t_8274c5692ac093 29
+  s_b390d6ce53b276::t_f78c42f5119e40 21
+infra/gen/kcc.yaml
+  s_b390d6ce53b276::t_eb344983d07b66 974-975
+  s_b390d6ce53b276::t_62eaeefba94cfd 959-973,976-981,1387-1404,1682-1697
+infra/gen/gram/risk/v1/presidio_enforcer.pb.go
+  s_b390d6ce53b276::t_4f9806a9ce9e04 1-111
+infra/gen/gram/risk/v1/presidio_enforcement.pb.go
+  s_b390d6ce53b276::t_96d70695e82339 1-465
+infra/internal/diagram/diagram.go
+  s_b390d6ce53b276::t_7fa600adbf4771 587-590,594-595
+  s_b390d6ce53b276::t_2e7019d0149fea 593
+  s_b390d6ce53b276::t_0b445d37eed76e 568-570
+  s_b390d6ce53b276::t_22720564573bcb 591-592
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
+  s_b390d6ce53b276::t_bc93bccad402d8 1-40
+server/internal/risk/enforcereply/dispatch_test.go
+  s_b390d6ce53b276::t_d7a5fcf5289ca7 21-22,24,27,43,47-50
+  s_b390d6ce53b276::t_a8cb1e49190a93 54-58,60-62,64
+  s_b390d6ce53b276::t_0fdcab7601b926 126-128,135-137,140
+  s_b390d6ce53b276::t_dc036efc4d43ca 51
+  s_b390d6ce53b276::t_bd4dc079a3d257 118-121,130,139,141-155,171-172
+  s_b390d6ce53b276::t_ebcea6fddc9922 122-125,129,132-134,138
+  s_b390d6ce53b276::t_b1b1c0f20a3750 156-170
+  s_b390d6ce53b276::t_afb8b3dcf94497 13
+  s_b390d6ce53b276::t_0a2a0b47133d8c 53,131
+  s_b390d6ce53b276::t_86a666b79de9d6 63
+infra/proto/gram/risk/v1/presidio_enforcer.proto
+  s_b390d6ce53b276::t_05dc2a43bf20f3 11-15
+  s_b390d6ce53b276::t_5360ae04b078f5 1-10,16-23
+infra/internal/diagram/diagram_test.go
+  s_b390d6ce53b276::t_1f86986ec95b81 133-169
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-10,12-33
+  s_b390d6ce53b276::t_eb344983d07b66 11,34
+pystreams/tests/test_risk_replywriter.py
+  s_b390d6ce53b276::t_7fce6982a154ac 7-9
+  s_b390d6ce53b276::t_0653cb409e83a6 10
+  s_b390d6ce53b276::t_ae44df50020299 1-6,14-26,56
+  s_b390d6ce53b276::t_92e2097e9fdfd5 11-13,27-29
+  s_b390d6ce53b276::t_e438221587d245 30-50,52
+  s_b390d6ce53b276::t_c17919551baf42 51
+  s_b390d6ce53b276::t_985d77ec0d64f6 53-55
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.py
+  s_b390d6ce53b276::t_71c2d39f5bf176 1-40
+infra/proto/gram/risk/v1/presidio_enforcement.proto
+  s_b390d6ce53b276::t_024825ffc3de16 1-17,22-33
+  s_b390d6ce53b276::t_7876a3505927aa 18-20
+  s_b390d6ce53b276::t_c6b113630baf8c 21
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f6d9e28801ceddecf4d8f6d28c2f703217541740",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
