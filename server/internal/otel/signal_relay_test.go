@@ -78,6 +78,39 @@ func TestSignalRelayLoadsActiveDataExportRoute(t *testing.T) {
 	require.True(t, loaded.includeSensitiveData)
 	require.Equal(t, projectID, loaded.projectID)
 }
+func TestSignalRelayReloadsRoutesThatMayExportSensitiveData(t *testing.T) {
+	t.Parallel()
+
+	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
+	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
+	relay.now = func() time.Time { return now }
+	projectID := createRelayTestProject(t, db, "org-test")
+	headers := encryptRelayTestHeaders(t, enc, nil)
+	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test/otlp", headers, "include")
+	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	key := relayRouteKey{organizationID: "org-test", projectID: projectID}
+
+	included, err := relay.destinationForRoute(t.Context(), key)
+	require.NoError(t, err)
+	require.True(t, included.includeSensitiveData)
+	require.NotContains(t, relay.destinationCache, key)
+
+	_, err = dataexportsrepo.New(db).UpdateOtelDestination(t.Context(), dataexportsrepo.UpdateOtelDestinationParams{
+		Name:             destination.Name,
+		EndpointUrl:      destination.EndpointUrl,
+		HeadersEncrypted: destination.HeadersEncrypted,
+		SensitiveData:    pgtype.Text{String: "exclude", Valid: true},
+		OrganizationID:   destination.OrganizationID,
+		ProjectID:        destination.ProjectID,
+		ID:               destination.ID,
+	})
+	require.NoError(t, err)
+
+	excluded, err := relay.destinationForRoute(t.Context(), key)
+	require.NoError(t, err)
+	require.False(t, excluded.includeSensitiveData)
+	require.Contains(t, relay.destinationCache, key)
+}
 
 func TestSignalRelayTreatsUnknownSensitiveDataPolicyAsExclude(t *testing.T) {
 	t.Parallel()

@@ -157,7 +157,9 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 			continue
 		}
 
-		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxMetricRelayExportBytes, buildMetricRelayExport)
+		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxMetricRelayExportBytes, func(messages []metricRelayMessage) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
+			return buildMetricRelayExport(messages, result.destination.includeSensitiveData)
+		})
 		if err != nil {
 			h.recordDroppedMetrics(ctx, len(provenanceGroup.messages), relayReasonInvalid)
 			h.logger.ErrorContext(
@@ -274,12 +276,12 @@ func groupMetricsByProvenance(messages []metricRelayMessage) ([]metricProvenance
 	return groups, invalid
 }
 
-func buildMetricRelayExport(messages []metricRelayMessage) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
+func buildMetricRelayExport(messages []metricRelayMessage, includeSensitiveData bool) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
 	metrics := make([]*otelv1.Metric, len(messages))
 	for i, message := range messages {
 		metrics[i] = message.metric
 	}
-	return newMetricRelayExportRequest(metrics)
+	return newMetricRelayExportRequest(metrics, includeSensitiveData)
 }
 
 func removeGramMetricFields(item *metricsv1.Metric) error {
@@ -299,7 +301,7 @@ func removeGramMetricFields(item *metricsv1.Metric) error {
 	return nil
 }
 
-func newMetricRelayExportRequest(items []*otelv1.Metric) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
+func newMetricRelayExportRequest(items []*otelv1.Metric, includeSensitiveData bool) (*collectormetricsv1.ExportMetricsServiceRequest, error) {
 	type scopeGroupKey struct {
 		scope     string
 		schemaURL string
@@ -399,6 +401,9 @@ func newMetricRelayExportRequest(items []*otelv1.Metric) (*collectormetricsv1.Ex
 	}
 	for i, group := range resourceGroups {
 		request.ResourceMetrics[i] = group.resourceMetrics
+	}
+	if !includeSensitiveData {
+		redactSensitiveOTLP(request)
 	}
 	return request, nil
 }

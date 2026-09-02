@@ -394,9 +394,6 @@ func newLogRelayExportRequest(records []*otelv1.LogRecord, includeSensitiveData 
 		if err := removeGramLogFields(converted); err != nil {
 			return nil, err
 		}
-		if !includeSensitiveData {
-			converted.Attributes = redactSensitiveAttributes(converted.Attributes)
-		}
 		scopeLogs := group.resourceLogs.ScopeLogs[scopeIndex]
 		scopeLogs.LogRecords = append(scopeLogs.LogRecords, converted)
 	}
@@ -406,6 +403,9 @@ func newLogRelayExportRequest(records []*otelv1.LogRecord, includeSensitiveData 
 	}
 	for i, group := range resourceGroups {
 		request.ResourceLogs[i] = group.resourceLogs
+	}
+	if !includeSensitiveData {
+		redactSensitiveOTLP(request)
 	}
 	return request, nil
 }

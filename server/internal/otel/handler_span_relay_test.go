@@ -157,7 +157,7 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	}
 }
 
-func TestSpanRelayExportExcludesSensitiveContentWithoutMutatingSource(t *testing.T) {
+func TestSpanRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T) {
 	t.Parallel()
 
 	span := relayTestSpan("redacted", testLogOrganizationID, testLogProjectID)
@@ -175,9 +175,12 @@ func TestSpanRelayExportExcludesSensitiveContentWithoutMutatingSource(t *testing
 	require.True(t, proto.Equal(before, span))
 
 	converted := request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans()[0]
-	require.Len(t, converted.GetAttributes(), 1)
-	require.Equal(t, "model", converted.GetAttributes()[0].GetKey())
-	require.Equal(t, "preserved", converted.GetAttributes()[0].GetValue().GetStringValue())
+	require.Len(t, converted.GetAttributes(), 5)
+	for _, attribute := range converted.GetAttributes()[:4] {
+		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue())
+	}
+	require.Equal(t, "model", converted.GetAttributes()[4].GetKey())
+	require.Equal(t, "preserved", converted.GetAttributes()[4].GetValue().GetStringValue())
 }
 
 func TestSpanRelayExportIncludesSensitiveContent(t *testing.T) {

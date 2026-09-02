@@ -80,12 +80,15 @@ func TestGroupMetricsByProvenanceRejectsInvalidProjectIDs(t *testing.T) {
 func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T) {
 	t.Parallel()
 
-	capture := &metricRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
-	server := httptest.NewServer(http.HandlerFunc(capture.handler))
-	t.Cleanup(server.Close)
+	captureA := &metricRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	serverA := httptest.NewServer(http.HandlerFunc(captureA.handler))
+	t.Cleanup(serverA.Close)
+	captureB := &metricRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	serverB := httptest.NewServer(http.HandlerFunc(captureB.handler))
+	t.Cleanup(serverB.Close)
 	handler := newMetricRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, server.URL)
-	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testLogOtherProjectID, server.URL)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, serverA.URL, true)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testLogOtherProjectID, serverB.URL, true)
 
 	messages, failures := metricRelayTestMessages(
 		relayTestMetric("requests", testMetricOrganizationID, testMetricProjectID),
@@ -97,13 +100,23 @@ func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T)
 		require.NoError(t, failure)
 	}
 
-	requests := capture.snapshot()
-	require.Len(t, requests, 2)
-	var names []string
-	for _, captured := range requests {
-		require.NoError(t, captured.err)
-		require.Equal(t, "/v1/metrics", captured.path)
-		require.Equal(t, "application/x-protobuf", captured.contentType)
+	requestsA := captureA.snapshot()
+	require.Len(t, requestsA, 1)
+	require.NoError(t, requestsA[0].err)
+	require.Equal(t, "/v1/metrics", requestsA[0].path)
+	require.Equal(t, "application/x-protobuf", requestsA[0].contentType)
+	namesA := relayRequestMetricNames(requestsA[0].request)
+	slices.Sort(namesA)
+	require.Equal(t, []string{"latency", "requests"}, namesA)
+
+	requestsB := captureB.snapshot()
+	require.Len(t, requestsB, 1)
+	require.NoError(t, requestsB[0].err)
+	require.Equal(t, "/v1/metrics", requestsB[0].path)
+	require.Equal(t, "application/x-protobuf", requestsB[0].contentType)
+	require.Equal(t, []string{"tokens"}, relayRequestMetricNames(requestsB[0].request))
+
+	for _, captured := range []capturedMetricRelayRequest{requestsA[0], requestsB[0]} {
 		for _, resourceMetrics := range captured.request.GetResourceMetrics() {
 			require.Equal(t, "https://opentelemetry.io/schemas/1.27.0", resourceMetrics.GetSchemaUrl())
 			require.Equal(t, "service.name", resourceMetrics.GetResource().GetAttributes()[0].GetKey())
@@ -117,15 +130,12 @@ func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T)
 				require.Equal(t, "scope-value", scopeMetrics.GetScope().GetAttributes()[0].GetValue().GetStringValue())
 				require.Equal(t, uint32(3), scopeMetrics.GetScope().GetDroppedAttributesCount())
 				for _, item := range scopeMetrics.GetMetrics() {
-					names = append(names, item.GetName())
 					require.Equal(t, "model", item.GetGauge().GetDataPoints()[0].GetAttributes()[0].GetKey())
 					require.Empty(t, item.ProtoReflect().GetUnknown(), "Gram provenance must not reach the customer destination")
 				}
 			}
 		}
 	}
-	slices.Sort(names)
-	require.Equal(t, []string{"latency", "requests", "tokens"}, names)
 }
 
 func TestMetricRelayHandlerLimitsDestinationExportsTo512KiB(t *testing.T) {
@@ -135,7 +145,7 @@ func TestMetricRelayHandlerLimitsDestinationExportsTo512KiB(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newMetricRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, server.URL)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, server.URL, true)
 
 	items := []*otelv1.Metric{
 		relayTestMetric("one", testMetricOrganizationID, testMetricProjectID),
@@ -168,6 +178,43 @@ func TestMetricRelayHandlerLimitsDestinationExportsTo512KiB(t *testing.T) {
 		require.LessOrEqual(t, captured.bodySize, maxMetricRelayExportBytes)
 	}
 }
+func TestMetricRelayExportAppliesSensitiveDataPolicyWithoutMutatingSource(t *testing.T) {
+	t.Parallel()
+
+	item := relayTestMetric("redacted", testMetricOrganizationID, testMetricProjectID)
+	item.GetGauge().GetDataPoints()[0].SetAttributes([]*otelv1.Metric_KeyValue{
+		(&otelv1.Metric_KeyValue_builder{
+			Key: new("gen_ai.tool.call.arguments"),
+			Value: (&otelv1.Metric_AnyValue_builder{
+				StringValue: new("sensitive"),
+			}).Build(),
+		}).Build(),
+		(&otelv1.Metric_KeyValue_builder{
+			Key: new("model"),
+			Value: (&otelv1.Metric_AnyValue_builder{
+				StringValue: new("preserved"),
+			}).Build(),
+		}).Build(),
+	})
+	before := proto.Clone(item)
+
+	excluded, err := newMetricRelayExportRequest([]*otelv1.Metric{item}, false)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(before, item))
+	excludedAttributes := excluded.GetResourceMetrics()[0].GetScopeMetrics()[0].GetMetrics()[0].GetGauge().GetDataPoints()[0].GetAttributes()
+	require.Len(t, excludedAttributes, 2)
+	require.Equal(t, "gen_ai.tool.call.arguments", excludedAttributes[0].GetKey())
+	require.Equal(t, redactedSensitiveDataValue, excludedAttributes[0].GetValue().GetStringValue())
+	require.Equal(t, "model", excludedAttributes[1].GetKey())
+	require.Equal(t, "preserved", excludedAttributes[1].GetValue().GetStringValue())
+
+	included, err := newMetricRelayExportRequest([]*otelv1.Metric{item}, true)
+	require.NoError(t, err)
+	includedAttributes := included.GetResourceMetrics()[0].GetScopeMetrics()[0].GetMetrics()[0].GetGauge().GetDataPoints()[0].GetAttributes()
+	require.Len(t, includedAttributes, 2)
+	require.Equal(t, "sensitive", includedAttributes[0].GetValue().GetStringValue())
+	require.Equal(t, "preserved", includedAttributes[1].GetValue().GetStringValue())
+}
 
 func metricRelayTestMessages(items ...*otelv1.Metric) ([]metricRelayMessage, []error) {
 	messages := make([]metricRelayMessage, len(items))
@@ -197,15 +244,34 @@ func newMetricRelayTestHandler(t *testing.T, meterProvider metric.MeterProvider)
 	)
 }
 
-func cacheMetricRelayTestDestination(t *testing.T, handler *MetricRelayHandler, organizationID, projectID, baseURL string) {
+func cacheMetricRelayTestDestination(
+	t *testing.T,
+	handler *MetricRelayHandler,
+	organizationID string,
+	projectID string,
+	baseURL string,
+	includeSensitiveData bool,
+) {
 	t.Helper()
 	key := relayTestRouteKey(organizationID, projectID)
-	destination, err := handler.relay.newDestination(key, baseURL, nil, true)
+	destination, err := handler.relay.newDestination(key, baseURL, nil, includeSensitiveData)
 	require.NoError(t, err)
 	handler.relay.destinationCache[key] = cachedRelayDestination{
 		destination: destination,
 		expiresAt:   time.Now().Add(time.Hour),
 	}
+}
+
+func relayRequestMetricNames(request *collectormetricsv1.ExportMetricsServiceRequest) []string {
+	var names []string
+	for _, resourceMetrics := range request.GetResourceMetrics() {
+		for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
+			for _, item := range scopeMetrics.GetMetrics() {
+				names = append(names, item.GetName())
+			}
+		}
+	}
+	return names
 }
 
 func relayTestMetric(name, organizationID, projectID string) *otelv1.Metric {

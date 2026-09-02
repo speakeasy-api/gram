@@ -255,7 +255,7 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, false)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
 
 	recordBodyBytes := maxOTLPLogRecordBytes / 2
 	records := []*otelv1.LogRecord{
@@ -288,7 +288,9 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 		for _, resourceLogs := range captured.request.GetResourceLogs() {
 			for _, scopeLogs := range resourceLogs.GetScopeLogs() {
 				for _, record := range scopeLogs.GetLogRecords() {
-					require.Empty(t, record.GetAttributes())
+					require.Len(t, record.GetAttributes(), 1)
+					require.Equal(t, "prompt", record.GetAttributes()[0].GetKey())
+					require.Equal(t, "filtered", record.GetAttributes()[0].GetValue().GetStringValue())
 					deliveredRecords++
 				}
 			}
@@ -370,7 +372,7 @@ func TestNewLogRelayExportRequestDiscardsGramOnlyFields(t *testing.T) {
 	}
 }
 
-func TestLogRelayExportExcludesSensitiveContentWithoutMutatingSource(t *testing.T) {
+func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T) {
 	t.Parallel()
 
 	record := relayTestLogRecord("redacted", testLogOrganizationID, testLogProjectID, 0)
@@ -388,9 +390,13 @@ func TestLogRelayExportExcludesSensitiveContentWithoutMutatingSource(t *testing.
 	require.True(t, proto.Equal(before, record))
 
 	converted := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
-	require.Len(t, converted.GetAttributes(), 1)
-	require.Equal(t, "model", converted.GetAttributes()[0].GetKey())
-	require.Equal(t, "preserved", converted.GetAttributes()[0].GetValue().GetStringValue())
+	require.Len(t, converted.GetAttributes(), 5)
+	for _, attribute := range converted.GetAttributes()[:4] {
+		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue())
+	}
+	require.Equal(t, redactedSensitiveDataValue, converted.GetBody().GetStringValue())
+	require.Equal(t, "model", converted.GetAttributes()[4].GetKey())
+	require.Equal(t, "preserved", converted.GetAttributes()[4].GetValue().GetStringValue())
 }
 
 func TestLogRelayExportIncludesSensitiveContent(t *testing.T) {

@@ -9,14 +9,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/proto"
 
@@ -27,28 +25,11 @@ import (
 )
 
 const (
-	relayDestinationCacheTTL        = 60 * time.Second
-	relayDestinationCacheMaxEntries = 1024
-	maxRelayErrorBodyBytes          = 4 * 1024
-	relayDataSourceProductTelemetry = "product_telemetry"
+	relayNonSensitiveDestinationCacheTTL = 60 * time.Second
+	relayDestinationCacheMaxEntries      = 1024
+	maxRelayErrorBodyBytes               = 4 * 1024
+	relayDataSourceProductTelemetry      = "product_telemetry"
 )
-
-var sensitiveDataAttributeKeys = map[string]struct{}{
-	"gen_ai.input.messages":  {},
-	"gen_ai.output.messages": {},
-	"user_prompt":            {},
-	"prompt":                 {},
-}
-
-func redactSensitiveAttributes(attributes []*commonv1.KeyValue) []*commonv1.KeyValue {
-	return slices.DeleteFunc(attributes, func(attribute *commonv1.KeyValue) bool {
-		if attribute == nil {
-			return false
-		}
-		_, sensitive := sensitiveDataAttributeKeys[attribute.GetKey()]
-		return sensitive
-	})
-}
 
 type relayReason string
 
@@ -142,7 +123,7 @@ func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey
 	value, err, _ := r.destinationLoads.Do(relayRouteLoadKey(key), func() (any, error) {
 		now := r.now()
 		if cached, ok := r.cachedDestination(key, now); ok {
-			return cachedRelayDestination{destination: cached, expiresAt: now.Add(relayDestinationCacheTTL)}, nil
+			return cachedRelayDestination{destination: cached}, nil
 		}
 
 		destination, err := r.loadDestination(ctx, key)
@@ -150,11 +131,13 @@ func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey
 			return nil, err
 		}
 
-		cached := cachedRelayDestination{
-			destination: destination,
-			expiresAt:   now.Add(relayDestinationCacheTTL),
+		cached := cachedRelayDestination{destination: destination}
+		// Only exclude and missing destinations are safe to reuse: stale include
+		// policy could disclose data after an include-to-exclude change.
+		if destination == nil || !destination.includeSensitiveData {
+			cached.expiresAt = now.Add(relayNonSensitiveDestinationCacheTTL)
+			r.cacheDestination(key, cached, now)
 		}
-		r.cacheDestination(key, cached, now)
 		return cached, nil
 	})
 	if err != nil {
@@ -229,7 +212,12 @@ func (r *signalRelay) newDestination(
 	retryConfig.ErrorHandler = func(response *http.Response, err error, _ int) (*http.Response, error) {
 		return response, err
 	}
-	httpClient := r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
+	var httpClient *guardian.HTTPClient
+	if includeSensitiveData {
+		httpClient = r.policy.Client(guardian.WithRetryConfig(retryConfig))
+	} else {
+		httpClient = r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
+	}
 	httpClient.Timeout = 10 * time.Second
 
 	return &relayDestination{

@@ -391,9 +391,6 @@ func newRelayExportRequest(spans []*otelv1.Span, includeSensitiveData bool) (*co
 		if err := removeGramSpanFields(converted); err != nil {
 			return nil, err
 		}
-		if !includeSensitiveData {
-			converted.Attributes = redactSensitiveAttributes(converted.Attributes)
-		}
 		scopeSpans := group.resourceSpans.ScopeSpans[scopeIndex]
 		scopeSpans.Spans = append(scopeSpans.Spans, converted)
 	}
@@ -403,6 +400,9 @@ func newRelayExportRequest(spans []*otelv1.Span, includeSensitiveData bool) (*co
 	}
 	for i, group := range resourceGroups {
 		request.ResourceSpans[i] = group.resourceSpans
+	}
+	if !includeSensitiveData {
+		redactSensitiveOTLP(request)
 	}
 	return request, nil
 }
