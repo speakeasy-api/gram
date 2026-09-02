@@ -14,15 +14,29 @@ import (
 	stripesdk "github.com/stripe/stripe-go/v85"
 	stripewebhook "github.com/stripe/stripe-go/v85/webhook"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
+// Metadata keys stamped on Stripe objects. Checkout Sessions and Subscriptions belong to
+// this product and carry speakeasy_product. A Customer can be shared with the SDK
+// product (same organization id), so its product-specific key is namespaced and
+// speakeasy_product is never written on a Customer; Stripe merges metadata on update,
+// so each product only touches its own keys. organization_name and the account type go
+// on the Customer only: Checkout requests are replayed under their original idempotency
+// key and Stripe rejects a replay whose parameters differ.
 const (
 	organizationIDMetadataKey   = "organization_id"
 	organizationSlugMetadataKey = "organization_slug"
+	organizationNameMetadataKey = "organization_name"
+	speakeasyProductMetadataKey = "speakeasy_product"
+	accountTypeMetadataKey      = "aicp_account_type"
 	meterCustomerPayloadKey     = "stripe_customer_id"
 	meterValuePayloadKey        = "value"
 	allocationMetadataKey       = "gram_billing_allocation"
+
+	// speakeasyProductAICP identifies objects billed by the AI Control Plane (this service).
+	speakeasyProductAICP = "aicp"
 )
 
 // ErrWebhookNotConfigured indicates that webhook verification cannot run because
@@ -30,6 +44,8 @@ const (
 var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
+
+var errMissingCustomerID = errors.New("customer id is required")
 
 var errMissingMeterEventName = errors.New("meter event name is required")
 
@@ -77,6 +93,7 @@ func IsConfigured(value string) bool {
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
+	UpdateCustomer(context.Context, UpdateCustomerInput) error
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
 	GetSubscription(context.Context, string) (*SubscriptionState, error)
@@ -97,12 +114,68 @@ type Client interface {
 type CreateCustomerInput struct {
 	OrganizationID   string
 	OrganizationSlug string
-	IdempotencyKey   string
+	OrganizationName string
+
+	// Email is the billing contact shown on Stripe receipts and Checkout. Empty leaves it unset.
+	Email string
+
+	// AccountType is the organization's gram_account_type at creation time. Values
+	// outside constants.AccountTypes leave the key unset.
+	AccountType string
+
+	IdempotencyKey string
+}
+
+// UpdateCustomerInput refreshes the identity and contract metadata of an existing Stripe customer.
+type UpdateCustomerInput struct {
+	CustomerID       string
+	OrganizationID   string
+	OrganizationSlug string
+	OrganizationName string
+
+	// Email replaces the customer's billing email. Empty leaves the existing value
+	// unchanged: callers resolve it best-effort and must not clear a working address.
+	Email string
+
+	// AccountType is the organization's current gram_account_type. Values outside
+	// constants.AccountTypes clear the key so a stale tier is never left behind.
+	AccountType string
 }
 
 // Customer is the Stripe customer data needed by billing callers.
 type Customer struct {
 	ID string
+}
+
+// organizationIdentity is the organization view stamped onto every Stripe object.
+type organizationIdentity struct {
+	id   string
+	slug string
+}
+
+func contractMetadata(org organizationIdentity) map[string]string {
+	return map[string]string{
+		speakeasyProductMetadataKey: speakeasyProductAICP,
+		organizationIDMetadataKey:   org.id,
+		organizationSlugMetadataKey: org.slug,
+	}
+}
+
+func customerMetadata(org organizationIdentity, name string) map[string]string {
+	return map[string]string{
+		organizationIDMetadataKey:   org.id,
+		organizationSlugMetadataKey: org.slug,
+		organizationNameMetadataKey: name,
+	}
+}
+
+// validAccountType returns the account type to stamp, or "" when it is outside
+// constants.AccountTypes.
+func validAccountType(accountType string) string {
+	if constants.IsAccountType(accountType) {
+		return accountType
+	}
+	return ""
 }
 
 // CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
@@ -347,6 +420,7 @@ type WebhookEvent struct {
 
 type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
+	updateCustomer(context.Context, string, *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error)
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	expireCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error)
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
@@ -370,6 +444,14 @@ func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerC
 	customer, err := s.client.V1Customers.Create(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("stripe SDK create customer: %w", err)
+	}
+	return customer, nil
+}
+
+func (s *sdkAPI) updateCustomer(ctx context.Context, id string, params *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error) {
+	customer, err := s.client.V1Customers.Update(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK update customer: %w", err)
 	}
 	return customer, nil
 }
@@ -500,9 +582,16 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 	}
 
 	params := new(stripesdk.CustomerCreateParams)
-	params.Metadata = map[string]string{
-		organizationIDMetadataKey:   input.OrganizationID,
-		organizationSlugMetadataKey: input.OrganizationSlug,
+	params.Name = stripesdk.String(input.OrganizationName)
+	if input.Email != "" {
+		params.Email = stripesdk.String(input.Email)
+	}
+	params.Metadata = customerMetadata(organizationIdentity{
+		id:   input.OrganizationID,
+		slug: input.OrganizationSlug,
+	}, input.OrganizationName)
+	if accountType := validAccountType(input.AccountType); accountType != "" {
+		params.Metadata[accountTypeMetadataKey] = accountType
 	}
 	params.SetIdempotencyKey(input.IdempotencyKey)
 
@@ -511,6 +600,30 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 		return nil, fmt.Errorf("create Stripe customer: %w", err)
 	}
 	return &Customer{ID: customer.ID}, nil
+}
+
+func (c *client) UpdateCustomer(ctx context.Context, input UpdateCustomerInput) error {
+	if input.CustomerID == "" {
+		return errMissingCustomerID
+	}
+
+	params := new(stripesdk.CustomerUpdateParams)
+	params.Name = stripesdk.String(input.OrganizationName)
+	if input.Email != "" {
+		params.Email = stripesdk.String(input.Email)
+	}
+	params.Metadata = customerMetadata(organizationIdentity{
+		id:   input.OrganizationID,
+		slug: input.OrganizationSlug,
+	}, input.OrganizationName)
+	// Stripe deletes a metadata key whose value is "", so an unknown or missing
+	// account type clears the stale one instead of preserving it.
+	params.Metadata[accountTypeMetadataKey] = validAccountType(input.AccountType)
+
+	if _, err := c.api.updateCustomer(ctx, input.CustomerID, params); err != nil {
+		return fmt.Errorf("update Stripe customer: %w", err)
+	}
+	return nil
 }
 
 func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
@@ -536,17 +649,16 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 			Quantity: nil,
 		},
 	}
-	params.Metadata = map[string]string{
-		organizationIDMetadataKey:   input.OrganizationID,
-		organizationSlugMetadataKey: input.OrganizationSlug,
+	identity := organizationIdentity{
+		id:   input.OrganizationID,
+		slug: input.OrganizationSlug,
 	}
+	params.Metadata = contractMetadata(identity)
 	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
 	params.PaymentMethodCollection = stripesdk.String(stripesdk.CheckoutSessionPaymentMethodCollectionAlways)
 	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
-	params.SubscriptionData.Metadata = map[string]string{
-		organizationIDMetadataKey:   input.OrganizationID,
-		organizationSlugMetadataKey: input.OrganizationSlug,
-	}
+	// Subscription metadata is also copied by Stripe onto invoice.parent.subscription_details.metadata.
+	params.SubscriptionData.Metadata = contractMetadata(identity)
 	params.SuccessURL = stripesdk.String(input.SuccessURL)
 	if input.TrialEnd != nil {
 		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
@@ -1032,6 +1144,11 @@ func NewStubClient(logger *slog.Logger) Client {
 func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) (*Customer, error) {
 	s.logger.DebugContext(ctx, "stub Stripe customer creation skipped")
 	return &Customer{ID: "cus_local_stub"}, nil
+}
+
+func (s *stubClient) UpdateCustomer(ctx context.Context, _ UpdateCustomerInput) error {
+	s.logger.DebugContext(ctx, "stub Stripe customer update skipped")
+	return nil
 }
 
 func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {

@@ -15,6 +15,7 @@ const METER_DISPLAY_NAME = "Tokens under management";
 const PRICE_LOOKUP_KEY = "payg-tum";
 const PRODUCT_NAME = "AI Control Plane PAYG";
 const PORTAL_CONFIGURATION_PURPOSE = "gram-payg";
+const PRODUCT_METADATA_SPEAKEASY_PRODUCT = "aicp";
 // $0.35 per 1M TUMs, linear per-unit, expressed in cents per TUM.
 const UNIT_AMOUNT_DECIMAL_CENTS = "0.000035";
 
@@ -38,8 +39,15 @@ interface StripeMeter {
   customer_mapping?: { type?: string; event_payload_key?: string };
 }
 
+interface StripeProduct {
+  id: string;
+  name: string;
+  metadata?: Record<string, string>;
+}
+
 interface StripePrice {
   id: string;
+  product: string;
   active: boolean;
   livemode: boolean;
   currency: string;
@@ -414,6 +422,8 @@ async function main() {
     );
     const createParams: Record<string, string> = {
       "product_data[name]": PRODUCT_NAME,
+      "product_data[metadata][speakeasy_product]":
+        PRODUCT_METADATA_SPEAKEASY_PRODUCT,
       lookup_key: PRICE_LOOKUP_KEY,
       nickname: "PAYG TUM ($0.35 per 1M)",
       currency: "usd",
@@ -444,6 +454,34 @@ async function main() {
     ["recurring.usage_type", price.recurring?.usage_type, "metered"],
     ["recurring.meter", price.recurring?.meter, meter.id],
   ]);
+
+  // Only the PAYG product may be tagged; a conflicting tag is fixed by hand.
+  const product = await stripe<StripeProduct>(
+    key,
+    "GET",
+    `/products/${price.product}`,
+  );
+  assertConfiguration(`Product ${product.id}`, [
+    ["name", product.name, PRODUCT_NAME],
+  ]);
+  const productTag = product.metadata?.speakeasy_product;
+  if (productTag && productTag !== PRODUCT_METADATA_SPEAKEASY_PRODUCT) {
+    throw new Error(
+      `Product ${product.id} has unexpected metadata.speakeasy_product=${productTag}; fix the product association before re-running.`,
+    );
+  }
+  if (!productTag) {
+    await stripe<StripeProduct>(key, "POST", `/products/${product.id}`, {
+      "metadata[speakeasy_product]": PRODUCT_METADATA_SPEAKEASY_PRODUCT,
+    });
+    log.success(
+      `Tagged product ${product.id} with metadata.speakeasy_product=${PRODUCT_METADATA_SPEAKEASY_PRODUCT}`,
+    );
+  } else {
+    log.info(
+      `Product ${product.id} already tagged speakeasy_product=${PRODUCT_METADATA_SPEAKEASY_PRODUCT}`,
+    );
+  }
 
   // Billing Portal — use a dedicated, tagged configuration so production
   // behavior cannot drift when someone edits Stripe's mutable default.
