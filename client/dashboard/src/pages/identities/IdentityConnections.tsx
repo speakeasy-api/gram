@@ -16,7 +16,11 @@ import { IdentityPanel } from "./IdentityPanel";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
-import { useIdentityProject, useIdentityWindow } from "./useIdentityQueries";
+import {
+  retryFailed,
+  useIdentityProject,
+  useIdentityWindow,
+} from "./useIdentityQueries";
 
 /**
  * What this person reaches, and how they got there.
@@ -119,7 +123,9 @@ export default function IdentityConnections(): JSX.Element {
             sessions={sessions}
             isPending={subjectUserId != null && sessionsQuery.isPending}
             isError={sessionsQuery.isError}
-            onRetry={() => void sessionsQuery.refetch()}
+            // Guarded: refetch() ignores `enabled`, so an unguarded retry
+            // would ask the session store about "user:undefined".
+            onRetry={retryFailed(sessionsQuery)}
             onRevoked={() => void sessionsQuery.refetch()}
             defaultGrouping="issuer"
             // The panel is already a bordered box with a heading; a second

@@ -19,6 +19,7 @@ import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import { shadowMCPAccessSummaryOf } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import {
+  retryFailed,
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityPrincipalUrn,
@@ -103,8 +104,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
-          error={riskQuery.isError}
-          onRetry={() => void riskQuery.refetch()}
+          error={riskQuery.isError && categories.length === 0}
+          refreshFailed={riskQuery.isError && categories.length > 0}
+          onRetry={retryFailed(riskQuery)}
           footer={
             !canReadRisk
               ? undefined
@@ -144,8 +146,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
-          error={riskQuery.isError}
-          onRetry={() => void riskQuery.refetch()}
+          error={riskQuery.isError && rules.length === 0}
+          refreshFailed={riskQuery.isError && rules.length > 0}
+          onRetry={retryFailed(riskQuery)}
           footer={
             canReadRisk && rules.length > TOP_RULES
               ? `Top ${TOP_RULES} of ${rules.length} rules`
@@ -178,8 +181,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Shadow MCP"
           handoffHref={handoffs.shadowMcp}
           loading={shadowQuery.isLoading}
-          error={shadowQuery.isError}
-          onRetry={() => void shadowQuery.refetch()}
+          error={shadowQuery.isError && shadowServers.length === 0}
+          refreshFailed={shadowQuery.isError && shadowServers.length > 0}
+          onRetry={retryFailed(shadowQuery)}
           footer={
             canReadRisk
               ? "Servers this person reached in this window, not the project-wide inventory."
@@ -220,8 +224,9 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
           loading={deniedQuery.isLoading}
-          error={deniedQuery.isError}
-          onRetry={() => void deniedQuery.refetch()}
+          error={deniedQuery.isError && denied.length === 0}
+          refreshFailed={deniedQuery.isError && denied.length > 0}
+          onRetry={retryFailed(deniedQuery)}
           footer={
             deniedTotal > 0 && unresolvedTotal !== undefined
               ? `${unresolvedTotal.toLocaleString()} of ${deniedTotal.toLocaleString()} still unresolved`

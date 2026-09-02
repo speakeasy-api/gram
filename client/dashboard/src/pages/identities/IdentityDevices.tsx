@@ -13,11 +13,12 @@ import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useIdentityDevices,
   useIdentityIsKnown,
+  useIdentityPeers,
   useIdentityWindow,
 } from "./useIdentityQueries";
-import { useIdentityPeers } from "./useIdentityQueries";
 
 /** How each coverage bucket reads, and whether it is worth flagging. */
 const COVERAGE: Record<string, { label: string; flag: boolean }> = {
@@ -62,6 +63,8 @@ export default function IdentityDevices(): JSX.Element {
     isError: peersFailed,
     refetch: refetchPeers,
   } = useIdentityPeers(identity, from, to);
+  const peersRetry = { isError: peersFailed, refetch: refetchPeers };
+  const retryPeers = retryFailed(peersRetry);
   const accounts = (self?.accounts ?? []).map((account) => ({
     email: account.email ?? "",
     provider: account.provider,
@@ -155,11 +158,8 @@ export default function IdentityDevices(): JSX.Element {
           // Every step below reads off data that failed to arrive as a "No",
           // and the footer then concludes "Not enrolled" — the worst possible
           // wrong answer on this page.
-          error={peersFailed || devicesQuery.isError}
-          onRetry={() => {
-            refetchPeers();
-            void devicesQuery.refetch();
-          }}
+          error={peersFailed || devicesQuery.isError || knownAllTime.isError}
+          onRetry={retryFailed(peersRetry, devicesQuery, knownAllTime)}
           footer={
             enrolled
               ? "Enrolled: the directory knows this person and we have seen them work."
@@ -183,8 +183,9 @@ export default function IdentityDevices(): JSX.Element {
         <IdentityPanel
           title="Linked accounts"
           loading={peersPending}
-          error={peersFailed}
-          onRetry={refetchPeers}
+          error={peersFailed && accounts.length === 0}
+          refreshFailed={peersFailed && accounts.length > 0}
+          onRetry={retryPeers}
           footer={
             accounts.length > 0
               ? `${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}${
@@ -220,8 +221,9 @@ export default function IdentityDevices(): JSX.Element {
           handoffLabel="Device Agent"
           handoffHref={handoffs.deviceAgent}
           loading={devicesQuery.isLoading}
-          error={devicesQuery.isError}
-          onRetry={() => void devicesQuery.refetch()}
+          error={devicesQuery.isError && devices.length === 0}
+          refreshFailed={devicesQuery.isError && devices.length > 0}
+          onRetry={retryFailed(devicesQuery)}
           footer={[
             coverageNote,
             // Devices match on the id OR on the MDM-reported email, because a

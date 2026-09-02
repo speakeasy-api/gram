@@ -12,6 +12,7 @@ import { DailyActivityChart } from "@/components/chart/DailyActivityChart";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useCanReadOthersChats,
   useIdentityAuditLogs,
   useIdentityChats,
@@ -71,26 +72,22 @@ export default function IdentityActivity(): JSX.Element {
   // for a viewer without chat:read, and that is a refusal to fetch, not a wait.
   const activityLoading = auditQuery.isLoading || chatsQuery.isLoading;
   // The chart draws both series as one shape, so a failed half would read as
-  // a quiet fortnight rather than as data that never arrived. A failure with
-  // rows already cached is a failed REFRESH, though: blanking the panel throws
-  // away readable data to report a background hiccup.
-  const auditFailed = auditQuery.isError && !auditQuery.data;
-  const chatsFailed = chatsQuery.isError && !chatsQuery.data;
-  const activityFailed = auditFailed || chatsFailed;
-  // Only what failed. refetch() runs even on a query held back by `enabled`,
-  // so retrying blindly would list unscoped audit logs for an identity with no
-  // Gram user id, or the viewer's own chats without chat:read, under the
-  // subject's name.
-  const retryActivity = () => {
-    if (auditQuery.isError) void auditQuery.refetch();
-    if (chatsQuery.isError) void chatsQuery.refetch();
-  };
+  // a quiet fortnight rather than as data that never arrived.
+  const activityFailed = auditQuery.isError || chatsQuery.isError;
+  const retryActivity = retryFailed(auditQuery, chatsQuery);
 
   const logDates = logs.map((log) => new Date(log.createdAt));
   const chatDates = chats
     .map((chat) => chat.lastMessageTimestamp)
     .filter((ts): ts is Date => Boolean(ts))
     .map((ts) => new Date(ts));
+
+  // A failed refresh keeps the rows it already has: those were really
+  // returned, and blanking them throws away the only true thing the panel
+  // holds. Only a failure with nothing behind it blocks the body.
+  const auditBlocked = auditQuery.isError && logs.length === 0;
+  const chatsBlocked = chatsQuery.isError && chats.length === 0;
+  const chartEmpty = logDates.length === 0 && chatDates.length === 0;
 
   return (
     <IdentitySection
@@ -112,7 +109,8 @@ export default function IdentityActivity(): JSX.Element {
           title="Activity by day"
           loading={activityLoading}
           loadingVariant="block"
-          error={activityFailed}
+          error={activityFailed && chartEmpty}
+          refreshFailed={activityFailed && !chartEmpty}
           onRetry={retryActivity}
         >
           <div className="px-4 py-4">
@@ -135,8 +133,9 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.auditLogs}
           loading={auditQuery.isLoading}
           loadingRows={RECENT_ROWS}
-          error={auditFailed}
-          onRetry={() => void auditQuery.refetch()}
+          error={auditBlocked}
+          refreshFailed={auditQuery.isError && !auditBlocked}
+          onRetry={retryFailed(auditQuery)}
           footer={
             auditQuery.isError ? (
               <RefreshFailed onRetry={() => void auditQuery.refetch()} />
@@ -179,8 +178,9 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.agentSessions}
           loading={chatsQuery.isLoading}
           loadingRows={RECENT_ROWS}
-          error={chatsFailed}
-          onRetry={() => void chatsQuery.refetch()}
+          error={chatsBlocked}
+          refreshFailed={chatsQuery.isError && !chatsBlocked}
+          onRetry={retryFailed(chatsQuery)}
           footer={
             chatsQuery.isError ? (
               <RefreshFailed onRetry={() => void chatsQuery.refetch()} />

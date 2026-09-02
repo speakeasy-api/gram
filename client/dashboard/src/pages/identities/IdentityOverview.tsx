@@ -30,6 +30,7 @@ import {
   useIdentityPeers,
   useIdentityRisk,
   useIdentityShadowServers,
+  retryFailed,
   useIdentityWindow,
   useIsSelf,
 } from "./useIdentityQueries";
@@ -111,6 +112,7 @@ export default function IdentityOverview(): JSX.Element {
     isError: peersFailed,
     refetch: refetchPeers,
   } = useIdentityPeers(identity, from, to);
+  const peersRetry = { isError: peersFailed, refetch: refetchPeers };
 
   // isLoading rather than isPending throughout: a query held behind `enabled`
   // — no agent identifier, no chat:read — stays pending forever, and showing
@@ -248,7 +250,8 @@ export default function IdentityOverview(): JSX.Element {
           title="Needs attention"
           loading={attentionLoading}
           loadingRows={2}
-          error={attentionFailed}
+          error={attentionFailed && attention.length === 0}
+          refreshFailed={attentionFailed && attention.length > 0}
           onRetry={retryAttention}
           footer={
             attention.length > 0
@@ -295,7 +298,9 @@ export default function IdentityOverview(): JSX.Element {
             <>
               <StatTile
                 title="Spend"
-                subtext={standingFor("totalCost")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalCost")
+                }
                 value={metrics?.totalCost ?? 0}
                 displayValue={metricsTileValue}
                 tooltip={metricsTileTooltip}
@@ -305,7 +310,9 @@ export default function IdentityOverview(): JSX.Element {
               />
               <StatTile
                 title="Tool calls"
-                subtext={standingFor("totalToolCalls")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalToolCalls")
+                }
                 value={metrics?.totalToolCalls ?? 0}
                 displayValue={metricsTileValue}
                 tooltip={metricsTileTooltip}
@@ -315,7 +322,9 @@ export default function IdentityOverview(): JSX.Element {
               />
               <StatTile
                 title="Chats"
-                subtext={standingFor("totalChats")}
+                subtext={
+                  metricsUnavailable ? undefined : standingFor("totalChats")
+                }
                 value={metrics?.totalChats ?? 0}
                 displayValue={metricsTileValue}
                 tooltip={metricsTileTooltip}
@@ -382,8 +391,9 @@ export default function IdentityOverview(): JSX.Element {
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"
-            error={peersFailed}
-            onRetry={refetchPeers}
+            error={peersFailed && platforms.length === 0}
+            refreshFailed={peersFailed && platforms.length > 0}
+            onRetry={retryFailed(peersRetry)}
           >
             <ShareBar
               segments={platforms.map((platform) => ({
@@ -402,8 +412,9 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Audit Logs"
             handoffHref={handoffs.auditLogs}
             loading={auditQuery.isLoading}
-            error={auditQuery.isError}
-            onRetry={() => void auditQuery.refetch()}
+            error={auditQuery.isError && logs.length === 0}
+            refreshFailed={auditQuery.isError && logs.length > 0}
+            onRetry={retryFailed(auditQuery)}
             footer={
               logs.length > 0
                 ? `Actor filtered to ${identity.displayName}`
@@ -433,8 +444,9 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Agent Sessions"
             handoffHref={handoffs.agentSessions}
             loading={chatsQuery.isLoading}
-            error={chatsQuery.isError}
-            onRetry={() => void chatsQuery.refetch()}
+            error={chatsQuery.isError && chats.length === 0}
+            refreshFailed={chatsQuery.isError && chats.length > 0}
+            onRetry={retryFailed(chatsQuery)}
             footer={
               chatsQuery.data
                 ? `${chatsQuery.data.total ?? chats.length} session${

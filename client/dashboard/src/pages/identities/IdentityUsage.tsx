@@ -14,6 +14,7 @@ import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   hasMetricsSubject,
+  retryFailed,
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
@@ -61,6 +62,10 @@ export default function IdentityUsage(): JSX.Element {
     isError: peersFailed,
     refetch: refetchPeers,
   } = useIdentityPeers(identity, from, to);
+  const retryPeers = retryFailed({
+    isError: peersFailed,
+    refetch: refetchPeers,
+  });
   const agents = [...(self?.hookSources ?? [])]
     .filter((source) => source.source && source.eventCount > 0)
     .sort((a, b) => b.eventCount - a.eventCount);
@@ -139,8 +144,9 @@ export default function IdentityUsage(): JSX.Element {
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"
-            error={peersFailed}
-            onRetry={refetchPeers}
+            error={peersFailed && agents.length === 0}
+            refreshFailed={peersFailed && agents.length > 0}
+            onRetry={retryPeers}
           >
             <ShareBar
               segments={agents.map((agent) => ({
@@ -164,8 +170,9 @@ export default function IdentityUsage(): JSX.Element {
           handoffHref={handoffs.toolLogs}
           loading={metricsQuery.isLoading}
           loadingVariant="block"
-          error={metricsQuery.isError}
-          onRetry={() => void metricsQuery.refetch()}
+          error={metricsQuery.isError && tools.length === 0}
+          refreshFailed={metricsQuery.isError && tools.length > 0}
+          onRetry={retryFailed(metricsQuery)}
           footer={
             tools.length > TOP_TOOLS
               ? `Top ${TOP_TOOLS} of ${tools.length} tools by call volume`

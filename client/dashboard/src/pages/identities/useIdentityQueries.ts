@@ -30,6 +30,27 @@ const OFF = { throwOnError: false } as const;
 /** What access.listShadowMCPInventoryServersForUser accepts in one request. */
 const MAX_USER_KEYS = 200;
 
+/** The part of a query a retry button needs. */
+type RetryableQuery = { isError: boolean; refetch: () => unknown };
+
+/**
+ * A retry that re-runs only the reads which actually failed.
+ *
+ * Several queries on these pages are held behind `enabled` — no Gram user id,
+ * no chat:read, no org:admin — and `refetch()` ignores `enabled` and fires
+ * anyway. A retry button that called it blindly would ask for audit logs with
+ * no actor filter, or for chats the caller may not filter by user, and render
+ * either under this identity's name. A query that is disabled never reaches an
+ * error, so having errored is itself proof it was allowed to run.
+ */
+export function retryFailed(...queries: RetryableQuery[]): () => void {
+  return () => {
+    for (const query of queries) {
+      if (query.isError) void query.refetch();
+    }
+  };
+}
+
 /**
  * The window every identity panel reads, kept in the URL so a link to a
  * sub-page carries the range the sender was looking at.
@@ -122,6 +143,13 @@ export function useIdentityMetrics(
 export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   known: boolean;
   isPending: boolean;
+  /**
+   * Whether the roster read failed. `known` is false either way, and callers
+   * that word that as a finding — "no activity recorded", "not enrolled" —
+   * need to tell the two apart.
+   */
+  isError: boolean;
+  refetch: () => void;
 } {
   const client = useGramContext();
   const organization = useOrganization();
@@ -144,29 +172,33 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
     enabled: !!identity && !hasDirectoryRow && identifiers.size > 0,
   });
 
-  if (!identity) return { known: true, isPending: true };
-  if (hasDirectoryRow) return { known: true, isPending: false };
+  const outcome = {
+    isError: query.isError,
+    refetch: () => void query.refetch(),
+  };
+
+  if (!identity) return { known: true, isPending: true, ...outcome };
+  if (hasDirectoryRow) return { known: true, isPending: false, ...outcome };
   // Only an unattributed subject is the "identifier nothing was recorded
   // under" case: an api-key or agent identity legitimately carries neither an
   // address nor an agent id, and is still a real subject.
   if (identity.kind !== "unattributed")
-    return { known: true, isPending: false };
-  if (identifiers.size === 0) return { known: false, isPending: false };
-  if (query.isPending) return { known: false, isPending: true };
-  // The roster is the only evidence for "unknown", so a failed read is not
-  // evidence of anything. Failing closed here puts "Identity not found" over a
-  // real person whose page merely could not confirm itself.
-  if (query.isError) return { known: true, isPending: false };
+    return { known: true, isPending: false, ...outcome };
+  if (identifiers.size === 0)
+    return { known: false, isPending: false, ...outcome };
+  if (query.isPending) return { known: false, isPending: true, ...outcome };
   return {
     known: (query.data ?? []).some(
       (summary) =>
-        // Independently: a summary can carry both an address and an agent-side
-        // id, and reading only the address misses the identity a row was
-        // recorded under whenever the two disagree.
-        identifiers.has(summary.userEmail.toLowerCase()) ||
-        identifiers.has(summary.userId.toLowerCase()),
+        // Independently, not `userEmail || userId`: a row can carry both, and
+        // preferring the address there would miss an identity we only know by
+        // the id an agent reported — which renders as "never seen here".
+        (!!summary.userEmail &&
+          identifiers.has(summary.userEmail.toLowerCase())) ||
+        (!!summary.userId && identifiers.has(summary.userId.toLowerCase())),
     ),
     isPending: false,
+    ...outcome,
   };
 }
 

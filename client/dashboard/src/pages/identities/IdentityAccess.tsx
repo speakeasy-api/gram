@@ -14,6 +14,7 @@ import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useIdentityChallenges,
   useIdentityMember,
   useIdentityPrincipalUrn,
@@ -69,10 +70,7 @@ export default function IdentityAccess(): JSX.Element {
   // someone's access made from data we never received.
   const rolesLoading = rolesQuery.isLoading || membersQuery.isLoading;
   const rolesFailed = rolesQuery.isError || membersQuery.isError;
-  const retryRoles = () => {
-    void rolesQuery.refetch();
-    void membersQuery.refetch();
-  };
+  const retryRoles = retryFailed(rolesQuery, membersQuery);
 
   const rolesById = new Map(
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
@@ -141,7 +139,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.roles}
           loading={rolesLoading}
           loadingVariant="block"
-          error={rolesFailed}
+          error={rolesFailed && roles.length === 0}
+          refreshFailed={rolesFailed && roles.length > 0}
           onRetry={retryRoles}
           footer={
             member ? undefined : "No org member row resolves to this identity."
@@ -180,7 +179,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.roles}
           loading={rolesLoading}
-          error={rolesFailed}
+          error={rolesFailed && permissions.length === 0}
+          refreshFailed={rolesFailed && permissions.length > 0}
           onRetry={retryRoles}
           footer={
             permissions.length > 0 || exclusions.size > 0
@@ -243,8 +243,9 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.challenges}
           loading={challengesQuery.isLoading}
           loadingRows={RECENT_CHALLENGES}
-          error={challengesQuery.isError}
-          onRetry={() => void challengesQuery.refetch()}
+          error={challengesQuery.isError && challenges.length === 0}
+          refreshFailed={challengesQuery.isError && challenges.length > 0}
+          onRetry={retryFailed(challengesQuery)}
           footer={
             challengeTotal > 0
               ? `${deniedTotal.toLocaleString()} denied of ${challengeTotal.toLocaleString()} recorded`
