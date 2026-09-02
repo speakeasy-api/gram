@@ -64,7 +64,6 @@ import (
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelc "github.com/speakeasy-api/gram/server/gen/http/otel/client"
-	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	platformkillswitchesc "github.com/speakeasy-api/gram/server/gen/http/platform_killswitches/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
@@ -145,7 +144,6 @@ func UsageCommands() []string {
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
-		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
@@ -1822,21 +1820,6 @@ func ParseEndpoint(
 		otelGetEventFacetsFlags            = flag.NewFlagSet("get-event-facets", flag.ExitOnError)
 		otelGetEventFacetsBodyFlag         = otelGetEventFacetsFlags.String("body", "REQUIRED", "")
 		otelGetEventFacetsSessionTokenFlag = otelGetEventFacetsFlags.String("session-token", "", "")
-
-		otelForwardingFlags = flag.NewFlagSet("otel-forwarding", flag.ContinueOnError)
-
-		otelForwardingGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
-		otelForwardingGetConfigApikeyTokenFlag  = otelForwardingGetConfigFlags.String("apikey-token", "", "")
-		otelForwardingGetConfigSessionTokenFlag = otelForwardingGetConfigFlags.String("session-token", "", "")
-
-		otelForwardingUpsertConfigFlags            = flag.NewFlagSet("upsert-config", flag.ExitOnError)
-		otelForwardingUpsertConfigBodyFlag         = otelForwardingUpsertConfigFlags.String("body", "REQUIRED", "")
-		otelForwardingUpsertConfigApikeyTokenFlag  = otelForwardingUpsertConfigFlags.String("apikey-token", "", "")
-		otelForwardingUpsertConfigSessionTokenFlag = otelForwardingUpsertConfigFlags.String("session-token", "", "")
-
-		otelForwardingDeleteConfigFlags            = flag.NewFlagSet("delete-config", flag.ExitOnError)
-		otelForwardingDeleteConfigApikeyTokenFlag  = otelForwardingDeleteConfigFlags.String("apikey-token", "", "")
-		otelForwardingDeleteConfigSessionTokenFlag = otelForwardingDeleteConfigFlags.String("session-token", "", "")
 
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
@@ -4190,11 +4173,6 @@ func ParseEndpoint(
 	otelGetEventVolumeFlags.Usage = otelGetEventVolumeUsage
 	otelGetEventFacetsFlags.Usage = otelGetEventFacetsUsage
 
-	otelForwardingFlags.Usage = otelForwardingUsage
-	otelForwardingGetConfigFlags.Usage = otelForwardingGetConfigUsage
-	otelForwardingUpsertConfigFlags.Usage = otelForwardingUpsertConfigUsage
-	otelForwardingDeleteConfigFlags.Usage = otelForwardingDeleteConfigUsage
-
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
 	packagesUpdatePackageFlags.Usage = packagesUpdatePackageUsage
@@ -4711,8 +4689,6 @@ func ParseEndpoint(
 			svcf = organizationsFlags
 		case "otel":
 			svcf = otelFlags
-		case "otel-forwarding":
-			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
 		case "admin-assets":
@@ -5860,19 +5836,6 @@ func ParseEndpoint(
 
 			case "get-event-facets":
 				epf = otelGetEventFacetsFlags
-
-			}
-
-		case "otel-forwarding":
-			switch epn {
-			case "get-config":
-				epf = otelForwardingGetConfigFlags
-
-			case "upsert-config":
-				epf = otelForwardingUpsertConfigFlags
-
-			case "delete-config":
-				epf = otelForwardingDeleteConfigFlags
 
 			}
 
@@ -8155,19 +8118,6 @@ func ParseEndpoint(
 			case "get-event-facets":
 				endpoint = c.GetEventFacets()
 				data, err = otelc.BuildGetEventFacetsPayload(*otelGetEventFacetsBodyFlag, *otelGetEventFacetsSessionTokenFlag)
-			}
-		case "otel-forwarding":
-			c := otelforwardingc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "get-config":
-				endpoint = c.GetConfig()
-				data, err = otelforwardingc.BuildGetConfigPayload(*otelForwardingGetConfigApikeyTokenFlag, *otelForwardingGetConfigSessionTokenFlag)
-			case "upsert-config":
-				endpoint = c.UpsertConfig()
-				data, err = otelforwardingc.BuildUpsertConfigPayload(*otelForwardingUpsertConfigBodyFlag, *otelForwardingUpsertConfigApikeyTokenFlag, *otelForwardingUpsertConfigSessionTokenFlag)
-			case "delete-config":
-				endpoint = c.DeleteConfig()
-				data, err = otelforwardingc.BuildDeleteConfigPayload(*otelForwardingDeleteConfigApikeyTokenFlag, *otelForwardingDeleteConfigSessionTokenFlag)
 			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16682,81 +16632,6 @@ func otelGetEventFacetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel get-event-facets --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
-}
-
-// otelForwardingUsage displays the usage of the otel-forwarding command and
-// its subcommands.
-func otelForwardingUsage() {
-	fmt.Fprintln(os.Stderr, `Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] otel-forwarding COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.`)
-	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.`)
-	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide OTEL forwarding config.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s otel-forwarding COMMAND --help\n", os.Args[0])
-}
-func otelForwardingGetConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding get-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding get-config --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func otelForwardingUpsertConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding upsert-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding upsert-config --body '{\n      \"enabled\": false,\n      \"endpoint_url\": \"abc123\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func otelForwardingDeleteConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding delete-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete the org-wide OTEL forwarding config.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding delete-config --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.

@@ -355,9 +355,6 @@ trackedFiles:
   src/funcs/organizationsSendInvite.ts: {}
   src/funcs/organizationsUpdateInviteRole.ts: {}
   src/funcs/organizationsVerifyOnboardingHooksSetup.ts: {}
-  src/funcs/otelForwardingDeleteConfig.ts: {}
-  src/funcs/otelForwardingGetConfig.ts: {}
-  src/funcs/otelForwardingUpsertConfig.ts: {}
   src/funcs/otelGetEventFacets.ts: {}
   src/funcs/otelGetEventVolume.ts: {}
   src/funcs/otelListEventLog.ts: {}
@@ -1178,9 +1175,6 @@ trackedFiles:
   src/models/components/otelattributevalue.ts: {}
   src/models/components/oteldestination.ts: {}
   src/models/components/oteldestinationheader.ts: {}
-  src/models/components/otelforwardingconfig.ts: {}
-  src/models/components/otelforwardingheader.ts: {}
-  src/models/components/otelforwardingheaderinput.ts: {}
   src/models/components/otellogbody.ts: {}
   src/models/components/otellogrecord.ts: {}
   src/models/components/otellogspayload.ts: {}
@@ -1548,7 +1542,6 @@ trackedFiles:
   src/models/components/upsertbusinessmemorysettingsrequestbody.ts: {}
   src/models/components/upsertconfigrequestbody.ts: {}
   src/models/components/upsertconfigrequestbody2.ts: {}
-  src/models/components/upsertconfigrequestbody3.ts: {}
   src/models/components/upsertglobaltoolvariationform.ts: {}
   src/models/components/upsertglobaltoolvariationresult.ts: {}
   src/models/components/upsertkeyrequestbody.ts: {}
@@ -1696,7 +1689,6 @@ trackedFiles:
   src/models/operations/deletemodelproviderkey.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
-  src/models/operations/deleteotelforwardingconfig.ts: {}
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
   src/models/operations/deleteremotemcpserver.ts: {}
@@ -1798,7 +1790,6 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
-  src/models/operations/getotelforwardingconfig.ts: {}
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
@@ -2189,7 +2180,6 @@ trackedFiles:
   src/models/operations/upsertdeviceintegrationconfig.ts: {}
   src/models/operations/upsertglobalvariation.ts: {}
   src/models/operations/upsertmodelproviderkey.ts: {}
-  src/models/operations/upsertotelforwardingconfig.ts: {}
   src/models/operations/upsertservernameoverride.ts: {}
   src/models/operations/upsertskillefficacysettings.ts: {}
   src/models/operations/validateapikey.ts: {}
@@ -2346,7 +2336,6 @@ trackedFiles:
   src/react-query/deleteModelProviderKey.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
-  src/react-query/deleteOtelForwardingConfig.ts: {}
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
   src/react-query/deleteRemoteMcpServer.ts: {}
@@ -2700,8 +2689,6 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuers.core.ts: {}
   src/react-query/organizationRemoteSessionIssuers.ts: {}
-  src/react-query/otelForwardingConfig.core.ts: {}
-  src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
   src/react-query/platformKillswitchesPlatformKillswitchesNumberActivatePrescription.ts: {}
   src/react-query/platformKillswitchesPlatformKillswitchesNumberChangePrescription.ts: {}
@@ -3054,7 +3041,6 @@ trackedFiles:
   src/react-query/upsertDeviceIntegrationConfig.ts: {}
   src/react-query/upsertGlobalVariation.ts: {}
   src/react-query/upsertModelProviderKey.ts: {}
-  src/react-query/upsertOtelForwardingConfig.ts: {}
   src/react-query/upsertSkillEfficacySettings.ts: {}
   src/react-query/userSessionClient.core.ts: {}
   src/react-query/userSessionClient.ts: {}
@@ -3143,7 +3129,6 @@ trackedFiles:
   src/sdk/organizationremotesessions.ts: {}
   src/sdk/organizations.ts: {}
   src/sdk/otel.ts: {}
-  src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
   src/sdk/platformkillswitches.ts: {}

@@ -834,8 +834,6 @@ tags:
     description: Organization membership, invitations, and directory.
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
-  - name: otelForwarding
-    description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
   - name: adminAssets
