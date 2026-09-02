@@ -455,6 +455,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		Message:      &message,
 		MessageID:    chatResp.ID,
 		Model:        chatResp.Model,
+		Provider:     chatResp.Provider,
 		Usage:        usage,
 		FinishReason: &finishReason,
 		ToolCalls:    toolCalls,
@@ -521,6 +522,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		startTime:            time.Now(),
 		messageID:            "",
 		model:                "",
+		provider:             "",
 		finishReason:         nil,
 		usage: Usage{
 			PromptTokens:            0,
@@ -611,6 +613,7 @@ type streamingResponseReader struct {
 
 	messageID    string
 	model        string
+	provider     string
 	finishReason *string
 	usage        Usage
 	usageSet     bool
@@ -649,6 +652,7 @@ func (r *streamingResponseReader) Close() error {
 			Message:   nil, // Not available in streaming mode
 			MessageID: r.messageID,
 			Model:     r.model,
+			Provider:  r.provider,
 			Content:   r.messageContent.String(),
 			// Never populated here: the reader does not parse annotations,
 			// and GetCompletionStream refuses the web plugin for that
@@ -721,6 +725,9 @@ func (r *streamingResponseReader) processSSELine(line string) {
 	}
 	if chunk.Model != "" {
 		r.model = chunk.Model
+	}
+	if chunk.Provider != "" {
+		r.provider = chunk.Provider
 	}
 
 	// Process choices
