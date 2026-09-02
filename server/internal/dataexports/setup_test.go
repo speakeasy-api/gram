@@ -1,0 +1,89 @@
+package dataexports_test
+
+import (
+	"context"
+	"log"
+	"os"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+)
+
+var infra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: false})
+	if err != nil {
+		log.Fatalf("launch test infrastructure: %v", err)
+	}
+	infra = res
+
+	code := m.Run()
+	if err := cleanup(); err != nil {
+		log.Fatalf("cleanup test infrastructure: %v", err)
+	}
+	os.Exit(code)
+}
+
+type testInstance struct {
+	service *dataexports.Service
+	conn    *pgxpool.Pool
+	enc     *encryption.Client
+}
+
+func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	enc := testenv.NewEncryptionClient(t)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+
+	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
+	return ctx, &testInstance{service: service, conn: conn, enc: enc}
+}
+
+func requireOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
+}
+
+func createDestination(t *testing.T, ctx context.Context, ti *testInstance, endpointURL, sensitiveData string) *gen.Destination {
+	t.Helper()
+	destination, err := ti.service.CreateDestination(ctx, &gen.CreateDestinationPayload{SessionToken: nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             "Test destination",
+		DestinationType:  "otel",
+		SensitiveData:    sensitiveData,
+		Otel: &gen.CreateOtelDestinationInput{
+			EndpointURL: endpointURL,
+			Headers:     []*gen.CreateOtelDestinationHeaderInput{},
+		}})
+	require.NoError(t, err)
+	return destination
+}

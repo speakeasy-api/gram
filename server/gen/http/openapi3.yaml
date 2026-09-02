@@ -13985,6 +13985,852 @@ paths:
             tags:
                 - cliAuth
             x-speakeasy-name-override: redeem
+    /rpc/dataExports.createDestination:
+        post:
+            description: Create a data export destination in the selected project.
+            operationId: createDataExportDestination
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDestinationForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Destination'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createDestination dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: createDestination
+            x-speakeasy-react-hook:
+                name: CreateDataExportDestination
+    /rpc/dataExports.createRoute:
+        post:
+            description: Create the selected data source's export route configuration.
+            operationId: createDataExportRoute
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDataExportRouteForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DataExportRoute'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createRoute dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: createRoute
+            x-speakeasy-react-hook:
+                name: CreateDataExportRoute
+    /rpc/dataExports.deleteDestination:
+        delete:
+            description: Delete a data export destination that is not referenced by an active route.
+            operationId: deleteDataExportDestination
+            parameters:
+                - allowEmptyValue: true
+                  description: Destination ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Destination ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Destination transport type.
+                  in: query
+                  name: destination_type
+                  required: true
+                  schema:
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteDestination dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: deleteDestination
+            x-speakeasy-react-hook:
+                name: DeleteDataExportDestination
+    /rpc/dataExports.deleteRoute:
+        delete:
+            description: Delete a data source's export route configuration.
+            operationId: deleteDataExportRoute
+            parameters:
+                - allowEmptyValue: true
+                  description: Route ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Route ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteRoute dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: deleteRoute
+            x-speakeasy-react-hook:
+                name: DeleteDataExportRoute
+    /rpc/dataExports.listDestinations:
+        get:
+            description: List data export destinations for the selected project.
+            operationId: listDataExportDestinations
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDestinationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDestinations dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: listDestinations
+            x-speakeasy-react-hook:
+                name: DataExportDestinations
+    /rpc/dataExports.listRoutes:
+        get:
+            description: List data source export route configurations for the selected project.
+            operationId: listDataExportRoutes
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDataExportRoutesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listRoutes dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: listRoutes
+            x-speakeasy-react-hook:
+                name: DataExportRoutes
+    /rpc/dataExports.updateDestination:
+        post:
+            description: Replace a data export destination in the selected project.
+            operationId: updateDataExportDestination
+            parameters:
+                - allowEmptyValue: true
+                  description: Destination ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Destination ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateDestinationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Destination'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateDestination dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: updateDestination
+            x-speakeasy-react-hook:
+                name: UpdateDataExportDestination
+    /rpc/dataExports.updateRoute:
+        post:
+            description: Replace the selected data source's export route configuration.
+            operationId: updateDataExportRoute
+            parameters:
+                - allowEmptyValue: true
+                  description: Route ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Route ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRouteRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DataExportRoute'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateRoute dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: updateRoute
+            x-speakeasy-react-hook:
+                name: UpdateDataExportRoute
     /rpc/deployments.active:
         get:
             description: Get the active deployment for a project.
@@ -65991,6 +66837,25 @@ components:
             required:
                 - rule_id
                 - title
+        CreateDataExportRouteForm:
+            type: object
+            properties:
+                data_source:
+                    type: string
+                    description: Class of data exported by this route.
+                    enum:
+                        - product_telemetry
+                enabled:
+                    type: boolean
+                    description: Whether the route is enabled.
+                    default: true
+                otel_destination_id:
+                    type: string
+                    description: OTEL destination configured on this route. Required when enabled.
+                    format: uuid
+            description: Form for creating the selected data source's export route.
+            required:
+                - data_source
         CreateDeploymentForm:
             type: object
             properties:
@@ -66086,6 +66951,30 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        CreateDestinationForm:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/CreateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    default: exclude
+                    enum:
+                        - exclude
+                        - include
+            description: Form for creating a data export destination. Supply the transport configuration selected by destination_type.
+            required:
+                - name
+                - destination_type
         CreateDomainRequestBody:
             type: object
             properties:
@@ -66478,6 +67367,35 @@ components:
                     minLength: 1
             required:
                 - name
+        CreateOtelDestinationHeaderInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Header name.
+                value:
+                    type: string
+                    description: Write-only header value.
+            description: An HTTP header supplied when creating an OTEL destination.
+            required:
+                - name
+                - value
+        CreateOtelDestinationInput:
+            type: object
+            properties:
+                endpoint_url:
+                    type: string
+                    description: OTEL collector endpoint URL.
+                    format: uri
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CreateOtelDestinationHeaderInput'
+                    description: Write-only HTTP headers.
+            description: OTEL-specific configuration supplied when creating a destination.
+            required:
+                - endpoint_url
+                - headers
         CreatePackageForm:
             type: object
             properties:
@@ -67675,6 +68593,45 @@ components:
                 - project_name
                 - project_slug
                 - is_domain_root
+        DataExportRoute:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                data_source:
+                    type: string
+                    description: Class of data exported by this route.
+                    enum:
+                        - product_telemetry
+                enabled:
+                    type: boolean
+                    description: Whether the route is enabled.
+                id:
+                    type: string
+                    description: Route ID.
+                    format: uuid
+                otel_destination_id:
+                    type: string
+                    description: OTEL destination configured on this route. Omitted when no OTEL destination is selected.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: Project that owns the route.
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            description: The export configuration for one class of project data. A route may contain one destination of each supported type.
+            required:
+                - id
+                - project_id
+                - data_source
+                - enabled
+                - created_at
+                - updated_at
         DeactivatePrescriptionRequestBody:
             type: object
             properties:
@@ -67984,6 +68941,50 @@ components:
                 - functions_tool_count
                 - external_mcp_asset_count
                 - external_mcp_tool_count
+        Destination:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                id:
+                    type: string
+                    description: Destination ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/OtelDestination'
+                project_id:
+                    type: string
+                    description: Project that owns the destination.
+                    format: uuid
+                sensitive_data:
+                    type: string
+                    description: Whether sensitive data is included in payloads sent to this destination.
+                    enum:
+                        - exclude
+                        - include
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            description: A reusable project-scoped data export destination. The destination_type discriminator identifies the populated transport configuration.
+            required:
+                - id
+                - project_id
+                - name
+                - destination_type
+                - sensitive_data
+                - created_at
+                - updated_at
         DetachUserSessionIssuerForm:
             type: object
             properties:
@@ -73060,6 +74061,16 @@ components:
             required:
                 - domains
                 - dns_config
+        ListDataExportRoutesResult:
+            type: object
+            properties:
+                routes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DataExportRoute'
+                    description: Active data export routes in the selected project.
+            required:
+                - routes
         ListDefinitionsResponseBody:
             type: object
             properties:
@@ -73089,6 +74100,16 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListDestinationsResult:
+            type: object
+            properties:
+                destinations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Destination'
+                    description: Active data export destinations in the selected project.
+            required:
+                - destinations
         ListDeviceIntegrationProvidersResult:
             type: object
             properties:
@@ -76213,6 +77234,35 @@ components:
                 - email
                 - created_at
                 - updated_at
+        OtelDestination:
+            type: object
+            properties:
+                endpoint_url:
+                    type: string
+                    description: OTEL collector endpoint URL. Transport-specific paths may be appended during delivery.
+                    format: uri
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OtelDestinationHeader'
+                    description: Configured HTTP header names. Header values are never returned.
+            description: OTEL-specific destination configuration.
+            required:
+                - endpoint_url
+                - headers
+        OtelDestinationHeader:
+            type: object
+            properties:
+                has_value:
+                    type: boolean
+                    description: Whether a non-empty encrypted value is stored for this header.
+                name:
+                    type: string
+                    description: Header name.
+            description: A write-only HTTP header configured on an OTEL destination.
+            required:
+                - name
+                - has_value
         OtelForwardingConfig:
             type: object
             properties:
@@ -86302,6 +87352,82 @@ components:
                 - id
                 - title
                 - severity
+        UpdateDataExportRouteForm:
+            type: object
+            properties:
+                data_source:
+                    type: string
+                    description: Class of data exported by this route.
+                    enum:
+                        - product_telemetry
+                enabled:
+                    type: boolean
+                    description: Whether the route is enabled.
+                id:
+                    type: string
+                    description: Route ID.
+                    format: uuid
+                otel_destination_id:
+                    type: string
+                    description: OTEL destination configured on this route. Required when enabled.
+                    format: uuid
+            description: Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.
+            required:
+                - id
+                - data_source
+                - enabled
+        UpdateDestinationForm:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                id:
+                    type: string
+                    description: Destination ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/UpdateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    enum:
+                        - exclude
+                        - include
+            description: Full replacement form for a data export destination. Supply the transport configuration selected by destination_type.
+            required:
+                - id
+                - name
+                - destination_type
+                - sensitive_data
+        UpdateDestinationRequestBody:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/UpdateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    enum:
+                        - exclude
+                        - include
+            required:
+                - name
+                - destination_type
+                - sensitive_data
         UpdateDomainRequestBody:
             type: object
             properties:
@@ -86653,6 +87779,34 @@ components:
                     description: New whitelisted flag.
             required:
                 - id
+        UpdateOtelDestinationHeaderInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Header name.
+                value:
+                    type: string
+                    description: Write-only header value. Omit to preserve an existing value; provide an empty string to clear it.
+            description: An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.
+            required:
+                - name
+        UpdateOtelDestinationInput:
+            type: object
+            properties:
+                endpoint_url:
+                    type: string
+                    description: OTEL collector endpoint URL.
+                    format: uri
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UpdateOtelDestinationHeaderInput'
+                    description: Complete HTTP header-name set for the OTEL destination.
+            description: OTEL-specific configuration supplied when updating a destination.
+            required:
+                - endpoint_url
+                - headers
         UpdatePackageForm:
             type: object
             properties:
@@ -87091,6 +88245,24 @@ components:
                     description: Scope grants to remove.
             required:
                 - id
+        UpdateRouteRequestBody:
+            type: object
+            properties:
+                data_source:
+                    type: string
+                    description: Class of data exported by this route.
+                    enum:
+                        - product_telemetry
+                enabled:
+                    type: boolean
+                    description: Whether the route is enabled.
+                otel_destination_id:
+                    type: string
+                    description: OTEL destination configured on this route. Required when enabled.
+                    format: uuid
+            required:
+                - data_source
+                - enabled
         UpdateSecurityVariableDisplayNameForm:
             type: object
             properties:
@@ -88678,6 +89850,8 @@ tags:
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+    - name: dataExports
+      description: Manage project-scoped data export destinations and routes.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: deviceIntegrations

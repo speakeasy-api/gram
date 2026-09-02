@@ -784,6 +784,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: dataExports
+    description: Manage project-scoped data export destinations and routes.
   - name: deployments
     description: Manages deployments of tools from upstream sources.
   - name: deviceIntegrations

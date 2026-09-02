@@ -697,16 +697,30 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		refreshEnc = &v
 	}
 
-	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
-	// store NULL — "no known expiry" — rather than fabricating a deadline the
-	// provider never asserted. validateAndRefresh serves that token as-is; a
-	// refresh token does not imply that the access token expires.
+	// A token with no reported expiry — neither expires_in nor a JWT exp —
+	// is stored with NULL access_expires_at, "no known expiry", rather than a
+	// deadline the provider never asserted. validateAndRefresh serves that
+	// token as-is; a refresh token does not imply that the access token
+	// expires.
 	now := time.Now()
-	var accessExpires *time.Time
-	if tok.ExpiresIn > 0 {
-		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
-		accessExpires = &v
+	accessExpires := tok.AccessExpiresAt(now)
+
+	// A deadline the provider asserts is persisted even when it has already
+	// passed: with a refresh grant the first resolution refreshes, and the
+	// session recovers on its own. With no refresh grant there is nothing to
+	// recover with — the row would report the session as connected while
+	// every resolution answered with a reconnect prompt, and a provider that
+	// pins exp to its own session rather than to this grant would mint the
+	// same dead row again on reconnect. exp is upstream wall-clock time, so a
+	// host clock running ahead of the provider reaches this too. The margin
+	// is the one the request path refreshes at, and the armed revocation
+	// above returns the pair to the provider.
+	if tok.RefreshToken == "" && accessExpires != nil && !accessExpires.After(now.Add(AccessTokenExpirySkew)) {
+		return oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
+			attr.SlogRemoteSessionAccessExpiresAt(*accessExpires),
+		)
 	}
+
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := expirationDeadline(now, refreshTimeout, refreshTimeoutReported)
 	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()
