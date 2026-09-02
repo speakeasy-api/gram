@@ -2,12 +2,12 @@ package mcpendpoints
 
 import (
 	"context"
-	"unicode/utf8"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"

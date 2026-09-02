@@ -2,8 +2,8 @@ package metamcp
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
