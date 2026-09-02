@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,8 +14,12 @@ import (
 	"time"
 
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -180,18 +185,23 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	baseURL := s.serverURL.String()
-	if toolset.CustomDomainID != nil {
-		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
-		}
-		baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
-	}
-
-	// modern gram toolsets always have an MCP slug
 	mcpServers := make([]*gen.InstanceMcpServer, 0)
-	if toolset.McpSlug != nil {
+	wrapperURL, err := s.resolveWrapperMCPURL(ctx, toolset, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case wrapperURL != "":
+		mcpServers = append(mcpServers, &gen.InstanceMcpServer{URL: wrapperURL})
+	case toolset.McpSlug != nil:
+		baseURL := s.serverURL.String()
+		if toolset.CustomDomainID != nil {
+			customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
+			}
+			baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
+		}
 		mcpServers = append(mcpServers, &gen.InstanceMcpServer{
 			URL: fmt.Sprintf("%s/mcp/%s", baseURL, string(*toolset.McpSlug)),
 		})
@@ -208,6 +218,35 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		PromptTemplates:              promptTemplates,
 		McpServers:                   mcpServers,
 	}, nil
+}
+
+// resolveWrapperMCPURL builds the toolset's hosted MCP URL from its wrapper's
+// primary endpoint; "" means fall back to the legacy toolset-column URL.
+func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Toolset, organizationID string, projectID uuid.UUID) (string, error) {
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "parse toolset id").LogError(ctx, s.logger)
+	}
+
+	wrapper, err := mcpserversRepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversRepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
+	case wrapper.Visibility == visibility.Disabled:
+		// The runtime 404s disabled wrappers; advertise the legacy URL instead.
+		return "", nil
+	}
+
+	mcpURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, organizationID, projectID, wrapper.ID, s.serverURL.String())
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "resolve wrapper mcp url").LogError(ctx, s.logger)
+	}
+	return mcpURL, nil
 }
 
 func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) error {

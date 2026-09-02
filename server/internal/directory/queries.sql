@@ -330,6 +330,25 @@ WHERE dg.organization_id = @organization_id
 GROUP BY dg.id, dg.name
 ORDER BY dg.name, dg.id;
 
+-- name: ListActiveDirectoryGroupMemberEmails :many
+SELECT DISTINCT LOWER(du.email) AS email
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE dg.id = @directory_group_id
+  AND du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND TRIM(du.email) != ''
+ORDER BY email;
+
 -- name: ListActiveDirectoryAttributeValues :many
 SELECT
   attribute.key::text AS attribute_key,

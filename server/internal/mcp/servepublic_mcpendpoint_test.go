@@ -99,6 +99,25 @@ func createToolsetMcpEndpoint(
 	return mcpServer
 }
 
+// createPlatformMcpEndpoint adds a second platform-scoped mcp_endpoints row
+// for an existing mcp_servers row.
+func createPlatformMcpEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	projectID uuid.UUID,
+	mcpServerID uuid.UUID,
+	slug string,
+) {
+	t.Helper()
+	_, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		Slug:        slug,
+	})
+	require.NoError(t, err)
+}
+
 // createRemoteMcpEndpoint writes a remote_mcp_servers row pointing at
 // upstreamURL, an mcp_servers row pointing at it, and an mcp_endpoints
 // row exposing it under slug. issuerID, when non-Nil, sets the

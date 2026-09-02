@@ -525,10 +525,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	// OAuth metadata at the canonical RFC paths. The handlers in
-	// authnchallenge.go dispatch internally on toolsets.user_session_issuer_id:
-	// issuer-gated toolsets get the new metadata shape; legacy toolsets fall
-	// through to wellknown.Resolve* (preserving the prior behaviour).
+	// OAuth metadata at the canonical RFC paths; resolution semantics are
+	// documented in authnchallenge_well_known.go.
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
@@ -1075,7 +1073,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	if bodyDecodeErr != nil {
-		return oops.E(oops.CodeBadRequest, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
+		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
+		// JSON of the wrong shape/type stays an invalid request (-32600).
+		decodeCode := oops.CodeBadRequest
+		if !json.Valid(bodyBytes) {
+			decodeCode = oops.CodeParseError
+		}
+		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
