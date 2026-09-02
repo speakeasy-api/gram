@@ -97,9 +97,6 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     version as their Killswitch history entries; the expiry row is attributed to
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
-13. **Data exports** — select the default project and confirm one enabled
-    **Product telemetry** export sends to **Datadog**. The configure sheet also
-    offers **Grafana Cloud** as an existing endpoint. No empty state or API error renders.
 
 ## On failure
 
