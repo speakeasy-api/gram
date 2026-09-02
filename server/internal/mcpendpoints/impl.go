@@ -144,7 +144,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// backend rows — so a create racing a backend deletion cannot deadlock:
 	// the insert's FK share on the domain row must not be requested while
 	// this transaction already holds the backend row a deleter is waiting on.
-	if err := lockCustomDomains(ctx, dbtx, UniqueIDs(customDomainID)); err != nil {
+	domainIDs, err := s.hostedDomainIDs(ctx, dbtx, *authCtx.ProjectID, backing, mcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp server custom domains").LogError(ctx, logger)
+	}
+	if err := lockCustomDomains(ctx, dbtx, append(domainIDs, UniqueIDs(customDomainID)...)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
 		}
@@ -271,7 +275,8 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	if server.Visibility == mcpservers.VisibilityDisabled {
+	// Hosted servers are attached toolset-keyed until AIS-638 re-keys plugins.
+	if server.Visibility == mcpservers.VisibilityDisabled || server.ToolsetID.Valid {
 		return false, nil
 	}
 
@@ -493,7 +498,11 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.E(oops.CodeInvalid, nil, "hosted server slugs are at most %d characters", hostedmcp.MaxToolsetSlugLength).LogWarn(ctx, logger)
 	}
 
-	domainIDs := UniqueIDs(preexisting.CustomDomainID, customDomainID)
+	domainIDs, err := s.hostedDomainIDs(ctx, dbtx, *authCtx.ProjectID, backing, preexisting.McpServerID, mcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp server custom domains").LogError(ctx, logger)
+	}
+	domainIDs = append(domainIDs, UniqueIDs(preexisting.CustomDomainID, customDomainID)...)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
@@ -722,7 +731,11 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		return oops.E(oops.CodeUnexpected, err, "lock backing toolsets").LogError(ctx, logger)
 	}
 
-	if err := lockCustomDomains(ctx, dbtx, UniqueIDs(preexisting.CustomDomainID)); err != nil {
+	domainIDs, err := s.hostedDomainIDs(ctx, dbtx, *authCtx.ProjectID, backing, preexisting.McpServerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list mcp server custom domains").LogError(ctx, logger)
+	}
+	if err := lockCustomDomains(ctx, dbtx, append(domainIDs, UniqueIDs(preexisting.CustomDomainID)...)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
 	}
 	existing, err := txRepo.LockMCPEndpointByID(ctx, repo.LockMCPEndpointByIDParams{
@@ -867,7 +880,30 @@ func UniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 	return result
 }
 
+// hostedDomainIDs lists the domains a hosted server's live endpoints already
+// sit on. The backward mirror locks the primary's domain late, so every domain
+// it could touch is taken up front, before the server row, in the order the
+// server delete path uses.
+func (s *Service) hostedDomainIDs(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, backing map[uuid.UUID]uuid.UUID, serverIDs ...uuid.NullUUID) ([]uuid.UUID, error) {
+	var domainIDs []uuid.UUID
+	for _, serverID := range UniqueIDs(serverIDs...) {
+		if _, hosted := backing[serverID]; !hosted {
+			continue
+		}
+		ids, err := repo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, repo.ListCustomDomainIDsByMCPServerIDParams{
+			McpServerID: serverID,
+			ProjectID:   projectID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list custom domains for mcp server %s: %w", serverID, err)
+		}
+		domainIDs = append(domainIDs, ids...)
+	}
+	return domainIDs, nil
+}
+
 func lockCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {
+	slices.SortFunc(domainIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	repository := customdomainsrepo.New(dbtx)
 	for _, domainID := range domainIDs {
 		if _, err := repository.LockCustomDomainByID(ctx, domainID); err != nil {

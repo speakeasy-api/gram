@@ -16,13 +16,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsRepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -540,6 +543,27 @@ func TestServiceCreateAssistantLiftsDisabledWrapper(t *testing.T) {
 		McpEnabled:     false,
 	})
 	require.NoError(t, err)
+	issuer, err := usersessionsRepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsRepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     pgtype.Text{String: "", Valid: false},
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = toolsetsRepo.New(conn).UpdateToolsetUserSessionIssuer(t.Context(), toolsetsRepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                ts.Slug,
+		ProjectID:           projectID,
+	})
+	require.NoError(t, err)
+	// remote_session_issuers FK to organization_metadata; the fixture org is a bare id.
+	now := time.Now()
+	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: "org-test", Name: "org-test", Slug: "org-test", GramAccountType: "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	}))
+	remoteIssuerID := seedBoundRemoteSessionIssuer(t, conn, "org-test", projectID, issuer.ID)
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
 	wrapper, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
@@ -569,8 +593,46 @@ func TestServiceCreateAssistantLiftsDisabledWrapper(t *testing.T) {
 	lifted, err := mcpserversRepo.New(conn).GetMCPServerByToolsetID(t.Context(), mcpserversRepo.GetMCPServerByToolsetIDParams{ToolsetID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", lifted.Visibility)
+	// The stale wrapper issuer is repaired and its derived remote issuer resynced.
+	require.Equal(t, uuid.NullUUID{UUID: issuer.ID, Valid: true}, lifted.UserSessionIssuerID)
+	require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, lifted.RemoteSessionIssuerID)
 	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: wrapper.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
 	require.Equal(t, ts.McpSlug.String, endpoints[0].Slug)
+}
+
+// seedBoundRemoteSessionIssuer creates a remote session issuer with one client
+// bound to the given user issuer, the shape the issuer resync derives from.
+func seedBoundRemoteSessionIssuer(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	q := remotesessionsRepo.New(conn)
+	suffix := uuid.NewString()[:8]
+	issuer, err := q.CreateRemoteSessionIssuer(t.Context(), remotesessionsRepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(projectID),
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              "rsi-" + suffix,
+		Issuer:                            "https://issuer-" + suffix + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://issuer-" + suffix + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://issuer-" + suffix + ".example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(t.Context(), remotesessionsRepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: issuer.ID,
+		ClientID:              "client-" + suffix,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsRepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+	return issuer.ID
 }

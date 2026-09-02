@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -96,6 +97,21 @@ func LockToolsets(ctx context.Context, db toolsetsrepo.DBTX, projectID uuid.UUID
 	return nil
 }
 
+// resyncIssuers recomputes the derived remote_session_issuer_id for every
+// user issuer a wrapper moved between.
+func resyncIssuers(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, issuers ...uuid.NullUUID) error {
+	ids := make([]uuid.UUID, 0, len(issuers))
+	for _, id := range issuers {
+		if id.Valid && !slices.Contains(ids, id.UUID) {
+			ids = append(ids, id.UUID)
+		}
+	}
+	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, organizationID, projectID, ids); err != nil {
+		return fmt.Errorf("resync mcp server remote session issuer: %w", err)
+	}
+	return nil
+}
+
 // Mirror projects wrapper-side writes back onto the toolset, audited under the acting user.
 type Mirror struct {
 	Audit       *audit.Logger
@@ -112,8 +128,12 @@ func (m Mirror) SyncToolsetFromWrapper(ctx context.Context, tx pgx.Tx, server mc
 		return fmt.Errorf("lock toolset: %w", err)
 	}
 	enabled, public := ToolsetFlags(server.Visibility)
-	if err := m.detachOAuthOnFlip(ctx, tx, before, public); err != nil {
-		return err
+	// Disabling keeps OAuth attached, as the toolset path's disable does; only
+	// an enabled public<->private flip detaches.
+	if before.McpEnabled && enabled {
+		if err := m.detachOAuthOnFlip(ctx, tx, before, public); err != nil {
+			return err
+		}
 	}
 	after, err := q.SyncToolsetHostingFromWrapper(ctx, toolsetsrepo.SyncToolsetHostingFromWrapperParams{
 		McpEnabled:            enabled,
@@ -150,15 +170,11 @@ func (m Mirror) SetToolsetAddress(ctx context.Context, tx pgx.Tx, projectID, too
 }
 
 // ClearToolsetHosting removes every hosting column from a toolset whose wrapper
-// was deleted; the toolset and its issuer row stay.
+// was deleted; the toolset, its issuer row, and its OAuth reference stay.
 func (m Mirror) ClearToolsetHosting(ctx context.Context, tx pgx.Tx, projectID, toolsetID uuid.UUID) error {
 	q := toolsetsrepo.New(tx)
-	before, err := q.LockToolsetByID(ctx, toolsetsrepo.LockToolsetByIDParams{ID: toolsetID, ProjectID: projectID})
-	if err != nil {
+	if _, err := q.LockToolsetByID(ctx, toolsetsrepo.LockToolsetByIDParams{ID: toolsetID, ProjectID: projectID}); err != nil {
 		return fmt.Errorf("lock toolset: %w", err)
-	}
-	if err := m.detachOAuthOnFlip(ctx, tx, before, false); err != nil {
-		return err
 	}
 	after, err := q.ClearToolsetHosting(ctx, toolsetsrepo.ClearToolsetHostingParams{ID: toolsetID, ProjectID: projectID})
 	if err != nil {
@@ -233,6 +249,7 @@ func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, tool
 		return fmt.Errorf("enable mcp server for toolset: %w", err)
 	}
 	if updated.UserSessionIssuerID != toolset.UserSessionIssuerID {
+		previousIssuer := updated.UserSessionIssuerID
 		updated, err = servers.SetMCPServerUserSessionIssuer(ctx, mcpserversrepo.SetMCPServerUserSessionIssuerParams{
 			UserSessionIssuerID: toolset.UserSessionIssuerID,
 			ID:                  updated.ID,
@@ -240,6 +257,9 @@ func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, tool
 		})
 		if err != nil {
 			return fmt.Errorf("set mcp server issuer for toolset: %w", err)
+		}
+		if err := resyncIssuers(ctx, tx, toolset.OrganizationID, projectID, previousIssuer, toolset.UserSessionIssuerID); err != nil {
+			return err
 		}
 	}
 	if err := m.Audit.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{

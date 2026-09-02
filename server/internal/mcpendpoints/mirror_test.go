@@ -236,3 +236,26 @@ func TestUpdateMcpEndpoint_MoveBetweenHostedServers_ReleasesSlugFirst(t *testing
 	slug, _ = toolsetAddress(t, ctx, ti.conn, *authCtx.ProjectID, newerToolset.ID)
 	require.False(t, slug.Valid)
 }
+
+// Creating an endpoint on a domain other than the server's current primary
+// must lock the primary's domain up front, in the order the server delete
+// path uses, so the backward mirror's late primary-domain lock cannot deadlock.
+func TestCreateMcpEndpoint_ToolsetBacked_LocksPrimaryDomainUpFront(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset, wrapper := seedHostedWrapper(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	primaryDomain := seedActiveCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	createEndpoint(t, ctx, ti, wrapper.ID, &primaryDomain, "primary")
+
+	// A platform endpoint targets no domain, so the only domain the write can
+	// touch is the primary's, reached through the backward mirror.
+	createEndpoint(t, ctx, ti, wrapper.ID, nil, authCtx.OrganizationSlug+"-secondary")
+
+	slug, domain := toolsetAddress(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.Equal(t, "primary", slug.String)
+	require.Equal(t, uuid.NullUUID{UUID: primaryDomain, Valid: true}, domain)
+}
