@@ -393,6 +393,7 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	now := time.Now().UTC()
 	require.NoError(t, chQueries.AppendRetroExclusionApplyByIDs(ctx, scope, exclusionID,
 		chrepo.FormatCHTime(now), chrepo.FormatCHTime(now.Add(time.Microsecond)), []uuid.UUID{c.ID}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	excluded, exID, _ := latestExclusionState(t, ti, c.ID)
 	require.True(t, excluded)
