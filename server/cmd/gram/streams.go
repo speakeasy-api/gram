@@ -530,7 +530,6 @@ func newStreamsCommand() *cli.Command {
 				replicaDB,
 				encryptionClient,
 				guardianPolicy,
-				featureFlags,
 			)
 
 			metricRelayHandler := otelsvc.NewMetricRelayHandler(
