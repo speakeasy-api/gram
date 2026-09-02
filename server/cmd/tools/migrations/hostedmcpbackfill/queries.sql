@@ -145,24 +145,6 @@ WHERE m.toolset_id = @toolset_id AND m.project_id = @project_id
 -- name: CountSkippedMcpMetadata :one
 SELECT count(*) FROM mcp_metadata WHERE toolset_id = @toolset_id AND project_id = @project_id;
 
--- name: MoveCollectionAttachments :execrows
-UPDATE organization_mcp_collection_server_attachments AS a
-SET mcp_server_id = @mcp_server_id, toolset_id = NULL
-FROM organization_mcp_collections AS c
-WHERE a.collection_id = c.id
-  AND c.organization_id = @organization_id
-  AND a.toolset_id = @toolset_id
-  AND (a.deleted OR NOT EXISTS (
-    SELECT 1 FROM organization_mcp_collection_server_attachments AS d
-    WHERE d.collection_id = a.collection_id AND d.mcp_server_id = @mcp_server_id AND d.deleted IS FALSE
-  ));
-
--- name: CountSkippedCollectionAttachments :one
-SELECT count(*)
-FROM organization_mcp_collection_server_attachments AS a
-JOIN organization_mcp_collections AS c ON a.collection_id = c.id
-WHERE c.organization_id = @organization_id AND a.toolset_id = @toolset_id;
-
 -- name: MovePluginServers :execrows
 UPDATE plugin_servers AS ps
 SET mcp_server_id = @mcp_server_id, toolset_id = NULL
@@ -239,14 +221,6 @@ VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors);
 INSERT INTO mcp_metadata (id, toolset_id, project_id, instructions)
 VALUES (@id, @toolset_id, @project_id, @instructions);
 
--- name: SeedCollectionFixture :exec
-INSERT INTO organization_mcp_collections (id, organization_id, name, slug, visibility)
-VALUES (@id, @organization_id, @name, @slug, 'private');
-
--- name: SeedCollectionAttachmentFixture :exec
-INSERT INTO organization_mcp_collection_server_attachments (id, collection_id, toolset_id, deleted_at)
-VALUES (@id, @collection_id, @toolset_id, @deleted_at);
-
 -- name: SeedPluginFixture :exec
 INSERT INTO plugins (id, organization_id, project_id, name, slug)
 VALUES (@id, @organization_id, @project_id, @name, @slug);
@@ -321,11 +295,6 @@ ORDER BY scope, effect, resource_id;
 -- name: GetMcpMetadataFixture :one
 SELECT id, toolset_id, mcp_server_id
 FROM mcp_metadata
-WHERE id = @id;
-
--- name: GetCollectionAttachmentFixture :one
-SELECT id, toolset_id, mcp_server_id, deleted, created_at
-FROM organization_mcp_collection_server_attachments
 WHERE id = @id;
 
 -- name: GetPluginServerFixture :one

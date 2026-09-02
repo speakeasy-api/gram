@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -427,11 +426,6 @@ func TestMoveDependents_MovesEveryDependentKind(t *testing.T) {
 
 	metadataID := uuid.New()
 	require.NoError(t, q.SeedMcpMetadataFixture(t.Context(), SeedMcpMetadataFixtureParams{ID: metadataID, ToolsetID: tsID, ProjectID: f.projectID, Instructions: conv.ToPGText("hi")}))
-	collectionID := uuid.New()
-	require.NoError(t, q.SeedCollectionFixture(t.Context(), SeedCollectionFixtureParams{ID: collectionID, OrganizationID: f.orgID, Name: "c", Slug: "c-" + uuid.NewString()[:8]}))
-	liveAttachment, deadAttachment := uuid.New(), uuid.New()
-	require.NoError(t, q.SeedCollectionAttachmentFixture(t.Context(), SeedCollectionAttachmentFixtureParams{ID: liveAttachment, CollectionID: collectionID, ToolsetID: tsID}))
-	require.NoError(t, q.SeedCollectionAttachmentFixture(t.Context(), SeedCollectionAttachmentFixtureParams{ID: deadAttachment, CollectionID: collectionID, ToolsetID: tsID, DeletedAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}}))
 	pluginID := uuid.New()
 	require.NoError(t, q.SeedPluginFixture(t.Context(), SeedPluginFixtureParams{ID: pluginID, OrganizationID: f.orgID, ProjectID: f.projectID, Name: "p", Slug: "p-" + uuid.NewString()[:8]}))
 	pluginServerID := uuid.New()
@@ -441,27 +435,18 @@ func TestMoveDependents_MovesEveryDependentKind(t *testing.T) {
 	assistantToolsetID := uuid.New()
 	require.NoError(t, q.SeedAssistantToolsetFixture(t.Context(), SeedAssistantToolsetFixtureParams{ID: assistantToolsetID, AssistantID: assistantID, ToolsetID: toolsetID, ProjectID: f.projectID}))
 
-	before, err := q.GetCollectionAttachmentFixture(t.Context(), deadAttachment)
-	require.NoError(t, err)
-
 	f.apply(t)
 	wrapperID := f.wrapper(t, toolsetID).ID
 	report := f.run(t, Options{Phase: PhaseDependents, Apply: true})
 
 	requireOnlyOutcome(t, report, OutcomeMovedDependents)
-	require.Equal(t, &DependentsReport{McpMetadata: 1, CollectionAttachments: 2, PluginServers: 1, AssistantToolsets: 1}, report.Rows[0].Dependents)
+	require.Equal(t, &DependentsReport{McpMetadata: 1, PluginServers: 1, AssistantToolsets: 1}, report.Rows[0].Dependents)
 	require.Nil(t, report.Rows[0].DependentsSkipped)
 
 	serverID := uuid.NullUUID{UUID: wrapperID, Valid: true}
 	metadata, err := q.GetMcpMetadataFixture(t.Context(), metadataID)
 	require.NoError(t, err)
 	require.Equal(t, GetMcpMetadataFixtureRow{ID: metadataID, McpServerID: serverID}, metadata)
-
-	dead, err := q.GetCollectionAttachmentFixture(t.Context(), deadAttachment)
-	require.NoError(t, err)
-	require.Equal(t, serverID, dead.McpServerID)
-	require.True(t, dead.Deleted, "soft-deletion state is preserved")
-	require.Equal(t, before.CreatedAt, dead.CreatedAt, "timestamps are preserved")
 
 	plugin, err := q.GetPluginServerFixture(t.Context(), pluginServerID)
 	require.NoError(t, err)

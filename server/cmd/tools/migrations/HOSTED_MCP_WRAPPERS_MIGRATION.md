@@ -15,7 +15,7 @@ The toolset↔wrapper mirror (AIS-635) must be deployed before `-apply`. Once a 
 ## Phases
 
 1. **wrappers** (default). Per toolset: wrapper (UUIDv5 from the toolset id, or an existing live wrapper adopted and reconciled), endpoints carrying `mcp_slug` verbatim, grants copied. Toolset-keyed grants stay in place, so every reader still keyed on the toolset id keeps working.
-2. **`-move-dependents`**. Re-keys `mcp_metadata`, collection attachments, `plugin_servers`, and `assistant_toolsets` (into `assistant_mcp_servers`) onto existing wrappers. Run only after the readers of those tables resolve server-keyed rows (AIS-638). Rows whose server-keyed twin already exists are skipped and left in place.
+2. **`-move-dependents`**. Re-keys `mcp_metadata`, `plugin_servers`, and `assistant_toolsets` (into `assistant_mcp_servers`) onto existing wrappers. Run only after the readers of those tables resolve server-keyed rows (AIS-638). Rows whose server-keyed twin already exists are skipped and left in place.
 3. **`-retire-toolset-grants`**. Deletes toolset-keyed `mcp` grants that have a wrapper-keyed twin. Run only after every grant reader keys hosted servers on the wrapper id (AIS-637/AIS-638).
 
 ## Outcomes

@@ -87,14 +87,13 @@ type EndpointReport struct {
 }
 
 type DependentsReport struct {
-	McpMetadata           int64 `json:"mcp_metadata"`
-	CollectionAttachments int64 `json:"collection_attachments"`
-	PluginServers         int64 `json:"plugin_servers"`
-	AssistantToolsets     int64 `json:"assistant_toolsets"`
+	McpMetadata       int64 `json:"mcp_metadata"`
+	PluginServers     int64 `json:"plugin_servers"`
+	AssistantToolsets int64 `json:"assistant_toolsets"`
 }
 
 func (d DependentsReport) total() int64 {
-	return d.McpMetadata + d.CollectionAttachments + d.PluginServers + d.AssistantToolsets
+	return d.McpMetadata + d.PluginServers + d.AssistantToolsets
 }
 
 // RowReport carries ids and slugs only, never organization names or emails.
@@ -514,9 +513,6 @@ func (r *Runner) moveDependents(ctx context.Context, tx pgx.Tx, q *Queries, tool
 	if moved.McpMetadata, err = q.MoveMcpMetadata(ctx, MoveMcpMetadataParams{McpServerID: serverID, ToolsetID: toolsetID, ProjectID: toolset.ProjectID}); err != nil {
 		return false, fmt.Errorf("move mcp metadata: %w", err)
 	}
-	if moved.CollectionAttachments, err = q.MoveCollectionAttachments(ctx, MoveCollectionAttachmentsParams{McpServerID: serverID, OrganizationID: toolset.OrganizationID, ToolsetID: toolsetID}); err != nil {
-		return false, fmt.Errorf("move collection attachments: %w", err)
-	}
 	if moved.PluginServers, err = q.MovePluginServers(ctx, MovePluginServersParams{McpServerID: serverID, ProjectID: toolset.ProjectID, ToolsetID: toolsetID}); err != nil {
 		return false, fmt.Errorf("move plugin servers: %w", err)
 	}
@@ -534,9 +530,6 @@ func (r *Runner) moveDependents(ctx context.Context, tx pgx.Tx, q *Queries, tool
 	var skipped DependentsReport
 	if skipped.McpMetadata, err = q.CountSkippedMcpMetadata(ctx, CountSkippedMcpMetadataParams{ToolsetID: toolsetID, ProjectID: toolset.ProjectID}); err != nil {
 		return false, fmt.Errorf("count skipped mcp metadata: %w", err)
-	}
-	if skipped.CollectionAttachments, err = q.CountSkippedCollectionAttachments(ctx, CountSkippedCollectionAttachmentsParams{OrganizationID: toolset.OrganizationID, ToolsetID: toolsetID}); err != nil {
-		return false, fmt.Errorf("count skipped collection attachments: %w", err)
 	}
 	if skipped.PluginServers, err = q.CountSkippedPluginServers(ctx, CountSkippedPluginServersParams{ProjectID: toolset.ProjectID, ToolsetID: toolsetID}); err != nil {
 		return false, fmt.Errorf("count skipped plugin servers: %w", err)

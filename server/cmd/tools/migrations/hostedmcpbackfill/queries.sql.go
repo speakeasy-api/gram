@@ -119,25 +119,6 @@ func (q *Queries) CountSkippedAssistantToolsets(ctx context.Context, arg CountSk
 	return count, err
 }
 
-const countSkippedCollectionAttachments = `-- name: CountSkippedCollectionAttachments :one
-SELECT count(*)
-FROM organization_mcp_collection_server_attachments AS a
-JOIN organization_mcp_collections AS c ON a.collection_id = c.id
-WHERE c.organization_id = $1 AND a.toolset_id = $2
-`
-
-type CountSkippedCollectionAttachmentsParams struct {
-	OrganizationID string
-	ToolsetID      uuid.NullUUID
-}
-
-func (q *Queries) CountSkippedCollectionAttachments(ctx context.Context, arg CountSkippedCollectionAttachmentsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSkippedCollectionAttachments, arg.OrganizationID, arg.ToolsetID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countSkippedMcpMetadata = `-- name: CountSkippedMcpMetadata :one
 SELECT count(*) FROM mcp_metadata WHERE toolset_id = $1 AND project_id = $2
 `
@@ -247,33 +228,6 @@ func (q *Queries) GetAssistantMcpServerFixture(ctx context.Context, arg GetAssis
 	row := q.db.QueryRow(ctx, getAssistantMcpServerFixture, arg.AssistantID, arg.McpServerID)
 	var i GetAssistantMcpServerFixtureRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
-	return i, err
-}
-
-const getCollectionAttachmentFixture = `-- name: GetCollectionAttachmentFixture :one
-SELECT id, toolset_id, mcp_server_id, deleted, created_at
-FROM organization_mcp_collection_server_attachments
-WHERE id = $1
-`
-
-type GetCollectionAttachmentFixtureRow struct {
-	ID          uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	Deleted     bool
-	CreatedAt   pgtype.Timestamptz
-}
-
-func (q *Queries) GetCollectionAttachmentFixture(ctx context.Context, id uuid.UUID) (GetCollectionAttachmentFixtureRow, error) {
-	row := q.db.QueryRow(ctx, getCollectionAttachmentFixture, id)
-	var i GetCollectionAttachmentFixtureRow
-	err := row.Scan(
-		&i.ID,
-		&i.ToolsetID,
-		&i.McpServerID,
-		&i.Deleted,
-		&i.CreatedAt,
-	)
 	return i, err
 }
 
@@ -738,33 +692,6 @@ func (q *Queries) MoveAssistantToolsets(ctx context.Context, arg MoveAssistantTo
 	return items, nil
 }
 
-const moveCollectionAttachments = `-- name: MoveCollectionAttachments :execrows
-UPDATE organization_mcp_collection_server_attachments AS a
-SET mcp_server_id = $1, toolset_id = NULL
-FROM organization_mcp_collections AS c
-WHERE a.collection_id = c.id
-  AND c.organization_id = $2
-  AND a.toolset_id = $3
-  AND (a.deleted OR NOT EXISTS (
-    SELECT 1 FROM organization_mcp_collection_server_attachments AS d
-    WHERE d.collection_id = a.collection_id AND d.mcp_server_id = $1 AND d.deleted IS FALSE
-  ))
-`
-
-type MoveCollectionAttachmentsParams struct {
-	McpServerID    uuid.NullUUID
-	OrganizationID string
-	ToolsetID      uuid.NullUUID
-}
-
-func (q *Queries) MoveCollectionAttachments(ctx context.Context, arg MoveCollectionAttachmentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, moveCollectionAttachments, arg.McpServerID, arg.OrganizationID, arg.ToolsetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const moveEndpointAddress = `-- name: MoveEndpointAddress :exec
 UPDATE mcp_endpoints
 SET custom_domain_id = $1,
@@ -988,50 +915,6 @@ func (q *Queries) SeedAssistantToolsetFixture(ctx context.Context, arg SeedAssis
 		arg.AssistantID,
 		arg.ToolsetID,
 		arg.ProjectID,
-	)
-	return err
-}
-
-const seedCollectionAttachmentFixture = `-- name: SeedCollectionAttachmentFixture :exec
-INSERT INTO organization_mcp_collection_server_attachments (id, collection_id, toolset_id, deleted_at)
-VALUES ($1, $2, $3, $4)
-`
-
-type SeedCollectionAttachmentFixtureParams struct {
-	ID           uuid.UUID
-	CollectionID uuid.UUID
-	ToolsetID    uuid.NullUUID
-	DeletedAt    pgtype.Timestamptz
-}
-
-func (q *Queries) SeedCollectionAttachmentFixture(ctx context.Context, arg SeedCollectionAttachmentFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedCollectionAttachmentFixture,
-		arg.ID,
-		arg.CollectionID,
-		arg.ToolsetID,
-		arg.DeletedAt,
-	)
-	return err
-}
-
-const seedCollectionFixture = `-- name: SeedCollectionFixture :exec
-INSERT INTO organization_mcp_collections (id, organization_id, name, slug, visibility)
-VALUES ($1, $2, $3, $4, 'private')
-`
-
-type SeedCollectionFixtureParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Name           string
-	Slug           string
-}
-
-func (q *Queries) SeedCollectionFixture(ctx context.Context, arg SeedCollectionFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedCollectionFixture,
-		arg.ID,
-		arg.OrganizationID,
-		arg.Name,
-		arg.Slug,
 	)
 	return err
 }
