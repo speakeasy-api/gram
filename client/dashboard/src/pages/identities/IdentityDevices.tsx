@@ -15,6 +15,7 @@ import { sectionMeta } from "./sectionMeta";
 import {
   retryFailed,
   useIdentityDevices,
+  useIdentityIsKnown,
   useIdentityPeers,
   useIdentityWindow,
 } from "./useIdentityQueries";
@@ -73,7 +74,12 @@ export default function IdentityDevices(): JSX.Element {
   // step below is one half of that, plus the two things that make the rest of
   // this tab worth reading.
   const hasDirectoryRow = identity.userIds.length > 0;
-  const seenWorking = self != null;
+  // All-time, not the page's window: enrollment is a standing fact about a
+  // person, and the identities list reports it that way. Reading it off the
+  // windowed roster marked someone "not enrolled" for having been quiet for
+  // the last seven days.
+  const knownAllTime = useIdentityIsKnown(identity);
+  const seenWorking = knownAllTime.known;
   const enrolled = hasDirectoryRow && seenWorking;
   const enrollmentSteps: {
     key: string;
@@ -140,12 +146,14 @@ export default function IdentityDevices(): JSX.Element {
             shows as a single word and never defines. */}
         <IdentityPanel
           title="Enrollment"
-          loading={peersPending || devicesQuery.isLoading}
+          loading={
+            peersPending || devicesQuery.isLoading || knownAllTime.isPending
+          }
           // Every step below reads off data that failed to arrive as a "No",
           // and the footer then concludes "Not enrolled" — the worst possible
           // wrong answer on this page.
-          error={peersFailed || devicesQuery.isError}
-          onRetry={retryFailed(peersRetry, devicesQuery)}
+          error={peersFailed || devicesQuery.isError || knownAllTime.isError}
+          onRetry={retryFailed(peersRetry, devicesQuery, knownAllTime)}
           footer={
             enrolled
               ? "Enrolled: the directory knows this person and we have seen them work."

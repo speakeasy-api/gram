@@ -54,10 +54,17 @@ export function IdentityLink({
   identifier,
   children,
   className,
+  "aria-label": ariaLabel,
 }: {
   identifier: IdentityRef | null | undefined;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Accessible name, for a link whose visible text is a bare verb. A column of
+   * rows each announcing "View" gives a screen reader no way to tell them
+   * apart.
+   */
+  "aria-label"?: string;
 }): React.JSX.Element {
   const href = useIdentityHref(identifier);
 
@@ -68,6 +75,7 @@ export function IdentityLink({
   return (
     <Link
       to={href}
+      aria-label={ariaLabel}
       // Person references sit inside clickable rows on several surfaces; the
       // link must win over the row rather than firing both.
       onClick={(event) => event.stopPropagation()}

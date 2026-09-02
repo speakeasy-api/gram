@@ -148,6 +148,13 @@ export function useIdentityMetrics(
 export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   known: boolean;
   isPending: boolean;
+  /**
+   * Whether the roster read failed. `known` is false either way, and callers
+   * that word that as a finding — "no activity recorded", "not enrolled" —
+   * need to tell the two apart.
+   */
+  isError: boolean;
+  refetch: () => void;
 } {
   const client = useGramContext();
   const organization = useOrganization();
@@ -170,15 +177,21 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
     enabled: !!identity && !hasDirectoryRow && identifiers.size > 0,
   });
 
-  if (!identity) return { known: true, isPending: true };
-  if (hasDirectoryRow) return { known: true, isPending: false };
+  const outcome = {
+    isError: query.isError,
+    refetch: () => void query.refetch(),
+  };
+
+  if (!identity) return { known: true, isPending: true, ...outcome };
+  if (hasDirectoryRow) return { known: true, isPending: false, ...outcome };
   // Only an unattributed subject is the "identifier nothing was recorded
   // under" case: an api-key or agent identity legitimately carries neither an
   // address nor an agent id, and is still a real subject.
   if (identity.kind !== "unattributed")
-    return { known: true, isPending: false };
-  if (identifiers.size === 0) return { known: false, isPending: false };
-  if (query.isPending) return { known: false, isPending: true };
+    return { known: true, isPending: false, ...outcome };
+  if (identifiers.size === 0)
+    return { known: false, isPending: false, ...outcome };
+  if (query.isPending) return { known: false, isPending: true, ...outcome };
   return {
     known: (query.data ?? []).some(
       (summary) =>
@@ -190,6 +203,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
         (!!summary.userId && identifiers.has(summary.userId.toLowerCase())),
     ),
     isPending: false,
+    ...outcome,
   };
 }
 

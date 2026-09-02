@@ -18,6 +18,7 @@ import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -181,13 +182,29 @@ function ClientIcon({ label }: { label: string }): JSX.Element {
   );
 }
 
-function GroupIcon({ group }: { group: ConnectionGroup }): JSX.Element {
+function GroupIcon({
+  group,
+  grouping,
+}: {
+  group: ConnectionGroup;
+  grouping: ConnectionGrouping;
+}): JSX.Element {
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
     );
   }
   if (group.client) return <ClientIcon label={group.label} />;
+  // An MCP server group has no identity or registration behind it, but it is
+  // the identity page's default grouping — an empty cell on every row there
+  // reads as a failed avatar rather than as a deliberate blank.
+  if (grouping === "issuer") {
+    return (
+      <span className="bg-muted/50 flex size-6 shrink-0 items-center justify-center">
+        <Icon name="server" className="text-muted-foreground size-3.5" />
+      </span>
+    );
+  }
 
   // Provider groups have neither an identity nor a registration to show, but
   // the cell still has to be occupied or every column after it shifts left.
@@ -424,7 +441,7 @@ function ConnectionGroupRow({
             )}
           />
 
-          <GroupIcon group={group} />
+          <GroupIcon group={group} grouping={grouping} />
 
           <span className="flex min-w-0 items-center gap-2">
             {group.identity?.urn ? (
