@@ -1,0 +1,14 @@
+server/cmd/gram/start.go
+  h_2620cc60cfd1e9 1288-1289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8697e0b627fdbcd127372753b28ccfdd4ec37a16",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

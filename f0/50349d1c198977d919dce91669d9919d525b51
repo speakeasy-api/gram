@@ -1,0 +1,28 @@
+server/internal/requestorigin/origin_test.go
+  h_9630b74bdac540 45-65
+server/internal/netingress/middleware.go
+  h_9630b74bdac540 1-9,11-13,15-70,76,79-110
+server/internal/netingress/tailscale_identity.go
+  h_9630b74bdac540 1-91,103-110,113-119,122
+server/internal/requestorigin/origin.go
+  h_9630b74bdac540 6,55-71
+server/internal/netingress/tailscale_identity_test.go
+  h_9630b74bdac540 1-40,52-79,88-146
+server/internal/netingress/attestation_test.go
+  h_9630b74bdac540 1-7,9-38,42-51,53,76-255,371-404
+server/internal/netingress/attestation.go
+  h_9630b74bdac540 1-14,16-21,31-60,64-81,85-102,104-202,247-260,264-310
+server/internal/networkingress/authority.go
+  h_9630b74bdac540 252,256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f050349d1c198977d919dce91669d9919d525b51",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

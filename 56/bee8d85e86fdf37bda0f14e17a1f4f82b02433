@@ -1,0 +1,14 @@
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  h_2620cc60cfd1e9 186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "56bee8d85e86fdf37bda0f14e17a1f4f82b02433",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

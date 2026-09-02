@@ -1,0 +1,39 @@
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  h_2620cc60cfd1e9 186
+server/internal/dataexports/repo/queries.sql.go
+  h_2620cc60cfd1e9 121,123-152,156-160
+  h_2620cc60cfd1e9 122,153-155,161-162
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 9,38-41,47,125,133-135,137,139-140,153,162-164,172,210,255-259,264,281,286,306,397-399
+server/internal/otel/handler_metric_relay_test.go
+  h_2620cc60cfd1e9 12-13,62-79,87-88,138,200,202-203,205
+server/internal/otel/handler_span_relay_test.go
+  h_2620cc60cfd1e9 73-75,79-82,91,136,160-201,226-227,235-239,246,267-268,271-272,296,298,323,325,367,372-373,375,409-415
+server/internal/otel/signal_relay_test.go
+  h_2620cc60cfd1e9 4,15-18,20,22,47-52,64-190,192-209,211-272,293,321,331,346-348,352,357,362,365,369-394,401-403,408,413-414,425-426,431,436,449,455-456,462-463,469-470,491-497,501-541,543,545-546,548-563,565,567-583
+  h_2620cc60cfd1e9 19,191,210,542,544,547,564,566
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 9,47,129,138-142,144-145,158,171,209,254-258,263,301,394-396
+server/internal/otel/handler_ilog_transforms_test.go
+  h_2620cc60cfd1e9 160
+server/internal/dataexports/queries.sql
+  h_2620cc60cfd1e9 5-21
+  h_2620cc60cfd1e9 3-4,22
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 9,46,123,131-135,137-138,151,168,206,251-255,260
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 12,16,19,23,33,36-52,76,80-84,90-91,93-99,131,136,138,142,144,148,157,171-180,185,192,195,199,203,206,236-242,246,250-251,256,260,266,268-270,272-273,275,278,283,291-297,305,307,319,321,330
+server/internal/otel/handler_log_relay_test.go
+  h_2620cc60cfd1e9 14-16,68,71-77,80-83,86,93-96,98-103,105-112,114-115,117-122,125-131,141-143,208,258,268-272,290-293,310,313,332,352,373-414,434,447,450,453-454,456,463-469
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "73fa35bf7564d23931520e84b996d748d9beed65",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
