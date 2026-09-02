@@ -18,6 +18,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -433,6 +434,78 @@ func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingMCPServer(t 
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err, "issuer must remain active when deletion is rejected")
+}
+
+// The organization sweep only counts owners in projects that are still live.
+// A soft-deleted project is terminal and unreachable, so a reference stranded
+// inside one must not leave the issuer undeletable everywhere else in the
+// organization.
+func TestDeleteUserSessionIssuer_OrganizationTierIgnoresOwnersInDeletedProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := seedOrganizationTierIssuer(t, ctx, ti.conn, "org-tier-deleted-project")
+	siblingID := createSiblingProject(t, ctx, ti.conn, "org-tier-deleted-project-sib")
+
+	// Both arms of the sweep get an owner, so the delete only succeeds once
+	// both stop counting the dead project's rows.
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              siblingID,
+		Name:                   "org-tier-deleted-project-toolset",
+		Slug:                   "org-tier-deleted-project-toolset",
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           siblingID,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             siblingID,
+		Name:                  pgtype.Text{String: "org-tier-deleted-project-server", Valid: true},
+		Slug:                  pgtype.Text{String: "org-tier-deleted-project-server", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	// While the owning project is live the references hold the issuer down.
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// Deleting the project leaves the owner rows behind, undeleted. They are
+	// what the sweep has to stop counting.
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, siblingID)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
 }
 
 func TestDeleteUserSessionIssuer_SiblingProjectNotFound(t *testing.T) {

@@ -97,6 +97,14 @@ FOR NO KEY UPDATE;
 -- project-scoped owner check would miss a sibling project's reference and soft
 -- delete the issuer out from under it.
 --
+-- The organization arm additionally requires the owning project to be live.
+-- A soft-deleted project is terminal (nothing clears projects.deleted_at) and
+-- unreachable (every project lookup filters it out), so a reference held
+-- inside one can never be acted on again; counting it would leave the issuer
+-- undeletable from every live project in the organization. The project arm
+-- needs no such check, because the project it names is the caller's own and
+-- auth resolved that one through a live lookup.
+--
 -- meta_mcp_servers stays project-scoped, and correctly so: its composite
 -- foreign key on (project_id, user_session_issuer_id) can never match a NULL
 -- project_id, so an organization-tier issuer has no meta MCP owners to sweep
@@ -114,18 +122,27 @@ WHERE issuer.id = @id
       AND server.deleted IS FALSE
       AND (
         server.project_id = issuer.project_id
-        OR (issuer.project_id IS NULL AND server_project.organization_id = issuer.organization_id)
+        OR (
+          issuer.project_id IS NULL
+          AND server_project.organization_id = issuer.organization_id
+          AND server_project.deleted IS FALSE
+        )
       )
 
     UNION ALL
 
     SELECT 1
     FROM toolsets AS toolset
+    JOIN projects AS toolset_project ON toolset_project.id = toolset.project_id
     WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
       AND (
         toolset.project_id = issuer.project_id
-        OR (issuer.project_id IS NULL AND toolset.organization_id = issuer.organization_id)
+        OR (
+          issuer.project_id IS NULL
+          AND toolset_project.organization_id = issuer.organization_id
+          AND toolset_project.deleted IS FALSE
+        )
       )
 
     UNION ALL
@@ -146,7 +163,8 @@ RETURNING issuer.*;
 -- same way DeleteUserSessionIssuer does. The caller's project and organization
 -- decide which issuer row is visible; the issuer row then decides where its
 -- owners can live. Preflight and write have to agree on that, otherwise this
--- check reports no owner for a reference the write would have to honor.
+-- check reports no owner for a reference the write would have to honor, or
+-- reports one for a reference the write is right to ignore.
 SELECT EXISTS (
     SELECT 1
     FROM user_session_issuers AS issuer
@@ -161,18 +179,27 @@ SELECT EXISTS (
           AND server.deleted IS FALSE
           AND (
             server.project_id = issuer.project_id
-            OR (issuer.project_id IS NULL AND server_project.organization_id = issuer.organization_id)
+            OR (
+              issuer.project_id IS NULL
+              AND server_project.organization_id = issuer.organization_id
+              AND server_project.deleted IS FALSE
+            )
           )
 
         UNION ALL
 
         SELECT 1
         FROM toolsets AS toolset
+        JOIN projects AS toolset_project ON toolset_project.id = toolset.project_id
         WHERE toolset.user_session_issuer_id = issuer.id
           AND toolset.deleted IS FALSE
           AND (
             toolset.project_id = issuer.project_id
-            OR (issuer.project_id IS NULL AND toolset.organization_id = issuer.organization_id)
+            OR (
+              issuer.project_id IS NULL
+              AND toolset_project.organization_id = issuer.organization_id
+              AND toolset_project.deleted IS FALSE
+            )
           )
 
         UNION ALL
