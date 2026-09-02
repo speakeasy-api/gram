@@ -1,10 +1,12 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -22,7 +24,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -224,56 +227,192 @@ func NewService(
 	}
 }
 
+func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return &gen.AdminSession{Email: authCtx.Email, Name: conv.PtrEmpty(authCtx.Name)}, nil
+}
+
+func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
+	return &gen.ProductFeatures{
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
+		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
+		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
+	}
+}
+
+func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetOrganizationFeaturesPayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, _ := adminActor(ctx)
+	mutator := productfeatures.NewMutator(s.productFeatures, s.audit)
+	feature := productfeatures.Feature(payload.FeatureName)
+	mutationActor := productfeatures.MutationActor{Principal: actor, DisplayName: displayName}
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		err = mutator.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, payload.Enabled, mutationActor)
+	} else {
+		err = mutator.SetFeature(ctx, organizationID, feature, payload.Enabled, mutationActor)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func chatAnalysisSettingsResult(settings chatanalysis.Settings) *gen.AdminChatAnalysisSettings {
+	return &gen.AdminChatAnalysisSettings{
+		OrganizationID: settings.OrganizationID, WorkUnitsEnabled: settings.WorkUnitsEnabled, WorkUnitsDailyCap: settings.WorkUnitsDailyCap,
+		BusinessMemoryEnabled: settings.BusinessMemoryEnabled, BusinessMemoryDailyCap: settings.BusinessMemoryDailyCap, IsDefault: settings.IsDefault,
+	}
+}
+
+func (s *Service) GetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := chatanalysis.LoadSettings(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat analysis settings").LogError(ctx, s.logger)
+	}
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) SetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.SetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, operatorEmail := adminActor(ctx)
+	settings, err := chatanalysis.UpsertSettings(ctx, s.db, s.audit, organizationID, payload.Judge, payload.Enabled, payload.DailyCap, actor, displayName)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update chat analysis settings").LogError(ctx, s.logger)
+	}
+	s.logger.InfoContext(ctx, "updated chat analysis settings", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) TriggerOrganizationChatAnalysis(ctx context.Context, payload *gen.TriggerOrganizationChatAnalysisPayload) (*gen.AdminChatAnalysisTriggerResult, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	projectsSignaled, err := chatanalysis.TriggerOrganization(ctx, s.db, s.chatAnalysisSignaler, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "trigger chat analysis").LogError(ctx, s.logger)
+	}
+	_, _, operatorEmail := adminActor(ctx)
+	s.logger.InfoContext(ctx, "triggered chat analysis", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return &gen.AdminChatAnalysisTriggerResult{ProjectsSignaled: projectsSignaled}, nil
+}
+
+func (s *Service) OpenOrganizationInDashboard(ctx context.Context, payload *gen.OpenOrganizationInDashboardPayload) (*gen.AdminDashboardRedirect, error) {
+	organizationID := strings.TrimSpace(conv.PtrValOr(payload.OrganizationID, ""))
+	if organizationID == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "organization_id is required")
+	}
+	if s.dashboardURL == nil || s.dashboardURL.Scheme == "" || s.dashboardURL.Host == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "dashboard URL is not configured").LogError(ctx, s.logger)
+	}
+	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load support target").LogError(ctx, s.logger)
+	}
+	if organization.DisabledAt.Valid {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	token, err := s.supportHandoffIssuer.Issue(ctx, organization.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "issue support handoff").LogError(ctx, s.logger)
+	}
+	query := url.Values{}
+	query.Set("support_handoff", token)
+	query.Set("redirect", "/"+organization.Slug)
+	destination := url.URL{Scheme: s.dashboardURL.Scheme, Host: s.dashboardURL.Host, Path: "/rpc/auth.login", RawQuery: query.Encode()}
+	return &gen.AdminDashboardRedirect{Location: destination.String(), CacheControl: "no-store"}, nil
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
+	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
+	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	adminserver.Mount(mux, server)
 
-	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
-	// features_handler.go for why these routes are hand written rather than
-	// generated from the Goa design.
-	mux.Handle(
-		http.MethodGet,
-		"/admin/session.get",
-		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleGetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleSetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisTrigger",
-		oops.ErrHandle(service.logger, service.handleTriggerChatAnalysis).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.open-dashboard",
-		oops.ErrHandle(service.logger, service.handleOpenOrganizationInDashboard).ServeHTTP,
-	)
+}
+
+type adminPreauthorizedKey struct{}
+
+func markAdminPreauthorized(ctx context.Context) context.Context {
+	return context.WithValue(ctx, adminPreauthorizedKey{}, true)
+}
+
+func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
+}
+
+func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "read admin request body")
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(body()); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
+		return ctx, nil
+	}
 	ctx, err := s.verifier.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("admin auth: %w", err)

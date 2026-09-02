@@ -231,6 +231,33 @@ var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
+var AdminSession = Type("AdminSession", func() {
+	Attribute("email", String)
+	Attribute("name", String)
+	Required("email")
+})
+
+var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {
+	Attribute("organization_id", String)
+	Attribute("work_units_enabled", Boolean)
+	Attribute("work_units_daily_cap", Int)
+	Attribute("business_memory_enabled", Boolean)
+	Attribute("business_memory_daily_cap", Int)
+	Attribute("is_default", Boolean)
+	Required("organization_id", "work_units_enabled", "work_units_daily_cap", "business_memory_enabled", "business_memory_daily_cap", "is_default")
+})
+
+var AdminChatAnalysisTriggerResult = Type("AdminChatAnalysisTriggerResult", func() {
+	Attribute("projects_signaled", Int)
+	Required("projects_signaled")
+})
+
+var AdminDashboardRedirect = Type("AdminDashboardRedirect", func() {
+	Attribute("location", String)
+	Attribute("cache_control", String)
+	Required("location", "cache_control")
+})
+
 // Shared so the two write paths, and the service's own copy of the check,
 // cannot drift into accepting different sets.
 var accountTypes = conv.AnySlice(constants.AccountTypes)
@@ -319,6 +346,78 @@ var _ = Service("admin", func() {
 
 			Response(StatusNoContent)
 		})
+	})
+
+	Method("getSession", func() {
+		Payload(func() { security.AdminAuthPayload() })
+		Result(AdminSession)
+		HTTP(func() { GET("/admin/session.get"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetSession")
+	})
+
+	Method("getOrganizationFeatures", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Required("organization_id")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationFeatures")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
+	})
+
+	Method("setOrganizationFeature", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("feature_name", shared.ProductFeatureName)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "feature_name", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.features"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationFeature")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationFeature"}`)
+	})
+
+	Method("getOrganizationChatAnalysisSettings", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminChatAnalysisSettings)
+		HTTP(func() { GET("/admin/organization.chatAnalysisSettings"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationChatAnalysisSettings")
+	})
+
+	Method("setOrganizationChatAnalysisSettings", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("judge", String, func() { Enum("work_units", "business_memory") })
+			Attribute("enabled", Boolean)
+			Attribute("daily_cap", Int, func() { Minimum(0); Maximum(10000) })
+			Required("organization_id", "judge", "enabled", "daily_cap")
+		})
+		Result(AdminChatAnalysisSettings)
+		HTTP(func() { POST("/admin/organization.chatAnalysisSettings"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationChatAnalysisSettings")
+	})
+
+	Method("triggerOrganizationChatAnalysis", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminChatAnalysisTriggerResult)
+		HTTP(func() { POST("/admin/organization.chatAnalysisTrigger"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminTriggerOrganizationChatAnalysis")
+	})
+
+	Method("openOrganizationInDashboard", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String) })
+		Result(AdminDashboardRedirect)
+		HTTP(func() {
+			POST("/admin/organization.open-dashboard")
+			Param("organization_id")
+			Response(StatusSeeOther, func() { Header("location:Location"); Header("cache_control:Cache-Control") })
+		})
+		Meta("openapi:operationId", "adminOpenOrganizationInDashboard")
 	})
 
 	Method("getProject", func() {

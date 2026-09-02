@@ -27,6 +27,34 @@ type Client struct {
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
 
+	// GetSession Doer is the HTTP client used to make requests to the getSession
+	// endpoint.
+	GetSessionDoer goahttp.Doer
+
+	// GetOrganizationFeatures Doer is the HTTP client used to make requests to the
+	// getOrganizationFeatures endpoint.
+	GetOrganizationFeaturesDoer goahttp.Doer
+
+	// SetOrganizationFeature Doer is the HTTP client used to make requests to the
+	// setOrganizationFeature endpoint.
+	SetOrganizationFeatureDoer goahttp.Doer
+
+	// GetOrganizationChatAnalysisSettings Doer is the HTTP client used to make
+	// requests to the getOrganizationChatAnalysisSettings endpoint.
+	GetOrganizationChatAnalysisSettingsDoer goahttp.Doer
+
+	// SetOrganizationChatAnalysisSettings Doer is the HTTP client used to make
+	// requests to the setOrganizationChatAnalysisSettings endpoint.
+	SetOrganizationChatAnalysisSettingsDoer goahttp.Doer
+
+	// TriggerOrganizationChatAnalysis Doer is the HTTP client used to make
+	// requests to the triggerOrganizationChatAnalysis endpoint.
+	TriggerOrganizationChatAnalysisDoer goahttp.Doer
+
+	// OpenOrganizationInDashboard Doer is the HTTP client used to make requests to
+	// the openOrganizationInDashboard endpoint.
+	OpenOrganizationInDashboardDoer goahttp.Doer
+
 	// GetProject Doer is the HTTP client used to make requests to the getProject
 	// endpoint.
 	GetProjectDoer goahttp.Doer
@@ -135,36 +163,43 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                        doer,
-		CallbackDoer:                     doer,
-		LogoutDoer:                       doer,
-		GetProjectDoer:                   doer,
-		UpdateOrganizationDoer:           doer,
-		BulkUpdateAccountTypeDoer:        doer,
-		DisableOrganizationDoer:          doer,
-		EnableOrganizationDoer:           doer,
-		GetOrganizationDoer:              doer,
-		ListOrganizationMembersDoer:      doer,
-		ListOrganizationProjectsDoer:     doer,
-		ListOrganizationActivityDoer:     doer,
-		ListOrganizationsDoer:            doer,
-		ExtendTrialDoer:                  doer,
-		CreateOrganizationDoer:           doer,
-		RearmTrialDoer:                   doer,
-		GetOrganizationStatsDoer:         doer,
-		GetInferenceKeysDoer:             doer,
-		SetInferenceKeyMonthlyLimitDoer:  doer,
-		GetInferenceSpendHistoryDoer:     doer,
-		GetPaygBillingSummaryDoer:        doer,
-		GetStripeSubscriptionDoer:        doer,
-		CancelStripeSubscriptionDoer:     doer,
-		ResumeStripeSubscriptionDoer:     doer,
-		MarkEnterpriseTrialConvertedDoer: doer,
-		RestoreResponseBody:              restoreBody,
-		scheme:                           scheme,
-		host:                             host,
-		decoder:                          dec,
-		encoder:                          enc,
+		LoginDoer:                               doer,
+		CallbackDoer:                            doer,
+		LogoutDoer:                              doer,
+		GetSessionDoer:                          doer,
+		GetOrganizationFeaturesDoer:             doer,
+		SetOrganizationFeatureDoer:              doer,
+		GetOrganizationChatAnalysisSettingsDoer: doer,
+		SetOrganizationChatAnalysisSettingsDoer: doer,
+		TriggerOrganizationChatAnalysisDoer:     doer,
+		OpenOrganizationInDashboardDoer:         doer,
+		GetProjectDoer:                          doer,
+		UpdateOrganizationDoer:                  doer,
+		BulkUpdateAccountTypeDoer:               doer,
+		DisableOrganizationDoer:                 doer,
+		EnableOrganizationDoer:                  doer,
+		GetOrganizationDoer:                     doer,
+		ListOrganizationMembersDoer:             doer,
+		ListOrganizationProjectsDoer:            doer,
+		ListOrganizationActivityDoer:            doer,
+		ListOrganizationsDoer:                   doer,
+		ExtendTrialDoer:                         doer,
+		CreateOrganizationDoer:                  doer,
+		RearmTrialDoer:                          doer,
+		GetOrganizationStatsDoer:                doer,
+		GetInferenceKeysDoer:                    doer,
+		SetInferenceKeyMonthlyLimitDoer:         doer,
+		GetInferenceSpendHistoryDoer:            doer,
+		GetPaygBillingSummaryDoer:               doer,
+		GetStripeSubscriptionDoer:               doer,
+		CancelStripeSubscriptionDoer:            doer,
+		ResumeStripeSubscriptionDoer:            doer,
+		MarkEnterpriseTrialConvertedDoer:        doer,
+		RestoreResponseBody:                     restoreBody,
+		scheme:                                  scheme,
+		host:                                    host,
+		decoder:                                 dec,
+		encoder:                                 enc,
 	}
 }
 
@@ -235,6 +270,174 @@ func (c *Client) Logout() goa.Endpoint {
 		resp, err := c.LogoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "logout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSession returns an endpoint that makes HTTP requests to the admin service
+// getSession server.
+func (c *Client) GetSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSessionRequest(c.encoder)
+		decodeResponse = DecodeGetSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationFeatures returns an endpoint that makes HTTP requests to the
+// admin service getOrganizationFeatures server.
+func (c *Client) GetOrganizationFeatures() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationFeaturesRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationFeaturesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationFeaturesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationFeaturesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationFeatures", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationFeature returns an endpoint that makes HTTP requests to the
+// admin service setOrganizationFeature server.
+func (c *Client) SetOrganizationFeature() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationFeatureRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationFeatureResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationFeatureRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationFeatureDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationFeature", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationChatAnalysisSettings returns an endpoint that makes HTTP
+// requests to the admin service getOrganizationChatAnalysisSettings server.
+func (c *Client) GetOrganizationChatAnalysisSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationChatAnalysisSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationChatAnalysisSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationChatAnalysisSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationChatAnalysisSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationChatAnalysisSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationChatAnalysisSettings returns an endpoint that makes HTTP
+// requests to the admin service setOrganizationChatAnalysisSettings server.
+func (c *Client) SetOrganizationChatAnalysisSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationChatAnalysisSettingsRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationChatAnalysisSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationChatAnalysisSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationChatAnalysisSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationChatAnalysisSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TriggerOrganizationChatAnalysis returns an endpoint that makes HTTP requests
+// to the admin service triggerOrganizationChatAnalysis server.
+func (c *Client) TriggerOrganizationChatAnalysis() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTriggerOrganizationChatAnalysisRequest(c.encoder)
+		decodeResponse = DecodeTriggerOrganizationChatAnalysisResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTriggerOrganizationChatAnalysisRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TriggerOrganizationChatAnalysisDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "triggerOrganizationChatAnalysis", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// OpenOrganizationInDashboard returns an endpoint that makes HTTP requests to
+// the admin service openOrganizationInDashboard server.
+func (c *Client) OpenOrganizationInDashboard() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeOpenOrganizationInDashboardRequest(c.encoder)
+		decodeResponse = DecodeOpenOrganizationInDashboardResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildOpenOrganizationInDashboardRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.OpenOrganizationInDashboardDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "openOrganizationInDashboard", err)
 		}
 		return decodeResponse(resp)
 	}

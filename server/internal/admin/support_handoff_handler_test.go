@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type fakeSupportHandoffIssuer struct {
@@ -29,7 +29,7 @@ func (f *fakeSupportHandoffIssuer) Issue(_ context.Context, organizationID strin
 	return f.token, nil
 }
 
-func TestHandleOpenOrganizationInDashboard(t *testing.T) {
+func TestOpenOrganizationInDashboard_HTTPContract(t *testing.T) {
 	t.Parallel()
 
 	t.Run("requires a valid admin session", func(t *testing.T) {
@@ -57,6 +57,15 @@ func TestHandleOpenOrganizationInDashboard(t *testing.T) {
 		require.Equal(t, "/rpc/auth.login", destination.Path)
 		require.Equal(t, "opaque-token", destination.Query().Get("support_handoff"))
 		require.Equal(t, "/target-slug", destination.Query().Get("redirect"))
+	})
+
+	t.Run("preserves invalid status for empty organization input", func(t *testing.T) {
+		t.Parallel()
+
+		svc, sessionID, issuer := newOpenOrganizationService(t)
+		rec := callOpenOrganization(t, svc, "", sessionID)
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		require.Empty(t, issuer.organizationID)
 	})
 
 	t.Run("rejects missing and disabled organizations before issuing", func(t *testing.T) {
@@ -118,7 +127,9 @@ func callOpenOrganization(t *testing.T, svc *Service, organizationID, sessionID 
 	if sessionID != "" {
 		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	}
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
 	rec := httptest.NewRecorder()
-	SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleOpenOrganizationInDashboard)).ServeHTTP(rec, req)
+	SessionMiddleware(mux).ServeHTTP(rec, req)
 	return rec
 }

@@ -62,6 +62,7 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	)
 	tracerProvider := testenv.NewTracerProvider(t)
 	svc := &Service{
+		tracer:          tracerProvider.Tracer("admin_test"),
 		logger:          logger,
 		db:              conn,
 		audit:           audit.NewLogger(),

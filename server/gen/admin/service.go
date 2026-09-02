@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 
+	adminviews "github.com/speakeasy-api/gram/server/gen/admin/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -23,6 +24,22 @@ type Service interface {
 	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
 	// Logout implements logout.
 	Logout(context.Context, *LogoutPayload) (err error)
+	// GetSession implements getSession.
+	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
+	// GetOrganizationFeatures implements getOrganizationFeatures.
+	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
+	// SetOrganizationFeature implements setOrganizationFeature.
+	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
+	// GetOrganizationChatAnalysisSettings implements
+	// getOrganizationChatAnalysisSettings.
+	GetOrganizationChatAnalysisSettings(context.Context, *GetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// SetOrganizationChatAnalysisSettings implements
+	// setOrganizationChatAnalysisSettings.
+	SetOrganizationChatAnalysisSettings(context.Context, *SetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.
+	TriggerOrganizationChatAnalysis(context.Context, *TriggerOrganizationChatAnalysisPayload) (res *AdminChatAnalysisTriggerResult, err error)
+	// OpenOrganizationInDashboard implements openOrganizationInDashboard.
+	OpenOrganizationInDashboard(context.Context, *OpenOrganizationInDashboardPayload) (res *AdminDashboardRedirect, err error)
 	// Returns full admin details for a project by id or slug, including aggregated
 	// counts of child resources.
 	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
@@ -112,7 +129,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [25]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
+var MethodNames = [32]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -123,6 +140,30 @@ type AdminBulkUpdateAccountTypeResult struct {
 	// IDs from the request that matched no organization, deduplicated and in
 	// request order. Nothing was written for these.
 	MissingIds []string
+}
+
+// AdminChatAnalysisSettings is the result type of the admin service
+// getOrganizationChatAnalysisSettings method.
+type AdminChatAnalysisSettings struct {
+	OrganizationID         string
+	WorkUnitsEnabled       bool
+	WorkUnitsDailyCap      int
+	BusinessMemoryEnabled  bool
+	BusinessMemoryDailyCap int
+	IsDefault              bool
+}
+
+// AdminChatAnalysisTriggerResult is the result type of the admin service
+// triggerOrganizationChatAnalysis method.
+type AdminChatAnalysisTriggerResult struct {
+	ProjectsSignaled int
+}
+
+// AdminDashboardRedirect is the result type of the admin service
+// openOrganizationInDashboard method.
+type AdminDashboardRedirect struct {
+	Location     string
+	CacheControl string
 }
 
 // Current usage and configured state for one materialized platform-managed
@@ -318,6 +359,12 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// AdminSession is the result type of the admin service getSession method.
+type AdminSession struct {
+	Email string
+	Name  *string
+}
+
 // AdminStripeSubscription is the result type of the admin service
 // getStripeSubscription method.
 type AdminStripeSubscription struct {
@@ -448,6 +495,20 @@ type GetInferenceSpendHistoryPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service getOrganizationChatAnalysisSettings method.
+type GetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationFeaturesPayload is the payload type of the admin service
+// getOrganizationFeatures method.
+type GetOrganizationFeaturesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -478,6 +539,11 @@ type GetProjectPayload struct {
 	// is reported as not found. Optional, because the global project lookup has no
 	// organization to scope by.
 	OrganizationIDOrSlug *string
+}
+
+// GetSessionPayload is the payload type of the admin service getSession method.
+type GetSessionPayload struct {
+	AdminSessionToken *string
 }
 
 // GetStripeSubscriptionPayload is the payload type of the admin service
@@ -602,6 +668,70 @@ type MarkEnterpriseTrialConvertedResult struct {
 	ConvertedAt string
 }
 
+// OpenOrganizationInDashboardPayload is the payload type of the admin service
+// openOrganizationInDashboard method.
+type OpenOrganizationInDashboardPayload struct {
+	AdminSessionToken *string
+	OrganizationID    *string
+}
+
+type ProductFeatureName string
+
+// ProductFeatures is the result type of the admin service
+// getOrganizationFeatures method.
+type ProductFeatures struct {
+	// Whether logging is enabled
+	LogsEnabled bool
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool
+	// Whether the organization can use the Gram Platform MCP capability
+	PlatformMcpEnabled bool
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled bool
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool
+}
+
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.
 type RearmTrialPayload struct {
 	AdminSessionToken *string
@@ -625,6 +755,32 @@ type SetInferenceKeyMonthlyLimitPayload struct {
 	OrganizationID    string
 	KeyType           string
 	MonthlyCredits    int
+}
+
+// SetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service setOrganizationChatAnalysisSettings method.
+type SetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	Judge             string
+	Enabled           bool
+	DailyCap          int
+}
+
+// SetOrganizationFeaturePayload is the payload type of the admin service
+// setOrganizationFeature method.
+type SetOrganizationFeaturePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	FeatureName       ProductFeatureName
+	Enabled           bool
+}
+
+// TriggerOrganizationChatAnalysisPayload is the payload type of the admin
+// service triggerOrganizationChatAnalysis method.
+type TriggerOrganizationChatAnalysisPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service
@@ -687,4 +843,108 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// NewProductFeatures initializes result type ProductFeatures from viewed
+// result type ProductFeatures.
+func NewProductFeatures(vres *adminviews.ProductFeatures) *ProductFeatures {
+	return newProductFeatures(vres.Projected)
+}
+
+// NewViewedProductFeatures initializes viewed result type ProductFeatures from
+// result type ProductFeatures using the given view.
+func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.ProductFeatures {
+	p := newProductFeaturesView(res)
+	return &adminviews.ProductFeatures{Projected: p, View: "default"}
+}
+
+// newProductFeatures converts projected type ProductFeatures to service type
+// ProductFeatures.
+func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
+	res := &ProductFeatures{}
+	if vres.LogsEnabled != nil {
+		res.LogsEnabled = *vres.LogsEnabled
+	}
+	if vres.ToolIoLogsEnabled != nil {
+		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
+	}
+	if vres.SessionCaptureEnabled != nil {
+		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
+	}
+	if vres.AuthzChallengeLoggingEnabled != nil {
+		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
+	}
+	if vres.SsoEnabled != nil {
+		res.SsoEnabled = *vres.SsoEnabled
+	}
+	if vres.ScimEnabled != nil {
+		res.ScimEnabled = *vres.ScimEnabled
+	}
+	if vres.HooksBrowserLoginEnabled != nil {
+		res.HooksBrowserLoginEnabled = *vres.HooksBrowserLoginEnabled
+	}
+	if vres.HooksFailOpenEnabled != nil {
+		res.HooksFailOpenEnabled = *vres.HooksFailOpenEnabled
+	}
+	if vres.CustomModelKeysEnabled != nil {
+		res.CustomModelKeysEnabled = *vres.CustomModelKeysEnabled
+	}
+	if vres.SkillsEnabled != nil {
+		res.SkillsEnabled = *vres.SkillsEnabled
+	}
+	if vres.SkillCaptureMetadataOnly != nil {
+		res.SkillCaptureMetadataOnly = *vres.SkillCaptureMetadataOnly
+	}
+	if vres.AiPlatformPushIntegrationsEnabled != nil {
+		res.AiPlatformPushIntegrationsEnabled = *vres.AiPlatformPushIntegrationsEnabled
+	}
+	if vres.PlatformMcpEnabled != nil {
+		res.PlatformMcpEnabled = *vres.PlatformMcpEnabled
+	}
+	if vres.CustomerManagedEncryptionKeysEnabled != nil {
+		res.CustomerManagedEncryptionKeysEnabled = *vres.CustomerManagedEncryptionKeysEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnabled != nil {
+		res.RemoteSessionAutoRefreshEnabled = *vres.RemoteSessionAutoRefreshEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
+		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
+	}
+	if vres.ConsentToolFilteringEnabled != nil {
+		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
+	}
+	if vres.SessionPortabilityEnabled != nil {
+		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
+	}
+	if vres.DeviceAgent != nil {
+		res.DeviceAgent = *vres.DeviceAgent
+	}
+	return res
+}
+
+// newProductFeaturesView projects result type ProductFeatures to projected
+// type ProductFeaturesView using the "default" view.
+func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
+	vres := &adminviews.ProductFeaturesView{
+		LogsEnabled:                             &res.LogsEnabled,
+		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            &res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              &res.SsoEnabled,
+		ScimEnabled:                             &res.ScimEnabled,
+		HooksBrowserLoginEnabled:                &res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    &res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  &res.CustomModelKeysEnabled,
+		SkillsEnabled:                           &res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                &res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       &res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      &res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
+		DeviceAgent:                             &res.DeviceAgent,
+	}
+	return vres
 }

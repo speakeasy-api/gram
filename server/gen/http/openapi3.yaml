@@ -447,6 +447,231 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.chatAnalysisSettings:
+        get:
+            tags:
+                - admin
+            summary: getOrganizationChatAnalysisSettings admin
+            operationId: adminGetOrganizationChatAnalysisSettings
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminChatAnalysisSettings'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+        post:
+            tags:
+                - admin
+            summary: setOrganizationChatAnalysisSettings admin
+            operationId: adminSetOrganizationChatAnalysisSettings
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationChatAnalysisSettingsRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminChatAnalysisSettings'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.chatAnalysisTrigger:
+        post:
+            tags:
+                - admin
+            summary: triggerOrganizationChatAnalysis admin
+            operationId: adminTriggerOrganizationChatAnalysis
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerOrganizationChatAnalysisRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminChatAnalysisTriggerResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.create:
         post:
             tags:
@@ -675,6 +900,160 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.features:
+        get:
+            operationId: adminGetOrganizationFeatures
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProductFeatures'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationFeatures admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOrganizationFeatures
+        post:
+            operationId: adminSetOrganizationFeature
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationFeatureRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProductFeatures'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setOrganizationFeature admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: SetAdminOrganizationFeature
     /admin/organization.get:
         get:
             tags:
@@ -935,6 +1314,84 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminListOrganizationMembersResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.open-dashboard:
+        post:
+            tags:
+                - admin
+            summary: openOrganizationInDashboard admin
+            operationId: adminOpenOrganizationInDashboard
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+            responses:
+                "303":
+                    description: See Other response.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                        Location:
+                            schema:
+                                type: string
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -1792,6 +2249,75 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminProjectDetail'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/session.get:
+        get:
+            tags:
+                - admin
+            summary: getSession admin
+            operationId: adminGetSession
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSession'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -4709,7 +5235,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/TriggerAnalysisResponseBody'
+                                $ref: '#/components/schemas/AdminChatAnalysisTriggerResult'
                     description: OK response.
                 "400":
                     content:
@@ -38360,7 +38886,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetProductFeatureRequestBody'
+                            $ref: '#/components/schemas/SetOrganizationFeatureRequestBody'
                 required: true
             responses:
                 "200":
@@ -65026,6 +65552,48 @@ components:
             required:
                 - updated_ids
                 - missing_ids
+        AdminChatAnalysisSettings:
+            type: object
+            properties:
+                business_memory_daily_cap:
+                    type: integer
+                    format: int64
+                business_memory_enabled:
+                    type: boolean
+                is_default:
+                    type: boolean
+                organization_id:
+                    type: string
+                work_units_daily_cap:
+                    type: integer
+                    format: int64
+                work_units_enabled:
+                    type: boolean
+            required:
+                - organization_id
+                - work_units_enabled
+                - work_units_daily_cap
+                - business_memory_enabled
+                - business_memory_daily_cap
+                - is_default
+        AdminChatAnalysisTriggerResult:
+            type: object
+            properties:
+                projects_signaled:
+                    type: integer
+                    format: int64
+            required:
+                - projects_signaled
+        AdminDashboardRedirect:
+            type: object
+            properties:
+                cache_control:
+                    type: string
+                location:
+                    type: string
+            required:
+                - location
+                - cache_control
         AdminInferenceKey:
             type: object
             properties:
@@ -65452,6 +66020,15 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AdminSession:
+            type: object
+            properties:
+                email:
+                    type: string
+                name:
+                    type: string
+            required:
+                - email
         AdminStripeSubscription:
             type: object
             properties:
@@ -83734,6 +84311,61 @@ components:
                     description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+        SetOrganizationChatAnalysisSettingsRequestBody:
+            type: object
+            properties:
+                daily_cap:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                enabled:
+                    type: boolean
+                judge:
+                    type: string
+                    enum:
+                        - work_units
+                        - business_memory
+                organization_id:
+                    type: string
+            required:
+                - organization_id
+                - judge
+                - enabled
+                - daily_cap
+        SetOrganizationFeatureRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                feature_name:
+                    type: string
+                    enum:
+                        - logs
+                        - tool_io_logs
+                        - session_capture
+                        - authz_challenge_logging
+                        - sso
+                        - scim
+                        - hooks_browser_login
+                        - hooks_fail_open
+                        - custom_model_keys
+                        - skills
+                        - skill_capture_metadata_only
+                        - ai_platform_push_integrations
+                        - platform_mcp
+                        - customer_managed_encryption_keys
+                        - remote_session_auto_refresh
+                        - remote_session_auto_refresh_enforced
+                        - consent_tool_filtering
+                        - session_portability
+                    maxLength: 60
+                organization_id:
+                    type: string
+            required:
+                - organization_id
+                - feature_name
+                - enabled
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:
@@ -83782,42 +84414,6 @@ components:
                     description: The updated assignments.
             required:
                 - assignments
-        SetProductFeatureRequestBody:
-            type: object
-            properties:
-                enabled:
-                    type: boolean
-                    description: Whether the feature should be enabled
-                feature_name:
-                    type: string
-                    description: Name of the feature to update
-                    enum:
-                        - logs
-                        - tool_io_logs
-                        - session_capture
-                        - authz_challenge_logging
-                        - sso
-                        - scim
-                        - hooks_browser_login
-                        - hooks_fail_open
-                        - custom_model_keys
-                        - skills
-                        - skill_capture_metadata_only
-                        - ai_platform_push_integrations
-                        - platform_mcp
-                        - customer_managed_encryption_keys
-                        - remote_session_auto_refresh
-                        - remote_session_auto_refresh_enforced
-                        - consent_tool_filtering
-                        - session_portability
-                    maxLength: 60
-                organization_id:
-                    type: string
-                    description: Organization whose product feature to update.
-            required:
-                - organization_id
-                - feature_name
-                - enabled
         SetProjectLogoForm:
             type: object
             properties:
@@ -87814,16 +88410,6 @@ components:
                     description: Organization whose projects to signal.
             required:
                 - organization_id
-        TriggerAnalysisResponseBody:
-            type: object
-            properties:
-                projects_signaled:
-                    type: integer
-                    description: Number of projects whose analysis coordinator was woken.
-                    format: int64
-            description: How far the trigger reached.
-            required:
-                - projects_signaled
         TriggerDefinition:
             type: object
             properties:
@@ -87982,6 +88568,13 @@ components:
                 - status
                 - created_at
                 - updated_at
+        TriggerOrganizationChatAnalysisRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         TriggerRiskAnalysisRequestBody:
             type: object
             properties:

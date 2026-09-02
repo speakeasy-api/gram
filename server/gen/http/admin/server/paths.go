@@ -22,6 +22,41 @@ func LogoutAdminPath() string {
 	return "/admin/auth.logout"
 }
 
+// GetSessionAdminPath returns the URL path to the admin service getSession HTTP endpoint.
+func GetSessionAdminPath() string {
+	return "/admin/session.get"
+}
+
+// GetOrganizationFeaturesAdminPath returns the URL path to the admin service getOrganizationFeatures HTTP endpoint.
+func GetOrganizationFeaturesAdminPath() string {
+	return "/admin/organization.features"
+}
+
+// SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
+func SetOrganizationFeatureAdminPath() string {
+	return "/admin/organization.features"
+}
+
+// GetOrganizationChatAnalysisSettingsAdminPath returns the URL path to the admin service getOrganizationChatAnalysisSettings HTTP endpoint.
+func GetOrganizationChatAnalysisSettingsAdminPath() string {
+	return "/admin/organization.chatAnalysisSettings"
+}
+
+// SetOrganizationChatAnalysisSettingsAdminPath returns the URL path to the admin service setOrganizationChatAnalysisSettings HTTP endpoint.
+func SetOrganizationChatAnalysisSettingsAdminPath() string {
+	return "/admin/organization.chatAnalysisSettings"
+}
+
+// TriggerOrganizationChatAnalysisAdminPath returns the URL path to the admin service triggerOrganizationChatAnalysis HTTP endpoint.
+func TriggerOrganizationChatAnalysisAdminPath() string {
+	return "/admin/organization.chatAnalysisTrigger"
+}
+
+// OpenOrganizationInDashboardAdminPath returns the URL path to the admin service openOrganizationInDashboard HTTP endpoint.
+func OpenOrganizationInDashboardAdminPath() string {
+	return "/admin/organization.open-dashboard"
+}
+
 // GetProjectAdminPath returns the URL path to the admin service getProject HTTP endpoint.
 func GetProjectAdminPath() string {
 	return "/admin/project.get"

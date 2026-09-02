@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
@@ -21,6 +22,8 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+type triggerAdminChatAnalysisResponse = adminserver.TriggerOrganizationChatAnalysisResponseBody
 
 type recordingAdminChatAnalysisSignaler struct {
 	projectIDs []uuid.UUID
@@ -51,7 +54,7 @@ func TestChatAnalysisSettingsRequiresAdminSession(t *testing.T) {
 	}
 }
 
-func TestChatAnalysisSettingsDefaultsUpdatesAndAudits(t *testing.T) {
+func TestGetOrganizationChatAnalysisSettings_HTTPContract(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	const (
@@ -159,7 +162,30 @@ func TestTriggerChatAnalysisSignalsOrganizationProjects(t *testing.T) {
 	require.ElementsMatch(t, []uuid.UUID{first.ID, second.ID}, signaler.projectIDs)
 }
 
-func TestSetChatAnalysisSettingsRejectsInvalidBodies(t *testing.T) {
+func TestTriggerOrganizationChatAnalysis_RejectsUnknownAndTrailingJSON(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _ := newTestAdminService(t)
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+
+	for name, body := range map[string]string{
+		"unknown":  `{"organization_id":"org_unused","extra":true}`,
+		"trailing": `{"organization_id":"org_unused"}{}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(body))
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
+}
+
+func TestSetOrganizationChatAnalysisSettings_RejectsUnknownAndTrailingJSON(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	const orgID = "org_admin_chat_analysis_reject"
