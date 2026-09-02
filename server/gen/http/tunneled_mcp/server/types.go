@@ -105,6 +105,13 @@ type GetServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -159,6 +166,13 @@ type UpdateServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1503,6 +1517,13 @@ type TunneledMcpServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1573,22 +1594,24 @@ func NewListServersResponseBody(res *tunneledmcp.ListTunneledMcpServersResult) *
 // the "getServer" endpoint of the "tunneledMcp" service.
 func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBody {
 	body := &GetServerResponseBody{
-		ID:                         res.ID,
-		ProjectID:                  res.ProjectID,
-		Name:                       res.Name,
-		KeyPrefix:                  res.KeyPrefix,
-		Status:                     string(res.Status),
-		ConnectionStatus:           string(res.ConnectionStatus),
-		AllowPublic:                res.AllowPublic,
-		AgentVersion:               res.AgentVersion,
-		ResourceIdentifier:         res.ResourceIdentifier,
-		PublicRequestRatePerSecond: res.PublicRequestRatePerSecond,
-		PublicRequestBurst:         res.PublicRequestBurst,
-		LastSeenAt:                 res.LastSeenAt,
-		ActiveConnectionCount:      res.ActiveConnectionCount,
-		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
-		CreatedAt:                  res.CreatedAt,
-		UpdatedAt:                  res.UpdatedAt,
+		ID:                                  res.ID,
+		ProjectID:                           res.ProjectID,
+		Name:                                res.Name,
+		KeyPrefix:                           res.KeyPrefix,
+		Status:                              string(res.Status),
+		ConnectionStatus:                    string(res.ConnectionStatus),
+		AllowPublic:                         res.AllowPublic,
+		AgentVersion:                        res.AgentVersion,
+		ResourceIdentifier:                  res.ResourceIdentifier,
+		PublicRequestRatePerSecond:          res.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  res.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: res.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         res.EffectivePublicRequestBurst,
+		LastSeenAt:                          res.LastSeenAt,
+		ActiveConnectionCount:               res.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          res.ActiveConsumerSessionCount,
+		CreatedAt:                           res.CreatedAt,
+		UpdatedAt:                           res.UpdatedAt,
 	}
 	return body
 }
@@ -1619,22 +1642,24 @@ func NewListServerConnectionsResponseBody(res *types.TunneledMcpServerConnection
 // the "updateServer" endpoint of the "tunneledMcp" service.
 func NewUpdateServerResponseBody(res *types.TunneledMcpServer) *UpdateServerResponseBody {
 	body := &UpdateServerResponseBody{
-		ID:                         res.ID,
-		ProjectID:                  res.ProjectID,
-		Name:                       res.Name,
-		KeyPrefix:                  res.KeyPrefix,
-		Status:                     string(res.Status),
-		ConnectionStatus:           string(res.ConnectionStatus),
-		AllowPublic:                res.AllowPublic,
-		AgentVersion:               res.AgentVersion,
-		ResourceIdentifier:         res.ResourceIdentifier,
-		PublicRequestRatePerSecond: res.PublicRequestRatePerSecond,
-		PublicRequestBurst:         res.PublicRequestBurst,
-		LastSeenAt:                 res.LastSeenAt,
-		ActiveConnectionCount:      res.ActiveConnectionCount,
-		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
-		CreatedAt:                  res.CreatedAt,
-		UpdatedAt:                  res.UpdatedAt,
+		ID:                                  res.ID,
+		ProjectID:                           res.ProjectID,
+		Name:                                res.Name,
+		KeyPrefix:                           res.KeyPrefix,
+		Status:                              string(res.Status),
+		ConnectionStatus:                    string(res.ConnectionStatus),
+		AllowPublic:                         res.AllowPublic,
+		AgentVersion:                        res.AgentVersion,
+		ResourceIdentifier:                  res.ResourceIdentifier,
+		PublicRequestRatePerSecond:          res.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  res.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: res.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         res.EffectivePublicRequestBurst,
+		LastSeenAt:                          res.LastSeenAt,
+		ActiveConnectionCount:               res.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          res.ActiveConsumerSessionCount,
+		CreatedAt:                           res.CreatedAt,
+		UpdatedAt:                           res.UpdatedAt,
 	}
 	return body
 }

@@ -87921,6 +87921,14 @@ components:
                     type: string
                     description: When the tunneled MCP server source was created
                     format: date-time
+                effective_public_request_burst:
+                    type: integer
+                    description: 'The token-bucket capacity actually applied to this tunnel: the stored burst, twice the stored rate when only a rate is stored, or the deployment default when nothing is stored.'
+                    format: int64
+                effective_public_request_rate_per_second:
+                    type: integer
+                    description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when none is stored.'
+                    format: int64
                 id:
                     type: string
                     description: The ID of the tunneled MCP server
@@ -87974,6 +87982,8 @@ components:
                 - active_consumer_session_count
                 - created_at
                 - updated_at
+                - effective_public_request_rate_per_second
+                - effective_public_request_burst
         TunneledMcpServerConnections:
             type: object
             properties:

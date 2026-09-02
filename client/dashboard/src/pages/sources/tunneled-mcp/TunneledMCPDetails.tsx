@@ -1039,13 +1039,16 @@ const PUBLIC_RATE_LIMIT_FIELDS: ReadonlyArray<{
   {
     key: "publicRequestBurst",
     label: "Burst",
-    hint: "Requests admitted back-to-back from idle before the per-second rate applies. Blank: twice the rate.",
+    hint: "Requests admitted back-to-back from idle before the per-second rate applies. Blank: twice the rate you set.",
   },
 ];
 
-function formatPublicRate(rate: number | undefined, burst: number | undefined) {
-  if (rate === undefined) return "Deployment default";
-  return `${rate}/s, burst ${burst ?? rate * 2}`;
+// The deployment default the API reports for a row with no stored limit.
+const DEFAULT_PUBLIC_RATE_TEXT = "50 requests/s with a burst of 100";
+
+function formatPublicRate(server: TunneledMcpServer) {
+  const stored = server.publicRequestRatePerSecond !== undefined;
+  return `${server.effectivePublicRequestRatePerSecond}/s, burst ${server.effectivePublicRequestBurst}${stored ? "" : " (default)"}`;
 }
 
 function toPublicRateDraft(
@@ -1151,18 +1154,19 @@ function PublicRateLimitsSection({
 
   return (
     <div className="border p-6">
-      <div className="mb-1 flex items-center gap-2">
-        <Text variant="subheading" id="tunneled-mcp-public-rate-limits-label">
-          Public Rate Limits
-        </Text>
-        <ReleaseStageBadge stage="preview" />
-      </div>
+      <Text
+        variant="subheading"
+        id="tunneled-mcp-public-rate-limits-label"
+        className="mb-1"
+      >
+        Public Rate Limits
+      </Text>
       <Text muted small className="mb-4 max-w-3xl">
         Admission limit for anonymous callers of MCP servers fronting this
         source, applied to every MCP request. One bucket is shared by every
         caller, so it bounds the total load reaching your server rather than
-        fairness between callers. Leave a field blank to use the deployment
-        default.
+        fairness between callers. Leave a field blank to use the default of{" "}
+        {DEFAULT_PUBLIC_RATE_TEXT}.
         {tunneledMcpServer.allowPublic
           ? null
           : " Takes effect once public access is enabled."}
@@ -1176,7 +1180,7 @@ function PublicRateLimitsSection({
         </dt>
         <dd>
           <Text small data-testid="public-rate-limit-requests">
-            {formatPublicRate(publicRequestRatePerSecond, publicRequestBurst)}
+            {formatPublicRate(tunneledMcpServer)}
           </Text>
         </dd>
       </dl>
@@ -1203,7 +1207,11 @@ function PublicRateLimitsSection({
                   onChange={(value) =>
                     setDraft((current) => ({ ...current, [key]: value }))
                   }
-                  placeholder="default"
+                  placeholder={String(
+                    key === "publicRequestRatePerSecond"
+                      ? tunneledMcpServer.effectivePublicRequestRatePerSecond
+                      : tunneledMcpServer.effectivePublicRequestBurst,
+                  )}
                   disabled={update.isPending}
                 />
                 <Text muted small>

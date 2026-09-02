@@ -105,6 +105,13 @@ type GetServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond *int `form:"effective_public_request_rate_per_second,omitempty" json:"effective_public_request_rate_per_second,omitempty" xml:"effective_public_request_rate_per_second,omitempty"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst *int `form:"effective_public_request_burst,omitempty" json:"effective_public_request_burst,omitempty" xml:"effective_public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -159,6 +166,13 @@ type UpdateServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond *int `form:"effective_public_request_rate_per_second,omitempty" json:"effective_public_request_rate_per_second,omitempty" xml:"effective_public_request_rate_per_second,omitempty"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst *int `form:"effective_public_request_burst,omitempty" json:"effective_public_request_burst,omitempty" xml:"effective_public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1503,6 +1517,13 @@ type TunneledMcpServerResponseBody struct {
 	// are admitted back-to-back from an idle tunnel before admission drops to the
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when none is stored.
+	EffectivePublicRequestRatePerSecond *int `form:"effective_public_request_rate_per_second,omitempty" json:"effective_public_request_rate_per_second,omitempty" xml:"effective_public_request_rate_per_second,omitempty"`
+	// The token-bucket capacity actually applied to this tunnel: the stored burst,
+	// twice the stored rate when only a rate is stored, or the deployment default
+	// when nothing is stored.
+	EffectivePublicRequestBurst *int `form:"effective_public_request_burst,omitempty" json:"effective_public_request_burst,omitempty" xml:"effective_public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1902,22 +1923,24 @@ func NewListServersGatewayError(body *ListServersGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.TunneledMcpServer {
 	v := &types.TunneledMcpServer{
-		ID:                         *body.ID,
-		ProjectID:                  *body.ProjectID,
-		Name:                       *body.Name,
-		KeyPrefix:                  *body.KeyPrefix,
-		Status:                     types.TunneledMcpLifecycleStatus(*body.Status),
-		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
-		AllowPublic:                *body.AllowPublic,
-		AgentVersion:               body.AgentVersion,
-		ResourceIdentifier:         body.ResourceIdentifier,
-		PublicRequestRatePerSecond: body.PublicRequestRatePerSecond,
-		PublicRequestBurst:         body.PublicRequestBurst,
-		LastSeenAt:                 body.LastSeenAt,
-		ActiveConnectionCount:      *body.ActiveConnectionCount,
-		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
-		CreatedAt:                  *body.CreatedAt,
-		UpdatedAt:                  *body.UpdatedAt,
+		ID:                                  *body.ID,
+		ProjectID:                           *body.ProjectID,
+		Name:                                *body.Name,
+		KeyPrefix:                           *body.KeyPrefix,
+		Status:                              types.TunneledMcpLifecycleStatus(*body.Status),
+		ConnectionStatus:                    types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
+		AllowPublic:                         *body.AllowPublic,
+		AgentVersion:                        body.AgentVersion,
+		ResourceIdentifier:                  body.ResourceIdentifier,
+		PublicRequestRatePerSecond:          body.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  body.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: *body.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         *body.EffectivePublicRequestBurst,
+		LastSeenAt:                          body.LastSeenAt,
+		ActiveConnectionCount:               *body.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          *body.ActiveConsumerSessionCount,
+		CreatedAt:                           *body.CreatedAt,
+		UpdatedAt:                           *body.UpdatedAt,
 	}
 
 	return v
@@ -2247,22 +2270,24 @@ func NewListServerConnectionsGatewayError(body *ListServerConnectionsGatewayErro
 // "updateServer" endpoint result from a HTTP "OK" response.
 func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.TunneledMcpServer {
 	v := &types.TunneledMcpServer{
-		ID:                         *body.ID,
-		ProjectID:                  *body.ProjectID,
-		Name:                       *body.Name,
-		KeyPrefix:                  *body.KeyPrefix,
-		Status:                     types.TunneledMcpLifecycleStatus(*body.Status),
-		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
-		AllowPublic:                *body.AllowPublic,
-		AgentVersion:               body.AgentVersion,
-		ResourceIdentifier:         body.ResourceIdentifier,
-		PublicRequestRatePerSecond: body.PublicRequestRatePerSecond,
-		PublicRequestBurst:         body.PublicRequestBurst,
-		LastSeenAt:                 body.LastSeenAt,
-		ActiveConnectionCount:      *body.ActiveConnectionCount,
-		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
-		CreatedAt:                  *body.CreatedAt,
-		UpdatedAt:                  *body.UpdatedAt,
+		ID:                                  *body.ID,
+		ProjectID:                           *body.ProjectID,
+		Name:                                *body.Name,
+		KeyPrefix:                           *body.KeyPrefix,
+		Status:                              types.TunneledMcpLifecycleStatus(*body.Status),
+		ConnectionStatus:                    types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
+		AllowPublic:                         *body.AllowPublic,
+		AgentVersion:                        body.AgentVersion,
+		ResourceIdentifier:                  body.ResourceIdentifier,
+		PublicRequestRatePerSecond:          body.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  body.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: *body.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         *body.EffectivePublicRequestBurst,
+		LastSeenAt:                          body.LastSeenAt,
+		ActiveConnectionCount:               *body.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          *body.ActiveConsumerSessionCount,
+		CreatedAt:                           *body.CreatedAt,
+		UpdatedAt:                           *body.UpdatedAt,
 	}
 
 	return v
@@ -2798,6 +2823,12 @@ func ValidateGetServerResponseBody(body *GetServerResponseBody) (err error) {
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EffectivePublicRequestRatePerSecond == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_rate_per_second", "body"))
+	}
+	if body.EffectivePublicRequestBurst == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_burst", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -2883,6 +2914,12 @@ func ValidateUpdateServerResponseBody(body *UpdateServerResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.EffectivePublicRequestRatePerSecond == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_rate_per_second", "body"))
+	}
+	if body.EffectivePublicRequestBurst == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_burst", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -4645,6 +4682,12 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.EffectivePublicRequestRatePerSecond == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_rate_per_second", "body"))
+	}
+	if body.EffectivePublicRequestBurst == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_public_request_burst", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

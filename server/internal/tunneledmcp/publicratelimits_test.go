@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -55,22 +56,29 @@ func TestUpdateServer_PublicRateLimits(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, view.PublicRequestRatePerSecond)
 	require.Nil(t, view.PublicRequestBurst)
+	require.Equal(t, publiclimits.DefaultRequestRatePerSecond, view.EffectivePublicRequestRatePerSecond)
+	require.Equal(t, publiclimits.DefaultRequestBurst, view.EffectivePublicRequestBurst)
 
 	view, err = ti.service.UpdateServer(writeCtx, updateLimits(id, new(300), nil))
 	require.NoError(t, err)
 	require.Equal(t, 300, *view.PublicRequestRatePerSecond)
 	require.Nil(t, view.PublicRequestBurst, "omitted burst stays unset (twice the rate applies at serve time)")
+	require.Equal(t, 300, view.EffectivePublicRequestRatePerSecond)
+	require.Equal(t, 600, view.EffectivePublicRequestBurst)
 
 	view, err = ti.service.UpdateServer(writeCtx, updateLimits(id, nil, new(450)))
 	require.NoError(t, err)
 	require.Equal(t, 300, *view.PublicRequestRatePerSecond, "omitted rate is left alone")
 	require.Equal(t, 450, *view.PublicRequestBurst)
+	require.Equal(t, 450, view.EffectivePublicRequestBurst)
 
 	// Omitted fields leave stored values alone; 0 clears back to the default.
 	view, err = ti.service.UpdateServer(writeCtx, updateLimits(id, new(0), nil))
 	require.NoError(t, err)
 	require.Nil(t, view.PublicRequestRatePerSecond)
 	require.Equal(t, 450, *view.PublicRequestBurst)
+	require.Equal(t, publiclimits.DefaultRequestRatePerSecond, view.EffectivePublicRequestRatePerSecond, "no stored rate: defaults apply even with a stray stored burst")
+	require.Equal(t, publiclimits.DefaultRequestBurst, view.EffectivePublicRequestBurst)
 
 	row, err := repo.New(ti.conn).GetServerByID(ctx, repo.GetServerByIDParams{ID: id, ProjectID: *requireAuthContext(t, ctx).ProjectID})
 	require.NoError(t, err)
@@ -87,10 +95,10 @@ func TestUpdateServer_PublicRateLimits_Validation(t *testing.T) {
 	_, err := ti.service.UpdateServer(writeCtx, updateLimits(id, new(-1), nil))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.UpdateServer(writeCtx, updateLimits(id, new(maxPublicRatePerSecond+1), nil))
+	_, err = ti.service.UpdateServer(writeCtx, updateLimits(id, new(publiclimits.MaxRequestRatePerSecond+1), nil))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.UpdateServer(writeCtx, updateLimits(id, nil, new(maxPublicBurst+1)))
+	_, err = ti.service.UpdateServer(writeCtx, updateLimits(id, nil, new(publiclimits.MaxRequestBurst+1)))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// Read-only access cannot change limits.

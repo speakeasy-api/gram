@@ -66,6 +66,14 @@ export type TunneledMcpServer = {
    */
   createdAt: Date;
   /**
+   * The token-bucket capacity actually applied to this tunnel: the stored burst, twice the stored rate when only a rate is stored, or the deployment default when nothing is stored.
+   */
+  effectivePublicRequestBurst: number;
+  /**
+   * The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when none is stored.
+   */
+  effectivePublicRequestRatePerSecond: number;
+  /**
    * The ID of the tunneled MCP server
    */
   id: string;
@@ -132,6 +140,8 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    effective_public_request_burst: z.int(),
+    effective_public_request_rate_per_second: z.int(),
     id: z.string(),
     key_prefix: z.string(),
     last_seen_at: z.optional(
@@ -156,6 +166,9 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "allow_public": "allowPublic",
       "connection_status": "connectionStatus",
       "created_at": "createdAt",
+      "effective_public_request_burst": "effectivePublicRequestBurst",
+      "effective_public_request_rate_per_second":
+        "effectivePublicRequestRatePerSecond",
       "key_prefix": "keyPrefix",
       "last_seen_at": "lastSeenAt",
       "project_id": "projectId",

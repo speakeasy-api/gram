@@ -6,14 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/tunneled_mcp"
-)
-
-// Bounds for stored public admission limits. They mirror the
-// tunneled_mcp_servers CHECK constraints and the Goa design; a change here
-// must land in all three.
-const (
-	maxPublicRatePerSecond = 100_000
-	maxPublicBurst         = 1_000_000
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 )
 
 // validatePublicRateLimits rejects a limit outside [0, max]. 0 is the clear
@@ -25,8 +18,8 @@ func validatePublicRateLimits(payload *gen.UpdateServerPayload) error {
 		value *int
 		max   int
 	}{
-		{name: "public_request_rate_per_second", value: payload.PublicRequestRatePerSecond, max: maxPublicRatePerSecond},
-		{name: "public_request_burst", value: payload.PublicRequestBurst, max: maxPublicBurst},
+		{name: "public_request_rate_per_second", value: payload.PublicRequestRatePerSecond, max: publiclimits.MaxRequestRatePerSecond},
+		{name: "public_request_burst", value: payload.PublicRequestBurst, max: publiclimits.MaxRequestBurst},
 	} {
 		if field.value != nil && (*field.value < 0 || *field.value > field.max) {
 			return fmt.Errorf("%s must be between 0 and %d", field.name, field.max)

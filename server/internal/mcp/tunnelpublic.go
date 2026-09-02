@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
@@ -74,13 +75,13 @@ type TunnelPublicConfig struct {
 // Built-in admission limits for anonymous public tunneled serving. Each is a
 // per-tunnel backstop protecting the tunnel gateway and the customer backend
 // from a single anonymous surface; one bucket is shared by every caller of a
-// tunnel, so these are not per-client fairness limits. They are deliberately
-// conservative for an arbitrary customer backend; a known high-traffic tunnel
-// gets its own limits stored on its tunneled_mcp_servers row by a platform
-// admin (see limitersForServer).
+// tunnel, so these are not per-client fairness limits. The request limit is
+// the deployment default the management API reports; a source owner raises
+// it by storing a limit on the tunneled_mcp_servers row (see
+// limitersForServer). The initialize limit paces session reservations only.
 const (
-	defaultPublicRequestRatePerSecond    = 50
-	defaultPublicRequestBurst            = 100
+	defaultPublicRequestRatePerSecond    = publiclimits.DefaultRequestRatePerSecond
+	defaultPublicRequestBurst            = publiclimits.DefaultRequestBurst
 	defaultPublicInitializeRatePerSecond = 5
 	defaultPublicInitializeBurst         = 20
 )
@@ -229,17 +230,15 @@ func (rt *tunnelPublicRuntime) limitersForServer(source *tunneledmcprepo.Tunnele
 }
 
 // storedPublicRate turns a tunnel's stored per-second rate and optional burst
-// into a Rate; an unset or non-positive rate is the zero Rate (use the
-// default), and a missing burst is twice the rate.
+// into a Rate; an unset rate is the zero Rate (use the deployment default).
+// The resolution is publiclimits.Effective, so the limit enforced here is the
+// one the management API reports.
 func storedPublicRate(perSecond, burst pgtype.Int4) ratelimit.Rate {
-	if !perSecond.Valid || perSecond.Int32 <= 0 {
+	if !publiclimits.Stored(perSecond) {
 		return ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}
 	}
-	rate := ratelimit.PerSecond(int(perSecond.Int32))
-	if burst.Valid && burst.Int32 > 0 {
-		return rate.WithBurst(int(burst.Int32))
-	}
-	return normalizeRate(rate.WithBurst(0), rate.Tokens, 2*rate.Tokens)
+	rate, burstCap := publiclimits.Effective(perSecond, burst)
+	return ratelimit.PerSecond(rate).WithBurst(burstCap)
 }
 
 func storedPublicRateKey(tunnelID string, rate ratelimit.Rate) string {
