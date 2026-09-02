@@ -38,3 +38,24 @@ func TestBuildSkillVersionMetricsQuery_CanonicalFoldDisablesConditionCache(t *te
 	require.NotContains(t, query, "joinGet", "flag-off query must stay literal")
 	require.NotContains(t, query, "use_query_condition_cache", "flag-off query must not carry fold settings")
 }
+
+func TestBuildListAIDetectionSummariesQuery_CanonicalFoldDisablesConditionCache(t *testing.T) {
+	t.Parallel()
+
+	arg := ListAIDetectionSummariesParams{
+		OrganizationID:       "org_0123456789",
+		Categories:           nil,
+		UserEmails:           []string{"member@example.com"},
+		CanonicalIdentityOrg: "org_0123456789",
+	}
+	query, _, err := buildListAIDetectionSummariesQuery(arg)
+	require.NoError(t, err)
+	require.Contains(t, query, "joinGet('identity_map'")
+	require.True(t, strings.HasSuffix(query, "SETTINGS use_query_condition_cache = 0"), "folded detection query must disable the query condition cache, got: %s", query)
+
+	arg.CanonicalIdentityOrg = ""
+	query, _, err = buildListAIDetectionSummariesQuery(arg)
+	require.NoError(t, err)
+	require.NotContains(t, query, "joinGet")
+	require.NotContains(t, query, "use_query_condition_cache")
+}

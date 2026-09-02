@@ -82,6 +82,11 @@ func ResolveShadowMCPInventoryRequestAccessPath() string {
 	return "/rpc/access.resolveShadowMCPInventoryRequest"
 }
 
+// ListAIDetectionsAccessPath returns the URL path to the access service listAIDetections HTTP endpoint.
+func ListAIDetectionsAccessPath() string {
+	return "/rpc/access.listAIDetections"
+}
+
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
 func RequestAccessAccessPath() string {
 	return "/rpc/access.requestAccess"

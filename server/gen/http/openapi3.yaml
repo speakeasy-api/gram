@@ -2733,6 +2733,105 @@ paths:
             x-speakeasy-name-override: getShadowMCPInventoryServer
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryServer
+    /rpc/access.listAIDetections:
+        get:
+            description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+            operationId: listAIDetections
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to detection targets of one category.
+                  in: query
+                  name: category
+                  schema:
+                    description: Filter to detection targets of one category.
+                    enum:
+                        - harness
+                        - local_model
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.
+                  in: query
+                  name: directory_group_id
+                  schema:
+                    description: Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIDetectionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAIDetections access
+            tags:
+                - access
+            x-speakeasy-name-override: listAIDetections
+            x-speakeasy-react-hook:
+                name: AIDetections
     /rpc/access.listChallengeBuckets:
         get:
             description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
@@ -7590,6 +7689,110 @@ paths:
             x-speakeasy-name-override: listSyncedUsers
             x-speakeasy-react-hook:
                 name: SyncedAgentUsers
+    /rpc/agent.reportAIScan:
+        post:
+            description: 'Report the result of a device-agent AI scan: which AI tools from the agent''s compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
+            operationId: reportAgentAIScan
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                  in: header
+                  name: Gram-User-Email
+                  schema:
+                    description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine that was scanned, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine that was scanned, when the agent can read it.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hostname of the machine that was scanned, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Hostname
+                  schema:
+                    description: Hostname of the machine that was scanned, when the agent can read it.
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportAIScanRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: reportAIScan agent
+            tags:
+                - agent
+            x-speakeasy-name-override: reportAIScan
+            x-speakeasy-react-hook:
+                name: ReportAgentAIScan
     /rpc/agent.reportSessionMoved:
         post:
             description: 'Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent''s perspective: the daemon must never fail a move because this call failed.'
@@ -63244,6 +63447,55 @@ paths:
                 name: UpsertGlobalVariation
 components:
     schemas:
+        AIDetection:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: 'Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.'
+                    enum:
+                        - harness
+                        - local_model
+                device_count:
+                    type: integer
+                    description: Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.
+                    format: int64
+                display_name:
+                    type: string
+                    description: Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.
+                first_seen:
+                    type: string
+                    description: When this tool was first detected anywhere in the organization.
+                    format: date-time
+                last_seen:
+                    type: string
+                    description: When this tool was most recently detected.
+                    format: date-time
+                signals:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - installed
+                            - running
+                    description: 'Detection signals observed for this target across all reports: installed and/or running.'
+                target_id:
+                    type: string
+                    description: Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
+                user_count:
+                    type: integer
+                    description: Distinct enrolled users this tool was detected for.
+                    format: int64
+            description: One AI detection target aggregated across an organization's device-agent scan reports.
+            required:
+                - target_id
+                - display_name
+                - category
+                - user_count
+                - device_count
+                - signals
+                - first_seen
+                - last_seen
         AIIntegrationConfig:
             type: object
             properties:
@@ -63363,6 +63615,37 @@ components:
                 - enabled
                 - status
                 - consecutive_failures
+        AIScanMatch:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: 'Target category the agent scanned under: harness or local_model. The server catalog''s category wins for targets it knows; this is what gets stored for the rest.'
+                    enum:
+                        - harness
+                        - local_model
+                    maxLength: 32
+                signal:
+                    type: string
+                    description: 'What the scan observed: installed or running.'
+                    enum:
+                        - installed
+                        - running
+                    maxLength: 16
+                target_id:
+                    type: string
+                    description: 'Identifier of the matched target from the agent''s compiled-in list (e.g. claude-code, ollama). Stored as reported: an agent binary can ship a newer target list than the server catalog knows.'
+                    minLength: 1
+                    maxLength: 64
+                version:
+                    type: string
+                    description: Installed version, when the scan could read one statically (e.g. from the app bundle's Info.plist).
+                    maxLength: 64
+            description: One AI detection target a device-agent scan matched.
+            required:
+                - target_id
+                - category
+                - signal
         AccessMember:
             type: object
             properties:
@@ -73507,6 +73790,16 @@ components:
             required:
                 - client_name
                 - activity_count
+        ListAIDetectionsResult:
+            type: object
+            properties:
+                detections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIDetection'
+                    description: Detected AI tools aggregated per target, most recently seen first.
+            required:
+                - detections
         ListAIIntegrationSchedulesResult:
             type: object
             properties:
@@ -79357,6 +79650,34 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ReportAIScanRequestBody:
+            type: object
+            properties:
+                matches:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIScanMatch'
+                    description: Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.
+                    maxItems: 100
+                scan_completed_at:
+                    type: string
+                    description: When the agent completed the scan.
+                    format: date-time
+                scan_started_at:
+                    type: string
+                    description: When the agent started the scan.
+                    format: date-time
+                target_list_version:
+                    type: integer
+                    description: Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
+                    format: int64
+                    minimum: 0
+                    maximum: 2.147483647e+09
+            required:
+                - scan_started_at
+                - scan_completed_at
+                - target_list_version
+                - matches
         ReportSessionMovedRequestBody:
             type: object
             properties:

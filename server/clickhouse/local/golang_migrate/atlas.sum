@@ -1,4 +1,4 @@
-h1:04QLYIzXj+ufj+X6a4FuP8cd8tgukpDvktxnKvbXM3o=
+h1:dwHPqP3CKsGwJU5rCyVuZoKdYreSgeHokvcwczKA6EM=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -95,3 +95,4 @@ h1:04QLYIzXj+ufj+X6a4FuP8cd8tgukpDvktxnKvbXM3o=
 20260830194012_drop-billing-meter-readings-for-recreation.up.sql h1:BaYerdiYBJFHERzcT2RjXIpGcOKOOue8RhqS6B0IPuU=
 20260830194031_create-billing-meter-readings-with-produced-version.up.sql h1:P/yMjAzN6cJJ/krXI3/Eqk7PEGEYdgNJIa8kpETP8t8=
 20260831143540_shadow-ai-detections.up.sql h1:uRzttx9/L+w1DU0E1aPuphygN67rLIztDf48CVrT8NI=
+20260902165937_meta-mcp-attribution.up.sql h1:7NTw1iTmV1otLjK+FhDNsLM3DqJtl5qKdewT8g0JuvI=
