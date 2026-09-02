@@ -825,7 +825,9 @@ function CellContainer({ children, className }: PropsWithChildrenAndClassName) {
     <td
       className={cn(
         styles.tableCell,
-        `flex max-w-full items-center`,
+        // min-w-0: an unbreakable value (a long agent id) would otherwise set
+        // this cell's min-content width and push the whole row into overflow.
+        `flex max-w-full min-w-0 items-center`,
         className,
       )}
     >
