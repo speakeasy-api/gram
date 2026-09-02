@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -293,6 +294,7 @@ func TestToolsetsService_SetUserSessionIssuer_MirrorsWrapperIssuer(t *testing.T)
 		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	require.NoError(t, err)
+	remoteIssuerID := seedBoundRemoteSessionIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuer.ID)
 
 	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{
 		SessionToken:        nil,
@@ -302,8 +304,12 @@ func TestToolsetsService_SetUserSessionIssuer_MirrorsWrapperIssuer(t *testing.T)
 		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: issuer.ID, Valid: true}, mirroredWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolsetID).UserSessionIssuerID)
+	wrapper := mirroredWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolsetID)
+	require.Equal(t, uuid.NullUUID{UUID: issuer.ID, Valid: true}, wrapper.UserSessionIssuerID)
+	require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, wrapper.RemoteSessionIssuerID)
 
+	// Clearing the issuer must clear the derived remote issuer with it: the
+	// resync only reaches servers still on the old issuer, never this one.
 	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
@@ -312,7 +318,44 @@ func TestToolsetsService_SetUserSessionIssuer_MirrorsWrapperIssuer(t *testing.T)
 		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
-	require.False(t, mirroredWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolsetID).UserSessionIssuerID.Valid)
+	wrapper = mirroredWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolsetID)
+	require.False(t, wrapper.UserSessionIssuerID.Valid)
+	require.False(t, wrapper.RemoteSessionIssuerID.Valid)
+}
+
+// seedBoundRemoteSessionIssuer creates a remote session issuer with one client
+// attached to the given user session issuer, so the wrapper derives it.
+func seedBoundRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	q := remotesessionsrepo.New(conn)
+	suffix := uuid.NewString()[:8]
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(projectID),
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              "rsi-" + suffix,
+		Issuer:                            "https://issuer-" + suffix + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://issuer-" + suffix + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://issuer-" + suffix + ".example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: issuer.ID,
+		ClientID:              "client-" + suffix,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+	return issuer.ID
 }
 
 func TestToolsetsService_SetToolVariationsGroup_MirrorsWrapperGroup(t *testing.T) {

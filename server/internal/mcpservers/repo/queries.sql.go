@@ -1208,6 +1208,7 @@ const setMCPServerUserSessionIssuer = `-- name: SetMCPServerUserSessionIssuer :o
 UPDATE mcp_servers
 SET
     user_session_issuer_id = $1,
+    remote_session_issuer_id = CASE WHEN $1::uuid IS NULL THEN NULL ELSE remote_session_issuer_id END,
     updated_at = clock_timestamp()
 WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
@@ -1219,6 +1220,8 @@ type SetMCPServerUserSessionIssuerParams struct {
 	ProjectID           uuid.UUID
 }
 
+// Clearing the issuer clears the derived remote issuer too: the resync only
+// reaches servers still on the old issuer, so it cannot repair this row.
 func (q *Queries) SetMCPServerUserSessionIssuer(ctx context.Context, arg SetMCPServerUserSessionIssuerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, setMCPServerUserSessionIssuer, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
 	var i McpServer
