@@ -3,6 +3,7 @@ package dialect
 import "strings"
 
 // Sensitive attribute keys are shared by dialect extraction and relay redaction.
+// Dialect keys stay in the exact set even when a prefix also covers them.
 const (
 	claudeCodeUserPromptKey  = "user_prompt"
 	codexPromptKey           = "prompt"

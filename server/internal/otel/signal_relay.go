@@ -151,6 +151,10 @@ func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey
 	return cached.destination, nil
 }
 
+// relayRouteLoadKey converts a structured route key into the string required
+// by singleflight.Group. The NUL byte delimits the organization ID from the
+// fixed-format project UUID so distinct component pairs cannot concatenate to
+// the same key.
 func relayRouteLoadKey(key relayRouteKey) string {
 	return key.organizationID + "\x00" + key.projectID.String()
 }
@@ -212,6 +216,10 @@ func (r *signalRelay) newDestination(
 	retryConfig.ErrorHandler = func(response *http.Response, err error, _ int) (*http.Response, error) {
 		return response, err
 	}
+	// Include destinations are deliberately reloaded for every delivery so an
+	// include-to-exclude policy change takes effect immediately. Their clients
+	// are therefore short-lived and must not retain idle connections. Exclude
+	// destinations live in the cache and use pooled connections across exports.
 	var httpClient *guardian.HTTPClient
 	if includeSensitiveData {
 		httpClient = r.policy.Client(guardian.WithRetryConfig(retryConfig))
