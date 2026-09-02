@@ -150,6 +150,14 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
+  src/funcs/dataExportsCreateDestination.ts: {}
+  src/funcs/dataExportsCreateRoute.ts: {}
+  src/funcs/dataExportsDeleteDestination.ts: {}
+  src/funcs/dataExportsDeleteRoute.ts: {}
+  src/funcs/dataExportsListDestinations.ts: {}
+  src/funcs/dataExportsListRoutes.ts: {}
+  src/funcs/dataExportsUpdateDestination.ts: {}
+  src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
   src/funcs/deploymentsEvolveDeployment.ts: {}
@@ -736,8 +744,10 @@ trackedFiles:
   src/models/components/createcimdform.ts: {}
   src/models/components/createcimdorganizationremotesessionclientform.ts: {}
   src/models/components/createcustomdetectionrulerequestbody.ts: {}
+  src/models/components/createdataexportrouteform.ts: {}
   src/models/components/createdeploymentrequestbody.ts: {}
   src/models/components/createdeploymentresult.ts: {}
+  src/models/components/createdestinationform.ts: {}
   src/models/components/createdomainrequestbody.ts: {}
   src/models/components/createenvironmentform.ts: {}
   src/models/components/creategcpiamcredentialform.ts: {}
@@ -751,6 +761,8 @@ trackedFiles:
   src/models/components/createmcpserverform.ts: {}
   src/models/components/createmetamcpserverform.ts: {}
   src/models/components/createorganizationremotesessionclientform.ts: {}
+  src/models/components/createoteldestinationheaderinput.ts: {}
+  src/models/components/createoteldestinationinput.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
   src/models/components/createplatformgcpiamcredentialform.ts: {}
@@ -791,6 +803,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
+  src/models/components/dataexportroute.ts: {}
   src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
@@ -803,6 +816,7 @@ trackedFiles:
   src/models/components/deploymentpackage.ts: {}
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+  src/models/components/destination.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
@@ -1008,8 +1022,10 @@ trackedFiles:
   src/models/components/listcustomdetectionrulesresult.ts: {}
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
   src/models/components/listcustomdomainsresult.ts: {}
+  src/models/components/listdataexportroutesresult.ts: {}
   src/models/components/listdefinitionsresponsebody.ts: {}
   src/models/components/listdeploymentresult.ts: {}
+  src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
@@ -1160,6 +1176,8 @@ trackedFiles:
   src/models/components/organizationuser.ts: {}
   src/models/components/otelattribute.ts: {}
   src/models/components/otelattributevalue.ts: {}
+  src/models/components/oteldestination.ts: {}
+  src/models/components/oteldestinationheader.ts: {}
   src/models/components/otelforwardingconfig.ts: {}
   src/models/components/otelforwardingheader.ts: {}
   src/models/components/otelforwardingheaderinput.ts: {}
@@ -1482,6 +1500,7 @@ trackedFiles:
   src/models/components/updateawskmskeyrequestbody.ts: {}
   src/models/components/updateconfigurationrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
+  src/models/components/updatedestinationrequestbody.ts: {}
   src/models/components/updatedomainrequestbody.ts: {}
   src/models/components/updateenvironmentrequestbody.ts: {}
   src/models/components/updategcpiamcredentialrequestbody.ts: {}
@@ -1496,6 +1515,8 @@ trackedFiles:
   src/models/components/updatememberrolesform.ts: {}
   src/models/components/updatemetamcpmemberform.ts: {}
   src/models/components/updatemetamcpserverform.ts: {}
+  src/models/components/updateoteldestinationheaderinput.ts: {}
+  src/models/components/updateoteldestinationinput.ts: {}
   src/models/components/updatepackageform.ts: {}
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
@@ -1507,6 +1528,7 @@ trackedFiles:
   src/models/components/updateriskexclusionrequestbody.ts: {}
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
+  src/models/components/updaterouterequestbody.ts: {}
   src/models/components/updateserverform.ts: {}
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
@@ -1602,6 +1624,8 @@ trackedFiles:
   src/models/operations/createcimdremotesessionclient.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
   src/models/operations/createcustomersession.ts: {}
+  src/models/operations/createdataexportdestination.ts: {}
+  src/models/operations/createdataexportroute.ts: {}
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
   src/models/operations/creategcpiamcredential.ts: {}
@@ -1653,6 +1677,8 @@ trackedFiles:
   src/models/operations/deleteawskmskey.ts: {}
   src/models/operations/deletechat.ts: {}
   src/models/operations/deletecustomdetectionrule.ts: {}
+  src/models/operations/deletedataexportdestination.ts: {}
+  src/models/operations/deletedataexportroute.ts: {}
   src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
@@ -1871,6 +1897,8 @@ trackedFiles:
   src/models/operations/listcimdclientpresets.ts: {}
   src/models/operations/listcustomdetectionrules.ts: {}
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
+  src/models/operations/listdataexportdestinations.ts: {}
+  src/models/operations/listdataexportroutes.ts: {}
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
@@ -2106,6 +2134,8 @@ trackedFiles:
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
+  src/models/operations/updatedataexportdestination.ts: {}
+  src/models/operations/updatedataexportroute.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
@@ -2248,6 +2278,8 @@ trackedFiles:
   src/react-query/createCimdOrganizationRemoteSessionClient.ts: {}
   src/react-query/createCimdRemoteSessionClient.ts: {}
   src/react-query/createCustomerSession.ts: {}
+  src/react-query/createDataExportDestination.ts: {}
+  src/react-query/createDataExportRoute.ts: {}
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
   src/react-query/createGcpIamCredential.ts: {}
@@ -2288,9 +2320,15 @@ trackedFiles:
   src/react-query/createUserSessionIssuerCimdClient.ts: {}
   src/react-query/customDomainMcpEndpoints.core.ts: {}
   src/react-query/customDomainMcpEndpoints.ts: {}
+  src/react-query/dataExportDestinations.core.ts: {}
+  src/react-query/dataExportDestinations.ts: {}
+  src/react-query/dataExportRoutes.core.ts: {}
+  src/react-query/dataExportRoutes.ts: {}
   src/react-query/deleteAIIntegrationConfig.ts: {}
   src/react-query/deleteAwsIamCredential.ts: {}
   src/react-query/deleteAwsKmsKey.ts: {}
+  src/react-query/deleteDataExportDestination.ts: {}
+  src/react-query/deleteDataExportRoute.ts: {}
   src/react-query/deleteDeviceIntegrationConfig.ts: {}
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
@@ -2965,6 +3003,8 @@ trackedFiles:
   src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
+  src/react-query/updateDataExportDestination.ts: {}
+  src/react-query/updateDataExportRoute.ts: {}
   src/react-query/updateDeviceAgentConfiguration.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
@@ -3066,6 +3106,7 @@ trackedFiles:
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
   src/sdk/customrules.ts: {}
+  src/sdk/dataexports.ts: {}
   src/sdk/deployments.ts: {}
   src/sdk/deviceintegrations.ts: {}
   src/sdk/domains.ts: {}
@@ -3642,6 +3683,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createDataExportDestination:
+    speakeasy-default-create-data-export-destination:
+      requestBody:
+        application/json: {"destination_type": "otel", "name": "<value>", "sensitive_data": "exclude"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-02T07:32:59.824Z", "destination_type": "otel", "id": "ce2534a3-ec03-4f48-8c3a-5057058c1c20", "name": "<value>", "project_id": "cf14e48a-f861-40e5-9809-be35b8035543", "sensitive_data": "include", "updated_at": "2025-10-05T10:00:15.072Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createDataExportRoute:
+    speakeasy-default-create-data-export-route:
+      requestBody:
+        application/json: {"data_source": "product_telemetry", "enabled": true}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-01-02T02:11:31.825Z", "data_source": "product_telemetry", "enabled": true, "id": "6cb9ec99-3365-44d5-a519-e75c783182be", "project_id": "624e8260-c4e8-4731-947d-d3348b93e724", "updated_at": "2024-09-25T02:21:05.029Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createDeployment:
     speakeasy-default-create-deployment:
       parameters:
@@ -3815,6 +3878,17 @@ examples:
       responses:
         "200":
           application/json: {"client_id_metadata_document_supported": true, "created_at": "2024-10-20T05:10:07.067Z", "id": "c2acebfc-0a1c-4292-a5ea-50b66989627d", "issuer": "mastercard", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T09:01:41.469Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createOtelDestination:
+    speakeasy-default-create-otel-destination:
+      requestBody:
+        application/json: {"endpoint_url": "https://light-goat.name/", "headers": [{"name": "<value>", "value": "<value>"}], "name": "<value>", "sensitive_data": "exclude"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-03T19:29:30.859Z", "endpoint_url": "https://defensive-topsail.info/", "headers": [], "id": "3c7733ea-4acf-46b4-8870-cc680b7f64ef", "name": "<value>", "project_id": "a88b45bd-b35f-49e1-98d7-3e8c749c7abd", "sensitive_data": "include", "updated_at": "2026-03-30T20:10:58.286Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4239,6 +4313,29 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteDataExportDestination:
+    speakeasy-default-delete-data-export-destination:
+      parameters:
+        query:
+          id: "655a434e-a20d-4da9-b246-863a46973bad"
+          destination_type: "otel"
+      requestBody:
+        application/json: {"destination_type": "otel"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteDataExportRoute:
+    speakeasy-default-delete-data-export-route:
+      parameters:
+        query:
+          id: "b2910772-e8ba-4318-9ddd-e618ae4406cb"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteDeviceIntegrationConfig:
     speakeasy-default-delete-device-integration-config:
       requestBody:
@@ -4408,6 +4505,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteOtelDestination:
+    speakeasy-default-delete-otel-destination:
+      parameters:
+        query:
+          id: "83ab50cc-d4e3-4762-b4ce-2cdd2d06ae7e"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   deleteOtelForwardingConfig:
     speakeasy-default-delete-otel-forwarding-config:
       responses:
@@ -6910,6 +7017,24 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listDataExportDestinations:
+    speakeasy-default-list-data-export-destinations:
+      responses:
+        "200":
+          application/json: {"destinations": [{"created_at": "2024-07-25T08:44:22.686Z", "destination_type": "otel", "id": "93fe4dd4-0df8-4674-bf72-c152a99fad21", "name": "<value>", "project_id": "96651d1c-ef6a-4192-b8bc-6fc544e0522f", "sensitive_data": "include", "updated_at": "2025-12-17T15:08:13.392Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listDataExportRoutes:
+    speakeasy-default-list-data-export-routes:
+      responses:
+        "200":
+          application/json: {"routes": [{"created_at": "2026-06-27T17:43:37.791Z", "data_source": "product_telemetry", "enabled": false, "id": "e719112f-0ed1-4cfd-b172-96bc7550893f", "project_id": "f9977cae-10a3-4f92-baf8-7d109b5d1fdf", "updated_at": "2026-08-01T00:39:59.073Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listDeployments:
     speakeasy-default-list-deployments:
       responses:
@@ -7325,6 +7450,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOtelDestinations:
+    speakeasy-default-list-otel-destinations:
+      responses:
+        "200":
+          application/json: {"destinations": [{"created_at": "2026-10-03T12:56:36.010Z", "endpoint_url": "https://runny-poppy.org/", "headers": [], "id": "1f1a652d-de36-459c-8f5e-ec84b0d00911", "name": "<value>", "project_id": "80f80ef4-9fc9-495e-96e1-feb4929bacf4", "sensitive_data": "exclude", "updated_at": "2026-03-22T14:39:31.734Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listPackages:
     speakeasy-default-list-packages:
       responses:
@@ -9574,6 +9708,34 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateDataExportDestination:
+    speakeasy-default-update-data-export-destination:
+      parameters:
+        query:
+          id: "80d6b19f-6dd6-4a85-828b-e85c11c536fc"
+      requestBody:
+        application/json: {"destination_type": "otel", "name": "<value>", "sensitive_data": "exclude"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-05-26T13:52:19.738Z", "destination_type": "otel", "id": "1de96843-21e2-4150-8b3f-0f37fb2f2166", "name": "<value>", "project_id": "2f98da04-debc-4ed4-bc16-d171038a5285", "sensitive_data": "include", "updated_at": "2025-07-04T17:34:52.007Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateDataExportRoute:
+    speakeasy-default-update-data-export-route:
+      parameters:
+        query:
+          id: "88aa078c-5fb9-4665-8704-e689099390bc"
+      requestBody:
+        application/json: {"data_source": "product_telemetry", "enabled": false}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-10-28T12:10:02.211Z", "data_source": "product_telemetry", "enabled": true, "id": "0a8f03a2-9799-4aa5-96bc-ff131046560f", "project_id": "bb63c7f5-eabe-4d11-ae89-e7710c8c74f1", "updated_at": "2026-12-26T06:25:41.453Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateDeviceAgentConfiguration:
     speakeasy-default-update-device-agent-configuration:
       requestBody:
@@ -9789,6 +9951,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateOtelDestination:
+    speakeasy-default-update-otel-destination:
+      parameters:
+        query:
+          id: "ffea0771-e1a7-4a4c-b557-434d71fa153e"
+      requestBody:
+        application/json: {"endpoint_url": "https://hot-presume.name/", "headers": [{"name": "<value>"}], "name": "<value>", "sensitive_data": "include"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-18T16:23:03.440Z", "endpoint_url": "https://bogus-pinstripe.info/", "headers": [], "id": "ea385b0a-baf1-4823-a7a2-729af68ecd27", "name": "<value>", "project_id": "edee45ac-158d-4c39-85fd-b973b8156db6", "sensitive_data": "exclude", "updated_at": "2024-10-16T04:12:28.117Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updatePackage:
     speakeasy-default-update-package:
       requestBody:
