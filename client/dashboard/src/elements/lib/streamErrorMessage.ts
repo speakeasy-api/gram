@@ -1,4 +1,9 @@
-import { toUIMessageStream, type TextStreamPart, type ToolSet } from "ai";
+import {
+  toUIMessageStream,
+  type TextStreamPart,
+  type ToolSet,
+  type UIMessageChunk,
+} from "ai";
 
 // Shown verbatim in the chat thread when the gateway rejects a request for
 // lack of chat credits. The "Get Support" wording matches the dashboard's
@@ -160,7 +165,7 @@ export const toElementsUIMessageStream = <TOOLS extends ToolSet>({
 }: {
   stream: ReadableStream<TextStreamPart<TOOLS>>;
   tools?: TOOLS;
-}) =>
+}): ReadableStream<UIMessageChunk> =>
   toUIMessageStream({
     stream,
     tools,
