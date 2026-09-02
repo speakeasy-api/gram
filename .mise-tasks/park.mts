@@ -7,16 +7,18 @@
 // `mise run pause` leaves the stack complete but stopped, which also leaves the
 // dashboard URL dead — so a bookmark, a `wt list` link or an agent's browser
 // step lands on a connection error and the developer has to know that `mise run
-// wake` exists. This task parks on the site port in the stack's place: the
-// first request gets an interstitial that starts the wake and reloads itself
-// when the real dashboard answers.
+// wake` exists. This task parks on the site port in the stack's place and
+// serves a page that says the stack is paused and offers to resume it. The
+// resume is behind a button, not behind the page load: prefetches, link
+// previews and reconnecting tabs all hit this port, and a stack that wakes
+// itself on any of them cannot be kept paused.
 //
 // The parker cannot proxy the dashboard once it is up (vite wants the port
-// itself), so it hands the port over instead. It keeps serving the interstitial
-// to every request -- a second tab, a reload, a probe -- while the wake it
+// itself), so it hands the port over instead. It keeps serving the page to
+// every request -- a second tab, a reload, a probe -- while the wake the button
 // started brings the containers up, and `mise run wake` kills it at the last
 // moment, immediately before vite binds. That leaves only a couple of seconds
-// where nothing is listening, which the interstitial covers by polling from the
+// where nothing is listening, which the page covers by polling from the
 // browser: the page is already loaded, so a refused fetch is just another retry.
 //
 // Started detached by `mise run pause`. Killed by `mise run wake`; the timeout
@@ -167,10 +169,20 @@ const PAGE = `<!doctype html>
     margin: 24px 0 10px; letter-spacing: -.01em;
   }
   .overlay p { margin: 0 auto; max-width: 30rem; color: var(--muted-strong); }
-  .spinner { animation: spin 1.1s steps(12) infinite; color: #111; }
+  #loader { color: #111; opacity: .35; }
+  /* Motion is the signal that something is happening, so it starts with the
+     resume rather than with the page. */
+  #loader.spinning { opacity: 1; animation: spin 1.1s steps(12) infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .button {
+    margin-top: 24px; width: 280px; height: 40px; border: 0; cursor: pointer;
+    background: var(--cta); color: #fff; font-family: var(--f-mono);
+    font-size: 15px; text-transform: uppercase; letter-spacing: .01em;
+  }
+  .button:hover { background: hsl(0, 0%, 14%); }
+  .button:disabled { opacity: .5; cursor: default; }
   .meta { margin-top: 20px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { #loader.spinning { animation: none; } }
 </style>
 </head>
 <body>
@@ -201,34 +213,67 @@ const PAGE = `<!doctype html>
 
 <div class="overlay" role="status" aria-live="polite">
   <main>
-    <!-- lucide "loader" -->
-    <svg class="spinner" xmlns="http://www.w3.org/2000/svg" width="64" height="64"
+    <!-- lucide "loader", still until the resume starts -->
+    <svg id="loader" xmlns="http://www.w3.org/2000/svg" width="64" height="64"
          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/>
       <path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/>
       <path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
     </svg>
-    <h1>Resuming stack</h1>
-    <p>This worktree's containers and services are starting. The page reloads
-       as soon as the dashboard answers.</p>
-    <p class="meta"><span id="elapsed">0s</span> &middot; logs: pitchfork logs dashboard</p>
+
+    <div id="idle">
+      <h1>Stack paused</h1>
+      <p>This worktree's containers and services are stopped. Their data is
+         intact — resuming takes about half a minute.</p>
+      <button id="resume" class="button" type="button">Resume stack</button>
+      <p class="meta">Or run <b>mise run wake</b> in the worktree.</p>
+    </div>
+
+    <div id="resuming" hidden>
+      <h1>Resuming stack</h1>
+      <p>Containers and services are starting. The page reloads as soon as the
+         dashboard answers.</p>
+      <p class="meta"><span id="elapsed">0s</span> &middot; logs: pitchfork logs dashboard</p>
+    </div>
   </main>
 </div>
 
 <script>
-  const started = Date.now();
+  const idle = document.getElementById("idle");
+  const resuming = document.getElementById("resuming");
+  const loader = document.getElementById("loader");
+  const button = document.getElementById("resume");
   const elapsed = document.getElementById("elapsed");
-  setInterval(() => {
-    elapsed.textContent = Math.round((Date.now() - started) / 1000) + "s";
-  }, 1000);
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    // Ask the parker to start the wake. Nothing else does: a page load on its
+    // own leaves the stack exactly as it found it.
+    try {
+      await fetch("/__wake", { method: "POST", cache: "no-store" });
+    } catch {
+      // The parker answers before it can be killed, so a failure here means it
+      // is already gone — the poll below sorts out which.
+    }
+    idle.hidden = true;
+    resuming.hidden = false;
+    loader.classList.add("spinning");
+
+    const started = Date.now();
+    setInterval(() => {
+      elapsed.textContent = Math.round((Date.now() - started) / 1000) + "s";
+    }, 1000);
+    setTimeout(poll, 2000);
+  });
+
   // Two things answer this origin in turn: the parker (which marks its
   // responses) and then vite. Refused connections in between are the couple of
   // seconds after the parker lets go — expected, not an error. Cache-busted so
   // a probe can't be answered from the bfcache.
   async function poll() {
     try {
-      const res = await fetch("/?__wake=" + Date.now(), { cache: "no-store" });
+      const res = await fetch("/?__poll=" + Date.now(), { cache: "no-store" });
       if (!res.headers.get("x-gram-parked")) {
         location.replace("/");
         return;
@@ -236,7 +281,6 @@ const PAGE = `<!doctype html>
     } catch {}
     setTimeout(poll, 1000);
   }
-  setTimeout(poll, 2000);
 </script>
 </body>
 </html>
@@ -268,10 +312,23 @@ function wake(): void {
 }
 
 const creds = tls();
-const handler = (
-  _req: http.IncomingMessage,
-  res: http.ServerResponse,
-): void => {
+const handler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+  // Waking is deliberately behind a click rather than behind the page load:
+  // a bookmark opened by accident, a browser prefetch, a link preview or a
+  // still-open tab reconnecting would otherwise each start a stack the
+  // developer did not ask for -- and pausing a worktree that keeps waking
+  // itself is a losing game.
+  if (req.method === "POST" && (req.url ?? "").startsWith("/__wake")) {
+    wake();
+    res.writeHead(202, {
+      "content-type": "text/plain",
+      "cache-control": "no-store",
+      "x-gram-parked": "1",
+    });
+    res.end("waking");
+    return;
+  }
+
   res.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
@@ -280,9 +337,7 @@ const handler = (
     // successful fetch alone would send the page reloading into itself.
     "x-gram-parked": "1",
   });
-  res.end(PAGE, () => {
-    wake();
-  });
+  res.end(PAGE);
 };
 
 const server = creds
@@ -299,7 +354,7 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 
 server.listen(port, () => {
   if (pidFile) fs.writeFileSync(pidFile, String(process.pid));
-  console.log(`Parked on port ${port}; first request wakes the stack.`);
+  console.log(`Parked on port ${port}; serving the resume page.`);
 });
 
 // Backstop, generous enough to cover a cold `wake` (image pulls, a slow

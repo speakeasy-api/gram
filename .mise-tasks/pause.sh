@@ -29,8 +29,8 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 
 
 # Park on the site port in the dashboard's place, so the worktree's URL answers
-# with a "Resuming stack" page that triggers the wake instead of a connection
-# error. Detached and nohup'd: `pause` is often run from a shell that goes away
+# with a page that says the stack is paused and offers a Resume button, instead
+# of a connection error. Detached and nohup'd: `pause` is often run from a shell that goes away
 # (and from `git:workboot`, whose whole process group is killed when the boot
 # hook finishes). The parker exits on its own once it has woken the stack, and
 # `mise run wake` kills it first when the wake comes from the CLI instead.
@@ -49,4 +49,4 @@ if [ -z "${GRAM_NO_PARK:-}" ]; then
     disown 2> /dev/null || true
 fi
 
-echo "Stack paused. Resume with \`mise run wake\`, or by opening ${GRAM_SITE_URL:-the dashboard URL}."
+echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
