@@ -3,6 +3,7 @@ package networkingress
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -140,12 +141,17 @@ var _ = Service("networkIngress", func() {
 
 	Method("checkHealth", func() {
 		Description("Signal reconciliation and return the latest observed ingress health.")
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() { security.SessionPayload() })
 		Result(NetworkIngress)
 		HTTP(func() {
 			POST("/rpc/networkIngress.checkHealth")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
 		})
 		Meta("openapi:operationId", "checkNetworkIngressHealth")
 		Meta("openapi:extension:x-speakeasy-name-override", "checkHealth")

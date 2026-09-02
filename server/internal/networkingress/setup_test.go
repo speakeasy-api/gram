@@ -128,8 +128,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	flags := &feature.InMemory{}
-	checker := networkingress.NewRepositoryActiveIngressChecker(conn)
-	admission := networkingress.NewExpansionAdmission(features, flags, orgrepo.New(conn), checker)
+	admission := networkingress.NewExpansionAdmission(features, flags, orgrepo.New(conn), true)
 	enc := testenv.NewEncryptionClient(t)
 	service := networkingress.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, nil)
 

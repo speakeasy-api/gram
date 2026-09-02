@@ -1340,6 +1340,25 @@ type DeleteIngressGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CheckHealthUnavailableResponseBody is the type of the "networkIngress"
+// service "checkHealth" endpoint HTTP response body for the "unavailable"
+// error.
+type CheckHealthUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CheckHealthUnauthorizedResponseBody is the type of the "networkIngress"
 // service "checkHealth" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2592,6 +2611,21 @@ func NewCheckHealthNetworkIngressOK(body *CheckHealthResponseBody) *networkingre
 		ConnectedSince:        body.ConnectedSince,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewCheckHealthUnavailable builds a networkIngress service checkHealth
+// endpoint unavailable error.
+func NewCheckHealthUnavailable(body *CheckHealthUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -4519,6 +4553,30 @@ func ValidateDeleteIngressUnexpectedResponseBody(body *DeleteIngressUnexpectedRe
 // ValidateDeleteIngressGatewayErrorResponseBody runs the validations defined
 // on deleteIngress_gateway_error_response_body
 func ValidateDeleteIngressGatewayErrorResponseBody(body *DeleteIngressGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthUnavailableResponseBody runs the validations defined on
+// checkHealth_unavailable_response_body
+func ValidateCheckHealthUnavailableResponseBody(body *CheckHealthUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
