@@ -401,7 +401,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 
 	// Locked before the read: this handler evaluates the private_key_jwt rule
 	// against the client's json_web_key_set_id, which detachKeySet writes.
-	if err := lockClientForAuthMethodWrite(ctx, logger, txRepo, clientID); err != nil {
+	if err := lockProjectClientForAuthMethodWrite(ctx, logger, txRepo, clientID, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 

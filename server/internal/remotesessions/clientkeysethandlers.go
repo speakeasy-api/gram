@@ -49,33 +49,56 @@ func (s *Service) requireKeySetEntitlement(ctx context.Context, logger *slog.Log
 	return nil
 }
 
-// requireKeySetEligibleClient rejects a client that cannot hold a JSON Web Key
-// Set no matter which set is named.
+// adoptClientOrganization makes a client eligible to hold a JSON Web Key Set,
+// backfilling its organization_id from its project when the column was never
+// populated.
 //
 // remote_session_clients.organization_id is nullable and was added without a
-// backfill (20260625174452), so rows predating it are still NULL. Every create
-// path populates it now, but a legacy row remains reachable from the
-// organization surface through its issuer's organization, and
-// remote_session_clients_json_web_key_set_id_check requires a non-NULL
-// organization_id whenever json_web_key_set_id is set. Catching it here turns
-// what would otherwise be a raw CHECK violation surfacing as a 500 into an
-// answer an administrator can act on.
+// backfill (20260625174452), so rows predating it are still NULL, and
+// remote_session_clients_json_web_key_set_id_check forbids a set on any of
+// them. Resolving the organization through project_id (AIM-77) is what lets a
+// legacy client opt into private_key_jwt at all; refusing them instead would
+// strand every pre-migration client on shared-secret authentication until some
+// unrelated backfill lands.
 //
-// The check is also the tenancy backstop for project-tier clients. The
-// composite foreign key to json_web_key_sets is MATCH SIMPLE, which skips its
-// check entirely when either column is NULL, so a NULL organization_id is
-// precisely the case where the database stops pinning the set to an
-// organization.
-func requireKeySetEligibleClient(ctx context.Context, logger *slog.Logger, client repo.RemoteSessionClient, organizationID string) error {
-	if !client.OrganizationID.Valid || client.OrganizationID.String == "" {
-		return oops.E(oops.CodeFailedPrecondition, nil, "this remote session client predates organization ownership and cannot hold a key set; recreate it to attach one")
+// The adoption is not a shortcut around tenancy, it is the point at which
+// tenancy becomes knowable. The composite foreign key to json_web_key_sets is
+// MATCH SIMPLE and skips its check entirely while organization_id is NULL, so
+// the column has to be populated before the database can pin the set to an
+// organization at all. BackfillRemoteSessionClientOrganization writes only when
+// the client's project belongs to the caller's organization, which makes the
+// statement its own ownership check: no rows means the organization could not
+// be established, and the caller is refused rather than adopted.
+//
+// A client with no project and no organization is the platform-owned global
+// tier. It matches nothing in the backfill and is refused, which is correct:
+// those rows are not a tenant's to claim.
+func adoptClientOrganization(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, client *repo.RemoteSessionClient, organizationID string) (bool, error) {
+	if client.OrganizationID.Valid && client.OrganizationID.String != "" {
+		if client.OrganizationID.String != organizationID {
+			return false, oops.E(oops.CodeNotFound, nil, "remote session client not found").LogError(ctx, logger)
+		}
+
+		return false, nil
 	}
 
-	if client.OrganizationID.String != organizationID {
-		return oops.E(oops.CodeNotFound, nil, "remote session client not found").LogError(ctx, logger)
+	rows, err := txRepo.BackfillRemoteSessionClientOrganization(ctx, repo.BackfillRemoteSessionClientOrganizationParams{
+		ID:             client.ID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "backfill remote session client organization").LogError(ctx, logger)
+	}
+	if rows == 0 {
+		return false, oops.E(oops.CodeFailedPrecondition, nil, "this remote session client has no owning organization to resolve, so it cannot hold a key set")
 	}
 
-	return nil
+	// The statement only writes when the project resolves to this organization,
+	// so the row now holds exactly it. Reflecting that here keeps the view and
+	// the subsequent tenancy-scoped write consistent without a second read.
+	client.OrganizationID = conv.ToPGText(organizationID)
+
+	return true, nil
 }
 
 // requireDetachableKeySet enforces the outbound half of the rule the inbound
@@ -98,13 +121,36 @@ func requireDetachableKeySet(client repo.RemoteSessionClient) error {
 	return oops.E(oops.CodeConflict, nil, "client authenticates with private_key_jwt and has nothing to sign with once the key set is detached; change token_endpoint_auth_method first")
 }
 
-// lockClientForAuthMethodWrite pins the client row for the rest of the
-// transaction, so the private_key_jwt coupling cannot be decided from a read
-// that another handler invalidates before either commits. Must run before the
-// client is read, or the read it protects is the stale one. A missing row is
-// left to the caller's tenancy-scoped read, which reports it as not found.
-func lockClientForAuthMethodWrite(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, clientID uuid.UUID) error {
-	_, err := txRepo.LockRemoteSessionClientForAuthMethodWrite(ctx, clientID)
+// lockProjectClientForAuthMethodWrite and
+// lockOrganizationClientForAuthMethodWrite pin the client row for the rest of
+// the transaction, so the private_key_jwt coupling cannot be decided from a
+// read another handler invalidates before either commits. Must run before the
+// client is read, or the read it protects is the stale one.
+//
+// Each is scoped to its own surface's reachability rather than locking by id
+// alone. An unscoped lock would let any authenticated caller take a row lock on
+// another tenant's client for the length of a transaction before the ownership
+// check rejects them. A missing row is left to the caller's own read, which
+// reports it as not found.
+func lockProjectClientForAuthMethodWrite(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, clientID uuid.UUID, projectID uuid.UUID) error {
+	_, err := txRepo.LockRemoteSessionClientForAuthMethodWrite(ctx, repo.LockRemoteSessionClientForAuthMethodWriteParams{
+		ID:        clientID,
+		ProjectID: conv.ToNullUUID(projectID),
+	})
+
+	return interpretClientLock(ctx, logger, err)
+}
+
+func lockOrganizationClientForAuthMethodWrite(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, clientID uuid.UUID, organizationID string) error {
+	_, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(organizationID),
+	})
+
+	return interpretClientLock(ctx, logger, err)
+}
+
+func interpretClientLock(ctx context.Context, logger *slog.Logger, err error) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
@@ -207,7 +253,7 @@ func (s *Service) mutateProjectClientKeySet(ctx context.Context, logger *slog.Lo
 
 	txRepo := repo.New(dbtx)
 
-	if err := lockClientForAuthMethodWrite(ctx, logger, txRepo, clientID); err != nil {
+	if err := lockProjectClientForAuthMethodWrite(ctx, logger, txRepo, clientID, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -298,7 +344,7 @@ func (s *Service) mutateOrganizationClientKeySet(ctx context.Context, logger *sl
 
 	txRepo := repo.New(dbtx)
 
-	if err := lockClientForAuthMethodWrite(ctx, logger, txRepo, clientID); err != nil {
+	if err := lockOrganizationClientForAuthMethodWrite(ctx, logger, txRepo, clientID, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 
@@ -337,15 +383,12 @@ func (s *Service) settleClientKeySet(
 	target uuid.NullUUID,
 	write func(ctx context.Context) (repo.RemoteSessionClient, error),
 ) (*types.RemoteSessionClient, error) {
-	if err := requireKeySetEligibleClient(ctx, logger, existing, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
-	}
-
 	// Re-applying the state the row already holds changes nothing, so it neither
 	// writes nor audits, in either direction. An audit entry for a change that
 	// did not happen is a false record, and a dashboard replaying its own
-	// optimistic state should not inflate the log.
-	if target.Valid && existing.JsonWebKeySetID.Valid && existing.JsonWebKeySetID.UUID == target.UUID {
+	// optimistic state should not inflate the log. Checked before adoption so a
+	// no-op detach never rewrites a client's organization as a side effect.
+	if sameKeySet(existing.JsonWebKeySetID, target) {
 		view, err := mv.BuildRemoteSessionClientView(existing, userSessionIssuerIDs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
@@ -353,22 +396,22 @@ func (s *Service) settleClientKeySet(
 		return view, nil
 	}
 
+	var adopted bool
 	if target.Valid {
+		var err error
+		adopted, err = adoptClientOrganization(ctx, logger, txRepo, &existing, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, err
+		}
+
 		if err := resolveAttachableKeySet(ctx, logger, txRepo, target.UUID, authCtx.ActiveOrganizationID); err != nil {
 			return nil, err
 		}
-	} else {
-		if !existing.JsonWebKeySetID.Valid {
-			view, err := mv.BuildRemoteSessionClientView(existing, userSessionIssuerIDs)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
-			}
-			return view, nil
-		}
-
-		if err := requireDetachableKeySet(existing); err != nil {
-			return nil, err
-		}
+	} else if err := requireDetachableKeySet(existing); err != nil {
+		// Detaching needs no organization: the CHECK constraint guarantees a
+		// client with a NULL organization_id holds no set, so it took the no-op
+		// branch above rather than reaching here.
+		return nil, err
 	}
 
 	updated, err := write(ctx)
@@ -400,6 +443,7 @@ func (s *Service) settleClientKeySet(
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(updated.ID),
 		ClientID:               updated.ClientID,
 		JsonWebKeySetURN:       urn.NewJsonWebKeySet(recorded.UUID),
+		AdoptedOrganization:    adopted,
 	}
 
 	logKeySetChange := s.auditLogger.LogRemoteSessionClientDetachKeySet
@@ -464,4 +508,15 @@ func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 	}
 
 	return oops.E(oops.CodeConflict, nil, "private_key_jwt requires an attached JSON Web Key Set; attach one before selecting this authentication method")
+}
+
+// sameKeySet reports whether the row already holds the requested state, for
+// either direction: an attach of the set already attached, or a detach of a
+// client that holds none.
+func sameKeySet(current uuid.NullUUID, target uuid.NullUUID) bool {
+	if !target.Valid {
+		return !current.Valid
+	}
+
+	return current.Valid && current.UUID == target.UUID
 }

@@ -131,9 +131,10 @@ type CreateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -173,9 +174,10 @@ type CreateCimdResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -216,9 +218,10 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -259,9 +262,10 @@ type AttachUserSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -302,9 +306,10 @@ type DetachUserSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -344,9 +349,10 @@ type AttachKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -386,9 +392,10 @@ type DetachKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -437,9 +444,10 @@ type GetRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -1395,6 +1403,25 @@ type DetachUserSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AttachKeySetFailedPreconditionResponseBody is the type of the
+// "remoteSessionClients" service "attachKeySet" endpoint HTTP response body
+// for the "failed_precondition" error.
+type AttachKeySetFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AttachKeySetUnauthorizedResponseBody is the type of the
 // "remoteSessionClients" service "attachKeySet" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1566,6 +1593,25 @@ type AttachKeySetUnexpectedResponseBody struct {
 // "remoteSessionClients" service "attachKeySet" endpoint HTTP response body
 // for the "gateway_error" error.
 type AttachKeySetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachKeySetFailedPreconditionResponseBody is the type of the
+// "remoteSessionClients" service "detachKeySet" endpoint HTTP response body
+// for the "failed_precondition" error.
+type DetachKeySetFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2365,9 +2411,10 @@ type RemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -3428,6 +3475,21 @@ func NewDetachUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewAttachKeySetFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "attachKeySet" endpoint of the "remoteSessionClients"
+// service.
+func NewAttachKeySetFailedPreconditionResponseBody(res *goa.ServiceError) *AttachKeySetFailedPreconditionResponseBody {
+	body := &AttachKeySetFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAttachKeySetUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "attachKeySet" endpoint of the "remoteSessionClients"
 // service.
@@ -3562,6 +3624,21 @@ func NewAttachKeySetUnexpectedResponseBody(res *goa.ServiceError) *AttachKeySetU
 // service.
 func NewAttachKeySetGatewayErrorResponseBody(res *goa.ServiceError) *AttachKeySetGatewayErrorResponseBody {
 	body := &AttachKeySetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachKeySetFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "detachKeySet" endpoint of the "remoteSessionClients"
+// service.
+func NewDetachKeySetFailedPreconditionResponseBody(res *goa.ServiceError) *DetachKeySetFailedPreconditionResponseBody {
+	body := &DetachKeySetFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -34,6 +34,47 @@ func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Conte
 	return err
 }
 
+const backfillRemoteSessionClientOrganization = `-- name: BackfillRemoteSessionClientOrganization :execrows
+UPDATE remote_session_clients AS c
+SET organization_id = p.organization_id,
+    updated_at = clock_timestamp()
+FROM projects AS p
+WHERE c.id = $1
+  AND c.project_id = p.id
+  AND c.organization_id IS NULL
+  AND p.organization_id = $2
+  AND c.deleted IS FALSE
+`
+
+type BackfillRemoteSessionClientOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Adopts a legacy client into the organization that owns its project, so it can
+// hold a JSON Web Key Set. remote_session_clients.organization_id was added
+// without a backfill (20260625174452), and
+// remote_session_clients_json_web_key_set_id_check forbids a set on any row
+// where it is still NULL, so these clients could otherwise never opt into
+// private_key_jwt.
+//
+// The statement is its own tenancy check: it writes only when the client's
+// project belongs to the caller's organization, so a zero row count means the
+// organization could not be established and the caller is refused. A client
+// with no project (the platform-owned global tier) matches nothing here and is
+// never adopted, which is the intended outcome: those rows are not a tenant's
+// to claim.
+//
+// Runs under LockRemoteSessionClientForAuthMethodWrite, so two concurrent
+// attaches cannot both adopt the same row.
+func (q *Queries) BackfillRemoteSessionClientOrganization(ctx context.Context, arg BackfillRemoteSessionClientOrganizationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillRemoteSessionClientOrganization, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const checkRemoteSessionClientBindingForUserSessionIssuer = `-- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -1187,6 +1228,31 @@ type DetachRemoteSessionClientFromUserSessionIssuerParams struct {
 // Callers establish org ownership of the client upstream.
 func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, detachRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = $1
+WHERE id = $2
+`
+
+type ForceRemoteSessionClientAuthMethodFixtureParams struct {
+	TokenEndpointAuthMethod pgtype.Text
+	ID                      uuid.UUID
+}
+
+// TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
+// accept, which no production path can produce. private_key_jwt arrives with
+// AIM-156; until then planting the value directly is the only way to exercise
+// requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
+// it. Lives beside the invariant it bypasses rather than in shared testenv,
+// because only this package's tests construct the impossible state.
+func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -4291,13 +4357,47 @@ func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg Lock
 	return id, err
 }
 
+const lockOrganizationRemoteSessionClientForAuthMethodWrite = `-- name: LockOrganizationRemoteSessionClientForAuthMethodWrite :one
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1
+  AND (i.organization_id = $2 OR c.organization_id = $2)
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+FOR UPDATE OF c
+`
+
+type LockOrganizationRemoteSessionClientForAuthMethodWriteParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// The organization-surface counterpart of
+// LockRemoteSessionClientForAuthMethodWrite. Reachability mirrors
+// GetOrganizationRemoteSessionClientByID (the issuer's organization or the
+// client's own), so the lock covers exactly the rows that surface can mutate.
+// FOR UPDATE OF c leaves the issuer row unlocked; only the client is written.
+func (q *Queries) LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx context.Context, arg LockOrganizationRemoteSessionClientForAuthMethodWriteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationRemoteSessionClientForAuthMethodWrite, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockRemoteSessionClientForAuthMethodWrite = `-- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients
 WHERE id = $1
+  AND project_id = $2
   AND deleted IS FALSE
 FOR UPDATE
 `
+
+type LockRemoteSessionClientForAuthMethodWriteParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
 
 // Serializes the two halves of the private_key_jwt coupling, which live in
 // different handlers and would otherwise each decide from a stale read.
@@ -4308,8 +4408,8 @@ FOR UPDATE
 // clear. Under READ COMMITTED, both can pass against the same starting row and
 // then commit: the update's WHERE mentions neither column, so it re-qualifies
 // happily against the detached row and the pair lands
-// token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id
-// -- exactly the row both rules exist to prevent. Every handler that evaluates
+// token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id,
+// exactly the row both rules exist to prevent. Every handler that evaluates
 // either rule takes this lock first, so one of the two blocks and re-reads.
 //
 // The JSON Web Key Set lock does not cover this: it serializes attach against
@@ -4320,14 +4420,15 @@ FOR UPDATE
 // DeleteSet takes the set lock and then only reads remote_session_clients
 // unlocked, so there is no cycle.
 //
-// Scoped by id alone rather than by tenancy: the caller's tenancy-scoped read
-// follows immediately and turns a foreign row into a not-found, and narrowing
-// the lock here would mean duplicating two different surfaces' predicates.
-func (q *Queries) LockRemoteSessionClientForAuthMethodWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockRemoteSessionClientForAuthMethodWrite, id)
-	var id_2 uuid.UUID
-	err := row.Scan(&id_2)
-	return id_2, err
+// Tenancy-scoped, matching the surface's own read. An unscoped lock by id would
+// let any authenticated caller take a row lock on another tenant's client for
+// the length of a transaction before the ownership check rejects them, which is
+// a cross-tenant side effect for no benefit.
+func (q *Queries) LockRemoteSessionClientForAuthMethodWrite(ctx context.Context, arg LockRemoteSessionClientForAuthMethodWriteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientForAuthMethodWrite, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one

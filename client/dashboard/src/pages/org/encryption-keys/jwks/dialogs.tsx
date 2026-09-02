@@ -107,10 +107,16 @@ export function DeleteSetDialog({
   onDeleted: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const { data: preflight, isPending: preflightPending } =
-    useJsonWebKeySetDeletePreflight({ id: set.id }, undefined, {
-      throwOnError: false,
-    });
+  // isFetching, not isPending: a reopened dialog has cached preflight data, so
+  // isPending is false while the refetch is still in flight and Delete would be
+  // confirmable against whatever the last open saw.
+  const {
+    data: preflight,
+    isFetching: preflightPending,
+    isError: preflightFailed,
+  } = useJsonWebKeySetDeletePreflight({ id: set.id }, undefined, {
+    throwOnError: false,
+  });
   const deleteMutation = useDeleteJsonWebKeySetMutation({
     onSuccess: async () => {
       await invalidateSet(queryClient);
@@ -121,9 +127,10 @@ export function DeleteSetDialog({
   });
 
   const blockingCount = preflight?.clientCount ?? 0;
-  // A failed preflight read leaves this false, so the delete is still attempted
-  // and the server's own refusal stops it. Better that the authoritative check
-  // answers than that an advisory read's error blocks a legitimate delete.
+  // A failed preflight leaves this false, so the delete is still attempted and
+  // the server's own refusal stops it. Better that the authoritative check
+  // answers than that an advisory read's error blocks a legitimate delete. The
+  // summary below says so rather than claiming nothing references the set.
   const blocked = blockingCount > 0;
 
   return (
@@ -140,7 +147,9 @@ export function DeleteSetDialog({
       impact={{
         summary: blocked
           ? `${blockingCount} remote session ${blockingCount === 1 ? "client" : "clients"} still sign with this set. Detach it there before deleting.`
-          : "No remote session clients reference this set.",
+          : preflightFailed
+            ? "Could not check which remote session clients reference this set. Deleting is still refused by the server if any do."
+            : "No remote session clients reference this set.",
         mcpServerNames: preflight?.clientIds,
         namesLabel: "Clients signing with this set:",
         isLoading: preflightPending,

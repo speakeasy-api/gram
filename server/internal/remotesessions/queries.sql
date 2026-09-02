@@ -672,8 +672,8 @@ RETURNING *;
 -- clear. Under READ COMMITTED, both can pass against the same starting row and
 -- then commit: the update's WHERE mentions neither column, so it re-qualifies
 -- happily against the detached row and the pair lands
--- token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id
--- -- exactly the row both rules exist to prevent. Every handler that evaluates
+-- token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id,
+-- exactly the row both rules exist to prevent. Every handler that evaluates
 -- either rule takes this lock first, so one of the two blocks and re-reads.
 --
 -- The JSON Web Key Set lock does not cover this: it serializes attach against
@@ -684,15 +684,59 @@ RETURNING *;
 -- DeleteSet takes the set lock and then only reads remote_session_clients
 -- unlocked, so there is no cycle.
 --
--- Scoped by id alone rather than by tenancy: the caller's tenancy-scoped read
--- follows immediately and turns a foreign row into a not-found, and narrowing
--- the lock here would mean duplicating two different surfaces' predicates.
+-- Tenancy-scoped, matching the surface's own read. An unscoped lock by id would
+-- let any authenticated caller take a row lock on another tenant's client for
+-- the length of a transaction before the ownership check rejects them, which is
+-- a cross-tenant side effect for no benefit.
 -- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients
 WHERE id = @id
+  AND project_id = @project_id
   AND deleted IS FALSE
 FOR UPDATE;
+
+-- The organization-surface counterpart of
+-- LockRemoteSessionClientForAuthMethodWrite. Reachability mirrors
+-- GetOrganizationRemoteSessionClientByID (the issuer's organization or the
+-- client's own), so the lock covers exactly the rows that surface can mutate.
+-- FOR UPDATE OF c leaves the issuer row unlocked; only the client is written.
+-- name: LockOrganizationRemoteSessionClientForAuthMethodWrite :one
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+FOR UPDATE OF c;
+
+-- Adopts a legacy client into the organization that owns its project, so it can
+-- hold a JSON Web Key Set. remote_session_clients.organization_id was added
+-- without a backfill (20260625174452), and
+-- remote_session_clients_json_web_key_set_id_check forbids a set on any row
+-- where it is still NULL, so these clients could otherwise never opt into
+-- private_key_jwt.
+--
+-- The statement is its own tenancy check: it writes only when the client's
+-- project belongs to the caller's organization, so a zero row count means the
+-- organization could not be established and the caller is refused. A client
+-- with no project (the platform-owned global tier) matches nothing here and is
+-- never adopted, which is the intended outcome: those rows are not a tenant's
+-- to claim.
+--
+-- Runs under LockRemoteSessionClientForAuthMethodWrite, so two concurrent
+-- attaches cannot both adopt the same row.
+-- name: BackfillRemoteSessionClientOrganization :execrows
+UPDATE remote_session_clients AS c
+SET organization_id = p.organization_id,
+    updated_at = clock_timestamp()
+FROM projects AS p
+WHERE c.id = @id
+  AND c.project_id = p.id
+  AND c.organization_id IS NULL
+  AND p.organization_id = @organization_id
+  AND c.deleted IS FALSE;
 
 -- Takes the JSON Web Key Set row in FOR SHARE while a client attaches to it, so
 -- the set cannot be soft-deleted out from under the attach. jsonWebKeySets'
@@ -2371,3 +2415,13 @@ WHERE link.remote_session_client_id = @remote_session_client_id
   AND c.project_id = @project_id
 ORDER BY link.user_session_issuer_id;
 
+-- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
+-- accept, which no production path can produce. private_key_jwt arrives with
+-- AIM-156; until then planting the value directly is the only way to exercise
+-- requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
+-- it. Lives beside the invariant it bypasses rather than in shared testenv,
+-- because only this package's tests construct the impossible state.
+-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = @token_endpoint_auth_method
+WHERE id = @id;

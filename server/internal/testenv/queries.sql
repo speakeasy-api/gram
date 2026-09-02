@@ -886,25 +886,17 @@ WITH issuer AS (
 INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
 SELECT @organization_id, issuer.id, @client_id, @json_web_key_set_id FROM issuer;
 
--- name: ClearRemoteSessionClientKeySetFixture :exec
+-- name: ClearRemoteSessionClientKeySetFixture :execrows
 -- Releases a key set the way the detach endpoint does, so the delete guard can
 -- be shown to read the live reference rather than any reference.
 UPDATE remote_session_clients
 SET json_web_key_set_id = NULL
 WHERE json_web_key_set_id = @json_web_key_set_id;
 
--- name: SoftDeleteRemoteSessionClientsForKeySetFixture :exec
+-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
 -- Tombstones the clients referencing a key set, so the delete guard can be
 -- shown to ignore them.
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE json_web_key_set_id = @json_web_key_set_id
   AND deleted IS FALSE;
-
--- name: ForceRemoteSessionClientAuthMethodFixture :execrows
--- Writes a token_endpoint_auth_method the Goa enum does not accept yet.
--- private_key_jwt arrives with AIM-156; until then planting the value directly
--- is the only way to exercise the rules that guard it.
-UPDATE remote_session_clients
-SET token_endpoint_auth_method = @token_endpoint_auth_method
-WHERE id = @id;

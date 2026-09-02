@@ -358,7 +358,17 @@ func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.Get
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid key set id").LogError(ctx, logger)
 	}
 
-	q := repo.New(s.db)
+	// One transaction for both reads. They are separate queries because the count
+	// is unbounded and the listing is capped, and a client attaching or detaching
+	// between them would otherwise let the preflight report a count that its own
+	// list contradicts.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
 
 	count, err := q.CountRemoteSessionClientsForJsonWebKeySet(ctx, repo.CountRemoteSessionClientsForJsonWebKeySetParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
@@ -375,6 +385,10 @@ func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.Get
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing key set references").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
 	}
 
 	clientIDs := make([]string, 0, len(rows))

@@ -36,6 +36,12 @@ export function SettingsTab({
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
   const [showDelete, setShowDelete] = useState(false);
+  // The key set link saves on its own endpoint the moment it changes, while
+  // these fields wait for Save. Selecting a set and immediately saving
+  // private_key_jwt would otherwise race: the update can reach the server first
+  // and be refused for having no set attached. AIM-156 makes that method
+  // selectable; the sequencing is here so it is already right when it does.
+  const [keySetPending, setKeySetPending] = useState(false);
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async () => {
@@ -73,7 +79,16 @@ export function SettingsTab({
           value={authMethod}
           onChange={setAuthMethod}
         />
-        <KeySetField client={client} issuerId={issuerId} />
+        {/* org:admin like the Save button below: attach and detach are
+            org:admin on the server, so a reader must not get a live control
+            whose every change 403s. */}
+        <RequireScope scope="org:admin" level="component">
+          <KeySetField
+            client={client}
+            issuerId={issuerId}
+            onPendingChange={setKeySetPending}
+          />
+        </RequireScope>
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
           <Input value={scope} onChange={setScope} />
@@ -97,7 +112,10 @@ export function SettingsTab({
         </div>
         <div>
           <RequireScope scope="org:admin" level="component">
-            <Button onClick={handleSave} disabled={update.isPending}>
+            <Button
+              onClick={handleSave}
+              disabled={update.isPending || keySetPending}
+            >
               <Button.Text>
                 {update.isPending ? "Saving…" : "Save changes"}
               </Button.Text>

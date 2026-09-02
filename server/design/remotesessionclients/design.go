@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func tokenEndpointAuthMethodEnum() {
@@ -183,6 +184,13 @@ var _ = Service("remoteSessionClients", func() {
 	Method("attachKeySet", func() {
 		Description("Attach an organization JSON Web Key Set to a remote_session_client, opting it into signing private_key_jwt assertions. The set must belong to the client's organization. Requires the customer_managed_encryption_keys entitlement.")
 
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		Payload(func() {
 			Extend(AttachKeySetForm)
 			security.SessionPayload()
@@ -197,6 +205,9 @@ var _ = Service("remoteSessionClients", func() {
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 			Response(StatusOK)
 		})
 
@@ -213,6 +224,13 @@ var _ = Service("remoteSessionClients", func() {
 		// structurally identical request bodies into a single SDK component, so a
 		// bare {id: uuid} body here merges with risk's shared RiskIDRequestBody
 		// and renames the request field on every unrelated endpoint that uses it.
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		Payload(func() {
 			Attribute("id", String, "The remote_session_client id.", func() {
 				Format(FormatUUID)
@@ -231,6 +249,9 @@ var _ = Service("remoteSessionClients", func() {
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 			Response(StatusOK)
 		})
 
@@ -536,6 +557,13 @@ var _ = Service("organizationRemoteSessionClients", func() {
 	Method("attachClientKeySet", func() {
 		Description("Attach an organization JSON Web Key Set to a remote_session_client in the caller's organization, opting it into signing private_key_jwt assertions. Requires org:admin and the customer_managed_encryption_keys entitlement.")
 
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		Payload(func() {
 			Extend(AttachKeySetForm)
 			security.SessionPayload()
@@ -548,6 +576,9 @@ var _ = Service("organizationRemoteSessionClients", func() {
 			POST("/rpc/organizationRemoteSessionClients.attachKeySet")
 			security.SessionHeader()
 			security.ByKeyHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 			Response(StatusOK)
 		})
 
@@ -560,6 +591,13 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Description("Detach the JSON Web Key Set from a remote_session_client in the caller's organization. Refused while the client declares token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached. Requires org:admin and the customer_managed_encryption_keys entitlement.")
 
 		// DELETE + Param for the same reason as the project-scoped detachKeySet.
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		Payload(func() {
 			Attribute("id", String, "The remote_session_client id.", func() {
 				Format(FormatUUID)
@@ -576,6 +614,9 @@ var _ = Service("organizationRemoteSessionClients", func() {
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 			Response(StatusOK)
 		})
 
@@ -779,7 +820,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in
 	// a way a field patch cannot express, and it is invalid by construction on
 	// the global clients that share UpdateRemoteSessionClientForm.
-	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set this client signs private_key_jwt assertions with. Null when the client authenticates with a shared secret or not at all.", func() {
+	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, whose private half signs its private_key_jwt assertions. Null when no key set is attached; a set can be attached before token_endpoint_auth_method is switched over to use it.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")

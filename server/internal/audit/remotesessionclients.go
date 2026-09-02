@@ -244,28 +244,20 @@ func (l *Logger) logRemoteSessionClientUserSessionIssuerAttachment(ctx context.C
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.RemoteSessionClientURN.ID.String(),
-		SubjectType:        string(subjectTypeRemoteSessionClient),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-		Metadata:       metadata,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
 }
 
 // LogRemoteSessionClientKeySetAttachmentEvent describes an attach or detach of
@@ -286,6 +278,11 @@ type LogRemoteSessionClientKeySetAttachmentEvent struct {
 	RemoteSessionClientURN urn.RemoteSessionClient
 	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	JsonWebKeySetURN       urn.JsonWebKeySet
+	// AdoptedOrganization records that the attach also backfilled the client's
+	// organization_id from its project, which a legacy row needs before it can
+	// hold a set at all. An ownership change is worth showing in the log even
+	// though it rides in on the attach rather than standing alone.
+	AdoptedOrganization bool
 }
 
 // LogRemoteSessionClientAttachKeySet records that a JSON Web Key Set was
@@ -301,35 +298,32 @@ func (l *Logger) LogRemoteSessionClientDetachKeySet(ctx context.Context, dbtx re
 }
 
 func (l *Logger) logRemoteSessionClientKeySetAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientKeySetAttachmentEvent) error {
-	metadata, err := marshalAuditPayload(map[string]any{
+	payload := map[string]any{
 		"json_web_key_set_id": event.JsonWebKeySetURN.ID.String(),
-	})
+	}
+	if event.AdoptedOrganization {
+		payload["adopted_organization"] = true
+	}
+
+	metadata, err := marshalAuditPayload(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.RemoteSessionClientURN.ID.String(),
-		SubjectType:        string(subjectTypeRemoteSessionClient),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-		Metadata:       metadata,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
 }
 
 type LogRemoteSessionClientRevokeSessionsEvent struct {
@@ -381,4 +375,46 @@ func (l *Logger) LogRemoteSessionClientRevokeSessions(ctx context.Context, dbtx 
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// remoteSessionClientAttachment is the shape both attachment writers on this
+// subject share: an action naming the direction, the client as subject, and the
+// attached resource in metadata. No before/after snapshot, because the action
+// and the metadata already describe the change in full.
+type remoteSessionClientAttachment struct {
+	organizationID   string
+	projectID        uuid.UUID
+	actor            urn.Principal
+	actorDisplayName *string
+	actorSlug        *string
+	action           Action
+	clientURN        urn.RemoteSessionClient
+	clientID         string
+	metadata         []byte
+}
+
+// remoteSessionClientAttachmentRow builds the audit row for attaching or
+// detaching something to a remote_session_client, so the user_session_issuer
+// and JSON Web Key Set writers cannot drift apart as the row shape changes.
+func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.InsertAuditLogParams {
+	return repo.InsertAuditLogParams{
+		OrganizationID: a.organizationID,
+		ProjectID:      uuid.NullUUID{UUID: a.projectID, Valid: a.projectID != uuid.Nil},
+
+		ActorID:          a.actor.ID,
+		ActorType:        string(a.actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(a.actorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(a.actorSlug),
+
+		Action: string(a.action),
+
+		SubjectID:          a.clientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(a.clientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       a.metadata,
+	}
 }

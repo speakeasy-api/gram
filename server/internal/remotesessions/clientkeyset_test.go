@@ -12,7 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 func TestAttachClientKeySet(t *testing.T) {
@@ -481,12 +483,14 @@ func TestAttachKeySet_ProjectSurfaceRefusesOrganizationLevelClient(t *testing.T)
 	require.NotNil(t, attached.JSONWebKeySetID)
 }
 
-// TestAttachClientKeySet_RefusesClientWithoutOrganization covers the legacy rows
-// left by the organization_id migration, which ran without a backfill. They stay
-// reachable through their issuer's organization, and
-// remote_session_clients_json_web_key_set_id_check forbids a set on any of them,
-// so this must be an explicit refusal rather than a raw constraint violation.
-func TestAttachClientKeySet_RefusesClientWithoutOrganization(t *testing.T) {
+// TestAttachClientKeySet_AdoptsClientWithoutOrganization covers the legacy rows
+// left by the organization_id migration, which ran without a backfill. The
+// CHECK constraint forbids a set on any row whose organization_id is still
+// NULL, so attaching resolves the organization through the client's project and
+// adopts the row, which is what AIM-77 means by matching ownership through
+// project_id. Refusing instead would strand every pre-migration client on
+// shared-secret authentication.
+func TestAttachClientKeySet_AdoptsClientWithoutOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -496,24 +500,69 @@ func TestAttachClientKeySet_RefusesClientWithoutOrganization(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	issuerID := createRemoteIssuer(t, ctx, ti, "keyset-noorg-issuer", "")
-	legacyClientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "keyset-noorg-client")
-	setID := createJsonWebKeySet(t, ctx, ti.conn, orgID, "keyset-noorg-set")
+	issuerID := createRemoteIssuer(t, ctx, ti, "keyset-adopt-issuer", "")
+	legacyClientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "keyset-adopt-client")
+	setID := createJsonWebKeySet(t, ctx, ti.conn, orgID, "keyset-adopt-set")
 
-	_, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{
+	attached, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{
 		SessionToken:    nil,
 		ApikeyToken:     nil,
 		ID:              legacyClientID.String(),
 		JSONWebKeySetID: setID.String(),
 	})
-	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.NoError(t, err)
+	require.NotNil(t, attached.JSONWebKeySetID)
+	require.Equal(t, setID.String(), *attached.JSONWebKeySetID)
+
+	// The adoption is durable, not just reflected in the response: the row now
+	// carries the organization the composite foreign key pins the set to.
+	require.Equal(t, orgID, attached.OrganizationID)
+
+	stored, err := repo.New(ti.conn).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             legacyClientID,
+		OrganizationID: conv.ToPGText(orgID),
+	})
+	require.NoError(t, err)
+	require.True(t, stored.RemoteSessionClient.OrganizationID.Valid)
+	require.Equal(t, orgID, stored.RemoteSessionClient.OrganizationID.String)
+}
+
+// TestDetachClientKeySet_ClientWithoutOrganizationIsNoop proves detach never
+// needs the adoption. The CHECK constraint guarantees a NULL-organization client
+// holds no set, so there is nothing to clear and nothing to resolve, and the
+// call must not rewrite the row's ownership as a side effect.
+func TestDetachClientKeySet_ClientWithoutOrganizationIsNoop(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := activeOrganizationID(t, ctx)
+	ti.enableCustomerManagedKeys(t, ctx, orgID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "keyset-noorg-detach-issuer", "")
+	legacyClientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "keyset-noorg-detach-client")
+
+	detached, err := ti.service.DetachClientKeySet(ctx, &orgclientsgen.DetachClientKeySetPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ID:           legacyClientID.String(),
+	})
+	require.NoError(t, err)
+	require.Nil(t, detached.JSONWebKeySetID)
+	require.Empty(t, detached.OrganizationID, "a no-op detach must not adopt the client")
 }
 
 // TestClientManagementUngatedByEntitlement is the other half of the entitlement
 // requirement: the gate covers the key set link and nothing else, so an
 // organization that never bought customer-managed keys manages clients as
-// before. Runs in its own organization for the reason enableCustomerManagedKeys
-// documents.
+// before.
+//
+// Unlike the refusal test, this one is safe in the shared seeded organization
+// because it never touches the entitlement in either direction: it calls only
+// ungated methods, so whatever a parallel sibling wrote to the Redis-cached
+// feature value cannot change its outcome.
 func TestClientManagementUngatedByEntitlement(t *testing.T) {
 	t.Parallel()
 

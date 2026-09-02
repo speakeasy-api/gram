@@ -80,8 +80,12 @@ export function ConfirmDialog({
                       {impact.namesLabel ?? "Affected MCP Servers:"}
                     </Text>
                     <ul className="mt-1 list-disc pl-5">
-                      {impact.mcpServerNames.map((name) => (
-                        <li key={name}>
+                      {impact.mcpServerNames.map((name, index) => (
+                        // Index-keyed: callers pass display labels, and some
+                        // (OAuth client_id values) legitimately repeat across
+                        // rows. The list is static for the life of the dialog,
+                        // so position is a stable identity here.
+                        <li key={`${index}-${name}`}>
                           <Text small muted as="span">
                             {name}
                           </Text>

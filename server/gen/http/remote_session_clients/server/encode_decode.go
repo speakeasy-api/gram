@@ -1297,6 +1297,20 @@ func EncodeAttachKeySetError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "failed_precondition":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachKeySetFailedPreconditionResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1524,6 +1538,20 @@ func EncodeDetachKeySetError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "failed_precondition":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDetachKeySetFailedPreconditionResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)

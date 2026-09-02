@@ -14,9 +14,10 @@ import { useAttachOrganizationRemoteSessionClientKeySetMutation } from "@gram/cl
 import { useDetachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/detachOrganizationRemoteSessionClientKeySet.js";
 import { buildListJsonWebKeySetsQuery } from "@gram/client/react-query/listJsonWebKeySets";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
-import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { buildOrganizationRemoteSessionClientsQuery } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 // The Select cannot carry an empty string as a value, so "no set attached" gets
@@ -42,9 +43,13 @@ const NONE = "__none__";
 export function KeySetField({
   client,
   issuerId,
+  onPendingChange,
 }: {
   client: RemoteSessionClient;
   issuerId: string;
+  // Lets the enclosing form hold its own Save until this link has settled, so
+  // an update that depends on the attach cannot overtake it.
+  onPendingChange?: (pending: boolean) => void;
 }): JSX.Element | null {
   const organization = useOrganization();
   const gramClient = useGramContext();
@@ -76,18 +81,28 @@ export function KeySetField({
   // First page only (the list defaults to 50). This is a hint, not a
   // constraint, so an issuer with more clients than that simply does not get
   // one; paginating to find a suggestion would not earn its complexity.
-  const { data: siblingsData } = useOrganizationRemoteSessionClients(
-    { issuerId },
-    undefined,
-    { throwOnError: false, enabled: entitled },
-  );
+  const siblingsQuery = buildOrganizationRemoteSessionClientsQuery(gramClient, {
+    issuerId,
+  });
+  const { data: siblingsData } = useQuery({
+    ...siblingsQuery,
+    queryKey: [...siblingsQuery.queryKey, { organizationId: organization.id }],
+    enabled: entitled,
+  });
   const suggestedSetId = (siblingsData?.result.items ?? [])
     .map((item) => item.client)
     .find(
       (sibling) => sibling.id !== client.id && sibling.jsonWebKeySetId != null,
     )?.jsonWebKeySetId;
 
-  const onSettled = async (message: string) => {
+  // An organization switch mid-flight must not invalidate the new
+  // organization's caches or toast about the old one's client, so each callback
+  // re-checks the organization it started in.
+  const settledIn = (organizationId: string) =>
+    organizationId === organization.id;
+
+  const onSettled = (organizationId: string) => async (message: string) => {
+    if (!settledIn(organizationId)) return;
     await invalidateAllOrganizationRemoteSessionClient(queryClient, {
       refetchType: "all",
     });
@@ -96,7 +111,8 @@ export function KeySetField({
 
   // Refetch on failure too. A 404 here usually means the set was deleted from
   // another tab, and without this the picker keeps offering the dead set.
-  const onError = async (error: unknown) => {
+  const onError = (organizationId: string) => async (error: unknown) => {
+    if (!settledIn(organizationId)) return;
     toast.error(
       error instanceof Error ? error.message : "Failed to update signing key",
     );
@@ -106,19 +122,24 @@ export function KeySetField({
     await queryClient.invalidateQueries({ queryKey: setsQuery.queryKey });
   };
 
+  const startedIn = organization.id;
   const attach = useAttachOrganizationRemoteSessionClientKeySetMutation({
-    onSuccess: () => onSettled("Signing key set attached"),
-    onError,
+    onSuccess: () => onSettled(startedIn)("Signing key set attached"),
+    onError: onError(startedIn),
   });
   const detach = useDetachOrganizationRemoteSessionClientKeySetMutation({
-    onSuccess: () => onSettled("Signing key set detached"),
-    onError,
+    onSuccess: () => onSettled(startedIn)("Signing key set detached"),
+    onError: onError(startedIn),
   });
-
-  if (!entitled) return null;
 
   const pending = attach.isPending || detach.isPending;
   const selected = client.jsonWebKeySetId ?? NONE;
+
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
+  if (!entitled) return null;
 
   const handleChange = (next: string) => {
     if (next === selected) return;

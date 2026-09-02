@@ -654,7 +654,7 @@ func createJsonWebKeySet(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, method string) {
 	t.Helper()
 
-	rows, err := testrepo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, testrepo.ForceRemoteSessionClientAuthMethodFixtureParams{
+	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
 		TokenEndpointAuthMethod: conv.ToPGText(method),
 		ID:                      clientID,
 	})

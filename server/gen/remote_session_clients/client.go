@@ -163,6 +163,7 @@ func (c *Client) DetachUserSessionIssuer(ctx context.Context, p *DetachUserSessi
 // AttachKeySet calls the "attachKeySet" endpoint of the "remoteSessionClients"
 // service.
 // AttachKeySet may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -186,6 +187,7 @@ func (c *Client) AttachKeySet(ctx context.Context, p *AttachKeySetPayload) (res 
 // DetachKeySet calls the "detachKeySet" endpoint of the "remoteSessionClients"
 // service.
 // DetachKeySet may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

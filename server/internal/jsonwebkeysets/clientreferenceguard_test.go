@@ -76,7 +76,9 @@ func TestDeleteSet_AllowedAfterClientDetaches(t *testing.T) {
 
 	attachClientToSet(t, ctx, ti, set.ID, "guard-detach-client-id")
 
-	require.NoError(t, testrepo.New(ti.conn).ClearRemoteSessionClientKeySetFixture(ctx, conv.StringToNullUUID(set.ID)))
+	cleared, err := testrepo.New(ti.conn).ClearRemoteSessionClientKeySetFixture(ctx, conv.StringToNullUUID(set.ID))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared, "fixture must actually release the set")
 
 	require.NoError(t, ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{
 		ID:           set.ID,
@@ -96,7 +98,9 @@ func TestDeleteSet_IgnoresSoftDeletedClients(t *testing.T) {
 
 	attachClientToSet(t, ctx, ti, set.ID, "guard-tombstone-client-id")
 
-	require.NoError(t, testrepo.New(ti.conn).SoftDeleteRemoteSessionClientsForKeySetFixture(ctx, conv.StringToNullUUID(set.ID)))
+	tombstoned, err := testrepo.New(ti.conn).SoftDeleteRemoteSessionClientsForKeySetFixture(ctx, conv.StringToNullUUID(set.ID))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tombstoned, "fixture must actually tombstone the client, or the delete below proves nothing")
 
 	require.NoError(t, ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{
 		ID:           set.ID,

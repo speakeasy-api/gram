@@ -343,3 +343,8 @@ func MakeUnexpected(err error) *goa.ServiceError {
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
 }
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
+}

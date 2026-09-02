@@ -211,6 +211,7 @@ func (c *Client) UpdateClient(ctx context.Context, p *UpdateClientPayload) (res 
 // AttachClientKeySet calls the "attachClientKeySet" endpoint of the
 // "organizationRemoteSessionClients" service.
 // AttachClientKeySet may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -234,6 +235,7 @@ func (c *Client) AttachClientKeySet(ctx context.Context, p *AttachClientKeySetPa
 // DetachClientKeySet calls the "detachClientKeySet" endpoint of the
 // "organizationRemoteSessionClients" service.
 // DetachClientKeySet may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

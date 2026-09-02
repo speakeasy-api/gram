@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const clearRemoteSessionClientKeySetFixture = `-- name: ClearRemoteSessionClientKeySetFixture :exec
+const clearRemoteSessionClientKeySetFixture = `-- name: ClearRemoteSessionClientKeySetFixture :execrows
 UPDATE remote_session_clients
 SET json_web_key_set_id = NULL
 WHERE json_web_key_set_id = $1
@@ -21,9 +21,12 @@ WHERE json_web_key_set_id = $1
 
 // Releases a key set the way the detach endpoint does, so the delete guard can
 // be shown to read the live reference rather than any reference.
-func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) error {
-	_, err := q.db.Exec(ctx, clearRemoteSessionClientKeySetFixture, jsonWebKeySetID)
-	return err
+func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearRemoteSessionClientKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
@@ -424,28 +427,6 @@ type FailDeviceIntegrationSyncsFixtureParams struct {
 func (q *Queries) FailDeviceIntegrationSyncsFixture(ctx context.Context, arg FailDeviceIntegrationSyncsFixtureParams) error {
 	_, err := q.db.Exec(ctx, failDeviceIntegrationSyncsFixture, arg.ErrorMessage, arg.LastPushDigest, arg.DeviceIntegrationConfigID)
 	return err
-}
-
-const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
-UPDATE remote_session_clients
-SET token_endpoint_auth_method = $1
-WHERE id = $2
-`
-
-type ForceRemoteSessionClientAuthMethodFixtureParams struct {
-	TokenEndpointAuthMethod pgtype.Text
-	ID                      uuid.UUID
-}
-
-// Writes a token_endpoint_auth_method the Goa enum does not accept yet.
-// private_key_jwt arrives with AIM-156; until then planting the value directly
-// is the only way to exercise the rules that guard it.
-func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const forceSoftDeleteChat = `-- name: ForceSoftDeleteChat :exec
@@ -2632,7 +2613,7 @@ func (q *Queries) SoftDeleteOpenRouterAPIKeyFixture(ctx context.Context, arg Sof
 	return err
 }
 
-const softDeleteRemoteSessionClientsForKeySetFixture = `-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :exec
+const softDeleteRemoteSessionClientsForKeySetFixture = `-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE json_web_key_set_id = $1
@@ -2641,9 +2622,12 @@ WHERE json_web_key_set_id = $1
 
 // Tombstones the clients referencing a key set, so the delete guard can be
 // shown to ignore them.
-func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) error {
-	_, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
-	return err
+func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one

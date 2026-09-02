@@ -546,7 +546,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 
 	// Locked before the read: this handler evaluates the private_key_jwt rule
 	// against the client's json_web_key_set_id, which detachKeySet writes.
-	if err := lockClientForAuthMethodWrite(ctx, logger, txRepo, clientID); err != nil {
+	if err := lockOrganizationClientForAuthMethodWrite(ctx, logger, txRepo, clientID, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 

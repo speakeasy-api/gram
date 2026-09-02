@@ -35,9 +35,10 @@ type RemoteSessionClient struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string
-	// The organization JSON Web Key Set this client signs private_key_jwt
-	// assertions with. Null when the client authenticates with a shared secret or
-	// not at all.
+	// The organization JSON Web Key Set attached to this client, whose private
+	// half signs its private_key_jwt assertions. Null when no key set is attached;
+	// a set can be attached before token_endpoint_auth_method is switched over to
+	// use it.
 	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.

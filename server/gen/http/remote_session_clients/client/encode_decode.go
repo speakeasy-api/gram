@@ -1285,6 +1285,7 @@ func EncodeAttachKeySetRequest(encoder func(*http.Request) goahttp.Encoder) func
 // remoteSessionClients attachKeySet endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeAttachKeySetResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1326,6 +1327,20 @@ func DecodeAttachKeySetResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewAttachKeySetRemoteSessionClientOK(&body)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body AttachKeySetFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetFailedPrecondition(&body)
 		case http.StatusUnauthorized:
 			var (
 				body AttachKeySetUnauthorizedResponseBody
@@ -1526,6 +1541,7 @@ func EncodeDetachKeySetRequest(encoder func(*http.Request) goahttp.Encoder) func
 // remoteSessionClients detachKeySet endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeDetachKeySetResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1567,6 +1583,20 @@ func DecodeDetachKeySetResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewDetachKeySetRemoteSessionClientOK(&body)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body DetachKeySetFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetFailedPrecondition(&body)
 		case http.StatusUnauthorized:
 			var (
 				body DetachKeySetUnauthorizedResponseBody
