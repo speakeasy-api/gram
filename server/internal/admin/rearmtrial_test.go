@@ -618,8 +618,7 @@ func TestRearmTrial_OrganizationWithNoKeysSucceeds(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err, "an organization with no key of a type must still be re-armable")
 
-	//nolint:exhaustive // the absent key type is the assertion: it must not appear
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeChat: conv.PtrEmpty(50)}, provisioner.revivedLimits(),
+	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeChat: conv.PtrEmpty(50)}, provisioner.revivedLimits(), //nolint:exhaustive // missing type is the assertion
 		"a key type the organization has no row for must not be refreshed")
 
 	state := readOrgState(t, ctx, conn, orgID)
@@ -644,8 +643,7 @@ func TestRearmTrial_OrganizationWithOnlyAnInternalKeySucceeds(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err)
 
-	//nolint:exhaustive // the absent key type is the assertion: it must not appear
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(),
+	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(), //nolint:exhaustive // missing type is the assertion
 		"a key that follows an absent one must still come back up")
 	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).Disabled)
 }
@@ -667,8 +665,7 @@ func TestRearmTrial_AlreadyEnabledKeyIsLeftAlone(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err)
 
-	//nolint:exhaustive // the omitted key type is the assertion: it was already live
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(),
+	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(), //nolint:exhaustive // missing type is the assertion
 		"an already-enabled key needs no upstream round trip")
 	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).Disabled)
 	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).Disabled)

@@ -29,6 +29,9 @@ const (
 	// an operator locked down. No top-up clears it, which is what separates it
 	// from CodeInsufficientCredits: only a deliberate reinstatement does.
 	CodeInferenceDisabled Code = "inference_disabled"
+	// CodeAIAccessDenied is a matched tenant ai_access prescription. Its public
+	// message is the prescription's selected external note.
+	CodeAIAccessDenied Code = "ai_access_denied"
 	// CodeCanceled represents a request whose client disconnected mid-flight,
 	// surfacing as a context.Canceled cause while the request context is itself
 	// canceled. It is not a server fault. It is never authored directly:
@@ -58,6 +61,7 @@ var StatusCodes = map[Code]int{
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
 	CodeInferenceDisabled:   http.StatusForbidden,
+	CodeAIAccessDenied:      http.StatusForbidden,
 	// 499 (client closed request) is non-standard but matches the convention
 	// already used by the request access log middleware.
 	CodeCanceled: 499,
@@ -91,6 +95,8 @@ func (c Code) UserMessage() string {
 		return "token balance exhausted"
 	case CodeInferenceDisabled:
 		return "AI features are disabled for this organization, contact support to restore access"
+	case CodeAIAccessDenied:
+		return "AI access denied"
 	case CodeRateLimitExceeded:
 		return "rate limit exceeded"
 	case CodeUnavailable:
@@ -115,7 +121,7 @@ func (c Code) MCPCode() MCPCode {
 	switch c {
 	case CodeUnauthorized:
 		return MCPCodeUnauthorized
-	case CodeForbidden, CodeInferenceDisabled:
+	case CodeForbidden, CodeInferenceDisabled, CodeAIAccessDenied:
 		return MCPCodeForbidden
 	case CodeBadRequest, CodeConflict, CodeFailedPrecondition, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest

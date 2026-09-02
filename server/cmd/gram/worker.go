@@ -686,7 +686,11 @@ func newWorkerCommand() *cli.Command {
 			)
 			telemetryLogger.AddObserver(spendUsageTrigger)
 
-			completionsClient := openrouter.NewUnifiedClient(
+			aiAccess, err := newAIAccessEnforcement(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient, err := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
@@ -695,7 +699,11 @@ func newWorkerCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
+				aiAccess.hostedInference,
 			)
+			if err != nil {
+				return fmt.Errorf("create hosted inference client: %w", err)
+			}
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
@@ -849,7 +857,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), aiAccess.hostedInference)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)

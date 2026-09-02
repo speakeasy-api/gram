@@ -316,7 +316,7 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},

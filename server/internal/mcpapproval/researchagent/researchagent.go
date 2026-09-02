@@ -49,6 +49,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -289,7 +290,11 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 		}
 
 		compactToolHistory(messages)
-		response, err := r.completions.GetCompletion(ctx, openrouter.CompletionRequest{
+		callCtx, classifyErr := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantResearch)
+		if classifyErr != nil {
+			return nil, meta, toolCalls, fmt.Errorf("classify assistant research inference: %w", classifyErr)
+		}
+		response, err := r.completions.GetCompletion(callCtx, openrouter.CompletionRequest{
 			OrgID:          input.OrgID,
 			ProjectID:      input.ProjectID.String(),
 			Messages:       messages,
@@ -693,7 +698,11 @@ func (r *Runner) extract(ctx context.Context, input RunInput, transcript string,
 
 	strict := true
 	temperature := 0.0
-	response, err := r.completions.GetObjectCompletion(ctx, openrouter.ObjectCompletionRequest{
+	callCtx, err := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantResearch)
+	if err != nil {
+		return nil, fmt.Errorf("classify assistant research extraction: %w", err)
+	}
+	response, err := r.completions.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:        input.OrgID,
 		ProjectID:    input.ProjectID.String(),
 		Model:        extractionModel,

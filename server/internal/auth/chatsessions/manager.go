@@ -126,5 +126,15 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		SupportOrganizationID: "",
 	}
 
-	return contextvalues.SetAuthContext(ctx, authCtx), nil
+	authorizedCtx := contextvalues.SetAuthContext(ctx, authCtx)
+	if provenance := claims.GramSessionActingUser; provenance != nil &&
+		provenance.OrgID != "" && provenance.OrgID == claims.OrgID &&
+		provenance.UserID != "" && provenance.UserID == claims.UserID &&
+		provenance.SessionID != "" && claims.SessionID != nil && provenance.SessionID == *claims.SessionID {
+		authorizedCtx = contextvalues.WithValidatedChatSessionActingUser(
+			authorizedCtx, provenance.OrgID, provenance.UserID, provenance.SessionID,
+		)
+	}
+
+	return authorizedCtx, nil
 }

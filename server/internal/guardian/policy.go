@@ -30,6 +30,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -140,6 +141,7 @@ func DefaultRetryConfig() *RetryConfig {
 type httpClientOptions struct {
 	otelHTTPOptions   []otelhttp.Option
 	retryConfig       *RetryConfig
+	attemptCheck      func(*http.Request) error
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
 	resilience        *resilienceOptions
@@ -166,6 +168,36 @@ func WithDefaultRetryConfig() func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
 		o.retryConfig = DefaultRetryConfig()
 	}
+}
+
+// WithAttemptCheck runs check inside the retry loop immediately before each
+// network attempt. A rejection stops retries and prevents the wrapped transport
+// from performing any network I/O for that attempt.
+func WithAttemptCheck(check func(*http.Request) error) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		o.attemptCheck = check
+	}
+}
+
+type attemptRejectedError struct{ cause error }
+
+func (e *attemptRejectedError) Error() string { return "HTTP attempt rejected" }
+func (e *attemptRejectedError) Unwrap() error { return e.cause }
+
+type attemptCheckRoundTripper struct {
+	next  http.RoundTripper
+	check func(*http.Request) error
+}
+
+func (t *attemptCheckRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := t.check(req); err != nil {
+		return nil, &attemptRejectedError{cause: err}
+	}
+	resp, err := t.next.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("round trip guarded request: %w", err)
+	}
+	return resp, nil
 }
 
 // WithAllowedCIDRBlocks permits this client to dial IPs inside the given CIDR
@@ -373,6 +405,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 			breaker: p.breaker,
 		}
 	}
+	if opts.attemptCheck != nil {
+		roundTripper = &attemptCheckRoundTripper{next: roundTripper, check: opts.attemptCheck}
+	}
 	roundTripper = &closeIdleRoundTripper{
 		RoundTripper:         roundTripper,
 		closeIdleConnections: transport.CloseIdleConnections,
@@ -391,6 +426,18 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	checkRetry := opts.retryConfig.CheckRetry
 	if opts.resilience != nil {
 		checkRetry = noRetryOnResilienceDenial(checkRetry)
+	}
+	if opts.attemptCheck != nil {
+		next := checkRetry
+		if next == nil {
+			next = retryablehttp.DefaultRetryPolicy
+		}
+		checkRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+			if _, ok := errors.AsType[*attemptRejectedError](err); ok {
+				return false, err
+			}
+			return next(ctx, resp, err)
+		}
 	}
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin

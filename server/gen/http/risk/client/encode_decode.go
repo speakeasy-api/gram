@@ -67,8 +67,10 @@ func EncodeCreateRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the risk createRiskPolicy endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeCreateRiskPolicyResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -108,6 +110,55 @@ func DecodeCreateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewCreateRiskPolicyRiskPolicyOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body CreateRiskPolicyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createRiskPolicy", err)
+			}
+			err = ValidateCreateRiskPolicyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createRiskPolicy", err)
+			}
+			return nil, NewCreateRiskPolicyUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body CreateRiskPolicyAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createRiskPolicy", err)
+				}
+				err = ValidateCreateRiskPolicyAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createRiskPolicy", err)
+				}
+				return nil, NewCreateRiskPolicyAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body CreateRiskPolicyForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createRiskPolicy", err)
+				}
+				err = ValidateCreateRiskPolicyForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createRiskPolicy", err)
+				}
+				return nil, NewCreateRiskPolicyForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "createRiskPolicy", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body CreateRiskPolicyUnauthorizedResponseBody
@@ -122,20 +173,6 @@ func DecodeCreateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("risk", "createRiskPolicy", err)
 			}
 			return nil, NewCreateRiskPolicyUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body CreateRiskPolicyForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "createRiskPolicy", err)
-			}
-			err = ValidateCreateRiskPolicyForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "createRiskPolicy", err)
-			}
-			return nil, NewCreateRiskPolicyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body CreateRiskPolicyBadRequestResponseBody
@@ -1027,8 +1064,10 @@ func EncodeUpdateRiskPolicyRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the risk updateRiskPolicy endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeUpdateRiskPolicyResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -1068,6 +1107,55 @@ func DecodeUpdateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewUpdateRiskPolicyRiskPolicyOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateRiskPolicyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateRiskPolicy", err)
+			}
+			err = ValidateUpdateRiskPolicyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateRiskPolicy", err)
+			}
+			return nil, NewUpdateRiskPolicyUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body UpdateRiskPolicyAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updateRiskPolicy", err)
+				}
+				err = ValidateUpdateRiskPolicyAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updateRiskPolicy", err)
+				}
+				return nil, NewUpdateRiskPolicyAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body UpdateRiskPolicyForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updateRiskPolicy", err)
+				}
+				err = ValidateUpdateRiskPolicyForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updateRiskPolicy", err)
+				}
+				return nil, NewUpdateRiskPolicyForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "updateRiskPolicy", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body UpdateRiskPolicyUnauthorizedResponseBody
@@ -1082,20 +1170,6 @@ func DecodeUpdateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("risk", "updateRiskPolicy", err)
 			}
 			return nil, NewUpdateRiskPolicyUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body UpdateRiskPolicyForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "updateRiskPolicy", err)
-			}
-			err = ValidateUpdateRiskPolicyForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "updateRiskPolicy", err)
-			}
-			return nil, NewUpdateRiskPolicyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body UpdateRiskPolicyBadRequestResponseBody
@@ -10212,8 +10286,10 @@ func EncodeSuggestCustomDetectionRuleRequest(encoder func(*http.Request) goahttp
 // returned by the risk suggestCustomDetectionRule endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeSuggestCustomDetectionRuleResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -10253,6 +10329,55 @@ func DecodeSuggestCustomDetectionRuleResponse(decoder func(*http.Response) goaht
 			}
 			res := NewSuggestCustomDetectionRuleResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SuggestCustomDetectionRuleUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestCustomDetectionRule", err)
+			}
+			err = ValidateSuggestCustomDetectionRuleUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestCustomDetectionRule", err)
+			}
+			return nil, NewSuggestCustomDetectionRuleUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body SuggestCustomDetectionRuleAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestCustomDetectionRule", err)
+				}
+				err = ValidateSuggestCustomDetectionRuleAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestCustomDetectionRule", err)
+				}
+				return nil, NewSuggestCustomDetectionRuleAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body SuggestCustomDetectionRuleForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestCustomDetectionRule", err)
+				}
+				err = ValidateSuggestCustomDetectionRuleForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestCustomDetectionRule", err)
+				}
+				return nil, NewSuggestCustomDetectionRuleForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "suggestCustomDetectionRule", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body SuggestCustomDetectionRuleUnauthorizedResponseBody
@@ -10267,20 +10392,6 @@ func DecodeSuggestCustomDetectionRuleResponse(decoder func(*http.Response) goaht
 				return nil, goahttp.ErrValidationError("risk", "suggestCustomDetectionRule", err)
 			}
 			return nil, NewSuggestCustomDetectionRuleUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SuggestCustomDetectionRuleForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "suggestCustomDetectionRule", err)
-			}
-			err = ValidateSuggestCustomDetectionRuleForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "suggestCustomDetectionRule", err)
-			}
-			return nil, NewSuggestCustomDetectionRuleForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SuggestCustomDetectionRuleBadRequestResponseBody
@@ -10454,8 +10565,10 @@ func EncodeSuggestExclusionRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the risk suggestExclusion endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeSuggestExclusionResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -10495,6 +10608,55 @@ func DecodeSuggestExclusionResponse(decoder func(*http.Response) goahttp.Decoder
 			}
 			res := NewSuggestExclusionResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SuggestExclusionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+			}
+			err = ValidateSuggestExclusionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+			}
+			return nil, NewSuggestExclusionUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body SuggestExclusionAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+				}
+				err = ValidateSuggestExclusionAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+				}
+				return nil, NewSuggestExclusionAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body SuggestExclusionForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
+				}
+				err = ValidateSuggestExclusionForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
+				}
+				return nil, NewSuggestExclusionForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "suggestExclusion", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body SuggestExclusionUnauthorizedResponseBody
@@ -10509,20 +10671,6 @@ func DecodeSuggestExclusionResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
 			}
 			return nil, NewSuggestExclusionUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SuggestExclusionForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("risk", "suggestExclusion", err)
-			}
-			err = ValidateSuggestExclusionForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("risk", "suggestExclusion", err)
-			}
-			return nil, NewSuggestExclusionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SuggestExclusionBadRequestResponseBody

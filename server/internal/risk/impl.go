@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -429,13 +430,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			existingNames = append(existingNames, p.Name)
 		}
 		if policyType == ra.PolicyTypePromptBased {
-			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+			name, err = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
 		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
 			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, payload.CustomRuleIds)
-			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, customRuleTitles, action, existingNames)
+			name, err = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, customRuleTitles, action, existingNames)
 		}
+	}
+	if err != nil {
+		return nil, s.mapHostedInferenceBoundaryError(ctx, err)
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -977,13 +981,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			}
 		}
 		if current.PolicyType == ra.PolicyTypePromptBased {
-			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+			name, err = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
 		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
 			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, customRuleIds)
-			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, customRuleTitles, action, existingNames)
+			name, err = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, customRuleTitles, action, existingNames)
 		}
+	}
+	if err != nil {
+		return nil, s.mapHostedInferenceBoundaryError(ctx, err)
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -2385,6 +2392,10 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 
 	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
+		//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
+		if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+			return nil, mapped
+		}
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
@@ -2446,6 +2457,10 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 
 	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, findings, payload.KnownRuleIds)
 	if err != nil {
+		//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
+		if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+			return nil, mapped
+		}
 		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
@@ -2668,6 +2683,10 @@ func validateScopeExpr(eng *celenv.Engine, expr *string) error {
 }
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+	ctx, err := hostedinference.WithGovernedUserOrUnsupported(ctx, hostedinference.CallCategoryRiskAuthoring, hostedinference.CallCategoryAPIKeyRiskAuthoring, hostedinference.CallCategoryNonOrdinarySessionRiskAuthoring)
+	if err != nil {
+		return nil, fmt.Errorf("classify custom risk authoring inference: %w", err)
+	}
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a CEL (Common Expression Language) boolean expression in "detection_expr".
@@ -2924,6 +2943,10 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 // validates the response with the same gate the create/update exclusion
 // handlers use. Validation failures wrap errExclusionSuggestionInvalid.
 func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, projectID, userID, userEmail, systemPrompt, userMessage string, jsonSchema *or.ChatJSONSchemaConfig) (*gen.SuggestExclusionResult, error) {
+	ctx, err := hostedinference.WithGovernedUserOrUnsupported(ctx, hostedinference.CallCategoryRiskAuthoring, hostedinference.CallCategoryAPIKeyRiskAuthoring, hostedinference.CallCategoryNonOrdinarySessionRiskAuthoring)
+	if err != nil {
+		return nil, fmt.Errorf("classify risk exclusion inference: %w", err)
+	}
 	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -3548,9 +3571,22 @@ func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCust
 	}
 }
 
-func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities, customRuleTitles []string, action string, existingNames []string) string {
+func (s *Service) mapHostedInferenceBoundaryError(ctx context.Context, err error) error {
+	//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
+	if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+		return mapped
+	}
+	return oops.E(oops.CodeUnexpected, err, "classify hosted inference").LogError(ctx, s.logger)
+}
+
+func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities, customRuleTitles []string, action string, existingNames []string) (string, error) {
+	fallback := s.fallbackPolicyName(sources, customRuleTitles, action)
 	if s.completionClient == nil {
-		return s.fallbackPolicyName(sources, customRuleTitles, action)
+		return fallback, nil
+	}
+	ctx, err := hostedinference.WithGovernedUserOrUnsupported(ctx, hostedinference.CallCategoryRiskAuthoring, hostedinference.CallCategoryAPIKeyRiskAuthoring, hostedinference.CallCategoryNonOrdinarySessionRiskAuthoring)
+	if err != nil {
+		return "", fmt.Errorf("classify risk policy naming inference: %w", err)
 	}
 
 	// Policy authors think in *what* is detected, not *how* (gitleaks,
@@ -3607,13 +3643,16 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
+		if hostedinference.IsBoundaryError(err) {
+			return "", err //nolint:wrapcheck // Preserve the typed error for Goa boundary mapping.
+		}
 		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
-		return s.fallbackPolicyName(sources, customRuleTitles, action)
+		return fallback, nil
 	}
 
 	name := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if name == "" {
-		return s.fallbackPolicyName(sources, customRuleTitles, action)
+		return fallback, nil
 	}
 
 	// Truncate to 100 chars
@@ -3622,7 +3661,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		name = string(runes[:100])
 	}
 
-	return name
+	return name, nil
 }
 
 // customRuleTitlesForIDs resolves selected custom rule ids to their
@@ -3713,10 +3752,14 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	return strings.Join(parts, " & ") + " " + actionLabel
 }
 
-func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID, prompt string, existingNames []string) string {
+func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID, prompt string, existingNames []string) (string, error) {
 	fallback := fallbackPromptPolicyName(prompt, existingNames)
 	if s.completionClient == nil {
-		return fallback
+		return fallback, nil
+	}
+	ctx, err := hostedinference.WithGovernedUserOrUnsupported(ctx, hostedinference.CallCategoryRiskAuthoring, hostedinference.CallCategoryAPIKeyRiskAuthoring, hostedinference.CallCategoryNonOrdinarySessionRiskAuthoring)
+	if err != nil {
+		return "", fmt.Errorf("classify prompt policy naming inference: %w", err)
 	}
 
 	namePrompt := fmt.Sprintf(
@@ -3761,19 +3804,22 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
+		if hostedinference.IsBoundaryError(err) {
+			return "", err //nolint:wrapcheck // Preserve the typed error for Goa boundary mapping.
+		}
 		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))
-		return fallback
+		return fallback, nil
 	}
 	if response == nil || response.Message == nil {
-		return fallback
+		return fallback, nil
 	}
 
 	name := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if name == "" {
-		return fallback
+		return fallback, nil
 	}
 
-	return promptPolicyNameFromBase(name, existingNames)
+	return promptPolicyNameFromBase(name, existingNames), nil
 }
 
 func validateAction(action string) error {

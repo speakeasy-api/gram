@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 )
 
 // TestMCPToolExecutionRegistration proves the checked-in registration builds
@@ -43,10 +44,10 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
 	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
-	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance}, aiDefinition.ResourceKinds)
+	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance, hostedinference.ResourceKindGramHostedInference}, aiDefinition.ResourceKinds)
 	require.Equal(t, IdentityContractKeyAuthenticatedUserAIResource, aiDefinition.IdentityContract)
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference}, aiDefinition.Surfaces)
-	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail}, aiDefinition.TransportAdapters)
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference}, aiDefinition.Surfaces)
+	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail, hostedinference.TransportAdapterGramHostedInference}, aiDefinition.TransportAdapters)
 	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
 	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
 	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
@@ -69,7 +70,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 9)
+	require.Len(t, inventory, 10)
 	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
 		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
@@ -85,7 +86,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
 	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference}, coverageByDefinition[DefinitionKeyAIAccess])
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
@@ -102,7 +103,10 @@ func TestMCPCoverageInventory(t *testing.T) {
 	aiProxy, ok := registry.Coverage(DefinitionKeyAIAccess, SurfacePrivateProxyToolsCall)
 	require.True(t, ok)
 	require.Equal(t, TransportAdapterPrivateProxyJSONRPC, aiProxy.TransportAdapter)
-	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "hosted_inference", "assistant_runtime", "hooks_permission_request", "hooks_backfill"} {
+	hostedInference, ok := registry.Coverage(DefinitionKeyAIAccess, hostedinference.SurfaceGramHostedInference)
+	require.True(t, ok)
+	require.Equal(t, hostedinference.TransportAdapterGramHostedInference, hostedInference.TransportAdapter)
+	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "assistant_runtime", "hooks_permission_request", "hooks_backfill"} {
 		_, covered := registry.Coverage(DefinitionKeyAIAccess, excludedSurface)
 		require.False(t, covered, string(excludedSurface))
 	}
@@ -142,7 +146,7 @@ func TestMCPToolExecutionTransportAdaptersFailClosed(t *testing.T) {
 	failure, err := killswitches.NewInfrastructureFailureResult(errors.New("database unavailable"))
 	require.NoError(t, err)
 
-	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative} {
+	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail, hostedinference.TransportAdapterGramHostedInference} {
 		adapter, ok := registry.TransportAdapter(key)
 		require.True(t, ok, string(key))
 

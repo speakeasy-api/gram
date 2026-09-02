@@ -1709,9 +1709,27 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SummarizeUnauthorizedResponseBody is the type of the "chat" service
-// "summarize" endpoint HTTP response body for the "unauthorized" error.
-type SummarizeUnauthorizedResponseBody struct {
+// SummarizeUnavailableResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unavailable" error.
+type SummarizeUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeAiAccessDeniedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "ai_access_denied" error.
+type SummarizeAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1730,6 +1748,24 @@ type SummarizeUnauthorizedResponseBody struct {
 // SummarizeForbiddenResponseBody is the type of the "chat" service "summarize"
 // endpoint HTTP response body for the "forbidden" error.
 type SummarizeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeUnauthorizedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1889,9 +1925,28 @@ type SummarizeGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SummarizeToolCallUnauthorizedResponseBody is the type of the "chat" service
-// "summarizeToolCall" endpoint HTTP response body for the "unauthorized" error.
-type SummarizeToolCallUnauthorizedResponseBody struct {
+// SummarizeToolCallUnavailableResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unavailable" error.
+type SummarizeToolCallUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeToolCallAiAccessDeniedResponseBody is the type of the "chat"
+// service "summarizeToolCall" endpoint HTTP response body for the
+// "ai_access_denied" error.
+type SummarizeToolCallAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1910,6 +1965,24 @@ type SummarizeToolCallUnauthorizedResponseBody struct {
 // SummarizeToolCallForbiddenResponseBody is the type of the "chat" service
 // "summarizeToolCall" endpoint HTTP response body for the "forbidden" error.
 type SummarizeToolCallForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeToolCallUnauthorizedResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeToolCallUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4295,9 +4368,24 @@ func NewSummarizeChatResultOK(body *SummarizeResponseBody) *chat.SummarizeChatRe
 	return v
 }
 
-// NewSummarizeUnauthorized builds a chat service summarize endpoint
-// unauthorized error.
-func NewSummarizeUnauthorized(body *SummarizeUnauthorizedResponseBody) *goa.ServiceError {
+// NewSummarizeUnavailable builds a chat service summarize endpoint unavailable
+// error.
+func NewSummarizeUnavailable(body *SummarizeUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeAiAccessDenied builds a chat service summarize endpoint
+// ai_access_denied error.
+func NewSummarizeAiAccessDenied(body *SummarizeAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4313,6 +4401,21 @@ func NewSummarizeUnauthorized(body *SummarizeUnauthorizedResponseBody) *goa.Serv
 // NewSummarizeForbidden builds a chat service summarize endpoint forbidden
 // error.
 func NewSummarizeForbidden(body *SummarizeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeUnauthorized builds a chat service summarize endpoint
+// unauthorized error.
+func NewSummarizeUnauthorized(body *SummarizeUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4455,9 +4558,24 @@ func NewSummarizeToolCallResultOK(body *SummarizeToolCallResponseBody) *chat.Sum
 	return v
 }
 
-// NewSummarizeToolCallUnauthorized builds a chat service summarizeToolCall
-// endpoint unauthorized error.
-func NewSummarizeToolCallUnauthorized(body *SummarizeToolCallUnauthorizedResponseBody) *goa.ServiceError {
+// NewSummarizeToolCallUnavailable builds a chat service summarizeToolCall
+// endpoint unavailable error.
+func NewSummarizeToolCallUnavailable(body *SummarizeToolCallUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeToolCallAiAccessDenied builds a chat service summarizeToolCall
+// endpoint ai_access_denied error.
+func NewSummarizeToolCallAiAccessDenied(body *SummarizeToolCallAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4473,6 +4591,21 @@ func NewSummarizeToolCallUnauthorized(body *SummarizeToolCallUnauthorizedRespons
 // NewSummarizeToolCallForbidden builds a chat service summarizeToolCall
 // endpoint forbidden error.
 func NewSummarizeToolCallForbidden(body *SummarizeToolCallForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeToolCallUnauthorized builds a chat service summarizeToolCall
+// endpoint unauthorized error.
+func NewSummarizeToolCallUnauthorized(body *SummarizeToolCallUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -7256,9 +7389,33 @@ func ValidateSetPinnedGatewayErrorResponseBody(body *SetPinnedGatewayErrorRespon
 	return
 }
 
-// ValidateSummarizeUnauthorizedResponseBody runs the validations defined on
-// summarize_unauthorized_response_body
-func ValidateSummarizeUnauthorizedResponseBody(body *SummarizeUnauthorizedResponseBody) (err error) {
+// ValidateSummarizeUnavailableResponseBody runs the validations defined on
+// summarize_unavailable_response_body
+func ValidateSummarizeUnavailableResponseBody(body *SummarizeUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeAiAccessDeniedResponseBody runs the validations defined on
+// summarize_ai_access_denied_response_body
+func ValidateSummarizeAiAccessDeniedResponseBody(body *SummarizeAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7283,6 +7440,30 @@ func ValidateSummarizeUnauthorizedResponseBody(body *SummarizeUnauthorizedRespon
 // ValidateSummarizeForbiddenResponseBody runs the validations defined on
 // summarize_forbidden_response_body
 func ValidateSummarizeForbiddenResponseBody(body *SummarizeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeUnauthorizedResponseBody runs the validations defined on
+// summarize_unauthorized_response_body
+func ValidateSummarizeUnauthorizedResponseBody(body *SummarizeUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7496,9 +7677,33 @@ func ValidateSummarizeGatewayErrorResponseBody(body *SummarizeGatewayErrorRespon
 	return
 }
 
-// ValidateSummarizeToolCallUnauthorizedResponseBody runs the validations
-// defined on summarizeToolCall_unauthorized_response_body
-func ValidateSummarizeToolCallUnauthorizedResponseBody(body *SummarizeToolCallUnauthorizedResponseBody) (err error) {
+// ValidateSummarizeToolCallUnavailableResponseBody runs the validations
+// defined on summarizeToolCall_unavailable_response_body
+func ValidateSummarizeToolCallUnavailableResponseBody(body *SummarizeToolCallUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeToolCallAiAccessDeniedResponseBody runs the validations
+// defined on summarizeToolCall_ai_access_denied_response_body
+func ValidateSummarizeToolCallAiAccessDeniedResponseBody(body *SummarizeToolCallAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7523,6 +7728,30 @@ func ValidateSummarizeToolCallUnauthorizedResponseBody(body *SummarizeToolCallUn
 // ValidateSummarizeToolCallForbiddenResponseBody runs the validations defined
 // on summarizeToolCall_forbidden_response_body
 func ValidateSummarizeToolCallForbiddenResponseBody(body *SummarizeToolCallForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeToolCallUnauthorizedResponseBody runs the validations
+// defined on summarizeToolCall_unauthorized_response_body
+func ValidateSummarizeToolCallUnauthorizedResponseBody(body *SummarizeToolCallUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

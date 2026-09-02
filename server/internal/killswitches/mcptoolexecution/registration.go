@@ -3,7 +3,7 @@
 // authoritative concrete-user principal adapter, the canonical
 // organization-owned resource adapters, and the coverage inventory for hosted
 // and private-proxy MCP tools/call, approved live Claude/Codex hook activity,
-// and managed LiteLLM pre-inference requests.
+// managed LiteLLM pre-inference requests, and Gram-hosted inference.
 //
 // Registration declares the contracts consumed by the MCP and hook checkpoints.
 // The internal ai_access definition is not exposed through customer management.
@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 )
 
 const (
@@ -26,13 +27,13 @@ const (
 
 	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
 	// verified coverage is limited to authenticated MCP tools/call, the
-	// explicitly registered live Claude/Codex hooks, and the managed LiteLLM
-	// pre-inference surface below.
-	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
+	// explicitly registered live Claude/Codex hooks, managed LiteLLM
+	// pre-inference, and Gram-hosted inference surfaces below.
+	DefinitionKeyAIAccess = killswitches.DefinitionKeyAIAccess
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys
 	// are user IDs of authoritative active organization members.
-	PrincipalKindUser killswitches.PrincipalKind = "user"
+	PrincipalKindUser = killswitches.PrincipalKindUser
 
 	// ResourceKindMCPServer is the canonical MCP server resource namespace;
 	// keys are fronting mcp_servers row IDs.
@@ -43,8 +44,8 @@ const (
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
 
 	// IdentityContractKeyAuthenticatedUserAIResource is the additive ai_access
-	// contract spanning MCP servers, governed native hooks, and managed LiteLLM
-	// pre-inference activity.
+	// contract spanning MCP servers, governed native hooks, managed LiteLLM
+	// pre-inference activity, and Gram-hosted inference.
 	IdentityContractKeyAuthenticatedUserAIResource killswitches.IdentityContractKey = "authenticated_user_ai_resource"
 
 	ResourceKindHookActivity    killswitches.ResourceKind = "hook_activity"
@@ -111,13 +112,13 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 			{
 				Key:                 DefinitionKeyAIAccess,
 				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance, hostedinference.ResourceKindGramHostedInference},
 				FailurePolicy:       killswitches.FailurePolicyFailClosed,
 				DefaultExternalNote: DefaultAIAccessExternalNote,
 				EnforcementOwner:    EnforcementOwner,
 				IdentityContract:    IdentityContractKeyAuthenticatedUserAIResource,
-				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference},
-				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail},
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail, hostedinference.TransportAdapterGramHostedInference},
 			},
 		},
 		IdentityContracts: []killswitches.IdentityContract{
@@ -129,7 +130,7 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 			{
 				Key:            IdentityContractKeyAuthenticatedUserAIResource,
 				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance, hostedinference.ResourceKindGramHostedInference},
 			},
 		},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
@@ -140,13 +141,15 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 			{Adapter: NewMCPServerResourceAdapter(db), Fixtures: resourceFixtures()},
 			{Adapter: HookActivityResourceAdapter{}, Fixtures: hookResourceFixtures()},
 			{Adapter: NewLiteLLMInstanceResourceAdapter(db), Fixtures: litellmResourceFixtures()},
+			{Adapter: hostedinference.ResourceAdapter{}, Fixtures: hostedinference.ResourceFixtures()},
 		},
-		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference},
+		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference},
 		TransportAdapters: []killswitches.TransportAdapterRegistration{
 			{Key: TransportAdapterHostedJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterPrivateProxyJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterHookNative, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterLiteLLMGenericGuardrail, Adapter: killswitches.ResolveTransportDisposition},
+			{Key: hostedinference.TransportAdapterGramHostedInference, Adapter: killswitches.ResolveTransportDisposition},
 		},
 		Coverage: append([]killswitches.CoverageContract{
 			{
@@ -205,6 +208,18 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 				ProtectedWork:   "Pre-inference request callbacks from the tested LiteLLM 1.94.0 fail-closed Generic Guardrail configuration. Response callbacks and unmanaged, unasserted, or fail-open deployments are not claimed as covered.",
 				FailurePolicy:   killswitches.FailurePolicyFailClosed, TransportAdapter: TransportAdapterLiteLLMGenericGuardrail,
 				EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
+			},
+			{
+				Definition:       DefinitionKeyAIAccess,
+				Surface:          hostedinference.SurfaceGramHostedInference,
+				PrincipalSource:  "Opaque tenant-bound acting-user provenance derived from a validated ordinary Gram session or a qualifying signed chat JWT carrying matching ordinary-session provenance, then revalidated as an active organization member for every provider attempt.",
+				ResourceSource:   "Static canonical Gram-hosted-inference identity for an enumerated current governed user call category.",
+				Checkpoint:       "ChatClient before capture and key resolution, then immediately before every completion, stream, object-completion, or embedding provider attempt.",
+				ProtectedWork:    "Governed user chat completion, chat summaries, tool-call summaries, risk authoring, and organization-admin business-memory search embeddings; internal, background, and assistant-owned classes are explicit bypasses.",
+				FailurePolicy:    killswitches.FailurePolicyFailClosed,
+				TransportAdapter: hostedinference.TransportAdapterGramHostedInference,
+				EnforcementOwner: EnforcementOwner,
+				IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 			},
 		}, hookContracts...),
 	}, nil

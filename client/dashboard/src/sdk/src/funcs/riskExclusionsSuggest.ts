@@ -212,7 +212,7 @@ async function $do(
   >(
     M.json(200, SuggestExclusionResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -280,8 +281,12 @@ func (s *MemoryService) Remember(
 		return zero, oops.E(oops.CodeUnauthorized, nil, "missing auth context")
 	}
 
+	callCtx, classifyErr := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantMemory)
+	if classifyErr != nil {
+		return zero, fmt.Errorf("classify assistant memory embedding: %w", classifyErr)
+	}
 	embedStart := time.Now()
-	vectors, err := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{content}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
+	vectors, err := s.completions.CreateEmbeddings(callCtx, organizationID, s.embeddingModel, []string{content}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
 	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
 		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
 			attr.GenAIRequestModel(s.embeddingModel),
@@ -465,8 +470,12 @@ func (s *MemoryService) Recall(
 		limit = maxRecallLimit
 	}
 
+	callCtx, classifyErr := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantMemory)
+	if classifyErr != nil {
+		return nil, fmt.Errorf("classify assistant memory recall: %w", classifyErr)
+	}
 	embedStart := time.Now()
-	vectors, embedErr := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
+	vectors, embedErr := s.completions.CreateEmbeddings(callCtx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
 	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
 		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
 			attr.GenAIRequestModel(s.embeddingModel),
@@ -589,8 +598,12 @@ func (s *MemoryService) Forget(
 		return noMatch, nil
 	}
 
+	callCtx, classifyErr := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantMemory)
+	if classifyErr != nil {
+		return ForgetResult{}, fmt.Errorf("classify assistant memory forget: %w", classifyErr)
+	}
 	embedStart := time.Now()
-	vectors, embedErr := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
+	vectors, embedErr := s.completions.CreateEmbeddings(callCtx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
 	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
 		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
 			attr.GenAIRequestModel(s.embeddingModel),

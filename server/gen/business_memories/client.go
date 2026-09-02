@@ -79,6 +79,8 @@ func (c *Client) ListBusinessMemoryContentScopes(ctx context.Context, p *ListBus
 // SearchBusinessMemories calls the "searchBusinessMemories" endpoint of the
 // "businessMemories" service.
 // SearchBusinessMemories may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

@@ -25,7 +25,11 @@ import {
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
 import { dictationAdapter } from "@/elements/lib/dictation";
-import { describeStreamError } from "@/elements/lib/streamErrorMessage";
+import {
+  describeStreamErrorForUI,
+  sanitizeStreamErrorForTelemetry,
+  toElementsUIMessageStream,
+} from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
@@ -53,7 +57,6 @@ import {
   isStepCount,
   streamText,
   ToolSet,
-  toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
@@ -430,6 +433,27 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           ? config.languageModel
           : (openRouterModel!.chat(model) as LanguageModel);
 
+        const reportStreamError = (
+          error: unknown,
+          source: "streaming" | "stream-creation",
+          label: string,
+        ) => {
+          const telemetryError = sanitizeStreamErrorForTelemetry(error);
+          console.error(label, telemetryError);
+          trackError(telemetryError, { source });
+
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes("fetch") ||
+                error.message.includes("network") ||
+                error.message.includes("Failed to fetch") ||
+                error.message.includes("NetworkError") ||
+                error.message.includes("ECONNREFUSED") ||
+                error.message.includes("ETIMEDOUT")));
+          if (isNetworkError) connectionStatus?.markDisconnected();
+        };
+
         try {
           // This works around AI SDK bug where these fields cause validation failures
           const cleanedMessages = cleanMessagesForModel(messages);
@@ -473,25 +497,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             stopWhen: isStepCount(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
-            onError: ({ error }) => {
-              console.error("Stream error in onError callback:", error);
-              trackError(error, { source: "streaming" });
-
-              // Check if this is a network/connection error
-              const isNetworkError =
-                error instanceof TypeError ||
-                (error instanceof Error &&
-                  (error.message.includes("fetch") ||
-                    error.message.includes("network") ||
-                    error.message.includes("Failed to fetch") ||
-                    error.message.includes("NetworkError") ||
-                    error.message.includes("ECONNREFUSED") ||
-                    error.message.includes("ETIMEDOUT")));
-
-              if (isNetworkError) {
-                connectionStatus?.markDisconnected();
-              }
-            },
+            onError: ({ error }) =>
+              reportStreamError(
+                error,
+                "streaming",
+                "Stream error in onError callback:",
+              ),
           });
 
           // Mark as connected when stream starts successfully
@@ -503,36 +514,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
           //
-          // onError: AI SDK masks errors by default; surface the friendly
-          // credits prompt for 402, otherwise keep the masking intact.
+          // AI SDK masks model error chunks at the conversion boundary by
+          // default. The wrapper surfaces only selected safe messages, while
+          // this outer handler covers errors thrown during stream execution.
           return createUIMessageStream({
             execute: ({ writer }) => {
-              writer.merge(toUIMessageStream({ stream: result.stream, tools }));
+              writer.merge(
+                toElementsUIMessageStream({ stream: result.stream, tools }),
+              );
             },
             originalMessages: messages,
-            onError: (error) =>
-              describeStreamError(error) ??
-              "An error occurred while generating a response.",
+            onError: describeStreamErrorForUI,
           });
         } catch (error) {
-          console.error("Error creating stream:", error);
-          trackError(error, { source: "stream-creation" });
-
-          // Check if this is a network/connection error
-          const isNetworkError =
-            error instanceof TypeError ||
-            (error instanceof Error &&
-              (error.message.includes("fetch") ||
-                error.message.includes("network") ||
-                error.message.includes("Failed to fetch") ||
-                error.message.includes("NetworkError") ||
-                error.message.includes("ECONNREFUSED") ||
-                error.message.includes("ETIMEDOUT")));
-
-          if (isNetworkError) {
-            connectionStatus?.markDisconnected();
-          }
-
+          reportStreamError(error, "stream-creation", "Error creating stream:");
           throw error;
         }
       },

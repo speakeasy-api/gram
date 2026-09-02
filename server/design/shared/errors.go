@@ -32,6 +32,28 @@ func DeclareErrorResponses() {
 	HTTP(DeclareHTTPErrorResponses)
 }
 
+// DeclareHostedInferenceErrors declares fail-closed hosted-inference errors for
+// services whose methods can perform governed provider egress.
+func DeclareHostedInferenceErrors() {
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	Error(string(oops.CodeAIAccessDenied), func() {
+		Description(oops.CodeAIAccessDenied.UserMessage())
+	})
+}
+
+// DeclareHTTPHostedInferenceErrorResponses maps hosted-inference errors to HTTP.
+func DeclareHTTPHostedInferenceErrorResponses() {
+	Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeAIAccessDenied), StatusForbidden, func() {
+		ContentType("application/json")
+	})
+}
+
 // DeclareHTTPErrorResponses maps the shared service errors to HTTP responses.
 // Call it from a service's final HTTP block when extending the shared mappings.
 func DeclareHTTPErrorResponses() {

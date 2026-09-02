@@ -130,6 +130,7 @@ type prescriptionFixture struct {
 	ID            uuid.UUID
 	DefinitionKey killswitches.DefinitionKey
 	PrincipalKey  string
+	ResourceKind  killswitches.ResourceKind
 	Scope         string
 	Resources     []string
 	ExternalNote  string
@@ -144,13 +145,17 @@ func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string,
 	if definitionKey == "" {
 		definitionKey = DefinitionKeyMCPToolExecution
 	}
+	resourceKind := fixture.ResourceKind
+	if resourceKind == "" {
+		resourceKind = ResourceKindMCPServer
+	}
 	err := testrepo.New(conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
 		PrescriptionID: fixture.ID,
 		OrganizationID: organizationID,
 		DefinitionKey:  string(definitionKey),
 		PrincipalKind:  string(PrincipalKindUser),
 		PrincipalKey:   fixture.PrincipalKey,
-		ResourceKind:   string(ResourceKindMCPServer),
+		ResourceKind:   string(resourceKind),
 		ResourceScope:  fixture.Scope,
 		InternalNote:   "test fixture context",
 		ExternalNote:   fixture.ExternalNote,

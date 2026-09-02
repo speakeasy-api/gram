@@ -9,6 +9,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// GramSessionActingUserClaim binds a chat JWT to the ordinary validated Gram
+// session that minted it. Its values must match the token's ordinary identity
+// claims before authorization stamps governed acting-user provenance.
+type GramSessionActingUserClaim struct {
+	OrgID     string `json:"org_id"`
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
+}
+
 // ChatSessionClaims represents the custom claims for a chat session JWT
 type ChatSessionClaims struct {
 	OrgID            string  `json:"org_id"`
@@ -26,6 +35,9 @@ type ChatSessionClaims struct {
 	// AccountType is the organization's billing tier (e.g. "enterprise").
 	// It is carried as session metadata and does not control RBAC enforcement.
 	AccountType string `json:"account_type,omitempty"`
+	// GramSessionActingUser is present only when chatsessions.Create ran with
+	// immutable ordinary validated Gram-session provenance.
+	GramSessionActingUser *GramSessionActingUserClaim `json:"gram_session_acting_user,omitempty"`
 	jwt.RegisteredClaims
 }
 

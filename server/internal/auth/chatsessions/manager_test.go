@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -22,6 +23,16 @@ func testClaims() chatsessions.ChatSessionClaims {
 		ProjectSlug:      "test-project",
 		UserID:           "user-123",
 	}
+}
+
+func governedTestClaims() chatsessions.ChatSessionClaims {
+	claims := testClaims()
+	sessionID := "session-123"
+	claims.SessionID = &sessionID
+	claims.GramSessionActingUser = &chatsessions.GramSessionActingUserClaim{
+		OrgID: claims.OrgID, UserID: claims.UserID, SessionID: sessionID,
+	}
+	return claims
 }
 
 func requireUnauthorized(t *testing.T, err error) {
@@ -70,13 +81,15 @@ func TestManagerAuthorize_RevokedToken(t *testing.T) {
 	ctx := t.Context()
 	mgr := newTestManager(t)
 
-	token, jti, err := mgr.GenerateToken(ctx, testClaims(), "https://example.com", 3600)
+	token, jti, err := mgr.GenerateToken(ctx, governedTestClaims(), "https://example.com", 3600)
 	require.NoError(t, err)
 
 	require.NoError(t, mgr.RevokeToken(ctx, jti))
 
-	_, err = mgr.Authorize(ctx, token)
+	authorizedCtx, err := mgr.Authorize(ctx, token)
 	requireUnauthorized(t, err)
+	_, stamped := contextvalues.ValidatedChatSessionActingUser(authorizedCtx)
+	require.False(t, stamped)
 }
 
 func TestManagerAuthorize_RevocationCheckUnavailable(t *testing.T) {
@@ -124,4 +137,54 @@ func TestManagerAuthorize_ValidToken(t *testing.T) {
 	require.Equal(t, claims.OrgID, authCtx.ActiveOrganizationID)
 	require.Equal(t, claims.ProjectID, authCtx.ProjectID.String())
 	require.Equal(t, claims.UserID, authCtx.UserID)
+	_, governed := contextvalues.ValidatedChatSessionActingUser(authorizedCtx)
+	require.False(t, governed, "old and unstamped chat JWTs remain unsupported")
+}
+
+func TestManagerAuthorize_StampsMatchingOrdinarySessionClaim(t *testing.T) {
+	t.Parallel()
+
+	mgr := newTestManager(t)
+	claims := governedTestClaims()
+	token, _, err := mgr.GenerateToken(t.Context(), claims, "https://example.com", 3600)
+	require.NoError(t, err)
+
+	authorizedCtx, err := mgr.Authorize(t.Context(), token)
+	require.NoError(t, err)
+	provenance, ok := contextvalues.ValidatedChatSessionActingUser(authorizedCtx)
+	require.True(t, ok)
+	require.Equal(t, claims.OrgID, provenance.OrganizationID())
+	require.Equal(t, claims.UserID, provenance.UserID())
+	require.Equal(t, *claims.SessionID, provenance.SessionID())
+}
+
+func TestManagerAuthorize_DoesNotStampMismatchedOrIncompleteClaim(t *testing.T) {
+	t.Parallel()
+
+	for name, mutate := range map[string]func(*chatsessions.ChatSessionClaims){
+		"organization mismatch": func(c *chatsessions.ChatSessionClaims) { c.GramSessionActingUser.OrgID = "org-other" },
+		"user mismatch":         func(c *chatsessions.ChatSessionClaims) { c.GramSessionActingUser.UserID = "owner-substitute" },
+		"session mismatch":      func(c *chatsessions.ChatSessionClaims) { c.GramSessionActingUser.SessionID = "session-other" },
+		"missing marker":        func(c *chatsessions.ChatSessionClaims) { c.GramSessionActingUser = nil },
+		"missing user":          func(c *chatsessions.ChatSessionClaims) { c.GramSessionActingUser.UserID = "" },
+		"missing claim session": func(c *chatsessions.ChatSessionClaims) { c.SessionID = nil },
+		"shared demo": func(c *chatsessions.ChatSessionClaims) {
+			c.OrgID = constants.DemoOrganizationID
+			c.GramSessionActingUser.OrgID = constants.DemoOrganizationID
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			mgr := newTestManager(t)
+			claims := governedTestClaims()
+			mutate(&claims)
+			token, _, err := mgr.GenerateToken(t.Context(), claims, "https://example.com", 3600)
+			require.NoError(t, err)
+
+			authorizedCtx, err := mgr.Authorize(t.Context(), token)
+			require.NoError(t, err, "legacy token authorization remains compatible")
+			_, ok := contextvalues.ValidatedChatSessionActingUser(authorizedCtx)
+			require.False(t, ok)
+		})
+	}
 }
