@@ -16,7 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -95,6 +97,70 @@ func TestHandleTokenCode_ResourceIndicator(t *testing.T) {
 	w = redeem("")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), "access_token")
+}
+
+func TestHandleTokenAuthorizationCodeIsSingleUse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+
+	first := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	second := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+	require.Equal(t, http.StatusBadRequest, second.Code)
+	require.Contains(t, second.Body.String(), "invalid_grant")
+}
+
+func TestHandleTokenWrongEndpointDoesNotBurnAuthorizationCode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	correct, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	other := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "sibling-"+uuid.NewString()[:8])
+	other, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: other.Slug, ProjectID: other.ProjectID,
+	})
+	require.NoError(t, err)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "code-" + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	ref := correct.EndpointRef(ti.serverURL.String())
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code: code, UserSessionIssuerID: issuer.ID, UserSessionClientID: client.ID,
+		ClientID: client.ClientID, RedirectURI: client.RedirectUris[0],
+		CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), CodeChallengeMethod: "S256",
+		Subject: urn.NewUserSubject("endpoint-user-" + uuid.NewString()), Endpoint: &ref, CreatedAt: time.Now(),
+	}))
+
+	wrong := postForm(t, ti, other.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+	require.Equal(t, http.StatusBadRequest, wrong.Code)
+	require.Contains(t, wrong.Body.String(), "invalid_grant")
+	legitimate := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+	require.Equal(t, http.StatusOK, legitimate.Code, legitimate.Body.String())
+}
+
+func TestHandleTokenBadPKCEBurnsAuthorizationCode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+
+	bad := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, "wrong-verifier"))
+	require.Equal(t, http.StatusBadRequest, bad.Code)
+	require.Contains(t, bad.Body.String(), "invalid_grant")
+	legitimate := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+	require.Equal(t, http.StatusBadRequest, legitimate.Code)
+	require.Contains(t, legitimate.Body.String(), "invalid_grant")
 }
 
 // TestHandleTokenRefresh_ResourceIndicator asserts the same check on the

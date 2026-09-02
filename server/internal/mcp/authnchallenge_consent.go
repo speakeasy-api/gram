@@ -357,7 +357,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
+	if err := endpoint.ValidateChallenge(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
 
@@ -700,6 +700,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
 
+	grantEndpoint := endpoint.EndpointRef(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
@@ -710,6 +711,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CodeChallenge:               challengeState.CodeChallenge,
 		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
 		Subject:                     subject,
+		Endpoint:                    &grantEndpoint,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
 		CreatedAt:                   time.Now(),
@@ -744,7 +746,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 // resolution. Shared by the preflight Get and the post-consume revalidation
 // so both read the same rules.
 func validateConsentChallenge(endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
+	if err := endpoint.ValidateChallenge(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {

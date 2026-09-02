@@ -21,11 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -199,6 +201,7 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // resume the challenge from a global URL (HandleIDPCallback) can
 // rebuild the consent redirect without re-deriving the origin.
 func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
+	isPublic := e.IsPublic
 	return EndpointRef{
 		BaseURL:         baseURL,
 		RouteBase:       e.RouteBase,
@@ -206,6 +209,8 @@ func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
 		CustomDomainID:  e.CustomDomainID,
 		McpServerID:     e.McpServerID,
 		MetaMcpServerID: e.MetaMcpServerID,
+		ToolsetID:       e.ToolsetID,
+		IsPublic:        &isPublic,
 	}
 }
 
@@ -274,11 +279,44 @@ func (e *ResolvedMcpEndpoint) RootURL(baseURL string) (string, error) {
 // here so a future model with multiple addresses per endpoint can
 // expand the check to "the stored ref is in the endpoint's address
 // set" without churning callers.
+func (e *ResolvedMcpEndpoint) ValidateChallenge(ref EndpointRef, issuerID uuid.UUID) error {
+	if e.UserSessionIssuerID != issuerID {
+		return errToolsetEndpointMismatch
+	}
+	return e.ValidateRef(ref)
+}
+
+func (e *ResolvedMcpEndpoint) ValidateGrant(ref EndpointRef, issuerID uuid.UUID, baseURL string) error {
+	if err := e.ValidateChallenge(ref, issuerID); err != nil {
+		return err
+	}
+	if ref.BaseURL != "" && ref.BaseURL != baseURL {
+		return errToolsetEndpointMismatch
+	}
+	return nil
+}
+
 func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.Slug != ref.McpSlug {
 		return errToolsetEndpointMismatch
 	}
 	if e.CustomDomainID != ref.CustomDomainID {
+		return errToolsetEndpointMismatch
+	}
+	if ref.IsPublic != nil && e.IsPublic != *ref.IsPublic {
+		return errToolsetEndpointMismatch
+	}
+	// Modern states pin the owning server/meta row and, when present, the
+	// delegated toolset. A legacy direct-toolset ref can intentionally survive a
+	// migration to a server-backed endpoint only when slug, issuer, visibility,
+	// route, domain, and the exact toolset all still match. States carrying no
+	// backend ID retain TTL-bounded compatibility with pre-field cached values.
+	if ref.McpServerID.Valid || ref.MetaMcpServerID.Valid {
+		if e.McpServerID != ref.McpServerID || e.MetaMcpServerID != ref.MetaMcpServerID {
+			return errToolsetEndpointMismatch
+		}
+	}
+	if ref.ToolsetID.Valid && e.ToolsetID != ref.ToolsetID {
 		return errToolsetEndpointMismatch
 	}
 	// The route surface is part of the endpoint's identity: the same slug can
@@ -458,8 +496,12 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
 		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
 		// so a visibility change closes in-flight flows.
-		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(&mcpServer) {
+		if mcpServer.Visibility == mcpservers.VisibilityDisabled || !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(&mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		mode, err := networkaccess.Effective(mcpServer.NetworkAccessMode)
+		if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow
 		// at a different mcp_server: the cached challenge belongs to the
@@ -577,6 +619,10 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		// A gateway disabled mid-flow closes in-flight challenges, matching
 		// the generic-server branch's visibility check.
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	mode, err := networkaccess.Effective(metaServer.NetworkAccessMode)
+	if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
 
 	routeBase := ref.RouteBase
