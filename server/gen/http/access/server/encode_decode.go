@@ -2842,6 +2842,8 @@ func DecodeListShadowMCPInventoryServersForUserRequest(mux goahttp.Muxer, decode
 		var (
 			projectID    string
 			userKeys     []string
+			from         *string
+			to           *string
 			limit        int
 			sessionToken *string
 			err          error
@@ -2861,6 +2863,20 @@ func DecodeListShadowMCPInventoryServersForUserRequest(mux goahttp.Muxer, decode
 		}
 		if len(userKeys) > 200 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -2887,7 +2903,7 @@ func DecodeListShadowMCPInventoryServersForUserRequest(mux goahttp.Muxer, decode
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPInventoryServersForUserPayload(projectID, userKeys, limit, sessionToken)
+		payload = NewListShadowMCPInventoryServersForUserPayload(projectID, userKeys, from, to, limit, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3734,6 +3750,8 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 			projectID    *string
 			resolved     *bool
 			ids          []string
+			from         *string
+			to           *string
 			limit        int
 			offset       int
 			apikeyToken  *string
@@ -3773,6 +3791,20 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 			}
 		}
 		ids = qp["ids"]
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+		}
 		{
 			limitRaw := qp.Get("limit")
 			if limitRaw == "" {
@@ -3815,7 +3847,7 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChallengesPayload(outcome, principalUrn, scope, projectID, resolved, ids, limit, offset, apikeyToken, sessionToken)
+		payload = NewListChallengesPayload(outcome, principalUrn, scope, projectID, resolved, ids, from, to, limit, offset, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

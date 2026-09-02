@@ -393,7 +393,10 @@ export function GatewayMembersSection({
               <Table.Header columns={columns} />
               {rows.length === 0 ? (
                 <Table.NoResultsMessage>
-                  <div className="flex flex-col items-center gap-3 px-4 py-8">
+                  {/* No padding of its own: Table.NoResultsMessage already
+                      insets the cell, and a second layer here made this empty
+                      state sit lower than every other one. */}
+                  <div className="flex flex-col items-center gap-3">
                     <Text muted>
                       No members yet. A gateway with no members exposes its four
                       tools but has nothing to route to.

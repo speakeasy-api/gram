@@ -4,12 +4,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
+import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
+import { useMembersSuspense } from "@gram/client/react-query/members.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
@@ -17,7 +19,7 @@ import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { Suspense, useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
 
 /**
@@ -398,6 +400,68 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
         />
       ))}
     </CommandGroup>
+  );
+}
+
+/**
+ * People, by name or address, jumping straight to their identity page.
+ *
+ * Directory members only: the identities index also lists unattributed
+ * addresses and agent ids, but reaching those needs an all-time telemetry crawl
+ * — far too heavy for a surface that has to answer on every keystroke.
+ */
+function PeopleGroup({ onNavigate }: GroupProps) {
+  // The identity page lives under a project, and the palette opens from the
+  // org shell too, where the path carries no slug. Fall back to the slug those
+  // pages already send on their requests, the same way IdentityLink does —
+  // without it the palette built `/org/projects//identities/...`, which
+  // matches no route.
+  const projectSlug = useProjectSlugForRequests();
+  const routes = useRoutes({ projectSlug });
+  const navigate = useNavigate();
+  // The palette opens over whatever page the reader had narrowed, so the
+  // person's page opens on that same window rather than the default one.
+  const { search } = useLocation();
+  const { data } = useMembersSuspense();
+  const members = data?.members ?? [];
+  if (!members.length) return null;
+  return (
+    <CommandGroup heading="People">
+      {members.map((member) => (
+        <ResultItem
+          key={member.id}
+          value={`person ${member.name} ${member.email} ${member.id}`}
+          label={member.name || member.email}
+          sublabel={member.email}
+          icon="user"
+          onSelect={() => {
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(`user:${member.id}`),
+                ),
+                search,
+              ),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * The people group on its own, so the palette can offer it from the org shell
+ * too — where the project-scoped resource groups have no project to read.
+ */
+export function PeopleResults({ onNavigate }: GroupProps): JSX.Element | null {
+  const { hasAnyScope } = useRBAC();
+  if (!hasAnyScope(["org:read", "org:admin"])) return null;
+  return (
+    <LazyGroup>
+      <PeopleGroup onNavigate={onNavigate} />
+    </LazyGroup>
   );
 }
 

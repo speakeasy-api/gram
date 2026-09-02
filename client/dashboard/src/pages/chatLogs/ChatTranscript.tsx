@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { isEmailAddress, type IdentityRef } from "@/lib/identity-urn";
 import {
   type CSSProperties,
   type JSX,
@@ -111,6 +113,10 @@ interface RowContext {
    * session ran on a personal AI account, whose email should label the turns
    * instead of the attributed employee's work email. */
   userLabelOverride?: string;
+  /** The chat owner's identity, resolved once by the panel. The turn's own
+   * userId is a display label as often as an id (userLabelOverride replaces
+   * it wholesale), so it cannot be keyed on. */
+  ownerIdentifier?: IdentityRef | null;
 }
 
 type ResolvedRowContext = Required<
@@ -267,12 +273,14 @@ function TurnHeader({
   author,
   userId,
   userLabel,
+  ownerIdentifier,
   createdAt,
   results,
 }: {
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
+  ownerIdentifier?: IdentityRef | null;
   createdAt?: Date;
   results?: RiskResult[];
 }) {
@@ -338,7 +346,13 @@ function TurnHeader({
             </AvatarFallback>
           </Avatar>
           <span className="text-foreground max-w-[220px] truncate text-sm font-medium">
-            {isUser ? userDisplayName(userName) : "Assistant"}
+            {isUser ? (
+              <IdentityLink identifier={ownerIdentifier}>
+                {userDisplayName(userName)}
+              </IdentityLink>
+            ) : (
+              "Assistant"
+            )}
           </span>
         </div>
       </div>
@@ -1178,6 +1192,15 @@ function DisplayItemView({
           author={item.author}
           userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
+          // The header links whatever name it shows. On a session run from a
+          // personal AI account the override is that account's address, which
+          // is a different subject from the chat's attributed owner, so the
+          // link follows the address rather than the owner.
+          ownerIdentifier={
+            ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
+              ? { email: ctx.userLabelOverride }
+              : ctx.ownerIdentifier
+          }
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],

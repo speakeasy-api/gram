@@ -385,6 +385,12 @@ var _ = Service("access", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("from", String, "Inclusive start of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -400,6 +406,8 @@ var _ = Service("access", func() {
 			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
 			Param("user_keys")
+			Param("from")
+			Param("to")
 			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -505,6 +513,12 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
+			Attribute("from", String, "Inclusive start of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -530,6 +544,8 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()

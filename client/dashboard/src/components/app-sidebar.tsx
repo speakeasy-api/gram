@@ -193,6 +193,9 @@ export function AppSidebar({
             label="Observe"
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
+              // First in the group: an identity is the subject the rest of
+              // these pages measure.
+              { item: routes.identities, ...accessFor(routes.identities) },
               { item: routes.costs, ...accessFor(routes.costs) },
               { item: routes.insights, ...accessFor(routes.insights) },
               {
@@ -203,7 +206,6 @@ export function AppSidebar({
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
-              { item: routes.employees, ...accessFor(routes.employees) },
             ]}
           />
 

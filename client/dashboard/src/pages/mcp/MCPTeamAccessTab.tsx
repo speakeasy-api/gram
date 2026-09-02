@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -371,9 +372,11 @@ export function MCPTeamAccessTab({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <Text variant="body" className="truncate font-medium">
-              {row.member.name}
-            </Text>
+            <IdentityLink identifier={{ userId: row.member.id }}>
+              <Text variant="body" className="truncate font-medium">
+                {row.member.name}
+              </Text>
+            </IdentityLink>
             <Text
               variant="body"
               className="text-muted-foreground truncate text-xs"
@@ -462,7 +465,7 @@ export function MCPTeamAccessTab({
           <Table.Header columns={columns} />
           {memberAccess.length === 0 ? (
             <Table.NoResultsMessage>
-              <div className="px-4 py-6 text-center">
+              <div className="text-center">
                 No team members have access to this server.
               </div>
             </Table.NoResultsMessage>

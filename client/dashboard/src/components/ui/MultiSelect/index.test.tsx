@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
@@ -9,6 +10,17 @@ vi.mock("@/components/ui/Icon", () => ({
 
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { MemberFacepile } from "@/components/member-facepile";
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
+}));
 
 // This vitest project does not enable `globals`, so RTL's automatic cleanup is
 // not registered. Without this, mounted popovers accumulate across tests.
@@ -385,36 +397,39 @@ describe("MultiSelect collapsed selections", () => {
 
   it("opens a custom summary without opening the options list", () => {
     render(
-      <MultiSelect
-        options={[{ label: "Selected", value: "selected" }]}
-        defaultValue={["selected"]}
-        onValueChange={() => undefined}
-        collapseSelectedValues={(values) => ({
-          values,
-          summary: (
-            <MemberFacepile
-              members={[
-                {
-                  id: "member-1",
-                  name: "Test Member",
-                  email: "member@example.test",
-                },
-              ]}
-              renderTrigger={({ label, onClick, onKeyDown }) => (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Show ${label}`}
-                  onClick={onClick}
-                  onKeyDown={onKeyDown}
-                >
-                  {label}
-                </span>
-              )}
-            />
-          ),
-        })}
-      />,
+      // The facepile's roster links each member to their identity page.
+      <MemoryRouter>
+        <MultiSelect
+          options={[{ label: "Selected", value: "selected" }]}
+          defaultValue={["selected"]}
+          onValueChange={() => undefined}
+          collapseSelectedValues={(values) => ({
+            values,
+            summary: (
+              <MemberFacepile
+                members={[
+                  {
+                    id: "member-1",
+                    name: "Test Member",
+                    email: "member@example.test",
+                  },
+                ]}
+                renderTrigger={({ label, onClick, onKeyDown }) => (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Show ${label}`}
+                    onClick={onClick}
+                    onKeyDown={onKeyDown}
+                  >
+                    {label}
+                  </span>
+                )}
+              />
+            ),
+          })}
+        />
+      </MemoryRouter>,
     );
 
     fireEvent.keyDown(screen.getByRole("button", { name: "Show 1 member" }), {

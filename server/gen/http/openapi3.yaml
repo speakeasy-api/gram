@@ -3033,6 +3033,22 @@ paths:
                         type: string
                     type: array
                 - allowEmptyValue: true
+                  description: Inclusive start of the window to list challenges from. Omit for the whole history.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window to list challenges from. Omit for the whole history.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window to list challenges from. Omit for the whole history.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window to list challenges from. Omit for the whole history.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Maximum number of results to return.
                   in: query
                   name: limit
@@ -3621,6 +3637,22 @@ paths:
                     maxItems: 200
                     minItems: 1
                     type: array
+                - allowEmptyValue: true
+                  description: Inclusive start of the window to attribute calls from. Omit for the whole history.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window to attribute calls from. Omit for the whole history.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window to attribute calls from. Omit for the whole history.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window to attribute calls from. Omit for the whole history.
+                    format: date-time
+                    type: string
                 - allowEmptyValue: true
                   in: query
                   name: limit
@@ -11162,6 +11194,22 @@ paths:
                   name: acting_surface
                   schema:
                     description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive start of the window to list changes from. Omit for the whole history.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window to list changes from. Omit for the whole history.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window to list changes from. Omit for the whole history.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window to list changes from. Omit for the whole history.
+                    format: date-time
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -73916,6 +73964,10 @@ components:
                 cursor:
                     type: string
                     description: The cursor for paginating through audit logs.
+                from:
+                    type: string
+                    description: Inclusive start of the window to list changes from. Omit for the whole history.
+                    format: date-time
                 project_slug:
                     type: string
                     description: Project slug to filter audit logs to a specific project.
@@ -73931,6 +73983,10 @@ components:
                 subject_type:
                     type: string
                     description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
+                to:
+                    type: string
+                    description: Exclusive end of the window to list changes from. Omit for the whole history.
+                    format: date-time
         ListAuditLogsResult:
             type: object
             properties:

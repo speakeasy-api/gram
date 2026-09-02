@@ -3099,6 +3099,12 @@ func EncodeListShadowMCPInventoryServersForUserRequest(encoder func(*http.Reques
 		for _, value := range p.UserKeys {
 			values.Add("user_keys", value)
 		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -4068,6 +4074,12 @@ func EncodeListChallengesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		}
 		for _, value := range p.Ids {
 			values.Add("ids", value)
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))

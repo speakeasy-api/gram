@@ -774,6 +774,14 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: a caller that sends neither
+	// bound still gets the whole history, which is what every existing caller
+	// of this endpoint expects.
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		ChallengeFilters: chrepo.ChallengeFilters{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -783,6 +791,8 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			Scope:          payload.Scope,
 			MemberUserIDs:  memberIDs,
 		},
+		From:           from,
+		To:             to,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
