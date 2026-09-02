@@ -476,7 +476,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}, nil
 }

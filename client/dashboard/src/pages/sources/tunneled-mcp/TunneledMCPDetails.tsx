@@ -659,6 +659,7 @@ function SettingsTab({
       <NameSection tunneledMcpServer={tunneledMcpServer} />
       <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
       <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
+      <PublicRateLimitsSection tunneledMcpServer={tunneledMcpServer} />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
@@ -1020,6 +1021,208 @@ function ResourceIdentifierSection({
       }
       fallbackError="Failed to update resource identifier"
     />
+  );
+}
+
+type PublicRateLimitField = "publicRequestRatePerSecond" | "publicRequestBurst";
+
+const PUBLIC_RATE_LIMIT_FIELDS: ReadonlyArray<{
+  key: PublicRateLimitField;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: "publicRequestRatePerSecond",
+    label: "Requests per second",
+    hint: "Sustained anonymous MCP requests admitted per second, across every method.",
+  },
+  {
+    key: "publicRequestBurst",
+    label: "Burst",
+    hint: "Requests admitted back-to-back from idle before the per-second rate applies. Blank: twice the rate.",
+  },
+];
+
+function formatPublicRate(rate: number | undefined, burst: number | undefined) {
+  if (rate === undefined) return "Deployment default";
+  return `${rate}/s, burst ${burst ?? rate * 2}`;
+}
+
+function toPublicRateDraft(
+  server: TunneledMcpServer,
+): Record<PublicRateLimitField, string> {
+  return Object.fromEntries(
+    PUBLIC_RATE_LIMIT_FIELDS.map(({ key }) => [
+      key,
+      server[key] === undefined ? "" : String(server[key]),
+    ]),
+  ) as Record<PublicRateLimitField, string>;
+}
+
+// Anonymous public admission limits for this source. One bucket per tunnel is
+// shared by every anonymous caller, so these bound the load reaching the
+// upstream server rather than fairness between callers. Unset fields keep the
+// deployment-wide defaults.
+function PublicRateLimitsSection({
+  tunneledMcpServer,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+}) {
+  const update = useUpdateTunneledMcpServerMutation();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState(() =>
+    toPublicRateDraft(tunneledMcpServer),
+  );
+  const [error, setError] = useState<string>();
+
+  const { publicRequestRatePerSecond, publicRequestBurst } = tunneledMcpServer;
+  useEffect(() => {
+    setDraft(toPublicRateDraft(tunneledMcpServer));
+    // Resync only when a stored value changes, not on every refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicRequestRatePerSecond, publicRequestBurst]);
+
+  if (!tunneledMcpServer.allowPublic) {
+    return null;
+  }
+
+  // Omitted fields leave the stored value alone; a cleared field sends 0,
+  // which the server treats as "back to the deployment default".
+  const changes = () => {
+    const form: Partial<Record<PublicRateLimitField, number>> = {};
+    for (const { key, label } of PUBLIC_RATE_LIMIT_FIELDS) {
+      const text = draft[key].trim();
+      const storedValue = tunneledMcpServer[key];
+      if (text === "") {
+        if (storedValue !== undefined) form[key] = 0;
+        continue;
+      }
+      const value = Number(text);
+      if (!Number.isInteger(value) || value < 1) {
+        throw new Error(`${label} must be a whole number of at least 1`);
+      }
+      if (value !== storedValue) form[key] = value;
+    }
+    return form;
+  };
+
+  let dirty = false;
+  try {
+    dirty = Object.keys(changes()).length > 0;
+  } catch {
+    dirty = true;
+  }
+
+  const handleSave = async () => {
+    setError(undefined);
+    let form: Partial<Record<PublicRateLimitField, number>>;
+    try {
+      form = changes();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid value";
+      setError(message);
+      return;
+    }
+    if (Object.keys(form).length === 0) return;
+    try {
+      await update.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledMcpServer.id,
+            ...form,
+          },
+        },
+      });
+      await invalidateTunneledMcpServerViews(queryClient);
+      toast.success("Public rate limits updated");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update rate limits";
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="border p-6">
+      <div className="mb-1 flex items-center gap-2">
+        <Text variant="subheading" id="tunneled-mcp-public-rate-limits-label">
+          Public Rate Limits
+        </Text>
+        <ReleaseStageBadge stage="preview" />
+      </div>
+      <Text muted small className="mb-4 max-w-3xl">
+        Admission limit for anonymous callers of MCP servers fronting this
+        source, applied to every MCP request. One bucket is shared by every
+        caller, so it bounds the total load reaching your server rather than
+        fairness between callers. Leave a field blank to use the deployment
+        default.
+      </Text>
+
+      <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+        <dt>
+          <Text muted small>
+            Effective limit
+          </Text>
+        </dt>
+        <dd>
+          <Text small data-testid="public-rate-limit-requests">
+            {formatPublicRate(publicRequestRatePerSecond, publicRequestBurst)}
+          </Text>
+        </dd>
+      </dl>
+
+      <RequireScope scope="mcp:write" level="component">
+        <Stack gap={3}>
+          <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+            {PUBLIC_RATE_LIMIT_FIELDS.map(({ key, label, hint }) => (
+              <Field key={key}>
+                <Text
+                  small
+                  className="mb-1"
+                  id={`public-rate-limit-${key}-label`}
+                >
+                  {label}
+                </Text>
+                <Input
+                  id={`public-rate-limit-${key}`}
+                  aria-labelledby={`public-rate-limit-${key}-label`}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={draft[key]}
+                  onChange={(value) =>
+                    setDraft((current) => ({ ...current, [key]: value }))
+                  }
+                  placeholder="default"
+                  disabled={update.isPending}
+                />
+                <Text muted small>
+                  {hint}
+                </Text>
+              </Field>
+            ))}
+          </div>
+          {error !== undefined && <FieldError>{error}</FieldError>}
+          <Stack direction="horizontal" gap={2}>
+            <Button
+              variant="primary"
+              disabled={!dirty || update.isPending}
+              onClick={() => void handleSave()}
+            >
+              {update.isPending ? (
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>
+                {update.isPending ? "Saving" : "Save limits"}
+              </Button.Text>
+            </Button>
+          </Stack>
+        </Stack>
+      </RequireScope>
+    </div>
   );
 }
 

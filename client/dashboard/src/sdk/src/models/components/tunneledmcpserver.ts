@@ -86,6 +86,14 @@ export type TunneledMcpServer = {
    */
   projectId: string;
   /**
+   * Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.
+   */
+  publicRequestBurst?: number | undefined;
+  /**
+   * Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.
+   */
+  publicRequestRatePerSecond?: number | undefined;
+  /**
    * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
    */
   resourceIdentifier?: string | undefined;
@@ -131,6 +139,8 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     ),
     name: z.string(),
     project_id: z.string(),
+    public_request_burst: z.optional(z.int()),
+    public_request_rate_per_second: z.optional(z.int()),
     resource_identifier: z.optional(z.string()),
     status: TunneledMcpServerStatus$inboundSchema,
     updated_at: z.pipe(
@@ -149,6 +159,8 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "key_prefix": "keyPrefix",
       "last_seen_at": "lastSeenAt",
       "project_id": "projectId",
+      "public_request_burst": "publicRequestBurst",
+      "public_request_rate_per_second": "publicRequestRatePerSecond",
       "resource_identifier": "resourceIdentifier",
       "updated_at": "updatedAt",
     });

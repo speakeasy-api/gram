@@ -40,6 +40,17 @@ type UpdateServerRequestBody struct {
 	// exact-match credential routing and never dialed by Gram. Pass an empty
 	// string to clear. Omit to leave unchanged.
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
+	// Sustained anonymous MCP requests per second admitted when this source is
+	// served through a public MCP endpoint. Applies to every MCP interaction; one
+	// bucket is shared by every caller. Omit to leave unchanged, 0 to clear back
+	// to the deployment default.
+	PublicRequestRatePerSecond *int `form:"public_request_rate_per_second,omitempty" json:"public_request_rate_per_second,omitempty" xml:"public_request_rate_per_second,omitempty"`
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Each request takes one token; tokens refill at the sustained
+	// rate up to this cap. Omit to leave unchanged, 0 to clear (twice the
+	// sustained rate applies).
+	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 }
 
 // RotateServerKeyRequestBody is the type of the "tunneledMcp" service
@@ -86,6 +97,14 @@ type GetServerResponseBody struct {
 	// RFC 9728 protected resource identifier of the tunneled server, used only for
 	// exact-match credential routing and never dialed by Gram
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
+	// Sustained anonymous MCP requests per second admitted for this tunnel when it
+	// is served through a public MCP endpoint. Applies to every MCP interaction.
+	// Unset means the deployment-wide default applies.
+	PublicRequestRatePerSecond *int `form:"public_request_rate_per_second,omitempty" json:"public_request_rate_per_second,omitempty" xml:"public_request_rate_per_second,omitempty"`
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Unset means twice the sustained rate.
+	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -132,6 +151,14 @@ type UpdateServerResponseBody struct {
 	// RFC 9728 protected resource identifier of the tunneled server, used only for
 	// exact-match credential routing and never dialed by Gram
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
+	// Sustained anonymous MCP requests per second admitted for this tunnel when it
+	// is served through a public MCP endpoint. Applies to every MCP interaction.
+	// Unset means the deployment-wide default applies.
+	PublicRequestRatePerSecond *int `form:"public_request_rate_per_second,omitempty" json:"public_request_rate_per_second,omitempty" xml:"public_request_rate_per_second,omitempty"`
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Unset means twice the sustained rate.
+	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1468,6 +1495,14 @@ type TunneledMcpServerResponseBody struct {
 	// RFC 9728 protected resource identifier of the tunneled server, used only for
 	// exact-match credential routing and never dialed by Gram
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
+	// Sustained anonymous MCP requests per second admitted for this tunnel when it
+	// is served through a public MCP endpoint. Applies to every MCP interaction.
+	// Unset means the deployment-wide default applies.
+	PublicRequestRatePerSecond *int `form:"public_request_rate_per_second,omitempty" json:"public_request_rate_per_second,omitempty" xml:"public_request_rate_per_second,omitempty"`
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Unset means twice the sustained rate.
+	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1517,10 +1552,12 @@ func NewCreateServerRequestBody(p *tunneledmcp.CreateServerPayload) *CreateServe
 // the "updateServer" endpoint of the "tunneledMcp" service.
 func NewUpdateServerRequestBody(p *tunneledmcp.UpdateServerPayload) *UpdateServerRequestBody {
 	body := &UpdateServerRequestBody{
-		ID:                 p.ID,
-		Name:               p.Name,
-		AllowPublic:        p.AllowPublic,
-		ResourceIdentifier: p.ResourceIdentifier,
+		ID:                         p.ID,
+		Name:                       p.Name,
+		AllowPublic:                p.AllowPublic,
+		ResourceIdentifier:         p.ResourceIdentifier,
+		PublicRequestRatePerSecond: p.PublicRequestRatePerSecond,
+		PublicRequestBurst:         p.PublicRequestBurst,
 	}
 	return body
 }
@@ -1874,6 +1911,8 @@ func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.Tunnele
 		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
 		ResourceIdentifier:         body.ResourceIdentifier,
+		PublicRequestRatePerSecond: body.PublicRequestRatePerSecond,
+		PublicRequestBurst:         body.PublicRequestBurst,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
@@ -2217,6 +2256,8 @@ func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.T
 		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
 		ResourceIdentifier:         body.ResourceIdentifier,
+		PublicRequestRatePerSecond: body.PublicRequestRatePerSecond,
+		PublicRequestBurst:         body.PublicRequestBurst,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,

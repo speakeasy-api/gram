@@ -714,6 +714,10 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// TunnelPublicRejectionReasonKey names why the anonymous public tunnel
+	// path rejected a request before proxying. Closed set, see
+	// mcpmetrics.TunnelPublicRejectReason.
+	TunnelPublicRejectionReasonKey = attribute.Key("gram.tunnel_public.rejection_reason")
 	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Gram-minted
 	// anonymous tunnel session id. The raw id is bearer-like and must never
 	// be logged.
@@ -1888,6 +1892,9 @@ func SlogRemoteMCPServerURL(v string) slog.Attr {
 }
 
 func TunneledMCPServerID(v string) attribute.KeyValue { return TunneledMCPServerIDKey.String(v) }
+func TunnelPublicRejectionReason(v string) attribute.KeyValue {
+	return TunnelPublicRejectionReasonKey.String(v)
+}
 func SlogTunneledMCPServerID(v string) slog.Attr {
 	return slog.String(string(TunneledMCPServerIDKey), v)
 }

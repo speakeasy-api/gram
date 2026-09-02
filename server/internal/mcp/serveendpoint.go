@@ -147,7 +147,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// Gate on owner consent before dispatch so ungated callers are never
 	// challenged for a server that will not serve them.
 	if isTunneledPublic(mcpServer) {
-		if err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
+		if _, err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
 			return err
 		}
 		issuerGated = false

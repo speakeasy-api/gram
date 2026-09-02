@@ -1,6 +1,7 @@
 package mv
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -32,6 +33,8 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		AllowPublic:                server.AllowPublic,
 		AgentVersion:               agentVersion,
 		ResourceIdentifier:         conv.FromPGText[string](server.ResourceIdentifier),
+		PublicRequestRatePerSecond: optionalInt(server.PublicRequestRatePerSecond),
+		PublicRequestBurst:         optionalInt(server.PublicRequestBurst),
 		LastSeenAt:                 lastSeenAt,
 		ActiveConnectionCount:      len(connections),
 		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
@@ -140,4 +143,13 @@ func connectionMetadata(metadata map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+// optionalInt maps a nullable integer column to the view's optional int.
+func optionalInt(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
 }

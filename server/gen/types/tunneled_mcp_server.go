@@ -30,6 +30,14 @@ type TunneledMcpServer struct {
 	// RFC 9728 protected resource identifier of the tunneled server, used only for
 	// exact-match credential routing and never dialed by Gram
 	ResourceIdentifier *string
+	// Sustained anonymous MCP requests per second admitted for this tunnel when it
+	// is served through a public MCP endpoint. Applies to every MCP interaction.
+	// Unset means the deployment-wide default applies.
+	PublicRequestRatePerSecond *int
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Unset means twice the sustained rate.
+	PublicRequestBurst *int
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string
 	// Number of active tunnel connections currently visible in Redis
