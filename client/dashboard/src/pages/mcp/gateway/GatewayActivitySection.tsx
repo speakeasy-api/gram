@@ -36,6 +36,7 @@ const memberColumns: Column<MemberUsageRow>[] = [
   {
     key: "label",
     header: "Member",
+    width: "2fr",
     render: (row) => <Text className="truncate">{row.label}</Text>,
   },
   {
@@ -283,7 +284,9 @@ export function GatewayActivitySection({
             {usageFailed ? (
               <LoadError what="the discovery funnel and member breakdown" />
             ) : (
-              <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
+              // Side by side only with real room: the member table needs
+              // five columns and the chart wants width for its bars.
+              <div className="grid grid-cols-1 gap-6 @6xl:grid-cols-2">
                 <MetaToolUsageChart
                   items={metaTools}
                   chartId="gateway-overview-meta-tools"
