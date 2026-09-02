@@ -1036,9 +1036,9 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
-	var routability grantRoutability = alwaysRoutable
+	var routing consentRouting
 	if len(statuses) > 0 {
-		routability, err = s.grantRoutabilityForEndpoint(ctx, endpoint, challengeState, statuses)
+		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
 		if err != nil {
 			return nil, err
 		}
@@ -1048,12 +1048,7 @@ func (s *Service) buildRemoteSessionCards(
 	renderedAt := time.Now()
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
-		unroutable := false
-		if hasSession && state.Status == remotesessions.RemoteSessionActive {
-			if unroutable, err = routability(c, state.Resource); err != nil {
-				return nil, fmt.Errorf("evaluate grant routability: %w", err)
-			}
-		}
+		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
 		var checked bool
 		switch policy {
 		case autoRefreshEnforced:
