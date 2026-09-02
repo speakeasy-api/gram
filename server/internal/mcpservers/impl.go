@@ -164,16 +164,15 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
-		return nil, err
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+		return nil, err
+	}
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -669,7 +668,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
 		return nil, err
 	}
 
@@ -848,7 +847,7 @@ func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkacc
 	return &mode
 }
 
-func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) error {
+func (s *Service) admitNetworkAccessMode(ctx context.Context, tx pgx.Tx, organizationID string, mode networkaccess.Mode, unproxied bool) error {
 	if mode.IsPublicOnly() {
 		return nil
 	}
@@ -858,7 +857,7 @@ func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID str
 	if s.networkAccessEligibility == nil {
 		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
-	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, tx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
 		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
 	}
 	return nil

@@ -21,34 +21,11 @@ type ExpansionAdmission struct {
 	features *productfeatures.Client
 	flags    feature.Provider
 	orgs     *orgrepo.Queries
-	active   ActiveIngressChecker
+	ready    bool
 }
 
-// ActiveIngressChecker lets network-mode writes additionally require a live,
-// enabled desired-state row without coupling networkaccess to this package.
-type ActiveIngressChecker interface {
-	HasEnabledIngress(ctx context.Context, organizationID string) (bool, error)
-}
-
-type RepositoryActiveIngressChecker struct{ queries *networkingressrepo.Queries }
-
-func NewRepositoryActiveIngressChecker(db networkingressrepo.DBTX) *RepositoryActiveIngressChecker {
-	return &RepositoryActiveIngressChecker{queries: networkingressrepo.New(db)}
-}
-
-func (c *RepositoryActiveIngressChecker) HasEnabledIngress(ctx context.Context, organizationID string) (bool, error) {
-	if c == nil || c.queries == nil {
-		return false, fmt.Errorf("network ingress desired-state checker is unavailable")
-	}
-	enabled, err := c.queries.HasEnabledNetworkIngress(ctx, organizationID)
-	if err != nil {
-		return false, fmt.Errorf("query enabled network ingress: %w", err)
-	}
-	return enabled, nil
-}
-
-func NewExpansionAdmission(features *productfeatures.Client, flags feature.Provider, orgs *orgrepo.Queries, active ActiveIngressChecker) *ExpansionAdmission {
-	return &ExpansionAdmission{features: features, flags: flags, orgs: orgs, active: active}
+func NewExpansionAdmission(features *productfeatures.Client, flags feature.Provider, orgs *orgrepo.Queries, ready bool) *ExpansionAdmission {
+	return &ExpansionAdmission{features: features, flags: flags, orgs: orgs, ready: ready}
 }
 
 func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID string) error {
@@ -90,17 +67,24 @@ func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID 
 	return nil
 }
 
-func (a *ExpansionAdmission) CheckNetworkAccess(ctx context.Context, input networkaccess.EligibilityInput) error {
+func (a *ExpansionAdmission) CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input networkaccess.EligibilityInput) error {
 	if input.Mode.IsPublicOnly() {
 		return nil
+	}
+	if tx == nil {
+		return fmt.Errorf("network ingress admission transaction is unavailable")
 	}
 	if err := a.CheckExpansion(ctx, input.OrganizationID); err != nil {
 		return err
 	}
-	if a.active == nil {
-		return fmt.Errorf("network ingress desired-state checker is unavailable")
+	if !a.ready {
+		return fmt.Errorf("network ingress reconciliation is unavailable")
 	}
-	enabled, err := a.active.HasEnabledIngress(ctx, input.OrganizationID)
+	queries := networkingressrepo.New(tx)
+	if err := queries.AcquireNetworkIngressOrganizationLock(ctx, input.OrganizationID); err != nil {
+		return fmt.Errorf("lock network ingress admission: %w", err)
+	}
+	enabled, err := queries.HasEnabledNetworkIngress(ctx, input.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("check enabled network ingress: %w", err)
 	}

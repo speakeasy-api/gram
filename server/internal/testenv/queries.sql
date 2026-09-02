@@ -31,6 +31,12 @@ UPDATE network_ingresses
 SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: SetNetworkIngressObservationFixture :exec
+UPDATE network_ingresses
+SET status = @status,
+    last_error = @last_error
+WHERE organization_id = @organization_id;
+
 -- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)

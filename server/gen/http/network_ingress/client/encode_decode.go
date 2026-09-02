@@ -1433,6 +1433,7 @@ func EncodeCheckHealthRequest(encoder func(*http.Request) goahttp.Encoder) func(
 // networkIngress checkHealth endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeCheckHealthResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1474,6 +1475,20 @@ func DecodeCheckHealthResponse(decoder func(*http.Response) goahttp.Decoder, res
 			}
 			res := NewCheckHealthNetworkIngressOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body CheckHealthUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("networkIngress", "checkHealth", err)
+			}
+			err = ValidateCheckHealthUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("networkIngress", "checkHealth", err)
+			}
+			return nil, NewCheckHealthUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body CheckHealthUnauthorizedResponseBody

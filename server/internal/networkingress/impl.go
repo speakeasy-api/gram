@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -108,7 +109,7 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 }
 
 func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate network ingress id").LogError(ctx, s.logger)
 	}
-	resources, err := NewResourceNames(ingressID)
+	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "derive provider resource identities").LogError(ctx, s.logger)
 	}
@@ -332,7 +333,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 }
 
 func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPayload) (*gen.NetworkIngressDeleteImpact, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +396,7 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 }
 
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
 	}

@@ -30,13 +30,19 @@ SET
     provider_resources = '{}'::jsonb,
     updated_at = clock_timestamp()
 WHERE id = $1
+  AND organization_id = $2
   AND deleted IS TRUE
 `
 
+type ClearDeletedNetworkIngressResourcesParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
 // AIS-611 calls this only after every persisted provider resource is confirmed
 // absent. Clearing both fields is the replacement-create release boundary.
-func (q *Queries) ClearDeletedNetworkIngressResources(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, clearDeletedNetworkIngressResources, id)
+func (q *Queries) ClearDeletedNetworkIngressResources(ctx context.Context, arg ClearDeletedNetworkIngressResourcesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearDeletedNetworkIngressResources, arg.ID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -64,6 +70,7 @@ SELECT
   (
     SELECT COUNT(*)
     FROM meta_mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
     WHERE s.organization_id = $1
       AND s.deleted IS FALSE
       AND s.network_access_mode = 'dual'
@@ -71,6 +78,7 @@ SELECT
   (
     SELECT COUNT(*)
     FROM meta_mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
     WHERE s.organization_id = $1
       AND s.deleted IS FALSE
       AND s.network_access_mode = 'private_only'
@@ -228,10 +236,16 @@ const getNetworkIngressByID = `-- name: GetNetworkIngressByID :one
 SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
 WHERE id = $1
+  AND organization_id = $2
 `
 
-func (q *Queries) GetNetworkIngressByID(ctx context.Context, id uuid.UUID) (NetworkIngress, error) {
-	row := q.db.QueryRow(ctx, getNetworkIngressByID, id)
+type GetNetworkIngressByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetNetworkIngressByID(ctx context.Context, arg GetNetworkIngressByIDParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressByID, arg.ID, arg.OrganizationID)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,
@@ -563,12 +577,12 @@ SET
     enabled = CASE WHEN $3::boolean THEN $4 ELSE enabled END,
     identity_required = CASE WHEN $5::boolean THEN $6 ELSE identity_required END,
     status = CASE
-      WHEN ($1::boolean OR ($3::boolean AND $4)) THEN 'pending'
+      WHEN ($1::boolean OR $5::boolean OR ($3::boolean AND $4)) THEN 'pending'
       WHEN ($3::boolean AND NOT $4) THEN 'disabled'
       ELSE status
     END,
     last_error = CASE
-      WHEN ($1::boolean OR $3::boolean) THEN NULL
+      WHEN ($1::boolean OR $5::boolean OR $3::boolean) THEN NULL
       ELSE last_error
     END,
     updated_at = clock_timestamp()

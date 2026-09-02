@@ -2335,6 +2335,24 @@ func (q *Queries) SetNetworkIngressEnabledFixture(ctx context.Context, arg SetNe
 	return err
 }
 
+const setNetworkIngressObservationFixture = `-- name: SetNetworkIngressObservationFixture :exec
+UPDATE network_ingresses
+SET status = $1,
+    last_error = $2
+WHERE organization_id = $3
+`
+
+type SetNetworkIngressObservationFixtureParams struct {
+	Status         string
+	LastError      pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) SetNetworkIngressObservationFixture(ctx context.Context, arg SetNetworkIngressObservationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setNetworkIngressObservationFixture, arg.Status, arg.LastError, arg.OrganizationID)
+	return err
+}
+
 const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
 UPDATE openrouter_api_keys
 SET disabled = $1,

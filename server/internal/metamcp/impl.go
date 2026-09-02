@@ -115,16 +115,15 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
-		return nil, err
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode); err != nil {
+		return nil, err
+	}
 	txRepo := repo.New(dbtx)
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
@@ -290,7 +289,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode); err != nil {
 		return nil, err
 	}
 	storedMode := networkaccess.Storage(mode)
@@ -368,14 +367,14 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	return afterView, nil
 }
 
-func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) error {
+func (s *Service) admitNetworkAccessMode(ctx context.Context, tx pgx.Tx, organizationID string, mode networkaccess.Mode) error {
 	if mode.IsPublicOnly() {
 		return nil
 	}
 	if s.networkAccessEligibility == nil {
 		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
-	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, tx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
 		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
 	}
 	return nil

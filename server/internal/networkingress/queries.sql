@@ -56,7 +56,8 @@ LIMIT 1;
 -- name: GetNetworkIngressByID :one
 SELECT *
 FROM network_ingresses
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- name: HasEnabledNetworkIngress :one
 SELECT EXISTS (
@@ -114,12 +115,12 @@ SET
     enabled = CASE WHEN @update_enabled::boolean THEN @enabled ELSE enabled END,
     identity_required = CASE WHEN @update_identity_required::boolean THEN @identity_required ELSE identity_required END,
     status = CASE
-      WHEN (@update_hostname::boolean OR (@update_enabled::boolean AND @enabled)) THEN 'pending'
+      WHEN (@update_hostname::boolean OR @update_identity_required::boolean OR (@update_enabled::boolean AND @enabled)) THEN 'pending'
       WHEN (@update_enabled::boolean AND NOT @enabled) THEN 'disabled'
       ELSE status
     END,
     last_error = CASE
-      WHEN (@update_hostname::boolean OR @update_enabled::boolean) THEN NULL
+      WHEN (@update_hostname::boolean OR @update_identity_required::boolean OR @update_enabled::boolean) THEN NULL
       ELSE last_error
     END,
     updated_at = clock_timestamp()
@@ -170,6 +171,7 @@ SELECT
   (
     SELECT COUNT(*)
     FROM meta_mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
     WHERE s.organization_id = @organization_id
       AND s.deleted IS FALSE
       AND s.network_access_mode = 'dual'
@@ -177,6 +179,7 @@ SELECT
   (
     SELECT COUNT(*)
     FROM meta_mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
     WHERE s.organization_id = @organization_id
       AND s.deleted IS FALSE
       AND s.network_access_mode = 'private_only'
@@ -191,4 +194,5 @@ SET
     provider_resources = '{}'::jsonb,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS TRUE;

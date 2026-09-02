@@ -172,6 +172,7 @@ func (c *Client) DeleteIngress(ctx context.Context, p *DeleteIngressPayload) (er
 
 // CheckHealth calls the "checkHealth" endpoint of the "networkIngress" service.
 // CheckHealth may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

@@ -1581,13 +1581,17 @@ func newStartCommand() *cli.Command {
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
+			// AIS-611 replaces these explicit unavailable values with the Temporal
+			// reconciler. Until then, non-public mode writes and health checks fail closed.
+			const networkIngressReconcilerReady = false
+			var networkIngressSignaler networkingress.ReconcileSignaler
 			networkIngressAdmission := networkingress.NewExpansionAdmission(
 				productFeatures,
 				featureFlags,
 				orgRepo.New(db),
-				networkingress.NewRepositoryActiveIngressChecker(db),
+				networkIngressReconcilerReady,
 			)
-			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, nil)
+			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkIngressSignaler)
 			networkingress.Attach(mux, networkIngressService)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission)
 			mcpservers.Attach(mux, mcpServersService)

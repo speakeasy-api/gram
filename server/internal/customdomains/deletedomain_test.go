@@ -44,7 +44,7 @@ func TestDeleteDomain_ActiveNetworkIngressPinConflicts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	ingressID := uuid.New()
-	resources, err := networkingress.NewResourceNames(ingressID)
+	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
 	encoded, err := resources.Marshal()
 	require.NoError(t, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -115,7 +116,9 @@ func (m Mode) IsPublicOnly() bool {
 // control-plane implementation arrives in a later checkpoint; nil and errors
 // must be treated as denial by callers.
 type EligibilityChecker interface {
-	CheckNetworkAccess(ctx context.Context, input EligibilityInput) error
+	// CheckNetworkAccess runs inside the caller's write transaction so safety-
+	// sensitive implementations can hold admission locks through commit.
+	CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input EligibilityInput) error
 }
 
 type EligibilityInput struct {
@@ -125,6 +128,6 @@ type EligibilityInput struct {
 
 type DenyAllChecker struct{}
 
-func (DenyAllChecker) CheckNetworkAccess(context.Context, EligibilityInput) error {
+func (DenyAllChecker) CheckNetworkAccess(context.Context, pgx.Tx, EligibilityInput) error {
 	return fmt.Errorf("private network access is not enabled")
 }
