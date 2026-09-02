@@ -59,3 +59,15 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Not a service: a cron that checks, every five minutes, whether this
+# worktree's stack has gone unused, and pauses it if so (see
+# `mise run idle-pause`). A developer with several worktrees otherwise pays for
+# every stack they are no longer looking at, and the alternative -- a launchd
+# agent or a systemd timer -- installs a job on the developer's machine that
+# outlives the repo. pitchfork is already running the stack it is watching, so
+# the scheduler comes and goes with it: a paused worktree needs no scheduler,
+# and `mise run wake` brings this back with everything else.
+[daemons.idle-pause]
+run = "mise run idle-pause"
+cron = "0 */5 * * * *"
