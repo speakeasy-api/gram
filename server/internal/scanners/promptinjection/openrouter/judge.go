@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -148,6 +149,11 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 	n := len(req.Messages)
 	if n == 0 {
 		return nil, nil
+	}
+
+	ctx, err = hostedinference.WithInternal(ctx, hostedinference.CallCategoryPromptScanner)
+	if err != nil {
+		return nil, fmt.Errorf("classify prompt-injection inference: %w", err)
 	}
 
 	ctx, span := c.tracer.Start(ctx, "risk.prompt_injection.classify", trace.WithAttributes(

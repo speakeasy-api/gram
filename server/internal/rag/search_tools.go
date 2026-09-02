@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -215,6 +216,10 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		limit = defaultFindToolsResultSize
 	}
 
+	ctx, err = hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantRAG)
+	if err != nil {
+		return nil, fmt.Errorf("classify assistant RAG inference: %w", err)
+	}
 	queryVectors, err := s.chatClient.CreateEmbeddings(ctx, toolset.OrganizationID, s.embeddingModel, []string{query})
 	if err != nil {
 		return nil, fmt.Errorf("create query embedding: %w", err)
@@ -412,6 +417,10 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 		return nil, nil
 	}
 
+	ctx, err := hostedinference.WithBackground(ctx, hostedinference.CallCategoryRAGIndexing)
+	if err != nil {
+		return nil, fmt.Errorf("classify RAG indexing inference: %w", err)
+	}
 	total := len(candidates)
 	results := make([][]float32, total)
 

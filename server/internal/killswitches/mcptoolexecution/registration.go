@@ -1,12 +1,9 @@
-// Package mcptoolexecution registers the MCP kill-switch contracts: the
-// fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
-// authoritative concrete-user principal adapter, the canonical
-// organization-owned `mcp_server` resource adapter, and the coverage inventory
-// for the hosted and private-proxy MCP tools/call surfaces.
+// Package mcptoolexecution registers the fail-closed mcp_tool_execution and
+// ai_access contracts. It preserves the MCP identities and coverage while
+// extending ai_access with the explicit Gram-hosted-inference identity and
+// coverage contract consumed by the shared ChatClient checkpoint.
 //
-// Registration declares the contracts consumed by both MCP checkpoints. The
-// internal ai_access definition is not exposed through customer management or
-// used to claim coverage for planned non-MCP surfaces.
+// The internal ai_access definition is not exposed through customer management.
 package mcptoolexecution
 
 import (
@@ -16,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 )
 
 const (
@@ -67,9 +65,9 @@ const (
 	EnforcementOwner = "devices-observability"
 )
 
-// NewRegistration assembles the complete code-owned MCP registration. The database is used by the adapters at evaluation and
-// validation time only; fixture validation during registry construction is
-// pure.
+// NewRegistration assembles the complete code-owned MCP and hosted-inference
+// registration. The database is used by adapters at evaluation and validation
+// time only; fixture validation during registry construction is pure.
 func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 	return killswitches.Registration{
 		Definitions: []killswitches.Definition{
@@ -87,32 +85,40 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Key:                 DefinitionKeyAIAccess,
 				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, hostedinference.ResourceKindGramHostedInference},
 				FailurePolicy:       killswitches.FailurePolicyFailClosed,
 				DefaultExternalNote: DefaultAIAccessExternalNote,
 				EnforcementOwner:    EnforcementOwner,
-				IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
-				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
-				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
+				IdentityContract:    hostedinference.IdentityContractKeyAuthenticatedUserAIAccess,
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, hostedinference.SurfaceGramHostedInference},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, hostedinference.TransportAdapterGramHostedInference},
 			},
 		},
-		IdentityContracts: []killswitches.IdentityContract{{
-			Key:            IdentityContractKeyAuthenticatedUserMCPServer,
-			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
-			ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
-		}},
+		IdentityContracts: []killswitches.IdentityContract{
+			{
+				Key:            IdentityContractKeyAuthenticatedUserMCPServer,
+				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
+			},
+			{
+				Key:            hostedinference.IdentityContractKeyAuthenticatedUserAIAccess,
+				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, hostedinference.ResourceKindGramHostedInference},
+			},
+		},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
 			Adapter:  NewAuthenticatedUserPrincipalAdapter(db),
 			Fixtures: principalFixtures(),
 		}},
-		ResourceAdapters: []killswitches.ResourceAdapterRegistration{{
-			Adapter:  NewMCPServerResourceAdapter(db),
-			Fixtures: resourceFixtures(),
-		}},
-		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
+		ResourceAdapters: []killswitches.ResourceAdapterRegistration{
+			{Adapter: NewMCPServerResourceAdapter(db), Fixtures: resourceFixtures()},
+			{Adapter: hostedinference.ResourceAdapter{}, Fixtures: hostedinference.ResourceFixtures()},
+		},
+		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, hostedinference.SurfaceGramHostedInference},
 		TransportAdapters: []killswitches.TransportAdapterRegistration{
 			{Key: TransportAdapterHostedJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterPrivateProxyJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
+			{Key: hostedinference.TransportAdapterGramHostedInference, Adapter: killswitches.ResolveTransportDisposition},
 		},
 		Coverage: []killswitches.CoverageContract{
 			{
@@ -149,7 +155,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterHostedJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: hostedinference.IdentityContractKeyAuthenticatedUserAIAccess,
 			},
 			{
 				Definition:       DefinitionKeyAIAccess,
@@ -161,7 +167,19 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: hostedinference.IdentityContractKeyAuthenticatedUserAIAccess,
+			},
+			{
+				Definition:       DefinitionKeyAIAccess,
+				Surface:          hostedinference.SurfaceGramHostedInference,
+				PrincipalSource:  "Opaque tenant-bound acting-user provenance derived only from a validated ordinary Gram session and revalidated as an active organization member for every provider attempt.",
+				ResourceSource:   "Static canonical Gram-hosted-inference identity for an enumerated current governed user call category.",
+				Checkpoint:       "ChatClient before capture and key resolution, then immediately before every completion, stream, object-completion, or embedding provider attempt.",
+				ProtectedWork:    "Governed user chat completion, chat summaries, tool-call summaries, risk authoring, and organization-admin business-memory search embeddings; internal, background, and assistant-owned classes are explicit bypasses.",
+				FailurePolicy:    killswitches.FailurePolicyFailClosed,
+				TransportAdapter: hostedinference.TransportAdapterGramHostedInference,
+				EnforcementOwner: EnforcementOwner,
+				IdentityContract: hostedinference.IdentityContractKeyAuthenticatedUserAIAccess,
 			},
 		},
 	}

@@ -80,6 +80,14 @@ func (e *ShareableError) SpanHandled() bool {
 	return e.spanHandled
 }
 
+// SuppressInternalReporting prevents outer tracing middleware from recording
+// this error's public message. Use it for customer-authored content that must
+// be returned verbatim but must not enter logs or traces.
+func (e *ShareableError) SuppressInternalReporting() *ShareableError {
+	e.spanHandled = true
+	return e
+}
+
 // Error implements the error interface.
 func (e *ShareableError) Error() string {
 	return e.public

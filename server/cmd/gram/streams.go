@@ -405,6 +405,11 @@ func newStreamsCommand() *cli.Command {
 				nil,
 				nil,
 			)
+			inferenceCheckpoint, err := newHostedInferenceCheckpoint(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient = completionsClient.WithHostedInferenceCheckpoint(inferenceCheckpoint)
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)

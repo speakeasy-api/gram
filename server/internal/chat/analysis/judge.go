@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -157,6 +158,10 @@ type StructuredCall struct {
 // returns the raw response text plus the model that produced it. Errors wrap
 // ErrModelFailure or ErrRetryable exactly as the publisher expects.
 func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.CompletionClient, limiter *ratelimit.Limiter, in JudgeInput, call StructuredCall) (string, string, error) {
+	ctx, classifyErr := hostedinference.WithInternal(ctx, hostedinference.CallCategoryChatAnalysis)
+	if classifyErr != nil {
+		return "", "", fmt.Errorf("classify chat analysis: %w", classifyErr)
+	}
 	// A Store outage is not a throttle: proceed rather than stall the pipeline on
 	// limiter infrastructure. A real throttle is retryable — the unit keeps its
 	// reservation and its attempt budget.
@@ -186,7 +191,6 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 
 	callCtx, cancel := context.WithTimeout(ctx, call.Timeout)
 	defer cancel()
-
 	response, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:        in.OrgID,
 		ProjectID:    in.ProjectID,

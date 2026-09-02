@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1468,6 +1469,9 @@ func IsHistoryCorrupted(err error) bool {
 // completion client into the oops code that should flow back to the caller
 // (and through the runner to the assistant runtime).
 func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
+	if mapped, ok := mapHostedInferenceError(ctx, s.logger, err); ok {
+		return mapped
+	}
 	switch {
 	case openrouter.IsPlatformKeyDisabled(err):
 		return oops.C(oops.CodeInferenceDisabled).LogError(ctx, s.logger)
@@ -1591,6 +1595,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		keySlot = billing.ModelUsageSourceAssistants
 	}
 	sourceName := string(source)
+
+	ctx, err = classifyChatInference(ctx, authCtx, keySlot)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "classify hosted inference").LogError(ctx, s.logger)
+	}
 
 	eventProperties := map[string]any{
 		"action":            "chat_request_received",
@@ -1761,6 +1770,15 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// (and its OpenRouter round trip on cache miss) is never called.
 	getContextWindow := func() int { return 0 }
 	if r.URL.Query().Get("includeContextWindow") == "1" {
+		// Metadata lookup starts concurrently with the provider call. Preflight
+		// immediately before it so a denied request cannot make this extra
+		// OpenRouter round trip. Ordinary requests rely on the client's common
+		// pre-capture check plus its per-attempt check and avoid a third evaluation.
+		if preflight, ok := s.completionClient.(hostedInferencePreflighter); ok {
+			if err := preflight.PreflightHostedInference(ctx, orgID); err != nil {
+				return s.classifyCompletionError(ctx, "hosted inference preflight", err)
+			}
+		}
 		resolved := sync.OnceValue(func() int {
 			return s.resolveContextWindow(ctx, completionReq.Model)
 		})
@@ -2235,6 +2253,10 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 
 	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
 	defer cancel()
+	summaryCtx, err = classifySessionInference(summaryCtx, hostedinference.CallCategoryChatSummary, hostedinference.CallCategoryAPIKeyChatSummary, hostedinference.CallCategoryNonOrdinarySessionChatSummary)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "classify chat summary inference").LogError(ctx, s.logger)
+	}
 
 	systemPrompt := "You summarize agent session transcripts for an operations dashboard. " +
 		"Write a concise summary in 2-4 short paragraphs covering: the user's goal, " +
@@ -2271,6 +2293,9 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
+		if mapped, ok := mapHostedInferenceError(ctx, s.logger, err); ok {
+			return nil, mapped
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
 	}
 	if response == nil || response.Message == nil {
@@ -2423,6 +2448,10 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 
 	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
 	defer cancel()
+	summaryCtx, err = classifySessionInference(summaryCtx, hostedinference.CallCategoryToolCallSummary, hostedinference.CallCategoryAPIKeyToolCallSummary, hostedinference.CallCategoryNonOrdinarySessionToolSummary)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "classify tool-call summary inference").LogError(ctx, s.logger)
+	}
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name: "tool_call_summary",
@@ -2457,6 +2486,9 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		WebSearch: nil, DisableResponseHealing: false,
 	})
 	if err != nil {
+		if mapped, ok := mapHostedInferenceError(ctx, s.logger, err); ok {
+			return nil, mapped
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to summarize tool call").LogError(ctx, s.logger)
 	}
 	if response == nil || response.Message == nil {

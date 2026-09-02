@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -95,6 +96,14 @@ func (c *Client) ResolveKey(ctx context.Context, orgID string, projectID string,
 	return resolved, nil
 }
 
+func (c *Client) PreflightHostedInference(ctx context.Context, organizationID string) error {
+	preflight, ok := c.completionClient.(hostedInferencePreflighter)
+	if !ok {
+		return nil
+	}
+	return preflight.PreflightHostedInference(ctx, organizationID)
+}
+
 func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
 	embeddings, err := c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs, opts...)
 	if err != nil {
@@ -145,6 +154,10 @@ func (c *Client) AgentChat(
 	prompt string,
 	opts AgentChatOptions,
 ) (string, error) {
+	ctx, err := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantChat)
+	if err != nil {
+		return "", fmt.Errorf("classify assistant chat: %w", err)
+	}
 	if opts.AgentTimeout != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *opts.AgentTimeout)

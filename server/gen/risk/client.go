@@ -124,6 +124,8 @@ func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinExclusions, getRis
 
 // CreateRiskPolicy calls the "createRiskPolicy" endpoint of the "risk" service.
 // CreateRiskPolicy may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -213,6 +215,8 @@ func (c *Client) GetRiskPolicy(ctx context.Context, p *GetRiskPolicyPayload) (re
 
 // UpdateRiskPolicy calls the "updateRiskPolicy" endpoint of the "risk" service.
 // UpdateRiskPolicy may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1056,6 +1060,8 @@ func (c *Client) DeleteRiskExclusion(ctx context.Context, p *DeleteRiskExclusion
 // SuggestCustomDetectionRule calls the "suggestCustomDetectionRule" endpoint
 // of the "risk" service.
 // SuggestCustomDetectionRule may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1078,6 +1084,8 @@ func (c *Client) SuggestCustomDetectionRule(ctx context.Context, p *SuggestCusto
 
 // SuggestExclusion calls the "suggestExclusion" endpoint of the "risk" service.
 // SuggestExclusion may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

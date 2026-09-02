@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -320,6 +321,10 @@ If there are no tool calls, return an empty array.`, userPromptText)
 		Strict:      nil,
 	}
 
+	analysisCtx, err := hostedinference.WithBackground(analysisCtx, hostedinference.CallCategoryChatResolution)
+	if err != nil {
+		return nil, fmt.Errorf("classify chat-resolution analysis: %w", err)
+	}
 	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{

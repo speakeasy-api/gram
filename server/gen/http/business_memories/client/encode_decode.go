@@ -548,8 +548,10 @@ func EncodeSearchBusinessMemoriesRequest(encoder func(*http.Request) goahttp.Enc
 // restoreBody controls whether the response body should be restored after
 // having been read.
 // DecodeSearchBusinessMemoriesResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -589,6 +591,55 @@ func DecodeSearchBusinessMemoriesResponse(decoder func(*http.Response) goahttp.D
 			}
 			res := NewSearchBusinessMemoriesResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SearchBusinessMemoriesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("businessMemories", "searchBusinessMemories", err)
+			}
+			err = ValidateSearchBusinessMemoriesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("businessMemories", "searchBusinessMemories", err)
+			}
+			return nil, NewSearchBusinessMemoriesUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body SearchBusinessMemoriesAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("businessMemories", "searchBusinessMemories", err)
+				}
+				err = ValidateSearchBusinessMemoriesAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("businessMemories", "searchBusinessMemories", err)
+				}
+				return nil, NewSearchBusinessMemoriesAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body SearchBusinessMemoriesForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("businessMemories", "searchBusinessMemories", err)
+				}
+				err = ValidateSearchBusinessMemoriesForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("businessMemories", "searchBusinessMemories", err)
+				}
+				return nil, NewSearchBusinessMemoriesForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("businessMemories", "searchBusinessMemories", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body SearchBusinessMemoriesUnauthorizedResponseBody
@@ -603,20 +654,6 @@ func DecodeSearchBusinessMemoriesResponse(decoder func(*http.Response) goahttp.D
 				return nil, goahttp.ErrValidationError("businessMemories", "searchBusinessMemories", err)
 			}
 			return nil, NewSearchBusinessMemoriesUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SearchBusinessMemoriesForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("businessMemories", "searchBusinessMemories", err)
-			}
-			err = ValidateSearchBusinessMemoriesForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("businessMemories", "searchBusinessMemories", err)
-			}
-			return nil, NewSearchBusinessMemoriesForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SearchBusinessMemoriesBadRequestResponseBody

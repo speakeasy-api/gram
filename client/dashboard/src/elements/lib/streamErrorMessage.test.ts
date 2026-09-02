@@ -2,9 +2,51 @@ import { describe, expect, it } from "vitest";
 import {
   CREDITS_EXHAUSTED_MESSAGE,
   describeStreamError,
+  sanitizeStreamErrorForTelemetry,
 } from "./streamErrorMessage";
 
 describe("describeStreamError", () => {
+  it("renders the exact dedicated AI access denial note", () => {
+    const note =
+      "Access paused by your organization. <script>ignored as markup</script>";
+    const error = {
+      responseBody: JSON.stringify({ name: "ai_access_denied", message: note }),
+    };
+    expect(describeStreamError(error)).toBe(note);
+
+    const sanitized = sanitizeStreamErrorForTelemetry(error);
+    expect(sanitized).toBeInstanceOf(Error);
+    expect((sanitized as Error).message).toBe("ai_access_denied");
+    expect(JSON.stringify(sanitized)).not.toContain(note);
+    expect(String(sanitized)).not.toContain(note);
+  });
+
+  it("sanitizes a dedicated denial envelope even when it has no renderable note", () => {
+    const error = {
+      name: "ai_access_denied",
+      message: "",
+      secret: "tenant text",
+    };
+    expect(describeStreamError(error)).toBeUndefined();
+    expect(String(sanitizeStreamErrorForTelemetry(error))).toBe(
+      "Error: ai_access_denied",
+    );
+  });
+
+  it("does not render evaluator-unavailable or free-text denial messages", () => {
+    expect(
+      describeStreamError({
+        name: "unavailable",
+        message: "evaluator unavailable",
+      }),
+    ).toBeUndefined();
+    expect(
+      describeStreamError({
+        message: "ai_access_denied: tenant-authored text",
+      }),
+    ).toBeUndefined();
+  });
+
   it("matches Gram goa 402 with name=insufficient_credits at top-level", () => {
     const error = {
       name: "insufficient_credits",

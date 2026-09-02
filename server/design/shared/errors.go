@@ -34,6 +34,25 @@ func DeclareErrorResponses() {
 
 // DeclareHTTPErrorResponses maps the shared service errors to HTTP responses.
 // Call it from a service's final HTTP block when extending the shared mappings.
+func DeclareHostedInferenceErrors() {
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	Error(string(oops.CodeAIAccessDenied), func() {
+		Description(oops.CodeAIAccessDenied.UserMessage())
+	})
+}
+
+func DeclareHTTPHostedInferenceErrorResponses() {
+	Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeAIAccessDenied), StatusForbidden, func() {
+		ContentType("application/json")
+	})
+}
+
 func DeclareHTTPErrorResponses() {
 	Response(string(oops.CodeUnauthorized), StatusUnauthorized, func() {
 		ContentType("application/json")

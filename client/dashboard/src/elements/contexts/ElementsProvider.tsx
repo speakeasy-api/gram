@@ -25,7 +25,10 @@ import {
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
 import { dictationAdapter } from "@/elements/lib/dictation";
-import { describeStreamError } from "@/elements/lib/streamErrorMessage";
+import {
+  describeStreamError,
+  sanitizeStreamErrorForTelemetry,
+} from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
@@ -474,8 +477,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
             onError: ({ error }) => {
-              console.error("Stream error in onError callback:", error);
-              trackError(error, { source: "streaming" });
+              const telemetryError = sanitizeStreamErrorForTelemetry(error);
+              console.error(
+                "Stream error in onError callback:",
+                telemetryError,
+              );
+              trackError(telemetryError, { source: "streaming" });
 
               // Check if this is a network/connection error
               const isNetworkError =
@@ -515,8 +522,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
               "An error occurred while generating a response.",
           });
         } catch (error) {
-          console.error("Error creating stream:", error);
-          trackError(error, { source: "stream-creation" });
+          const telemetryError = sanitizeStreamErrorForTelemetry(error);
+          console.error("Error creating stream:", telemetryError);
+          trackError(telemetryError, { source: "stream-creation" });
 
           // Check if this is a network/connection error
           const isNetworkError =

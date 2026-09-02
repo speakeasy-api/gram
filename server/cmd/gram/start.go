@@ -991,6 +991,11 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
+			inferenceCheckpoint, err := newHostedInferenceCheckpoint(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient = completionsClient.WithHostedInferenceCheckpoint(inferenceCheckpoint)
 
 			memorySvc := memory.NewMemoryService(
 				logger,

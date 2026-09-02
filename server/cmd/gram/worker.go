@@ -696,6 +696,11 @@ func newWorkerCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
 			)
+			inferenceCheckpoint, err := newHostedInferenceCheckpoint(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient = completionsClient.WithHostedInferenceCheckpoint(inferenceCheckpoint)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{

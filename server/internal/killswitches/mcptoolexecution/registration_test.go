@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 )
 
 // TestMCPToolExecutionRegistration proves the checked-in registration builds
@@ -35,10 +36,10 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
 	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
-	require.Equal(t, []killswitches.ResourceKind{ResourceKindMCPServer}, aiDefinition.ResourceKinds)
-	require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, aiDefinition.IdentityContract)
-	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, aiDefinition.Surfaces)
-	require.Equal(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC}, aiDefinition.TransportAdapters)
+	require.Equal(t, []killswitches.ResourceKind{hostedinference.ResourceKindGramHostedInference, ResourceKindMCPServer}, aiDefinition.ResourceKinds)
+	require.Equal(t, hostedinference.IdentityContractKeyAuthenticatedUserAIAccess, aiDefinition.IdentityContract)
+	require.Equal(t, []killswitches.Surface{hostedinference.SurfaceGramHostedInference, SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, aiDefinition.Surfaces)
+	require.Equal(t, []killswitches.TransportAdapterKey{hostedinference.TransportAdapterGramHostedInference, TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC}, aiDefinition.TransportAdapters)
 	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
 	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
 	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
@@ -49,6 +50,9 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	resourceAdapter, ok := registry.ResourceAdapter(ResourceKindMCPServer)
 	require.True(t, ok)
 	require.Equal(t, ResourceKindMCPServer, resourceAdapter.Kind())
+	hostedResource, ok := registry.ResourceAdapter(hostedinference.ResourceKindGramHostedInference)
+	require.True(t, ok)
+	require.Equal(t, hostedinference.ResourceKindGramHostedInference, hostedResource.Kind())
 }
 
 // TestMCPCoverageInventory proves each declared surface has its own coverage
@@ -61,19 +65,23 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 4)
+	require.Len(t, inventory, 5)
 	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
 		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
 		require.Equal(t, killswitches.FailurePolicyFailClosed, contract.FailurePolicy)
-		require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, contract.IdentityContract)
+		if contract.Definition == DefinitionKeyAIAccess {
+			require.Equal(t, hostedinference.IdentityContractKeyAuthenticatedUserAIAccess, contract.IdentityContract)
+		} else {
+			require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, contract.IdentityContract)
+		}
 		require.NotEmpty(t, contract.PrincipalSource)
 		require.NotEmpty(t, contract.ResourceSource)
 		require.NotEmpty(t, contract.Checkpoint)
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
 	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
-	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyAIAccess])
+	require.Equal(t, []killswitches.Surface{hostedinference.SurfaceGramHostedInference, SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
@@ -90,7 +98,10 @@ func TestMCPCoverageInventory(t *testing.T) {
 	aiProxy, ok := registry.Coverage(DefinitionKeyAIAccess, SurfacePrivateProxyToolsCall)
 	require.True(t, ok)
 	require.Equal(t, TransportAdapterPrivateProxyJSONRPC, aiProxy.TransportAdapter)
-	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "hosted_inference", "assistant_runtime"} {
+	hostedInference, ok := registry.Coverage(DefinitionKeyAIAccess, hostedinference.SurfaceGramHostedInference)
+	require.True(t, ok)
+	require.Equal(t, hostedinference.TransportAdapterGramHostedInference, hostedInference.TransportAdapter)
+	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "assistant_runtime"} {
 		_, covered := registry.Coverage(DefinitionKeyAIAccess, excludedSurface)
 		require.False(t, covered, string(excludedSurface))
 	}
@@ -130,7 +141,7 @@ func TestMCPToolExecutionTransportAdaptersFailClosed(t *testing.T) {
 	failure, err := killswitches.NewInfrastructureFailureResult(errors.New("database unavailable"))
 	require.NoError(t, err)
 
-	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC} {
+	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, hostedinference.TransportAdapterGramHostedInference} {
 		adapter, ok := registry.TransportAdapter(key)
 		require.True(t, ok, string(key))
 

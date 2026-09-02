@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -102,6 +103,10 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
+	ctx, classifyErr := hostedinference.WithInternal(ctx, hostedinference.CallCategoryPromptScanner)
+	if classifyErr != nil {
+		return nil, fmt.Errorf("classify prompt-policy inference: %w", classifyErr)
+	}
 	if j == nil || j.client == nil {
 		return nil, nil
 	}
@@ -207,7 +212,6 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
-
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
