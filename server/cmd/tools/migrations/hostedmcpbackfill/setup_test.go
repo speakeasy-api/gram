@@ -118,6 +118,48 @@ func (f *fixture) seedForeignWrapper(t *testing.T, toolsetID uuid.UUID) uuid.UUI
 	return id
 }
 
+// Mirrors a wrapper the AIS-635 mirror created: v7 id, given name, private.
+func (f *fixture) seedMirroredWrapper(t *testing.T, toolsetID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+	require.NoError(t, New(f.pool).SeedWrapperFixture(t.Context(), SeedWrapperFixtureParams{
+		ID:         id,
+		ProjectID:  f.projectID,
+		Name:       conv.ToPGText(name),
+		Slug:       conv.ToPGText("mirrored-" + uuid.NewString()[:8]),
+		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility: "private",
+	}))
+	return id
+}
+
+// One live remote-session client bound to the issuer, which is what the
+// resync derives remote_session_issuer_id from.
+func (f *fixture) seedRemoteSessionClientBinding(t *testing.T, userIssuerID uuid.UUID) {
+	t.Helper()
+	q := New(f.pool)
+	remoteIssuerID, clientID := uuid.New(), uuid.New()
+	require.NoError(t, q.SeedRemoteSessionIssuerFixture(t.Context(), SeedRemoteSessionIssuerFixtureParams{
+		ID:             remoteIssuerID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID: conv.ToPGText(f.orgID),
+		Slug:           "rsi-" + uuid.NewString()[:8],
+		Issuer:         "https://issuer.example.test",
+	}))
+	require.NoError(t, q.SeedRemoteSessionClientFixture(t.Context(), SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID:        conv.ToPGText(f.orgID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "client-" + uuid.NewString()[:8],
+	}))
+	require.NoError(t, q.SeedRemoteSessionClientIssuerLinkFixture(t.Context(), SeedRemoteSessionClientIssuerLinkFixtureParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+}
+
 func (f *fixture) seedEndpoint(t *testing.T, wrapperID uuid.UUID, domainID uuid.NullUUID, slug string, root bool) uuid.UUID {
 	t.Helper()
 	id := uuid.New()

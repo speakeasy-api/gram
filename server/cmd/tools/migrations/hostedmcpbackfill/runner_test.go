@@ -128,32 +128,63 @@ func TestRun_AdoptsExistingWrapper(t *testing.T) {
 	report := f.apply(t)
 
 	requireOnlyOutcome(t, report, OutcomeAdopted)
-	require.Equal(t, "name_drift", report.Rows[0].Reason)
+	require.Empty(t, report.Rows[0].Reason)
 	w := f.wrapper(t, toolsetID)
 	require.Equal(t, foreignID, w.ID)
 	require.Equal(t, "public", w.Visibility)
 	require.Equal(t, uuid.NullUUID{UUID: issuerID, Valid: true}, w.UserSessionIssuerID)
-	require.Equal(t, "hosted-org-adopt-"+foreignID.String()[len(foreignID.String())-4:], w.Slug.String, "name and slug follow the toolset, as the mirror's next write would")
+	require.Equal(t, "manual wrapper", w.Name.String, "adoption keeps the wrapper's own name")
 	eps := f.endpoints(t, foreignID)
 	require.Len(t, eps, 1)
 	require.Equal(t, "org-adopt", eps[0].Slug)
 	requireOnlyOutcome(t, f.apply(t), OutcomeAlreadyComplete)
 }
 
-func TestRun_AdoptRepairsStaleWrapperSlug(t *testing.T) {
+// A wrapper the mirror created on the toolset's first write: nothing to do.
+func TestRun_MirrorCreatedWrapperIsComplete(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-stale", public: true, enabled: true})
-	foreignID := f.seedForeignWrapper(t, toolsetID)
-	f.apply(t)
-	require.NoError(t, New(f.pool).UpdateWrapperSlugFixture(t.Context(), UpdateWrapperSlugFixtureParams{Slug: conv.ToPGText("stale-slug"), ID: foreignID}))
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-mirrored", enabled: true})
+	wrapperID := f.seedMirroredWrapper(t, toolsetID, "hosted org-mirrored")
+	f.seedEndpoint(t, wrapperID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "org-mirrored", false)
+	before := f.wrapper(t, toolsetID)
 
-	report := f.apply(t)
+	for _, opts := range []Options{{}, {Apply: true}} {
+		requireOnlyOutcome(t, f.run(t, opts), OutcomeAlreadyComplete)
+	}
+	require.Equal(t, before, f.wrapper(t, toolsetID))
+	require.Len(t, f.endpoints(t, wrapperID), 1)
+}
 
-	requireOnlyOutcome(t, report, OutcomeAdopted)
-	require.Equal(t, "slug_drift", report.Rows[0].Reason)
-	require.Equal(t, "hosted-org-stale-"+foreignID.String()[len(foreignID.String())-4:], f.wrapper(t, toolsetID).Slug.String)
+// A user's rename on the MCP server page must survive every backfill pass.
+func TestRun_AdoptPreservesRenamedWrapper(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-renamed", enabled: true})
+	wrapperID := f.seedMirroredWrapper(t, toolsetID, "Support (prod)")
+	f.seedEndpoint(t, wrapperID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "org-renamed", false)
+	require.NoError(t, New(f.pool).UpdateWrapperSlugFixture(t.Context(), UpdateWrapperSlugFixtureParams{Slug: conv.ToPGText("support-prod-ab12"), ID: wrapperID}))
+
 	requireOnlyOutcome(t, f.apply(t), OutcomeAlreadyComplete)
+	w := f.wrapper(t, toolsetID)
+	require.Equal(t, "Support (prod)", w.Name.String)
+	require.Equal(t, "support-prod-ab12", w.Slug.String)
+}
+
+func TestRun_DerivesRemoteSessionIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuerID := f.seedIssuer(t)
+	f.seedRemoteSessionClientBinding(t, issuerID)
+	created := f.seedToolset(t, toolsetSpec{mcpSlug: "org-remote-created", enabled: true, issuerID: uuid.NullUUID{UUID: issuerID, Valid: true}})
+	adopted := f.seedToolset(t, toolsetSpec{mcpSlug: "org-remote-adopted", enabled: true, issuerID: uuid.NullUUID{UUID: issuerID, Valid: true}})
+	f.seedForeignWrapper(t, adopted)
+
+	f.apply(t)
+
+	for _, toolsetID := range []uuid.UUID{created, adopted} {
+		require.True(t, f.wrapper(t, toolsetID).RemoteSessionIssuerID.Valid, "wrapper derives remote_session_issuer_id like the mirror")
+	}
 }
 
 func TestRun_MoveToPlatformScopeClearsDomainRoot(t *testing.T) {

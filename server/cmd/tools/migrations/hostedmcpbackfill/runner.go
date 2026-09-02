@@ -22,6 +22,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // Fixed UUIDv5 namespace so reruns recompute the same ids.
@@ -314,27 +315,11 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return false, fmt.Errorf("load existing wrapper: %w", err)
 	case adopted:
+		// Name and slug are the wrapper's own: the mirror only syncs them on a
+		// toolset rename, so a user's wrapper rename must survive every pass.
 		wrapperID = existing.ID
-		slug, err := mcpservers.ComputeServerSlug(toolset.Name, wrapperID)
-		if err != nil {
-			return false, fmt.Errorf("compute wrapper slug: %w", err)
-		}
-		wantName := conv.ToPGText(toolset.Name)
-		identityDrift := existing.Name != wantName || existing.Slug.String != slug
-		if identityDrift {
-			taken, err := q.WrapperSlugTaken(ctx, WrapperSlugTakenParams{ProjectID: toolset.ProjectID, Slug: conv.ToPGText(slug), ID: wrapperID})
-			if err != nil {
-				return false, fmt.Errorf("check wrapper slug: %w", err)
-			}
-			if taken {
-				return false, blocked(row, OutcomeBlockedCollision, "wrapper slug already used in project")
-			}
-			row.Reason = conv.Ternary(existing.Name != wantName, "name_drift", "slug_drift")
-		}
-		if identityDrift || existing.Visibility != wantVisibility || existing.UserSessionIssuerID != toolset.UserSessionIssuerID || existing.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
+		if existing.Visibility != wantVisibility || existing.UserSessionIssuerID != toolset.UserSessionIssuerID || existing.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
 			if err := q.ReconcileWrapper(ctx, ReconcileWrapperParams{
-				Name:                  wantName,
-				Slug:                  conv.ToPGText(slug),
 				UserSessionIssuerID:   toolset.UserSessionIssuerID,
 				ToolVariationsGroupID: toolset.ToolVariationsGroupID,
 				Visibility:            wantVisibility,
@@ -342,6 +327,9 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 				ProjectID:             toolset.ProjectID,
 			}); err != nil {
 				return false, fmt.Errorf("reconcile wrapper: %w", err)
+			}
+			if err := resyncIssuers(ctx, tx, toolset, existing.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
+				return false, err
 			}
 			wrote = true
 		}
@@ -386,6 +374,9 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 		}); err != nil {
 			return false, fmt.Errorf("insert wrapper: %w", err)
 		}
+		if err := resyncIssuers(ctx, tx, toolset, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.UserSessionIssuerID); err != nil {
+			return false, err
+		}
 		wrote = true
 	}
 	row.WrapperID = &wrapperID
@@ -428,6 +419,18 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 		row.Outcome = conv.Ternary(r.options.Apply, OutcomeCreated, OutcomeWouldCreate)
 	}
 	return wrote, nil
+}
+
+// resyncIssuers derives remote_session_issuer_id the way the mirror does on an
+// issuer change, so a backfilled wrapper matches one the mirror would produce.
+func resyncIssuers(ctx context.Context, tx pgx.Tx, toolset LockToolsetRowRow, previous, current uuid.NullUUID) error {
+	if previous == current {
+		return nil
+	}
+	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, mcpendpoints.UniqueIDs(previous, current)); err != nil {
+		return fmt.Errorf("resync remote session issuers: %w", err)
+	}
+	return nil
 }
 
 // ensureEndpoint matches a wanted endpoint by address, then by deterministic id

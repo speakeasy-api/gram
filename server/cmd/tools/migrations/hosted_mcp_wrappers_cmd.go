@@ -44,7 +44,9 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
 	ackMirror := fs.Bool("acknowledge-mirror-deployed", false, "required with -apply; see guide")
 	moveDependents := fs.Bool("move-dependents", false, "dependent-move phase; see guide")
+	ackDependents := fs.Bool("acknowledge-dependent-readers-deployed", false, "required with -apply -move-dependents; see guide")
 	retireGrants := fs.Bool("retire-toolset-grants", false, "grant-retirement phase; see guide")
+	ackGrants := fs.Bool("acknowledge-grant-readers-deployed", false, "required with -apply -retire-toolset-grants; see guide")
 	project := fs.String("project", "", "project_id (uuid) to scope the run")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
@@ -67,6 +69,12 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 	if *apply && !*ackMirror {
 		return hostedMCPWrappersConfig{}, errors.New("-apply requires -acknowledge-mirror-deployed")
+	}
+	if *apply && *moveDependents && !*ackDependents {
+		return hostedMCPWrappersConfig{}, errors.New("-apply -move-dependents requires -acknowledge-dependent-readers-deployed")
+	}
+	if *apply && *retireGrants && !*ackGrants {
+		return hostedMCPWrappersConfig{}, errors.New("-apply -retire-toolset-grants requires -acknowledge-grant-readers-deployed")
 	}
 
 	cfg := hostedMCPWrappersConfig{

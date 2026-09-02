@@ -52,9 +52,7 @@ INSERT INTO mcp_servers (
 
 -- name: ReconcileWrapper :exec
 UPDATE mcp_servers
-SET name = @name,
-    slug = @slug,
-    user_session_issuer_id = @user_session_issuer_id,
+SET user_session_issuer_id = @user_session_issuer_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()
@@ -282,9 +280,21 @@ UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = @id;
 UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 
 -- name: GetWrapperFixture :one
-SELECT id, slug, visibility, user_session_issuer_id, tool_variations_group_id
+SELECT id, name, slug, visibility, user_session_issuer_id, tool_variations_group_id, remote_session_issuer_id
 FROM mcp_servers
 WHERE toolset_id = @toolset_id AND deleted IS FALSE;
+
+-- name: SeedRemoteSessionIssuerFixture :exec
+INSERT INTO remote_session_issuers (id, project_id, organization_id, slug, issuer)
+VALUES (@id, @project_id, @organization_id, @slug, @issuer);
+
+-- name: SeedRemoteSessionClientFixture :exec
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
+VALUES (@id, @project_id, @organization_id, @remote_session_issuer_id, @client_id);
+
+-- name: SeedRemoteSessionClientIssuerLinkFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES (@remote_session_client_id, @user_session_issuer_id);
 
 -- name: CountWrappersFixture :one
 SELECT count(*) FROM mcp_servers WHERE toolset_id = @toolset_id;

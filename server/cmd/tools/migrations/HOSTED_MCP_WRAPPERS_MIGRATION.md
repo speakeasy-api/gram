@@ -20,7 +20,7 @@ The toolset↔wrapper mirror (AIS-635) must be deployed before `-apply`. Once a 
 
 ## Outcomes
 
-`would_create`/`created`, `would_adopt_existing_wrapper`/`adopted_existing_wrapper` (adoption reconciles name, slug, issuer, variation group, and visibility to the toolset so the mirror's next write is a no-op — `reason: name_drift` marks a renamed wrapper — moves a backfill endpoint whose address changed, and clears domain roots when the wrapper becomes disabled; cleared domain ids are reported), `already_complete`, `blocked_collision` (address or wrapper slug held elsewhere, or a platform slug owned by another toolset), `blocked_drift` (toolset no longer qualifies, custom domain not in the organization, or a backfill row was deleted or belongs to another server), `blocked_no_wrapper`, `would_move_dependents`/`moved_dependents`/`skipped_dependents`, `would_retire_toolset_grants`/`retired_toolset_grants`.
+`would_create`/`created`, `would_adopt_existing_wrapper`/`adopted_existing_wrapper` (adoption reconciles issuer, variation group, and visibility to the toolset so the mirror's next write is a no-op; the wrapper keeps its own name and slug, as the mirror only syncs those on a toolset rename; moves a backfill endpoint whose address changed, and clears domain roots when the wrapper becomes disabled; cleared domain ids are reported), `already_complete`, `blocked_collision` (address or wrapper slug held elsewhere, or a platform slug owned by another toolset), `blocked_drift` (toolset no longer qualifies, custom domain not in the organization, or a backfill row was deleted or belongs to another server), `blocked_no_wrapper`, `would_move_dependents`/`moved_dependents`/`skipped_dependents`, `would_retire_toolset_grants`/`retired_toolset_grants`.
 
 A toolset bound to a soft-deleted custom domain gets an endpoint tombstoned at the domain's `deleted_at`. `-aliases slug@custom_domain_id,...` adds a platform-scope twin for the listed custom-domain toolsets; the allowlist lives in the ticket, not the repo. `oauth_proxy_server_id` is ignored; its counts are in every report.
 
@@ -28,7 +28,7 @@ A dry run cannot see an endpoint collision between two candidates that would bot
 
 ## Run book
 
-Every `-apply` below also carries `-acknowledge-mirror-deployed`.
+Every `-apply` below also carries `-acknowledge-mirror-deployed`. The later phases gate on their own readers: `-apply -move-dependents` also needs `-acknowledge-dependent-readers-deployed` (AIS-638), and `-apply -retire-toolset-grants` also needs `-acknowledge-grant-readers-deployed` (AIS-637/AIS-638). Dry runs need none of them.
 
 1. Dev: dry run, then `-apply`; rerun and confirm every row reports `already_complete`.
 2. Prod: dry run with `-report`; review outcome counts and every `blocked_*` row.

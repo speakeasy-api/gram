@@ -398,17 +398,19 @@ func (q *Queries) GetWrapperByID(ctx context.Context, arg GetWrapperByIDParams) 
 }
 
 const getWrapperFixture = `-- name: GetWrapperFixture :one
-SELECT id, slug, visibility, user_session_issuer_id, tool_variations_group_id
+SELECT id, name, slug, visibility, user_session_issuer_id, tool_variations_group_id, remote_session_issuer_id
 FROM mcp_servers
 WHERE toolset_id = $1 AND deleted IS FALSE
 `
 
 type GetWrapperFixtureRow struct {
 	ID                    uuid.UUID
+	Name                  pgtype.Text
 	Slug                  pgtype.Text
 	Visibility            string
 	UserSessionIssuerID   uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
 }
 
 func (q *Queries) GetWrapperFixture(ctx context.Context, toolsetID uuid.NullUUID) (GetWrapperFixtureRow, error) {
@@ -416,10 +418,12 @@ func (q *Queries) GetWrapperFixture(ctx context.Context, toolsetID uuid.NullUUID
 	var i GetWrapperFixtureRow
 	err := row.Scan(
 		&i.ID,
+		&i.Name,
 		&i.Slug,
 		&i.Visibility,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
+		&i.RemoteSessionIssuerID,
 	)
 	return i, err
 }
@@ -864,18 +868,14 @@ func (q *Queries) PlatformSlugOwnedByOtherToolset(ctx context.Context, arg Platf
 
 const reconcileWrapper = `-- name: ReconcileWrapper :exec
 UPDATE mcp_servers
-SET name = $1,
-    slug = $2,
-    user_session_issuer_id = $3,
-    tool_variations_group_id = $4,
-    visibility = $5,
+SET user_session_issuer_id = $1,
+    tool_variations_group_id = $2,
+    visibility = $3,
     updated_at = clock_timestamp()
-WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
+WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
 `
 
 type ReconcileWrapperParams struct {
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
 	UserSessionIssuerID   uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -885,8 +885,6 @@ type ReconcileWrapperParams struct {
 
 func (q *Queries) ReconcileWrapper(ctx context.Context, arg ReconcileWrapperParams) error {
 	_, err := q.db.Exec(ctx, reconcileWrapper,
-		arg.Name,
-		arg.Slug,
 		arg.UserSessionIssuerID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
@@ -1211,6 +1209,69 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 		arg.Name,
 		arg.Slug,
 		arg.OrganizationID,
+	)
+	return err
+}
+
+const seedRemoteSessionClientFixture = `-- name: SeedRemoteSessionClientFixture :exec
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SeedRemoteSessionClientFixtureParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+}
+
+func (q *Queries) SeedRemoteSessionClientFixture(ctx context.Context, arg SeedRemoteSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteSessionClientFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+	)
+	return err
+}
+
+const seedRemoteSessionClientIssuerLinkFixture = `-- name: SeedRemoteSessionClientIssuerLinkFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES ($1, $2)
+`
+
+type SeedRemoteSessionClientIssuerLinkFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) SeedRemoteSessionClientIssuerLinkFixture(ctx context.Context, arg SeedRemoteSessionClientIssuerLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteSessionClientIssuerLinkFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedRemoteSessionIssuerFixture = `-- name: SeedRemoteSessionIssuerFixture :exec
+INSERT INTO remote_session_issuers (id, project_id, organization_id, slug, issuer)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SeedRemoteSessionIssuerFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Slug           string
+	Issuer         string
+}
+
+func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRemoteSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteSessionIssuerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.Issuer,
 	)
 	return err
 }
