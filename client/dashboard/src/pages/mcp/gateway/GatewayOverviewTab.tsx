@@ -9,6 +9,7 @@ import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { GatewayActivitySection } from "./GatewayActivitySection";
 import { GatewayMembersSection } from "./GatewayMembersSection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
@@ -105,6 +106,11 @@ export function GatewayOverviewTab({
           </div>
         </Page.Section.Body>
       </Page.Section>
+
+      <GatewayActivitySection
+        metaMcpServerId={metaMcpServer.id}
+        memberRows={rows}
+      />
 
       <GatewayMembersSection metaMcpServer={metaMcpServer} />
     </>

@@ -589,6 +589,11 @@ function MCPOverview() {
                       key={gateway.id}
                       gateway={gateway}
                       url={gatewayUrlById.get(gateway.id)}
+                      activityStatus={activityStatusFor(
+                        "meta_mcp_server",
+                        gateway.id,
+                      )}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                   {filteredToolsets.map((toolset) => (
