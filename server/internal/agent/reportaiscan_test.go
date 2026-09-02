@@ -376,13 +376,14 @@ func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
 	now := time.Now().UTC()
 
 	cases := []struct {
-		name  string
-		match *gen.AIScanMatch
+		name    string
+		match   *gen.AIScanMatch
+		wantErr string
 	}{
-		{name: "null match", match: nil},
-		{name: "blank target id", match: &gen.AIScanMatch{TargetID: " ", Category: "harness", Signal: "installed", Version: nil}},
-		{name: "invalid category", match: &gen.AIScanMatch{TargetID: "new-tool", Category: "other", Signal: "installed", Version: nil}},
-		{name: "invalid signal", match: &gen.AIScanMatch{TargetID: "cursor", Category: "harness", Signal: "stopped", Version: nil}},
+		{name: "null match", match: nil, wantErr: "matches must not contain null entries"},
+		{name: "blank target id", match: &gen.AIScanMatch{TargetID: " ", Category: "harness", Signal: "installed", Version: nil}, wantErr: "match target_id must not be blank"},
+		{name: "unsupported category", match: &gen.AIScanMatch{TargetID: "new-tool", Category: "future_category", Signal: "installed", Version: nil}, wantErr: "match category must be harness or local_model"},
+		{name: "unsupported signal", match: &gen.AIScanMatch{TargetID: "cursor", Category: "harness", Signal: "future_signal", Version: nil}, wantErr: "match signal must be installed or running"},
 	}
 
 	for _, testCase := range cases {
@@ -398,6 +399,7 @@ func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
 		var shareableErr *oops.ShareableError
 		require.ErrorAs(t, err, &shareableErr, testCase.name)
 		require.Equal(t, oops.CodeBadRequest, shareableErr.Code, testCase.name)
+		require.ErrorContains(t, err, testCase.wantErr, testCase.name)
 	}
 
 	require.Empty(t, aiDetectionSummaries(t, ti, orgID))

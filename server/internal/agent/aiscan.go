@@ -83,6 +83,9 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		if targetID == "" {
 			return oops.E(oops.CodeBadRequest, nil, "match target_id must not be blank")
 		}
+		// ClickHouse deliberately stores these dimensions as
+		// LowCardinality(String), so extending the supported vocabulary does
+		// not require a migration. Keep the request contract closed here.
 		category := strings.ToLower(strings.TrimSpace(match.Category))
 		if category != "harness" && category != "local_model" {
 			return oops.E(oops.CodeBadRequest, nil, "match category must be harness or local_model")
