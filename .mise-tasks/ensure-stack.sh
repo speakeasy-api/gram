@@ -37,5 +37,14 @@ if [ -n "$gitdir" ] && [ -f "$gitdir/gram-stack-boot.pid" ]; then
     fi
 fi
 
+# A boot that failed leaves containers behind that a wake would happily start,
+# which is worse than not starting them: the databases behind them may have no
+# migrations and no seed, and every daemon then reports confusing errors.
+# Finishing the boot is the fix, and only the developer can decide to.
+if [ -n "$gitdir" ] && [ -f "$gitdir/gram-stack-boot.failed" ]; then
+    echo "This worktree's last boot failed — finish it with \`mise run git:workboot\` before running this." >&2
+    exit 1
+fi
+
 echo "Stack is not running — waking it first."
 exec mise run wake

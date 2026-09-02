@@ -79,7 +79,7 @@ const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Resuming stack…</title>
+<title>Stack paused</title>
 <style>
   /* A still of the login screen (client/dashboard/src/pages/login) under a
      scrim, so the wake reads as "your dashboard, one moment" rather than as an
@@ -259,6 +259,9 @@ const PAGE = `<!doctype html>
     idle.hidden = true;
     resuming.hidden = false;
     loader.classList.add("spinning");
+    // The tab title is the only part of this page visible once it is in the
+    // background, which is exactly where it sits during a wake.
+    document.title = "Resuming stack…";
 
     const started = Date.now();
     setInterval(() => {
@@ -312,7 +315,25 @@ function wake(): void {
 }
 
 const creds = tls();
+// The parker holds a dev port and its only endpoint starts a whole stack, so it
+// answers nobody but this machine. Filtering by peer address rather than
+// binding to 127.0.0.1 keeps `localhost` working in the browser: on macOS that
+// resolves to ::1 first, and one Node listener cannot cover both loopback
+// families.
+function fromLoopback(req: http.IncomingMessage): boolean {
+  const addr = req.socket.remoteAddress ?? "";
+  return (
+    addr === "::1" || addr === "::ffff:127.0.0.1" || addr.startsWith("127.")
+  );
+}
+
 const handler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+  if (!fromLoopback(req)) {
+    res.writeHead(403, { "content-type": "text/plain" });
+    res.end("This worktree's stack can only be resumed from this machine.\n");
+    return;
+  }
+
   // Waking is deliberately behind a click rather than behind the page load:
   // a bookmark opened by accident, a browser prefetch, a link preview or a
   // still-open tab reconnecting would otherwise each start a stack the

@@ -5,7 +5,7 @@ This document provides an overview of the key directories in the Gram project to
 <tip>
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
 
-In a fresh git worktree the stack is booted for you and then paused — containers exist with migrations and seed data applied, but nothing is running. You rarely need to wake it by hand: opening the worktree's dashboard URL serves a "Resuming stack" page that wakes it and reloads, and `mise run seed` / `mise run playwright` wake it first. `mise run wake` and `mise run pause` (alias `sleep`) are there when you want to be explicit, and `mise run idle-pause --all` pauses stacks nobody is using.
+In a fresh git worktree the stack is booted for you and then paused — containers exist with migrations and seed data applied, but no application daemons are running (a placeholder holds the dashboard port and serves a resume page). You rarely need to wake it by hand: opening the worktree's dashboard URL serves a "Resuming stack" page that wakes it and reloads, and `mise run seed` / `mise run playwright` wake it first. `mise run wake` and `mise run pause` (alias `sleep`) are there when you want to be explicit, and `mise run idle-pause --all` pauses stacks nobody is using.
 </tip>
 
 ## Customer Data Is Confidential

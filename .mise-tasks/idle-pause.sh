@@ -40,16 +40,21 @@ if [ "$check_all" = "true" ]; then
 
     while read -r wt; do
         [ -d "$wt" ] || continue
-        # Worktrees on a branch that predates this task would just print
-        # "no task idle-pause found" on every cron run -- skip them quietly.
-        (cd "$wt" && mise tasks info idle-pause &> /dev/null \
-            && mise run idle-pause "${forward[@]}") || true
+        # Worktrees on a branch that predates this task would just print "no
+        # task idle-pause found" on every run -- skip those quietly, but keep
+        # reporting a sweep that actually failed.
+        (cd "$wt" && mise tasks info idle-pause &> /dev/null) || continue
+        (cd "$wt" && mise run idle-pause "${forward[@]}") \
+            || echo "⚠️  idle-pause failed in $wt" >&2
     done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
     exit 0
 fi
 
 gitdir="$(git rev-parse --absolute-git-dir)"
-branch="$(git branch --show-current 2> /dev/null || echo detached)"
+# `git branch --show-current` succeeds with empty output on a detached HEAD,
+# so `||` never fires.
+branch="$(git branch --show-current 2> /dev/null)"
+[ -n "$branch" ] || branch="detached"
 
 # Already paused, or a boot is in flight: nothing to do either way.
 [ -f "$gitdir/gram-stack-paused" ] && exit 0
@@ -58,15 +63,37 @@ if [ -f "$gitdir/gram-stack-boot.pid" ]; then
     ps -o command= -p "$pid" 2> /dev/null | grep -q workboot && exit 0
 fi
 
-# Nothing listening on the site port means the stack is down (not paused --
-# a nuked or never-booted worktree); leave it alone.
-if ! lsof -nP -iTCP:"${GRAM_SITE_PORT}" -sTCP:LISTEN -t > /dev/null 2>&1; then
+# `lsof` on macOS and every dev container that has it; `ss` on the Linux hosts
+# that do not (a missing tool would otherwise read as "no connections" and
+# pause a stack somebody is using).
+if command -v lsof > /dev/null 2>&1; then
+    listening() {
+        lsof -nP -iTCP:"$1" -sTCP:LISTEN -t > /dev/null 2>&1
+    }
+    established() {
+        lsof -nP -iTCP:"$1" -iTCP:"$2" -sTCP:ESTABLISHED -t 2> /dev/null \
+            | grep -c . | tr -d ' '
+    }
+elif command -v ss > /dev/null 2>&1; then
+    listening() {
+        ss -Hltn "sport = :$1" 2> /dev/null | grep -q .
+    }
+    established() {
+        ss -Htn "state established ( sport = :$1 or sport = :$2 )" 2> /dev/null \
+            | grep -c . | tr -d ' '
+    }
+else
+    echo "Neither lsof nor ss is available; cannot tell whether this stack is in use." >&2
     exit 0
 fi
 
-conns=$(lsof -nP \
-    -iTCP:"${GRAM_SITE_PORT}" -iTCP:"${GRAM_SERVER_PORT}" \
-    -sTCP:ESTABLISHED -t 2> /dev/null | wc -l | tr -d ' ')
+# Nothing listening on the site port means the stack is down (not paused --
+# a nuked or never-booted worktree); leave it alone.
+if ! listening "${GRAM_SITE_PORT}"; then
+    exit 0
+fi
+
+conns=$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}")
 
 stamp="$gitdir/gram-stack-lastseen"
 now=$(date +%s)
@@ -90,6 +117,13 @@ fi
 
 if [ "$dry_run" = "true" ]; then
     echo "${branch}: idle ${idle}m — would pause"
+    exit 0
+fi
+
+# The sample that decided this is up to five minutes old. Cheap insurance
+# against pausing a stack somebody started using in between.
+if [ "$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}")" -gt 0 ]; then
+    echo "$now" > "$stamp"
     exit 0
 fi
 

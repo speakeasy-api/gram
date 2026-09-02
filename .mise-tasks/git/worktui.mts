@@ -751,7 +751,11 @@ async function run() {
           // Boot log is the interesting one while a boot is live or failed;
           // for a stack that's simply up (or has no boot log), the live
           // service logs are what you want to see.
-          logMode = ["booting", "seeding", "failed"].includes(logTarget.state)
+          // `paused` belongs with the boot states, not with the running ones: a paused
+          // worktree has no pitchfork daemons, so service logs would come back empty.
+          logMode = ["booting", "seeding", "failed", "paused"].includes(
+            logTarget.state,
+          )
             ? "boot"
             : "services";
           logScroll = 0;
