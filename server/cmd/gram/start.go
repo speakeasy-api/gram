@@ -1935,7 +1935,7 @@ func newStartCommand() *cli.Command {
 		After: func(c *cli.Context) error {
 			ctx := context.WithoutCancel(c.Context)
 			defer dbClose()
-			defer o11y.LogDefer(ctx, PullLogger(c.Context), func() error { return clickhouseShutdown(ctx) })
+			defer o11y.LogDefer(ctx, PullLogger(c.Context), "failed to shut down clickhouse client", func() error { return clickhouseShutdown(ctx) })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

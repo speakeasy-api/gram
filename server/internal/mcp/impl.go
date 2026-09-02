@@ -882,7 +882,6 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // downstream tool dispatch doesn't 401 when the in-toolset gate is skipped.
 // The legacy /mcp path passes nil.
 //
-// The caller is responsible for closing r.Body.
 // callerToolSelection is the consent-screen tool policy resolved by a
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
