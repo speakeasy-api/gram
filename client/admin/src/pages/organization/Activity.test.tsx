@@ -1,30 +1,49 @@
-import { QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { organizationActivityQuery } from "@/lib/adminQueries";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import { Activity } from "@/pages/organization/Activity";
 import { anActivityLog, anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({ listOrganizationActivity: vi.fn() }));
 
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
-  return {
-    ...actual,
-    listOrganizationActivity: mocks.listOrganizationActivity,
-  };
-});
+vi.mock("@/lib/gramAdminClient", () => ({
+  organizationActivityQuery: (organizationId: string) =>
+    infiniteQueryOptions({
+      queryKey: ["activity", organizationId],
+      initialPageParam: undefined as { cursor: string } | undefined,
+      queryFn: async ({ pageParam }) => {
+        const result = await mocks.listOrganizationActivity(
+          organizationId,
+          pageParam?.cursor,
+        );
+        return {
+          result,
+          "~next": result.nextCursor
+            ? { cursor: result.nextCursor }
+            : undefined,
+        };
+      },
+      getNextPageParam: (page) => page["~next"],
+    }),
+}));
 
 const ORG = anOrganization();
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((settle, fail) => {
     resolve = settle;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => mocks.listOrganizationActivity.mockReset());
@@ -32,45 +51,45 @@ afterEach(cleanup);
 
 describe("Activity", () => {
   it("renders every event field and the display, slug, and ID fallbacks", async () => {
-    const createdAt = "2026-01-15T12:30:00Z";
+    const createdAt = new Date("2026-01-15T12:30:00Z");
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
           id: "event-display",
-          created_at: createdAt,
-          actor_id: "actor-display-id",
-          actor_type: "staff",
-          actor_display_name: "Actor Display",
-          actor_slug: "actor-display-slug",
-          subject_id: "subject-display-id",
-          subject_type: "organization",
-          subject_display_name: "Subject Display",
-          subject_slug: "subject-display-slug",
-          project_id: "project-id",
-          project_slug: "project-slug",
-          acting_surface: "platform_mcp",
-          acting_client_id: "client-id",
-          before_snapshot: { days: 7 },
-          after_snapshot: { days: 14 },
+          createdAt: createdAt,
+          actorId: "actor-display-id",
+          actorType: "staff",
+          actorDisplayName: "Actor Display",
+          actorSlug: "actor-display-slug",
+          subjectId: "subject-display-id",
+          subjectType: "organization",
+          subjectDisplayName: "Subject Display",
+          subjectSlug: "subject-display-slug",
+          projectId: "project-id",
+          projectSlug: "project-slug",
+          actingSurface: "platform_mcp",
+          actingClientId: "client-id",
+          beforeSnapshot: { days: 7 },
+          afterSnapshot: { days: 14 },
           metadata: { approved: true },
         }),
         anActivityLog({
           id: "event-slug",
-          actor_id: "actor-slug-id",
-          actor_display_name: undefined,
-          actor_slug: "actor-slug",
-          subject_id: "subject-slug-id",
-          subject_display_name: undefined,
-          subject_slug: "subject-slug",
+          actorId: "actor-slug-id",
+          actorDisplayName: undefined,
+          actorSlug: "actor-slug",
+          subjectId: "subject-slug-id",
+          subjectDisplayName: undefined,
+          subjectSlug: "subject-slug",
         }),
         anActivityLog({
           id: "event-id",
-          actor_id: "actor-id-fallback",
-          actor_display_name: undefined,
-          actor_slug: undefined,
-          subject_id: "subject-id-fallback",
-          subject_display_name: undefined,
-          subject_slug: undefined,
+          actorId: "actor-id-fallback",
+          actorDisplayName: undefined,
+          actorSlug: undefined,
+          subjectId: "subject-id-fallback",
+          subjectDisplayName: undefined,
+          subjectSlug: undefined,
         }),
       ],
     });
@@ -94,7 +113,7 @@ describe("Activity", () => {
     expect(list.textContent).toContain("via platform_mcp");
 
     const time = list.querySelector("time");
-    expect(time?.getAttribute("datetime")).toBe(createdAt);
+    expect(time?.getAttribute("datetime")).toBe(createdAt.toISOString());
     expect(time?.textContent).toBe(
       "Thursday, January 15, 2026 at 12:30:00 PM UTC",
     );
@@ -122,13 +141,13 @@ describe("Activity", () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
-          before_snapshot: {
+          beforeSnapshot: {
             zeta: "before",
             removed: "gone",
             complex: { nested: ["old"] },
             alpha: null,
           },
-          after_snapshot: {
+          afterSnapshot: {
             zeta: "after",
             added: true,
             complex: { nested: ["new"] },
@@ -186,12 +205,28 @@ describe("Activity", () => {
     expect(rows[3]?.textContent).toBe('removed"gone"→(none)');
   });
 
+  it("uses the legacy system actor ID fallback", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          actorId: "system",
+          actorType: "staff",
+          actorDisplayName: undefined,
+          actorSlug: undefined,
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    expect((await screen.findByRole("list")).textContent).toContain("System");
+  });
+
   it("renders an empty string as a visible JSON string in a changed field", async () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
-          before_snapshot: { value: "before" },
-          after_snapshot: { value: "" },
+          beforeSnapshot: { value: "before" },
+          afterSnapshot: { value: "" },
         }),
       ],
     });
@@ -209,8 +244,8 @@ describe("Activity", () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
-          before_snapshot: { value: true },
-          after_snapshot: { value: "true" },
+          beforeSnapshot: { value: true },
+          afterSnapshot: { value: "true" },
         }),
       ],
     });
@@ -228,8 +263,8 @@ describe("Activity", () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
-          before_snapshot: { days: 7 },
-          after_snapshot: { days: 14 },
+          beforeSnapshot: { days: 7 },
+          afterSnapshot: { days: 14 },
         }),
       ],
     });
@@ -255,8 +290,8 @@ describe("Activity", () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
-          before_snapshot: snapshot,
-          after_snapshot: snapshot,
+          beforeSnapshot: snapshot,
+          afterSnapshot: snapshot,
           metadata: { request_id: "request-placeholder" },
         }),
       ],
@@ -305,6 +340,17 @@ describe("Activity", () => {
     expect(screen.queryByText("Loading activity...")).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not claim the feed is empty while another page is available", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [],
+      nextCursor: "next-page",
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    await screen.findByRole("button", { name: "Load more" });
+    expect(screen.queryByText("No activity for this organization")).toBeNull();
   });
 
   it("keeps the empty state and shows only the refresh error after a failed refetch", async () => {
@@ -417,7 +463,7 @@ describe("Activity", () => {
           anActivityLog({ id: "event-4", action: "event-4" }),
           anActivityLog({ id: "event-3", action: "event-3" }),
         ],
-        next_cursor: "cursor-2",
+        nextCursor: "cursor-2",
       })
       .mockReturnValueOnce(secondPage.promise);
     await renderWithApp(<Activity org={ORG} />);
@@ -453,12 +499,227 @@ describe("Activity", () => {
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 
+  it("humanizes trial actions and interprets Stripe checkout conversion", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          id: "armed",
+          action: "organization:enterprise_trial_armed",
+          createdAt: new Date("2026-08-01T12:00:00Z"),
+          afterSnapshot: {
+            trial: { tier: "enterprise", ends_at: "2026-08-15T12:00:00Z" },
+          },
+        }),
+        anActivityLog({
+          id: "extended",
+          action: "organization:enterprise_trial_extended",
+          beforeSnapshot: { trial: { ends_at: "2026-08-15T12:00:00Z" } },
+          afterSnapshot: {
+            trial: { tier: "enterprise", ends_at: "2026-08-29T12:00:00Z" },
+          },
+        }),
+        anActivityLog({
+          id: "rearmed",
+          action: "organization:enterprise_trial_rearmed",
+        }),
+        anActivityLog({
+          id: "demoted",
+          action: "organization:enterprise_trial_demoted",
+          metadata: { previous_account_type: "enterprise" },
+        }),
+        anActivityLog({
+          id: "converted",
+          action: "organization:enterprise_trial_converted",
+          metadata: {
+            conversion_source: "stripe_checkout",
+            key_access_changed: true,
+          },
+          beforeSnapshot: {
+            keys: [{ key_type: "chat", effective_disabled: true }],
+          },
+          afterSnapshot: {
+            trial: { converted_at: "2026-08-20T12:00:00Z", tier: "enterprise" },
+            keys: [{ key_type: "chat", effective_disabled: false }],
+          },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+
+    for (const phrase of [
+      "started enterprise trial",
+      "extended enterprise trial",
+      "rearmed enterprise trial",
+      "demoted enterprise trial",
+      "converted enterprise trial through checkout",
+    ]) {
+      expect(await screen.findByText(phrase)).toBeTruthy();
+    }
+    const checkout = screen
+      .getByText("converted enterprise trial through checkout")
+      .closest("li");
+    expect(checkout?.textContent).toContain("Stripe");
+    expect(checkout?.textContent).toContain("Enterprise trial converted");
+    expect(checkout?.textContent).toContain("Conversion methodStripe checkout");
+    expect(checkout?.textContent).toContain("Tierenterprise");
+    expect(checkout?.textContent).toContain("OpenRouter key access changedYes");
+    expect(checkout?.textContent).toContain(
+      "OpenRouter chat keyDisabled → Enabled",
+    );
+    expect(
+      screen.getByRole("region", { name: "Enterprise trial started" })
+        .textContent,
+    ).toContain("Trial end");
+    expect(
+      screen.getByRole("region", { name: "Enterprise trial extended" })
+        .textContent,
+    ).toContain("Previous trial end");
+    expect(
+      screen.getByRole("region", { name: "Enterprise trial ended" })
+        .textContent,
+    ).toContain("Tierenterprise");
+  });
+
+  it("renders malformed trial dates without breaking the feed", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          action: "organization:enterprise_trial_rearmed",
+          createdAt: new Date("not-a-date"),
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    expect(await screen.findByText("rearmed enterprise trial")).toBeTruthy();
+    expect(screen.getAllByText("Unknown time").length).toBeGreaterThan(0);
+  });
+
+  it("adds labeled nested trial, organization, and key diffs without losing Admin details", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          id: "nested",
+          action: "organization:enterprise_trial_converted",
+          actorId: "actor-id",
+          actorSlug: "actor-slug",
+          subjectId: "subject-id",
+          projectId: "project-id",
+          actingClientId: "client-id",
+          metadata: { conversion_source: "manual", extra: { retained: true } },
+          beforeSnapshot: {
+            organization: { account_type: "free", whitelisted: false },
+            trial: { status: "running", tier: "enterprise" },
+            trial_ends_at: "2026-08-20T12:00:00Z",
+            keys: [{ key_type: "chat", effective_disabled: false }],
+            generic_extra: { value: "before" },
+          },
+          afterSnapshot: {
+            organization: { account_type: "enterprise", whitelisted: true },
+            trial: { status: "converted", tier: "enterprise" },
+            trial_ends_at: "2026-08-27T12:00:00Z",
+            keys: [{ key_type: "chat", effective_disabled: true }],
+            generic_extra: { value: "after" },
+          },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show diff ▾" }));
+    const diff = screen.getByRole("region", { name: "Changed fields" });
+    for (const label of [
+      "Account type",
+      "Whitelisted",
+      "Trial status",
+      "Trial end",
+      "OpenRouter effective disabled (chat)",
+      "generic_extra",
+    ]) {
+      expect(within(diff).getByText(label)).toBeTruthy();
+    }
+
+    fireEvent.click(screen.getByText(/Event details for/));
+    for (const value of [
+      "actor-id",
+      "actor-slug",
+      "subject-id",
+      "project-id",
+      "client-id",
+    ]) {
+      expect(screen.getAllByText(value).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText(/"retained": true/)).toBeTruthy();
+    fireEvent.click(
+      within(diff).getByRole("button", { name: "View raw diff" }),
+    );
+    expect(screen.getAllByText(/"generic_extra"/)).toHaveLength(2);
+  });
+
+  it("deduplicates IDs at page boundaries and announces incremental loading", async () => {
+    const secondPage = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
+    mocks.listOrganizationActivity
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ id: "same", action: "first-seen" })],
+        nextCursor: "next",
+      })
+      .mockReturnValueOnce(secondPage.promise);
+    await renderWithApp(<Activity org={ORG} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "Loading more activity",
+    );
+    secondPage.resolve({
+      logs: [
+        anActivityLog({ id: "same", action: "duplicate" }),
+        anActivityLog({ id: "new", action: "new" }),
+      ],
+    });
+    await screen.findByText("new");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("first-seen")).toBeTruthy();
+    expect(screen.queryByText("duplicate")).toBeNull();
+  });
+
+  it("guards load-more synchronously, handles rejection, and safely settles after unmount", async () => {
+    const page = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
+    mocks.listOrganizationActivity
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ id: "current" })],
+        nextCursor: "next",
+      })
+      .mockReturnValueOnce(page.promise);
+    const mounted = await renderWithApp(<Activity org={ORG} />);
+    const loadMore = await screen.findByRole("button", { name: "Load more" });
+
+    fireEvent.click(loadMore);
+    fireEvent.click(loadMore);
+    expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(2);
+
+    mounted.unmount();
+    page.reject(new Error("offline"));
+    await page.promise.catch(() => undefined);
+  });
+
+  it("exposes the initial loading message as a polite status", async () => {
+    const pending = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
+    mocks.listOrganizationActivity.mockReturnValue(pending.promise);
+    const mounted = await renderWithApp(<Activity org={ORG} />);
+    const status = await screen.findByRole("status");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(status.textContent).toContain("Loading activity");
+    mounted.unmount();
+    pending.resolve({ logs: [] });
+  });
+
   it("keeps rows and prevents repeated activation while retrying a later page", async () => {
     const retry = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
     mocks.listOrganizationActivity
       .mockResolvedValueOnce({
         logs: [anActivityLog({ id: "event-2", action: "event-2" })],
-        next_cursor: "retry-cursor",
+        nextCursor: "retry-cursor",
       })
       .mockRejectedValueOnce(new Error("offline"))
       .mockReturnValueOnce(retry.promise);

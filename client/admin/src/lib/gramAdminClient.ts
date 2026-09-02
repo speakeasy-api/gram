@@ -1,4 +1,5 @@
 import {
+  infiniteQueryOptions,
   queryOptions,
   useMutation,
   type UseMutationOptions,
@@ -8,6 +9,10 @@ import {
 import { GramCore } from "@gram/admin-client/core";
 import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
+import {
+  buildAdminListOrganizationActivityInfiniteQuery,
+  type AdminListOrganizationActivityPageParams,
+} from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
@@ -101,6 +106,25 @@ export function organizationFeaturesQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationFeaturesQuery> {
   return createOrganizationFeaturesQuery(organizationId);
+}
+
+function createOrganizationActivityQuery(organizationId: string) {
+  const generated = buildAdminListOrganizationActivityInfiniteQuery(
+    redirectingClient,
+    { organizationId },
+  );
+  return infiniteQueryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    initialPageParam: undefined as AdminListOrganizationActivityPageParams,
+    getNextPageParam: (lastPage) => lastPage["~next"],
+  });
+}
+
+export function organizationActivityQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationActivityQuery> {
+  return createOrganizationActivityQuery(organizationId);
 }
 
 // Feature writes preserve their predecessor's in-place 401 behavior. No raw
