@@ -51,8 +51,11 @@ INSERT INTO mcp_servers (
 );
 
 -- name: ReconcileWrapper :exec
+-- The derived remote_session_issuer_id is resynced by issuer id afterwards,
+-- which cannot reach a server whose issuer just became NULL; clear it here.
 UPDATE mcp_servers
 SET user_session_issuer_id = @user_session_issuer_id,
+    remote_session_issuer_id = CASE WHEN @user_session_issuer_id::uuid IS NULL THEN NULL ELSE remote_session_issuer_id END,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()
@@ -263,6 +266,10 @@ VALUES (@id, @assistant_id, @toolset_id, @project_id);
 -- name: SeedAssistantMcpServerFixture :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
 VALUES (@id, @assistant_id, @mcp_server_id, @project_id);
+
+-- name: UpdateToolsetIssuerFixture :exec
+-- TEST FIXTURE ONLY.
+UPDATE toolsets SET user_session_issuer_id = @user_session_issuer_id WHERE id = @id;
 
 -- name: UpdateToolsetSlugFixture :exec
 UPDATE toolsets SET mcp_slug = @mcp_slug WHERE id = @id;

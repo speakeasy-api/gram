@@ -869,6 +869,7 @@ func (q *Queries) PlatformSlugOwnedByOtherToolset(ctx context.Context, arg Platf
 const reconcileWrapper = `-- name: ReconcileWrapper :exec
 UPDATE mcp_servers
 SET user_session_issuer_id = $1,
+    remote_session_issuer_id = CASE WHEN $1::uuid IS NULL THEN NULL ELSE remote_session_issuer_id END,
     tool_variations_group_id = $2,
     visibility = $3,
     updated_at = clock_timestamp()
@@ -883,6 +884,8 @@ type ReconcileWrapperParams struct {
 	ProjectID             uuid.UUID
 }
 
+// The derived remote_session_issuer_id is resynced by issuer id afterwards,
+// which cannot reach a server whose issuer just became NULL; clear it here.
 func (q *Queries) ReconcileWrapper(ctx context.Context, arg ReconcileWrapperParams) error {
 	_, err := q.db.Exec(ctx, reconcileWrapper,
 		arg.UserSessionIssuerID,
@@ -1396,6 +1399,21 @@ type UpdateToolsetDomainFixtureParams struct {
 
 func (q *Queries) UpdateToolsetDomainFixture(ctx context.Context, arg UpdateToolsetDomainFixtureParams) error {
 	_, err := q.db.Exec(ctx, updateToolsetDomainFixture, arg.CustomDomainID, arg.ID)
+	return err
+}
+
+const updateToolsetIssuerFixture = `-- name: UpdateToolsetIssuerFixture :exec
+UPDATE toolsets SET user_session_issuer_id = $1 WHERE id = $2
+`
+
+type UpdateToolsetIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+}
+
+// TEST FIXTURE ONLY.
+func (q *Queries) UpdateToolsetIssuerFixture(ctx context.Context, arg UpdateToolsetIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, updateToolsetIssuerFixture, arg.UserSessionIssuerID, arg.ID)
 	return err
 }
 

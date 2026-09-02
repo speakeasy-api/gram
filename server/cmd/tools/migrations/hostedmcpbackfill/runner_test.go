@@ -187,6 +187,23 @@ func TestRun_DerivesRemoteSessionIssuer(t *testing.T) {
 	}
 }
 
+func TestRun_ClearedIssuerClearsDerivedRemoteIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuerID := f.seedIssuer(t)
+	f.seedRemoteSessionClientBinding(t, issuerID)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "org-issuer-cleared", enabled: true, issuerID: uuid.NullUUID{UUID: issuerID, Valid: true}})
+	f.apply(t)
+	require.True(t, f.wrapper(t, toolsetID).RemoteSessionIssuerID.Valid)
+
+	require.NoError(t, New(f.pool).UpdateToolsetIssuerFixture(t.Context(), UpdateToolsetIssuerFixtureParams{UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ID: toolsetID}))
+	requireOnlyOutcome(t, f.apply(t), OutcomeAdopted)
+
+	w := f.wrapper(t, toolsetID)
+	require.False(t, w.UserSessionIssuerID.Valid)
+	require.False(t, w.RemoteSessionIssuerID.Valid, "derived remote issuer must not outlive the user issuer")
+}
+
 func TestRun_MoveToPlatformScopeClearsDomainRoot(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
