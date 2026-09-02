@@ -29,6 +29,22 @@ var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc 
 // supported") rather than a generic decode failure.
 var ErrBatchRequest = errors.New("batch requests are not supported")
 
+type forwardTransportError struct {
+	cause    error
+	timedOut bool
+}
+
+func (e *forwardTransportError) Error() string { return e.cause.Error() }
+func (e *forwardTransportError) Unwrap() error { return e.cause }
+
+func (p *Proxy) classifyForwardResultError(ctx context.Context, err error) error {
+	var forwardErr *forwardTransportError
+	if !errors.As(err, &forwardErr) {
+		return err
+	}
+	return p.classifyForwardError(ctx, forwardErr.cause, forwardErr.timedOut)
+}
+
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
 // error. timedOut is true when the failure was caused by the proxy's own
 // phase-1 timer firing (vs. a parent-context cancellation from the user

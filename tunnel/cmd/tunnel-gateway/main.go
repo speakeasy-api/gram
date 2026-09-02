@@ -94,16 +94,27 @@ func main() {
 		slog.String("public_addr", publicListenAddr),
 		slog.String("forward_addr", forwardListenAddr),
 		slog.String("advertise", advertiseAddr))
+	var serverErr error
 	for range 2 {
-		if err := <-errCh; err != nil {
+		if err := <-errCh; err != nil && serverErr == nil {
+			serverErr = err
 			stop()
 			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			_ = publicSrv.Shutdown(shutCtx)
 			_ = forwardSrv.Shutdown(shutCtx)
 			cancel()
-			logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", err))
-			os.Exit(1)
 		}
+	}
+
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), 25*time.Second)
+	if err := gw.Shutdown(drainCtx); err != nil {
+		logger.ErrorContext(context.Background(), "tunnel-gateway session drain failed", slog.Any("error", err))
+	}
+	cancelDrain()
+
+	if serverErr != nil {
+		logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", serverErr))
+		os.Exit(1)
 	}
 }
 

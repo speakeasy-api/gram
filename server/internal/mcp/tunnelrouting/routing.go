@@ -6,8 +6,10 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -101,8 +103,18 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 }
 
 // Retryer returns the tunnel-specific proxy retry policy.
-func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.UpstreamResponseRetryer {
-	return func(ctx context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
+func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.UpstreamRetryer {
+	return func(ctx context.Context, resp *http.Response, forwardErr error) (*proxy.UpstreamRetry, error) {
+		if forwardErr != nil {
+			var opErr *net.OpError
+			if ctx.Err() != nil || !errors.As(forwardErr, &opErr) || opErr.Op != "dial" {
+				return nil, nil
+			}
+			if err := unpublishSelected(ctx, routes, tunnelID, selectedAddr); err != nil {
+				return nil, err
+			}
+			return retryTarget(ctx, routes, tunnelID, selectedAddr, clientAffinityKey, forwardToken)
+		}
 		if resp == nil || resp.StatusCode != http.StatusBadGateway {
 			return nil, nil
 		}
@@ -110,10 +122,8 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		tunnelErr := resp.Header.Get(ErrorHeader)
 		switch tunnelErr {
 		case wire.TunnelErrorNoLiveSession:
-			if selectedAddr != "" {
-				if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
-					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
-				}
+			if err := unpublishSelected(ctx, routes, tunnelID, selectedAddr); err != nil {
+				return nil, err
 			}
 		case wire.TunnelErrorTunnelBusy:
 			// The gateway is healthy but at its substream cap: keep its route
@@ -134,27 +144,45 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 			return nil, nil
 		}
 
-		candidates, err := routes.Candidates(ctx, tunnelID)
-		if err != nil {
-			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
-		}
-		exclude := map[string]struct{}{selectedAddr: {}}
+		excludedAddr := selectedAddr
 		if tunnelErr == wire.TunnelErrorSubstreamFailed {
-			exclude = nil
+			excludedAddr = ""
 		}
-		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
-		if !ok {
-			return nil, nil
-		}
-		gatewayURL, err := GatewayURL(addr)
-		if err != nil {
-			return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
-		}
-		return &proxy.UpstreamResponseRetry{
-			RemoteURL: gatewayURL,
-			Headers:   Headers(tunnelID, forwardToken, clientAffinityKey),
-		}, nil
+		return retryTarget(ctx, routes, tunnelID, excludedAddr, clientAffinityKey, forwardToken)
 	}
+}
+
+func unpublishSelected(ctx context.Context, routes route.Store, tunnelID, selectedAddr string) error {
+	if selectedAddr == "" {
+		return nil
+	}
+	if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
+		return fmt.Errorf("unpublish stale tunnel route: %w", err)
+	}
+	return nil
+}
+
+func retryTarget(ctx context.Context, routes route.Store, tunnelID, excludedAddr, clientAffinityKey, forwardToken string) (*proxy.UpstreamRetry, error) {
+	candidates, err := routes.Candidates(ctx, tunnelID)
+	if err != nil {
+		return nil, fmt.Errorf("list tunnel retry routes: %w", err)
+	}
+	var exclude map[string]struct{}
+	if excludedAddr != "" {
+		exclude = map[string]struct{}{excludedAddr: {}}
+	}
+	addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
+	if !ok {
+		return nil, nil
+	}
+	gatewayURL, err := GatewayURL(addr)
+	if err != nil {
+		return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
+	}
+	return &proxy.UpstreamRetry{
+		RemoteURL: gatewayURL,
+		Headers:   Headers(tunnelID, forwardToken, clientAffinityKey),
+	}, nil
 }
 
 // GatewayURL normalizes a route store address into the proxy's upstream URL.

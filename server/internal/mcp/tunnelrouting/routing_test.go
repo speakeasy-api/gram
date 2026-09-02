@@ -3,6 +3,8 @@ package tunnelrouting
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -45,7 +47,7 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 
 	resp := tunnelErrorResponse("no-live-session")
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.NotNil(t, retry)
 	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
@@ -58,6 +60,43 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
 }
 
+func TestRetryerDialFailureUnpublishesAndFailsOver(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("i/o timeout")}
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, nil, dialErr)
+	require.NoError(t, err)
+	require.NotNil(t, retry)
+	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
+}
+
+func TestRetryerDoesNotReplayAfterConnectedTransportFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+
+	readErr := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset")}
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, nil, readErr)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"127.0.0.1:1001", "127.0.0.1:1002"}, candidates)
+}
+
 func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +106,7 @@ func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 
 	resp := tunnelErrorResponse("substream-failed")
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.NotNil(t, retry)
 	require.Equal(t, "http://127.0.0.1:1001", retry.RemoteURL)
@@ -91,7 +130,7 @@ func TestRetryerTunnelBusyFailsOverWithoutUnpublish(t *testing.T) {
 
 	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.NotNil(t, retry)
 	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
@@ -111,7 +150,7 @@ func TestRetryerTunnelBusySingleCandidateDoesNotRetry(t *testing.T) {
 
 	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.Nil(t, retry)
 
@@ -134,7 +173,7 @@ func TestRetryerSubstreamFailedDoesNotReplayPost(t *testing.T) {
 
 	resp := tunnelErrorResponseForMethod("substream-failed", http.MethodPost)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.Nil(t, retry)
 
@@ -156,7 +195,7 @@ func TestRetryerSubstreamFailedNilRequestDoesNotRetry(t *testing.T) {
 	resp := tunnelErrorResponse("substream-failed")
 	resp.Request = nil
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.Nil(t, retry)
 }
@@ -174,7 +213,7 @@ func TestRetryerPlainBadGatewayDoesNotRetry(t *testing.T) {
 		Body:       http.NoBody,
 	}
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.Nil(t, retry)
 
@@ -192,7 +231,7 @@ func TestRetryerNoLiveSessionSingleCandidateDoesNotRetry(t *testing.T) {
 
 	resp := tunnelErrorResponse("no-live-session")
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp, nil)
 	require.NoError(t, err)
 	require.Nil(t, retry)
 

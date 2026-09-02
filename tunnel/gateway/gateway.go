@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -56,6 +57,10 @@ type Gateway struct {
 	routes route.Store
 	reg    *registry
 	logger *slog.Logger
+
+	lifecycleMu sync.Mutex
+	draining    bool
+	handlers    sync.WaitGroup
 }
 
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
@@ -102,7 +107,45 @@ func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 // SetAdvertiseAddr lets tests publish listener addresses known only after bind.
 func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 
+// Shutdown rejects new agent connections, closes every hijacked WebSocket
+// session, and waits for their handlers to withdraw route state.
+func (g *Gateway) Shutdown(ctx context.Context) error {
+	g.lifecycleMu.Lock()
+	g.draining = true
+	g.lifecycleMu.Unlock()
+
+	g.reg.closeAll()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		g.handlers.Wait()
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (g *Gateway) beginConnect() bool {
+	g.lifecycleMu.Lock()
+	defer g.lifecycleMu.Unlock()
+	if g.draining {
+		return false
+	}
+	g.handlers.Add(1)
+	return true
+}
+
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if !g.beginConnect() {
+		http.Error(w, "tunnel gateway is shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	defer g.handlers.Done()
+
 	// Shed before key lookup so a connect storm cannot load the key resolver.
 	if g.reg.activeSessions() >= g.cfg.MaxSessions {
 		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
@@ -163,23 +206,16 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
-	defer conn.Close()
-
-	// Record durable activation only after the session is actually live: a
-	// valid-key plain-HTTP probe (no upgrade) must not flip status to active
-	// or advance last_seen_at for a tunnel that never connected. On failure,
-	// close the session — the agent retries and re-activates.
-	if recorder, ok := g.keys.(ConnectionRecorder); ok {
-		if err := recorder.MarkConnected(r.Context(), tunnelID, presentedKeyHash, agentVersion); err != nil {
-			g.logger.ErrorContext(r.Context(), "tunnel connect activation failed",
-				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-			_ = session.Close()
-			return
-		}
-	}
+	defer func() { _ = conn.Close() }()
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
+	g.lifecycleMu.Lock()
+	if g.draining {
+		g.lifecycleMu.Unlock()
+		_ = session.Close()
+		return
+	}
 	remove := g.reg.add(tunnelID, sessionID, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
@@ -191,6 +227,25 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		ActiveConsumerSessions: 0,
 		Metadata:               metadata,
 	})
+	g.lifecycleMu.Unlock()
+
+	// Record durable activation only after the session is actually live: a
+	// valid-key plain-HTTP probe (no upgrade) must not flip status to active
+	// or advance last_seen_at for a tunnel that never connected. On failure,
+	// remove and close the session — the agent retries and re-activates.
+	if recorder, ok := g.keys.(ConnectionRecorder); ok {
+		if err := recorder.MarkConnected(r.Context(), tunnelID, presentedKeyHash, agentVersion); err != nil {
+			g.logger.ErrorContext(r.Context(), "tunnel connect activation failed",
+				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+			remove()
+			_ = session.Close()
+			return
+		}
+	}
+	if session.IsClosed() {
+		remove()
+		return
+	}
 	stateCtx, cancelState := routeOperationContext(r.Context())
 	if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
 		g.logger.WarnContext(r.Context(), "tunnel route publish failed", slog.Any("error", err))
@@ -204,10 +259,15 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	go g.sayHello(session, tunnelID, sessionID)
 
 	stop := make(chan struct{})
-	go g.refreshSessionState(tunnelID, presentedKeyHash, session, stop)
+	refreshDone := make(chan struct{})
+	go func() {
+		defer close(refreshDone)
+		g.refreshSessionState(tunnelID, presentedKeyHash, session, stop)
+	}()
 
 	<-session.CloseChan()
 	close(stop)
+	<-refreshDone
 	remove()
 	g.cleanupSessionState(tunnelID)
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",

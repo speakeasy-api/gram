@@ -51,7 +51,7 @@ func TestForwardRequestWithRetryClosesBodyOnRetryerError(t *testing.T) {
 		RemoteURL:             upstream.URL,
 		Headers:               nil,
 		AuthorizationOverride: "",
-		UpstreamResponseRetryer: func(_ context.Context, _ *http.Response) (*UpstreamResponseRetry, error) {
+		UpstreamRetryer: func(_ context.Context, _ *http.Response, _ error) (*UpstreamRetry, error) {
 			return nil, retryerErr
 		},
 		UserRequestObservationInterceptors: nil,

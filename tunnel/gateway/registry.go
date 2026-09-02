@@ -224,12 +224,31 @@ func (r *registry) kill(tunnelID string) int {
 	return len(list)
 }
 
-func (r *registry) activeSessions() int {
+func (r *registry) closeAll() {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	sessions := make([]*yamux.Session, 0, r.activeSessionsLocked())
+	for _, list := range r.sessions {
+		for _, entry := range list {
+			sessions = append(sessions, entry.session)
+		}
+	}
+	r.mu.RUnlock()
+
+	for _, session := range sessions {
+		_ = session.Close()
+	}
+}
+
+func (r *registry) activeSessionsLocked() int {
 	n := 0
 	for _, list := range r.sessions {
 		n += len(list)
 	}
 	return n
+}
+
+func (r *registry) activeSessions() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.activeSessionsLocked()
 }

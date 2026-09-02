@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -70,7 +71,7 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 		RemoteURL:                          upstreamURL,
 		Headers:                            nil,
 		AuthorizationOverride:              "",
-		UpstreamResponseRetryer:            nil,
+		UpstreamRetryer:                    nil,
 		UpstreamResponseInterceptor:        nil,
 		UserRequestObservationInterceptors: nil,
 		UserRequestInterceptors:            nil,
@@ -186,11 +187,12 @@ func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
 	t.Cleanup(first.Close)
 
 	p := newProxyForTest(t, first.URL)
-	p.UpstreamResponseRetryer = func(_ context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
+	p.UpstreamRetryer = func(_ context.Context, resp *http.Response, forwardErr error) (*proxy.UpstreamRetry, error) {
+		require.NoError(t, forwardErr)
 		if resp.Header.Get("X-Gram-Tunnel-Error") != "no-live-session" {
 			return nil, nil
 		}
-		return &proxy.UpstreamResponseRetry{RemoteURL: second.URL, Headers: nil}, nil
+		return &proxy.UpstreamRetry{RemoteURL: second.URL, Headers: nil}, nil
 	}
 
 	rr := httptest.NewRecorder()
@@ -205,6 +207,46 @@ func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
 	require.Equal(t, int64(1), secondRequests.Load())
 	require.JSONEq(t, initializeRequest, secondBody)
 	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
+}
+
+func TestProxy_Post_RetriesDialFailureBeforeRelay(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	staleURL := "http://" + listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	var retryCalls atomic.Int64
+	var secondBody string
+	var secondReadErr error
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body []byte
+		body, secondReadErr = io.ReadAll(r.Body)
+		secondBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+	}))
+	t.Cleanup(second.Close)
+
+	p := newProxyForTest(t, staleURL)
+	p.UpstreamRetryer = func(_ context.Context, resp *http.Response, forwardErr error) (*proxy.UpstreamRetry, error) {
+		retryCalls.Add(1)
+		require.Nil(t, resp)
+		require.Error(t, forwardErr)
+		return &proxy.UpstreamRetry{RemoteURL: second.URL, Headers: nil}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int64(1), retryCalls.Load())
+	require.NoError(t, secondReadErr)
+	require.JSONEq(t, initializeRequest, secondBody)
 }
 
 func TestProxy_Post_StripsAuthorizationHeader(t *testing.T) {

@@ -129,12 +129,12 @@ func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute
 	return attrs
 }
 
-type UpstreamResponseRetry struct {
+type UpstreamRetry struct {
 	RemoteURL string
 	Headers   []ConfiguredHeader
 }
 
-type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
+type UpstreamRetryer func(ctx context.Context, resp *http.Response, forwardErr error) (*UpstreamRetry, error)
 
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
@@ -220,10 +220,11 @@ type Proxy struct {
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
 
-	// UpstreamResponseRetryer may replace the upstream target once after
-	// response headers arrive but before any response is relayed to the user.
-	// It is used by tunneled MCP to fail over stale gateway owners.
-	UpstreamResponseRetryer UpstreamResponseRetryer
+	// UpstreamRetryer may replace the upstream target once before anything is
+	// relayed to the user. It receives either a response or an error; tunneled
+	// MCP uses the error path only for failures proven to have happened while
+	// dialing, before an HTTP request could reach the agent.
+	UpstreamRetryer UpstreamRetryer
 
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
@@ -928,10 +929,12 @@ func (p *Proxy) forwardRequest(
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent
 		// cancellation when both surface as the same context error
-		// inside the http.Client error chain.
+		// inside the http.Client error chain. Classification is deferred
+		// until the retry policy has had a chance to fail over a dial that
+		// never reached the selected gateway.
 		timedOut := !phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, p.classifyForwardError(ctx, err, timedOut)
+		return upstreamReq, nil, &forwardTransportError{cause: err, timedOut: timedOut}
 	}
 
 	// Atomically transition out of the headers-phase window. Stop returning
@@ -942,7 +945,7 @@ func (p *Proxy) forwardRequest(
 	if !phaseTimer.Stop() {
 		_ = resp.Body.Close()
 		forwardCancel()
-		return nil, nil, p.classifyForwardError(ctx, context.DeadlineExceeded, true)
+		return upstreamReq, nil, &forwardTransportError{cause: context.DeadlineExceeded, timedOut: true}
 	}
 
 	if isEventStream(resp.Header) {
@@ -981,27 +984,32 @@ func (p *Proxy) forwardRequestWithRetry(
 	validate func(*http.Request) error,
 ) (*http.Request, *http.Response, error) {
 	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
-	if err != nil || p.UpstreamResponseRetryer == nil {
-		return upstreamReq, upstreamResp, err
+	if p.UpstreamRetryer == nil {
+		return upstreamReq, upstreamResp, p.classifyForwardResultError(ctx, err)
 	}
 
-	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
-	if err != nil {
+	retry, retryErr := p.UpstreamRetryer(ctx, upstreamResp, err)
+	if retryErr != nil {
 		// Callers bail on err before they register their Body.Close defer,
 		// so an open response returned alongside an error is leaked — it
 		// would pin the upstream connection until the phase timer fires.
 		// Close it here and return no response.
-		o11y.NoLogDefer(upstreamResp.Body.Close)
-		return upstreamReq, nil, err
+		if upstreamResp != nil {
+			o11y.NoLogDefer(upstreamResp.Body.Close)
+		}
+		return upstreamReq, nil, retryErr
 	}
 	if retry == nil {
-		return upstreamReq, upstreamResp, nil
+		return upstreamReq, upstreamResp, p.classifyForwardResultError(ctx, err)
 	}
-	o11y.NoLogDefer(upstreamResp.Body.Close)
+	if upstreamResp != nil {
+		o11y.NoLogDefer(upstreamResp.Body.Close)
+	}
 
 	p.RemoteURL = retry.RemoteURL
 	p.Headers = retry.Headers
-	return p.forwardRequest(ctx, r, body(), validate)
+	upstreamReq, upstreamResp, err = p.forwardRequest(ctx, r, body(), validate)
+	return upstreamReq, upstreamResp, p.classifyForwardResultError(ctx, err)
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays

@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -45,6 +47,51 @@ func TestNewRejectsMissingForwardToken(t *testing.T) {
 	_, err := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	require.ErrorIs(t, err, errMissingForwardToken)
+}
+
+func TestShutdownClosesSessionsAndWithdrawsRoutes(t *testing.T) {
+	table := route.NewRouteTable()
+	gw, err := New(
+		Config{AdvertiseAddr: "gw-1:8091", ForwardToken: "s3cret"},
+		NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_testkey"}),
+		table,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	require.NoError(t, err)
+
+	public := httptest.NewServer(gw.PublicHandler())
+	t.Cleanup(public.Close)
+
+	headers := http.Header{
+		"Authorization":                 []string{"Bearer gram_tunnel_testkey"},
+		wire.HeaderTunnelServiceVersion: []string{"1.0.0"},
+	}
+	ws, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(public.URL, "http")+"/connect", &websocket.DialOptions{HTTPHeader: headers})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ws.CloseNow() })
+
+	conn := websocket.NetConn(t.Context(), ws, websocket.MessageBinary)
+	session, err := yamux.Server(conn, yamux.DefaultConfig())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		candidates, candidateErr := table.Candidates(t.Context(), "tunnel-1")
+		assert.NoError(c, candidateErr)
+		assert.Equal(c, []string{"gw-1:8091"}, candidates)
+	}, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, gw.Shutdown(t.Context()))
+	require.True(t, session.IsClosed())
+
+	candidates, err := table.Candidates(t.Context(), "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/connect", nil)
+	gw.PublicHandler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
