@@ -115,6 +115,9 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
+	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
+		return nil, err
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -243,6 +246,27 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
+	unlocked, err := repo.New(s.db).GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode); err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -250,6 +274,9 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, preflightMode); err != nil {
+		return nil, err
+	}
 	txRepo := repo.New(dbtx)
 
 	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
@@ -289,8 +316,8 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode); err != nil {
-		return nil, err
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "meta mcp server network access mode changed concurrently; retry the update")
 	}
 	storedMode := networkaccess.Storage(mode)
 
@@ -365,6 +392,19 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 
 	return afterView, nil
+}
+
+func (s *Service) preflightNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if s.networkAccessEligibility == nil {
+		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	if err := s.networkAccessEligibility.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return nil
 }
 
 func (s *Service) admitNetworkAccessMode(ctx context.Context, tx pgx.Tx, organizationID string, mode networkaccess.Mode) error {

@@ -67,18 +67,25 @@ func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID 
 	return nil
 }
 
-func (a *ExpansionAdmission) CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input networkaccess.EligibilityInput) error {
+func (a *ExpansionAdmission) PreflightNetworkAccess(ctx context.Context, input networkaccess.EligibilityInput) error {
 	if input.Mode.IsPublicOnly() {
 		return nil
-	}
-	if tx == nil {
-		return fmt.Errorf("network ingress admission transaction is unavailable")
 	}
 	if err := a.CheckExpansion(ctx, input.OrganizationID); err != nil {
 		return err
 	}
 	if !a.ready {
 		return fmt.Errorf("network ingress reconciliation is unavailable")
+	}
+	return nil
+}
+
+func (a *ExpansionAdmission) CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input networkaccess.EligibilityInput) error {
+	if input.Mode.IsPublicOnly() {
+		return nil
+	}
+	if tx == nil {
+		return fmt.Errorf("network ingress admission transaction is unavailable")
 	}
 	queries := networkingressrepo.New(tx)
 	if err := queries.AcquireNetworkIngressOrganizationLock(ctx, input.OrganizationID); err != nil {

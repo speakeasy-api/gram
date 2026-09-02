@@ -112,12 +112,13 @@ func (m Mode) IsPublicOnly() bool {
 	return m == ModePublicOnly
 }
 
-// EligibilityChecker authorizes admission to a non-public network mode. The
-// control-plane implementation arrives in a later checkpoint; nil and errors
-// must be treated as denial by callers.
+// EligibilityChecker authorizes admission to a non-public network mode in two
+// phases. PreflightNetworkAccess performs checks that may use shared clients or
+// external services before the caller reserves a database connection.
+// CheckNetworkAccess then runs inside the caller's write transaction so safety-
+// sensitive implementations can hold admission locks through commit.
 type EligibilityChecker interface {
-	// CheckNetworkAccess runs inside the caller's write transaction so safety-
-	// sensitive implementations can hold admission locks through commit.
+	PreflightNetworkAccess(ctx context.Context, input EligibilityInput) error
 	CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input EligibilityInput) error
 }
 
@@ -127,6 +128,10 @@ type EligibilityInput struct {
 }
 
 type DenyAllChecker struct{}
+
+func (DenyAllChecker) PreflightNetworkAccess(context.Context, EligibilityInput) error {
+	return fmt.Errorf("private network access is not enabled")
+}
 
 func (DenyAllChecker) CheckNetworkAccess(context.Context, pgx.Tx, EligibilityInput) error {
 	return fmt.Errorf("private network access is not enabled")
