@@ -37309,7 +37309,7 @@ paths:
       x-speakeasy-name-override: setOrganizationWhitelist
   /rpc/projects.update:
     post:
-      description: Update the display name and URL slug of the current project.
+      description: Update the display name of the current project.
       operationId: updateProject
       parameters:
         - allowEmptyValue: true
@@ -87478,14 +87478,8 @@ components:
           description: The display name of the project
           minLength: 1
           maxLength: 40
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
       required:
         - name
-        - slug
     UpdateProjectResult:
       type: object
       properties:

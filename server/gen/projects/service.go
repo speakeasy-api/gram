@@ -21,7 +21,7 @@ type Service interface {
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
 	// Create a new project.
 	CreateProject(context.Context, *CreateProjectPayload) (res *CreateProjectResult, err error)
-	// Update the display name and URL slug of the current project.
+	// Update the display name of the current project.
 	UpdateProject(context.Context, *UpdateProjectPayload) (res *UpdateProjectResult, err error)
 	// List all projects for an organization.
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
@@ -207,8 +207,6 @@ type UpdateProjectPayload struct {
 	SessionToken     *string
 	// The display name of the project
 	Name string
-	// The URL-friendly identifier of the project
-	Slug types.Slug
 }
 
 // UpdateProjectResult is the result type of the projects service updateProject

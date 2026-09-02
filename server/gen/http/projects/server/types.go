@@ -29,8 +29,6 @@ type CreateProjectRequestBody struct {
 type UpdateProjectRequestBody struct {
 	// The display name of the project
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The URL-friendly identifier of the project
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
@@ -3206,7 +3204,6 @@ func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string
 func NewUpdateProjectPayload(body *UpdateProjectRequestBody, sessionToken *string, projectSlugInput *string) *projects.UpdateProjectPayload {
 	v := &projects.UpdateProjectPayload{
 		Name: *body.Name,
-		Slug: types.Slug(*body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3313,9 +3310,6 @@ func ValidateUpdateProjectRequestBody(body *UpdateProjectRequestBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
@@ -3324,14 +3318,6 @@ func ValidateUpdateProjectRequestBody(body *UpdateProjectRequestBody) (err error
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
-		}
-	}
-	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.Slug != nil {
-		if utf8.RuneCountInString(*body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
 		}
 	}
 	return

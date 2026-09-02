@@ -9,16 +9,11 @@ export type UpdateProjectForm = {
    * The display name of the project
    */
   name: string;
-  /**
-   * A short url-friendly label that uniquely identifies a resource.
-   */
-  slug: string;
 };
 
 /** @internal */
 export type UpdateProjectForm$Outbound = {
   name: string;
-  slug: string;
 };
 
 /** @internal */
@@ -27,7 +22,6 @@ export const UpdateProjectForm$outboundSchema: z.ZodMiniType<
   UpdateProjectForm
 > = z.object({
   name: z.string(),
-  slug: z.string(),
 });
 
 export function updateProjectFormToJSON(

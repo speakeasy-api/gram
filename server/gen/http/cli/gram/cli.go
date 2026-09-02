@@ -18237,7 +18237,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-project: Get project details by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-project: Create a new project.`)
-	fmt.Fprintln(os.Stderr, `    update-project: Update the display name and URL slug of the current project.`)
+	fmt.Fprintln(os.Stderr, `    update-project: Update the display name of the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-projects: List all projects for an organization.`)
 	fmt.Fprintln(os.Stderr, `    set-logo: Uploads a logo for a project.`)
 	fmt.Fprintln(os.Stderr, `    list-allowed-origins: List allowed origins for a project.`)
@@ -18302,7 +18302,7 @@ func projectsUpdateProjectUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update the display name and URL slug of the current project.`)
+	fmt.Fprintln(os.Stderr, `Update the display name of the current project.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -18311,7 +18311,7 @@ func projectsUpdateProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-project --body '{\n      \"name\": \"aa\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-project --body '{\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func projectsListProjectsUsage() {
