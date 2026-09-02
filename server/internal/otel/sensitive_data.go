@@ -15,47 +15,52 @@ func redactSensitiveOTLP(message proto.Message) {
 	if message == nil {
 		return
 	}
-	redactSensitiveMessage(message.ProtoReflect())
-}
 
-func redactSensitiveMessage(message protoreflect.Message) {
-	if !message.IsValid() {
-		return
-	}
-	if record, ok := message.Interface().(*logsv1.LogRecord); ok {
-		redactUnkeyedLogBody(record.GetBody())
-	}
-	if attribute, ok := message.Interface().(*commonv1.KeyValue); ok && dialect.ClassifySensitiveDataKey(attribute.GetKey()) != dialect.SensitivityNone {
-		attribute.Value = &commonv1.AnyValue{
-			Value: &commonv1.AnyValue_StringValue{StringValue: redactedSensitiveDataValue},
+	switch value := message.(type) {
+	case *logsv1.LogRecord:
+		redactUnkeyedLogBody(value.GetBody())
+	case *commonv1.KeyValue:
+		if dialect.ClassifySensitiveDataKey(value.GetKey()) != dialect.SensitivityNone {
+			value.Value = &commonv1.AnyValue{
+				Value: &commonv1.AnyValue_StringValue{StringValue: redactedSensitiveDataValue},
+			}
+			return
 		}
-		return
 	}
 
-	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
-		if field.IsMap() {
-			if field.MapValue().Kind() == protoreflect.MessageKind || field.MapValue().Kind() == protoreflect.GroupKind {
-				value.Map().Range(func(_ protoreflect.MapKey, item protoreflect.Value) bool {
-					redactSensitiveMessage(item.Message())
-					return true
-				})
-			}
-			return true
-		}
-		if field.IsList() {
-			if field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind {
-				items := value.List()
-				for i := range items.Len() {
-					redactSensitiveMessage(items.Get(i).Message())
-				}
-			}
-			return true
-		}
-		if field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind {
-			redactSensitiveMessage(value.Message())
-		}
+	reflected := message.ProtoReflect()
+	if !reflected.IsValid() {
+		return
+	}
+	reflected.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		redactSensitiveField(field, value)
 		return true
 	})
+}
+
+func redactSensitiveField(field protoreflect.FieldDescriptor, value protoreflect.Value) {
+	switch {
+	case field.IsMap():
+		if isProtobufMessage(field.MapValue().Kind()) {
+			value.Map().Range(func(_ protoreflect.MapKey, value protoreflect.Value) bool {
+				redactSensitiveOTLP(value.Message().Interface())
+				return true
+			})
+		}
+	case field.IsList():
+		if isProtobufMessage(field.Kind()) {
+			values := value.List()
+			for i := range values.Len() {
+				redactSensitiveOTLP(values.Get(i).Message().Interface())
+			}
+		}
+	case isProtobufMessage(field.Kind()):
+		redactSensitiveOTLP(value.Message().Interface())
+	}
+}
+
+func isProtobufMessage(kind protoreflect.Kind) bool {
+	return kind == protoreflect.MessageKind || kind == protoreflect.GroupKind
 }
 
 func redactUnkeyedLogBody(value *commonv1.AnyValue) {
