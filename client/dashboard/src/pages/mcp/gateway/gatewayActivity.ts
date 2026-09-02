@@ -2,15 +2,17 @@ import type { MetaMcpDiscoveryFunnel } from "@gram/client/models/components/meta
 import type { MetaMcpMemberUsage } from "@gram/client/models/components/metamcpmemberusage.js";
 import type { MemberRow } from "./memberRows";
 
-export interface FunnelItem {
+export interface MetaToolUsageItem {
   key: string;
   label: string;
   value: number;
 }
 
-// Discovery order as an agent walks it: inventory, one server, its schemas,
-// then a call. Values are absolute counts so a bar shows drop-off per step.
-export function funnelItems(funnel: MetaMcpDiscoveryFunnel): FunnelItem[] {
+// The gateway's four tools in the order an agent reaches for them: inventory,
+// one server's tool list, schemas, then a call.
+export function metaToolUsageItems(
+  funnel: MetaMcpDiscoveryFunnel,
+): MetaToolUsageItem[] {
   return [
     { key: "list_servers", label: "list_servers", value: funnel.listServers },
     {

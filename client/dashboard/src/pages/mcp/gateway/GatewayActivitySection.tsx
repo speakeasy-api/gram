@@ -1,4 +1,4 @@
-import { RankedBarList } from "@/components/chart/RankedBarList";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -17,13 +17,14 @@ import type { ObservabilitySummary } from "@gram/client/models/components/observ
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
-  funnelItems,
   memberUsageRows,
+  metaToolUsageItems,
   type MemberUsageRow,
 } from "./gatewayActivity";
 import type { MemberRow } from "./memberRows";
+import { MetaToolUsageChart } from "./MetaToolUsageChart";
 
 function errorRate(summary: ObservabilitySummary): number {
   return summary.totalToolCalls > 0
@@ -40,28 +41,35 @@ const memberColumns: Column<MemberUsageRow>[] = [
   {
     key: "toolCalls",
     header: "Calls",
-    width: "100px",
+    width: "72px",
     render: (row) => <Text>{row.toolCalls}</Text>,
   },
   {
     key: "errorCount",
     header: "Errors",
-    width: "100px",
+    width: "72px",
     render: (row) => <Text>{row.errorCount}</Text>,
   },
   {
     key: "errorRate",
     header: "Error rate",
-    width: "110px",
+    width: "96px",
     render: (row) => <Text>{row.errorRate.toFixed(1)}%</Text>,
   },
   {
     key: "lastCalledAt",
     header: "Last call",
-    width: "180px",
+    width: "132px",
     render: (row) => (
-      <Text muted>
-        {row.lastCalledAt ? row.lastCalledAt.toLocaleString() : "—"}
+      <Text muted className="whitespace-nowrap">
+        {row.lastCalledAt
+          ? row.lastCalledAt.toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          : "—"}
       </Text>
     ),
   },
@@ -106,6 +114,15 @@ export function GatewayActivitySection({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
   const rangeKey = [metaMcpServerId, from.toISOString(), to.toISOString()];
+  const handleRangeSelect = useCallback(
+    (rangeFrom: Date, rangeTo: Date) =>
+      setCustomRangeParam(
+        rangeFrom,
+        rangeTo,
+        formatChartZoomRangeLabel(rangeFrom, rangeTo),
+      ),
+    [setCustomRangeParam],
+  );
 
   const overview = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
@@ -151,15 +168,14 @@ export function GatewayActivitySection({
     () => overview.data?.timeSeries ?? [],
     [overview.data],
   );
-  const funnel = useMemo(
-    () => (usage.data ? funnelItems(usage.data.funnel) : []),
+  const metaTools = useMemo(
+    () => (usage.data ? metaToolUsageItems(usage.data.funnel) : []),
     [usage.data],
   );
   const members = useMemo(
     () => memberUsageRows(usage.data?.members ?? [], memberRows),
     [usage.data, memberRows],
   );
-  const hasDiscovery = funnel.some((item) => item.value > 0);
 
   return (
     <Page.Section>
@@ -257,6 +273,9 @@ export function GatewayActivitySection({
                   timeRangeMs={timeRangeMs}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
+                  onRangeSelect={handleRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={() => clearCustomRange()}
                 />
               </>
             )}
@@ -265,16 +284,13 @@ export function GatewayActivitySection({
               <LoadError what="the discovery funnel and member breakdown" />
             ) : (
               <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
-                <div className="border p-5">
-                  <h3 className="text-eyebrow mb-3">Discovery funnel</h3>
-                  {usage.isLoading && !usage.data ? (
-                    <Skeleton className="h-32" />
-                  ) : hasDiscovery ? (
-                    <RankedBarList items={funnel} />
-                  ) : (
-                    <WidgetEmptyState message="No discovery calls in the selected range." />
-                  )}
-                </div>
+                <MetaToolUsageChart
+                  items={metaTools}
+                  chartId="gateway-overview-meta-tools"
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                  loading={usage.isLoading && !usage.data}
+                />
                 <div className="border p-5">
                   <h3 className="text-eyebrow mb-3">Calls by member</h3>
                   {usage.isLoading && !usage.data ? (

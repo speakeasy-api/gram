@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MemberRow } from "./memberRows";
-import { funnelItems, memberUsageRows } from "./gatewayActivity";
+import { memberUsageRows, metaToolUsageItems } from "./gatewayActivity";
 
 function row(
   mcpServerId: string,
@@ -20,9 +20,9 @@ function row(
   };
 }
 
-describe("funnelItems", () => {
-  it("orders steps the way an agent walks discovery", () => {
-    const items = funnelItems({
+describe("metaToolUsageItems", () => {
+  it("orders the tools the way an agent reaches for them", () => {
+    const items = metaToolUsageItems({
       listServers: 10,
       describeServer: 6,
       describeTools: 4,

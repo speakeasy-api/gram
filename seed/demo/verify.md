@@ -100,7 +100,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 
 13. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
-    discovery funnel with all four steps populated, the three discovery steps
+    Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
     table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
