@@ -16,35 +16,54 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 # Pause and wake move the same containers in opposite directions, and both can
 # start without the developer: the idle sweep pauses, the parker's Resume
 # button wakes. Interleaved, they leave the worktree half-up -- daemons running
-# against stopped databases, or a paused marker over a running stack. mkdir is
-# the portable atomic test-and-set (macOS has no flock binary), and the pid
-# inside it tells a stale lock from a live one.
+# against stopped databases, or a paused marker over a running stack. A symlink
+# is the portable atomic test-and-set here (macOS has no flock binary).
 lock="$gitdir/gram-stack-lock"
+
+# `ln -s` is the atomic test-and-set: creating a symlink fails if the name
+# exists, and its target carries the owner's pid, so the lock and the identity
+# of its owner appear in one step. (A lock file written after a `mkdir` has a
+# window where it exists with no owner recorded, which another process reads as
+# abandoned.) The target is a pid string and never has to resolve.
 release_lock() {
-    rm -f "$lock/pid" 2> /dev/null; rmdir "$lock" 2> /dev/null || true
+    # Only release a lock this process still owns.
+    if [ "$(readlink "$lock" 2> /dev/null)" = "$$" ]; then
+        rm -f "$lock"
+    fi
 }
+
+# Clearing a dead owner's lock cannot be done from the plain retry loop:
+# between reading the owner and removing it, another process can acquire the
+# lock, and the removal then evicts a live holder -- two commands end up
+# running against the same containers. So removal happens under its own lock,
+# which is only ever taken by exclusive create; whoever holds it re-reads the
+# owner before removing anything.
+reap_stale_lock() {
+    local reap="$lock.reap" owner
+    ln -s "$$" "$reap" 2> /dev/null || return 1
+    owner="$(readlink "$lock" 2> /dev/null || true)"
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
+        echo "Clearing a stack lock left behind by a dead process ($owner)." >&2
+        rm -f "$lock"
+    fi
+    rm -f "$reap"
+}
+
 locked=false
 for _ in $(seq 1 60); do
-    if mkdir "$lock" 2> /dev/null; then
-        echo $$ > "$lock/pid"
+    if ln -s "$$" "$lock" 2> /dev/null; then
         trap release_lock EXIT
         locked=true
         break
     fi
-
-    # Only a lock whose owner is gone -- a killed pause or wake, a reboot -- is
-    # safe to clear. An age-based break would eventually steal the lock from a
-    # slow but healthy wake, which is the very thing this guards against.
-    owner="$(cat "$lock/pid" 2> /dev/null || true)"
-    if [ -z "$owner" ] || ! kill -0 "$owner" 2> /dev/null; then
-        echo "Clearing a stack lock left behind by a dead process." >&2
-        release_lock
-    fi
+    reap_stale_lock || true
     sleep 1
 done
 
 if [ "$locked" != true ]; then
-    echo "Another pause or wake has held this worktree's stack lock for a minute; giving up." >&2
+    owner="$(readlink "$lock" 2> /dev/null || true)"
+    echo "Another pause or wake (pid ${owner:-unknown}) has held this worktree's stack lock for a minute; giving up." >&2
+    echo "If nothing is running, remove $lock and retry." >&2
     exit 1
 fi
 
