@@ -658,7 +658,7 @@ func TestToolsetsService_UpdateToolset_RekeysAliasTwin(t *testing.T) {
 		scopes[endpoint.CustomDomainID] = endpoint.Slug
 	}
 	require.Equal(t, map[uuid.NullUUID]string{
-		{UUID: domainID, Valid: true}: "twin-renamed",
+		{UUID: domainID, Valid: true}:  "twin-renamed",
 		{UUID: uuid.Nil, Valid: false}: "twin-renamed",
 	}, scopes, "the twin follows the rename within its own scope")
 }
