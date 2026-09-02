@@ -125,8 +125,33 @@ var _ = Service("jsonWebKeySets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetJsonWebKeySet"}`)
 	})
 
+	Method("getSetDeletePreflight", func() {
+		Description("Authoritative impact summary for deleting a JSON Web Key Set: the remote_session_clients still referencing it. deleteSet returns a conflict for exactly the sets this reports a non-zero client_count for. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the key set to summarize.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(JsonWebKeySetDeletePreflight)
+
+		HTTP(func() {
+			GET("/rpc/jsonWebKeySets.getDeletePreflight")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getJsonWebKeySetDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "JsonWebKeySetDeletePreflight"}`)
+	})
+
 	Method("deleteSet", func() {
-		Description("Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.")
+		Description("Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Refused with a conflict while any live remote_session_client still references the set — detach it there first; see getDeletePreflight. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key set to delete.", func() {

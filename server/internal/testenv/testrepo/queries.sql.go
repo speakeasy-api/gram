@@ -13,6 +13,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const clearRemoteSessionClientKeySetFixture = `-- name: ClearRemoteSessionClientKeySetFixture :execrows
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = $1
+`
+
+// Releases a key set the way the detach endpoint does, so the delete guard can
+// be shown to read the live reference rather than any reference.
+func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearRemoteSessionClientKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
@@ -1914,6 +1930,37 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	return id, err
 }
 
+const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES ($1, 'gcp_iam', $2 || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT $1, credential.id, 'gcp_kms', 'RS256', $2 || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT $1, key.id, $2 FROM key
+RETURNING id
+`
+
+type SeedJsonWebKeySetFixtureParams struct {
+	OrganizationID string
+	Name           string
+}
+
+// Builds the external credential / external key / key set chain a
+// json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+// Those tests reference the set row and never read its keys, so this skips the
+// KMS mint that jsonwebkeysets.CreateSet performs.
+func (q *Queries) SeedJsonWebKeySetFixture(ctx context.Context, arg SeedJsonWebKeySetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedJsonWebKeySetFixture, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const seedOpenRouterSpendPrivacyFixture = `-- name: SeedOpenRouterSpendPrivacyFixture :exec
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
 VALUES ($1, 'chat', CURRENT_DATE, $2::text::numeric)
@@ -2056,6 +2103,36 @@ type SeedRearmAuditMetadataFixtureParams struct {
 // Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
 func (q *Queries) SeedRearmAuditMetadataFixture(ctx context.Context, arg SeedRearmAuditMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedRearmAuditMetadataFixture, arg.OrganizationID, arg.Metadata)
+	return err
+}
+
+const seedRemoteSessionClientForKeySetFixture = `-- name: SeedRemoteSessionClientForKeySetFixture :exec
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES ($1, $4, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT $1, issuer.id, $2, $3 FROM issuer
+`
+
+type SeedRemoteSessionClientForKeySetFixtureParams struct {
+	OrganizationID  pgtype.Text
+	ClientID        string
+	JsonWebKeySetID uuid.NullUUID
+	IssuerSlug      string
+}
+
+// Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+// delete guard and its preflight. Those live in the jsonwebkeysets package,
+// which cannot reach the remotesessions service to build the reference.
+func (q *Queries) SeedRemoteSessionClientForKeySetFixture(ctx context.Context, arg SeedRemoteSessionClientForKeySetFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteSessionClientForKeySetFixture,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.JsonWebKeySetID,
+		arg.IssuerSlug,
+	)
 	return err
 }
 
@@ -2534,6 +2611,23 @@ type SoftDeleteOpenRouterAPIKeyFixtureParams struct {
 func (q *Queries) SoftDeleteOpenRouterAPIKeyFixture(ctx context.Context, arg SoftDeleteOpenRouterAPIKeyFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteOpenRouterAPIKeyFixture, arg.OrganizationID, arg.KeyType)
 	return err
+}
+
+const softDeleteRemoteSessionClientsForKeySetFixture = `-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = $1
+  AND deleted IS FALSE
+`
+
+// Tombstones the clients referencing a key set, so the delete guard can be
+// shown to ignore them.
+func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one

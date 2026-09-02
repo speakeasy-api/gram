@@ -27,6 +27,11 @@ func GetSetJSONWebKeySetsPath() string {
 	return "/rpc/jsonWebKeySets.get"
 }
 
+// GetSetDeletePreflightJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service getSetDeletePreflight HTTP endpoint.
+func GetSetDeletePreflightJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.getDeletePreflight"
+}
+
 // DeleteSetJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service deleteSet HTTP endpoint.
 func DeleteSetJSONWebKeySetsPath() string {
 	return "/rpc/jsonWebKeySets.delete"

@@ -32,6 +32,10 @@ type Client struct {
 	// GetSet Doer is the HTTP client used to make requests to the getSet endpoint.
 	GetSetDoer goahttp.Doer
 
+	// GetSetDeletePreflight Doer is the HTTP client used to make requests to the
+	// getSetDeletePreflight endpoint.
+	GetSetDeletePreflightDoer goahttp.Doer
+
 	// DeleteSet Doer is the HTTP client used to make requests to the deleteSet
 	// endpoint.
 	DeleteSetDoer goahttp.Doer
@@ -77,21 +81,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateSetDoer:       doer,
-		UpdateSetDoer:       doer,
-		ListSetsDoer:        doer,
-		GetSetDoer:          doer,
-		DeleteSetDoer:       doer,
-		ListKeysDoer:        doer,
-		PublishKeyDoer:      doer,
-		ActivateKeyDoer:     doer,
-		RetireKeyDoer:       doer,
-		RevokeKeyDoer:       doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateSetDoer:             doer,
+		UpdateSetDoer:             doer,
+		ListSetsDoer:              doer,
+		GetSetDoer:                doer,
+		GetSetDeletePreflightDoer: doer,
+		DeleteSetDoer:             doer,
+		ListKeysDoer:              doer,
+		PublishKeyDoer:            doer,
+		ActivateKeyDoer:           doer,
+		RetireKeyDoer:             doer,
+		RevokeKeyDoer:             doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -186,6 +191,30 @@ func (c *Client) GetSet() goa.Endpoint {
 		resp, err := c.GetSetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("jsonWebKeySets", "getSet", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSetDeletePreflight returns an endpoint that makes HTTP requests to the
+// jsonWebKeySets service getSetDeletePreflight server.
+func (c *Client) GetSetDeletePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSetDeletePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetSetDeletePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSetDeletePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSetDeletePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("jsonWebKeySets", "getSetDeletePreflight", err)
 		}
 		return decodeResponse(resp)
 	}

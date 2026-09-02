@@ -18,6 +18,7 @@ export function ConfirmDialog({
   isPending,
   impact,
   error,
+  confirmDisabled = false,
   confirmVariant = "destructive-primary",
 }: {
   open: boolean;
@@ -30,6 +31,10 @@ export function ConfirmDialog({
   impact?: {
     summary: string;
     mcpServerNames?: string[];
+    // Heading for the list above. Defaults to the MCP server wording this
+    // component was written for; other preflights list other things (the key
+    // set delete preflight lists OAuth client_ids).
+    namesLabel?: string;
     isLoading?: boolean;
   };
   // Rendered inline above the footer, for refusals the operator has to read and
@@ -37,6 +42,11 @@ export function ConfirmDialog({
   // vanishes, and the dialog it describes is still open. Callers that only need
   // "something went wrong" should keep using a toast.
   error?: string | null;
+  // Blocks the action outright, for a preflight that predicts a refusal rather
+  // than merely describing consequences. The impact summary still renders, so
+  // the operator can read what is in the way; there is just nothing useful to
+  // confirm until they clear it.
+  confirmDisabled?: boolean;
   // Confirmations of destructive actions are the common case, so that is the
   // default; a lifecycle step that is safe but still worth a pause (activating
   // a key) reads wrong in red.
@@ -67,11 +77,15 @@ export function ConfirmDialog({
                 {impact.mcpServerNames && impact.mcpServerNames.length > 0 && (
                   <div className="mt-2">
                     <Text small as="div">
-                      Affected MCP Servers:
+                      {impact.namesLabel ?? "Affected MCP Servers:"}
                     </Text>
                     <ul className="mt-1 list-disc pl-5">
-                      {impact.mcpServerNames.map((name) => (
-                        <li key={name}>
+                      {impact.mcpServerNames.map((name, index) => (
+                        // Index-keyed: callers pass display labels, and some
+                        // (OAuth client_id values) legitimately repeat across
+                        // rows. The list is static for the life of the dialog,
+                        // so position is a stable identity here.
+                        <li key={`${index}-${name}`}>
                           <Text small muted as="span">
                             {name}
                           </Text>
@@ -100,7 +114,7 @@ export function ConfirmDialog({
           <Button
             variant={confirmVariant}
             onClick={onConfirm}
-            disabled={isPending || impact?.isLoading}
+            disabled={isPending || impact?.isLoading || confirmDisabled}
           >
             <Button.Text>{isPending ? "Working…" : confirmLabel}</Button.Text>
           </Button>

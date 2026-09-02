@@ -114,3 +114,15 @@ var ListJsonWebKeysResult = Type("ListJsonWebKeysResult", func() {
 	Attribute("keys", ArrayOf(JsonWebKey), "The set's published keys.")
 	Required("keys")
 })
+
+// JsonWebKeySetDeletePreflight is the impact summary the dashboard shows before
+// deleting a set. Unlike the remote_session_client delete preflight, which is
+// purely informational because that delete cascades, this one predicts a real
+// refusal: deleteSet returns a conflict whenever client_count is non-zero.
+var JsonWebKeySetDeletePreflight = Type("JsonWebKeySetDeletePreflight", func() {
+	Attribute("client_count", Int, "Number of live remote_session_clients referencing this set. Deleting the set is refused while this is non-zero.")
+	// remote_session_clients has no display-name column, so the closest thing to
+	// a label is the OAuth client_id the counterparty issued.
+	Attribute("client_ids", ArrayOf(String), "The client_id values of the referencing remote_session_clients, oldest first. Truncated when client_count exceeds the listing cap.")
+	Required("client_count", "client_ids")
+})

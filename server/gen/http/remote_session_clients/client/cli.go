@@ -332,6 +332,90 @@ func BuildDetachUserSessionIssuerPayload(remoteSessionClientsDetachUserSessionIs
 	return v, nil
 }
 
+// BuildAttachKeySetPayload builds the payload for the remoteSessionClients
+// attachKeySet endpoint from CLI flags.
+func BuildAttachKeySetPayload(remoteSessionClientsAttachKeySetBody string, remoteSessionClientsAttachKeySetSessionToken string, remoteSessionClientsAttachKeySetApikeyToken string, remoteSessionClientsAttachKeySetProjectSlugInput string) (*remotesessionclients.AttachKeySetPayload, error) {
+	var err error
+	var body AttachKeySetRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsAttachKeySetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", body.JSONWebKeySetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsAttachKeySetSessionToken != "" {
+			sessionToken = &remoteSessionClientsAttachKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsAttachKeySetApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsAttachKeySetApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsAttachKeySetProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsAttachKeySetProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.AttachKeySetPayload{
+		ID:              body.ID,
+		JSONWebKeySetID: body.JSONWebKeySetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachKeySetPayload builds the payload for the remoteSessionClients
+// detachKeySet endpoint from CLI flags.
+func BuildDetachKeySetPayload(remoteSessionClientsDetachKeySetID string, remoteSessionClientsDetachKeySetSessionToken string, remoteSessionClientsDetachKeySetApikeyToken string, remoteSessionClientsDetachKeySetProjectSlugInput string) (*remotesessionclients.DetachKeySetPayload, error) {
+	var err error
+	var id string
+	{
+		id = remoteSessionClientsDetachKeySetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsDetachKeySetSessionToken != "" {
+			sessionToken = &remoteSessionClientsDetachKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsDetachKeySetApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsDetachKeySetApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsDetachKeySetProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsDetachKeySetProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.DetachKeySetPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRemoteSessionClientsPayload builds the payload for the
 // remoteSessionClients listRemoteSessionClients endpoint from CLI flags.
 func BuildListRemoteSessionClientsPayload(remoteSessionClientsListRemoteSessionClientsRemoteSessionIssuerID string, remoteSessionClientsListRemoteSessionClientsUserSessionIssuerID string, remoteSessionClientsListRemoteSessionClientsCursor string, remoteSessionClientsListRemoteSessionClientsLimit string, remoteSessionClientsListRemoteSessionClientsSessionToken string, remoteSessionClientsListRemoteSessionClientsApikeyToken string, remoteSessionClientsListRemoteSessionClientsProjectSlugInput string) (*remotesessionclients.ListRemoteSessionClientsPayload, error) {

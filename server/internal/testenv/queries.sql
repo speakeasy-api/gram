@@ -855,3 +855,48 @@ INSERT INTO user_session_issuers (
 )
 VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
 RETURNING id;
+
+-- name: SeedJsonWebKeySetFixture :one
+-- Builds the external credential / external key / key set chain a
+-- json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+-- Those tests reference the set row and never read its keys, so this skips the
+-- KMS mint that jsonwebkeysets.CreateSet performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT @organization_id, key.id, @name FROM key
+RETURNING id;
+
+-- name: SeedRemoteSessionClientForKeySetFixture :exec
+-- Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+-- delete guard and its preflight. Those live in the jsonwebkeysets package,
+-- which cannot reach the remotesessions service to build the reference.
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES (@organization_id, @issuer_slug, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT @organization_id, issuer.id, @client_id, @json_web_key_set_id FROM issuer;
+
+-- name: ClearRemoteSessionClientKeySetFixture :execrows
+-- Releases a key set the way the detach endpoint does, so the delete guard can
+-- be shown to read the live reference rather than any reference.
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = @json_web_key_set_id;
+
+-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+-- Tombstones the clients referencing a key set, so the delete guard can be
+-- shown to ignore them.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND deleted IS FALSE;
