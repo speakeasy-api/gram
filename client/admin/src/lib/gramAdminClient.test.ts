@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 const useMutation = vi.hoisted(() => vi.fn());
 
@@ -10,6 +10,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-query")>();
   return { ...actual, useMutation };
 });
+
+import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 
 import { isRedirectingToLogin as predecessorLatch } from "@/lib/gramAdminApi";
 import * as boundary from "@/lib/gramAdminClient";
@@ -40,15 +42,10 @@ describe("generated admin boundary", () => {
       "useSetAdminOrganizationFeatureMutation",
     ]);
 
-    if (false) {
-      // @ts-expect-error The session operation accepts no SDK/request options.
-      boundary.adminSessionQuery({ serverURL: "https://example.invalid" });
-      boundary.setAdminOrganizationFeature(
-        { organizationId: "org_1", featureName: "sso", enabled: true },
-        // @ts-expect-error Per-call transport and credentials are not accepted.
-        { credentials: "include", headers: { Authorization: "Bearer x" } },
-      );
-    }
+    expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
+    expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
+      [request: SetOrganizationFeatureRequestBody]
+    >();
   });
 
   it("does not allow forged mutation options to replace its key or function", () => {

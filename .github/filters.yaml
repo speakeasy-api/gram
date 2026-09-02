@@ -59,8 +59,13 @@ sdk-gen:
   - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
-  - "server/design/admin/**"
-  - "server/design/shared/**"
+  - "server/design/**"
+  - "server/internal/constants/accounts.go"
+  - "server/internal/constants/auth.go"
+  - "server/internal/constants/spend_cap.go"
+  - "server/internal/constants/trials.go"
+  - "server/internal/conv/from.go"
+  - "server/internal/productfeatures/features.go"
   - "server/gen/http/openapi3.yaml"
 
 migrations:

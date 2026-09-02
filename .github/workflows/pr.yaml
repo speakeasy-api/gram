@@ -1946,6 +1946,9 @@ jobs:
       - name: Test SDK overlays
         run: mise run test:sdk-overlays
 
+      - name: Check transformed SDK specs
+        run: mise run gen:sdk --check
+
       - name: Regenerate SDK
         run: mise run gen:sdk
 

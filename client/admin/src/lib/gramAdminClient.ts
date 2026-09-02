@@ -2,6 +2,7 @@ import {
   queryOptions,
   useMutation,
   type UseMutationOptions,
+  type UseMutationResult,
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
@@ -57,7 +58,7 @@ async function redirecting<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
-export function adminSessionQuery() {
+function createAdminSessionQuery() {
   const generated = buildAdminAdminGetSessionQuery(client);
   return queryOptions({
     ...generated,
@@ -66,13 +67,25 @@ export function adminSessionQuery() {
   });
 }
 
-export function organizationFeaturesQuery(organizationId: string) {
+export function adminSessionQuery(): ReturnType<
+  typeof createAdminSessionQuery
+> {
+  return createAdminSessionQuery();
+}
+
+function createOrganizationFeaturesQuery(organizationId: string) {
   const request: AdminGetOrganizationFeaturesRequest = { organizationId };
   const generated = buildAdminOrganizationFeaturesQuery(client, request);
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),
   });
+}
+
+export function organizationFeaturesQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationFeaturesQuery> {
+  return createOrganizationFeaturesQuery(organizationId);
 }
 
 // Feature writes preserve their predecessor's in-place 401 behavior. No raw
@@ -93,7 +106,11 @@ type SetFeatureMutationOptions = Omit<
 
 export function useSetAdminOrganizationFeatureMutation(
   options?: SetFeatureMutationOptions,
-) {
+): UseMutationResult<
+  ProductFeatures,
+  Error,
+  SetOrganizationFeatureRequestBody
+> {
   return useMutation({
     ...options,
     mutationKey: ["@gram/admin-client", "admin", "adminSetOrganizationFeature"],
