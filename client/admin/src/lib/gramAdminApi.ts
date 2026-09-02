@@ -566,6 +566,7 @@ export type AdminOrganizationFeatures = {
   customer_managed_encryption_keys_enabled: boolean;
   custom_model_keys_enabled: boolean;
   platform_mcp_enabled: boolean;
+  network_ingress_enabled: boolean;
   remote_session_auto_refresh_enabled: boolean;
   session_portability_enabled: boolean;
   sso_enabled: boolean;
@@ -577,6 +578,7 @@ export type AdminOrganizationFeatureName =
   | "customer_managed_encryption_keys"
   | "custom_model_keys"
   | "platform_mcp"
+  | "network_ingress"
   | "remote_session_auto_refresh"
   | "session_portability"
   | "sso"

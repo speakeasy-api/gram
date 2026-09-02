@@ -58,6 +58,7 @@ import (
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
 	metamcpc "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/client"
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
+	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -143,6 +144,7 @@ func UsageCommands() []string {
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
+		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
@@ -1739,6 +1741,32 @@ func ParseEndpoint(
 		modelKeysDeleteKeySessionTokenFlag     = modelKeysDeleteKeyFlags.String("session-token", "", "")
 		modelKeysDeleteKeyApikeyTokenFlag      = modelKeysDeleteKeyFlags.String("apikey-token", "", "")
 		modelKeysDeleteKeyProjectSlugInputFlag = modelKeysDeleteKeyFlags.String("project-slug-input", "", "")
+
+		networkIngressFlags = flag.NewFlagSet("network-ingress", flag.ContinueOnError)
+
+		networkIngressGetIngressFlags            = flag.NewFlagSet("get-ingress", flag.ExitOnError)
+		networkIngressGetIngressSessionTokenFlag = networkIngressGetIngressFlags.String("session-token", "", "")
+
+		networkIngressCreateIngressFlags            = flag.NewFlagSet("create-ingress", flag.ExitOnError)
+		networkIngressCreateIngressBodyFlag         = networkIngressCreateIngressFlags.String("body", "REQUIRED", "")
+		networkIngressCreateIngressSessionTokenFlag = networkIngressCreateIngressFlags.String("session-token", "", "")
+
+		networkIngressUpdateIngressFlags            = flag.NewFlagSet("update-ingress", flag.ExitOnError)
+		networkIngressUpdateIngressBodyFlag         = networkIngressUpdateIngressFlags.String("body", "REQUIRED", "")
+		networkIngressUpdateIngressSessionTokenFlag = networkIngressUpdateIngressFlags.String("session-token", "", "")
+
+		networkIngressRotateCredentialsFlags            = flag.NewFlagSet("rotate-credentials", flag.ExitOnError)
+		networkIngressRotateCredentialsBodyFlag         = networkIngressRotateCredentialsFlags.String("body", "REQUIRED", "")
+		networkIngressRotateCredentialsSessionTokenFlag = networkIngressRotateCredentialsFlags.String("session-token", "", "")
+
+		networkIngressGetDeleteImpactFlags            = flag.NewFlagSet("get-delete-impact", flag.ExitOnError)
+		networkIngressGetDeleteImpactSessionTokenFlag = networkIngressGetDeleteImpactFlags.String("session-token", "", "")
+
+		networkIngressDeleteIngressFlags            = flag.NewFlagSet("delete-ingress", flag.ExitOnError)
+		networkIngressDeleteIngressSessionTokenFlag = networkIngressDeleteIngressFlags.String("session-token", "", "")
+
+		networkIngressCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
+		networkIngressCheckHealthSessionTokenFlag = networkIngressCheckHealthFlags.String("session-token", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -4166,6 +4194,15 @@ func ParseEndpoint(
 	modelKeysSetKeyEnabledFlags.Usage = modelKeysSetKeyEnabledUsage
 	modelKeysDeleteKeyFlags.Usage = modelKeysDeleteKeyUsage
 
+	networkIngressFlags.Usage = networkIngressUsage
+	networkIngressGetIngressFlags.Usage = networkIngressGetIngressUsage
+	networkIngressCreateIngressFlags.Usage = networkIngressCreateIngressUsage
+	networkIngressUpdateIngressFlags.Usage = networkIngressUpdateIngressUsage
+	networkIngressRotateCredentialsFlags.Usage = networkIngressRotateCredentialsUsage
+	networkIngressGetDeleteImpactFlags.Usage = networkIngressGetDeleteImpactUsage
+	networkIngressDeleteIngressFlags.Usage = networkIngressDeleteIngressUsage
+	networkIngressCheckHealthFlags.Usage = networkIngressCheckHealthUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -4707,6 +4744,8 @@ func ParseEndpoint(
 			svcf = metaMcpFlags
 		case "model-keys":
 			svcf = modelKeysFlags
+		case "network-ingress":
+			svcf = networkIngressFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "otel":
@@ -5792,6 +5831,31 @@ func ParseEndpoint(
 
 			case "delete-key":
 				epf = modelKeysDeleteKeyFlags
+
+			}
+
+		case "network-ingress":
+			switch epn {
+			case "get-ingress":
+				epf = networkIngressGetIngressFlags
+
+			case "create-ingress":
+				epf = networkIngressCreateIngressFlags
+
+			case "update-ingress":
+				epf = networkIngressUpdateIngressFlags
+
+			case "rotate-credentials":
+				epf = networkIngressRotateCredentialsFlags
+
+			case "get-delete-impact":
+				epf = networkIngressGetDeleteImpactFlags
+
+			case "delete-ingress":
+				epf = networkIngressDeleteIngressFlags
+
+			case "check-health":
+				epf = networkIngressCheckHealthFlags
 
 			}
 
@@ -8078,6 +8142,31 @@ func ParseEndpoint(
 			case "delete-key":
 				endpoint = c.DeleteKey()
 				data, err = modelkeysc.BuildDeleteKeyPayload(*modelKeysDeleteKeyIDFlag, *modelKeysDeleteKeySessionTokenFlag, *modelKeysDeleteKeyApikeyTokenFlag, *modelKeysDeleteKeyProjectSlugInputFlag)
+			}
+		case "network-ingress":
+			c := networkingressc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-ingress":
+				endpoint = c.GetIngress()
+				data, err = networkingressc.BuildGetIngressPayload(*networkIngressGetIngressSessionTokenFlag)
+			case "create-ingress":
+				endpoint = c.CreateIngress()
+				data, err = networkingressc.BuildCreateIngressPayload(*networkIngressCreateIngressBodyFlag, *networkIngressCreateIngressSessionTokenFlag)
+			case "update-ingress":
+				endpoint = c.UpdateIngress()
+				data, err = networkingressc.BuildUpdateIngressPayload(*networkIngressUpdateIngressBodyFlag, *networkIngressUpdateIngressSessionTokenFlag)
+			case "rotate-credentials":
+				endpoint = c.RotateCredentials()
+				data, err = networkingressc.BuildRotateCredentialsPayload(*networkIngressRotateCredentialsBodyFlag, *networkIngressRotateCredentialsSessionTokenFlag)
+			case "get-delete-impact":
+				endpoint = c.GetDeleteImpact()
+				data, err = networkingressc.BuildGetDeleteImpactPayload(*networkIngressGetDeleteImpactSessionTokenFlag)
+			case "delete-ingress":
+				endpoint = c.DeleteIngress()
+				data, err = networkingressc.BuildDeleteIngressPayload(*networkIngressDeleteIngressSessionTokenFlag)
+			case "check-health":
+				endpoint = c.CheckHealth()
+				data, err = networkingressc.BuildCheckHealthPayload(*networkIngressCheckHealthSessionTokenFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16245,6 +16334,155 @@ func modelKeysDeleteKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "model-keys delete-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// networkIngressUsage displays the usage of the network-ingress command and
+// its subcommands.
+func networkIngressUsage() {
+	fmt.Fprintln(os.Stderr, `Manage an organization's private network ingress desired state.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] network-ingress COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-ingress: Get the active network ingress for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    create-ingress: Create the organization's Tailscale ingress. Provider credentials are encrypted and never returned.`)
+	fmt.Fprintln(os.Stderr, `    update-ingress: Update desired ingress settings. Enabling is expansion-gated; disabling remains available after gate removal.`)
+	fmt.Fprintln(os.Stderr, `    rotate-credentials: Replace the provider OAuth client credentials without returning either value.`)
+	fmt.Fprintln(os.Stderr, `    get-delete-impact: Count hosted MCP servers that retain dual or private-only modes after ingress deletion.`)
+	fmt.Fprintln(os.Stderr, `    delete-ingress: Soft-delete the ingress and retain provider identities until cleanup is confirmed.`)
+	fmt.Fprintln(os.Stderr, `    check-health: Signal reconciliation and return the latest observed ingress health.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s network-ingress COMMAND --help\n", os.Args[0])
+}
+func networkIngressGetIngressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress get-ingress", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the active network ingress for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress get-ingress --session-token \"abc123\"")
+}
+
+func networkIngressCreateIngressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress create-ingress", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create the organization's Tailscale ingress. Provider credentials are encrypted and never returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress create-ingress --body '{\n      \"hostname\": \"abc123\",\n      \"identity_required\": false,\n      \"oauth_client_id\": \"abc123\",\n      \"oauth_client_secret\": \"abc123\",\n      \"provider\": \"tailscale\"\n   }' --session-token \"abc123\"")
+}
+
+func networkIngressUpdateIngressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress update-ingress", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update desired ingress settings. Enabling is expansion-gated; disabling remains available after gate removal.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress update-ingress --body '{\n      \"enabled\": false,\n      \"hostname\": \"abc123\",\n      \"identity_required\": false\n   }' --session-token \"abc123\"")
+}
+
+func networkIngressRotateCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress rotate-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the provider OAuth client credentials without returning either value.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress rotate-credentials --body '{\n      \"oauth_client_id\": \"abc123\",\n      \"oauth_client_secret\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func networkIngressGetDeleteImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress get-delete-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count hosted MCP servers that retain dual or private-only modes after ingress deletion.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress get-delete-impact --session-token \"abc123\"")
+}
+
+func networkIngressDeleteIngressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress delete-ingress", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete the ingress and retain provider identities until cleanup is confirmed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress delete-ingress --session-token \"abc123\"")
+}
+
+func networkIngressCheckHealthUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] network-ingress check-health", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Signal reconciliation and return the latest observed ingress health.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress check-health --session-token \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

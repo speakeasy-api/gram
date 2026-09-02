@@ -284,6 +284,7 @@ const (
 	HTTPResponseFilteredKey        = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
+	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
 	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
@@ -2098,6 +2099,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func NetworkIngressID(v string) attribute.KeyValue { return NetworkIngressIDKey.String(v) }
+func SlogNetworkIngressID(v string) slog.Attr      { return slog.String(string(NetworkIngressIDKey), v) }
 
 func MetaMcpServerID(v string) attribute.KeyValue { return MetaMcpServerIDKey.String(v) }
 func SlogMetaMcpServerID(v string) slog.Attr      { return slog.String(string(MetaMcpServerIDKey), v) }

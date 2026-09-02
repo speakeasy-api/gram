@@ -45,6 +45,7 @@ import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -299,6 +300,11 @@ export class Gram extends ClientSDK {
   private _modelKeys?: ModelKeys;
   get modelKeys(): ModelKeys {
     return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

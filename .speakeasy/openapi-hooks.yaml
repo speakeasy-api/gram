@@ -830,6 +830,8 @@ tags:
     description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: networkIngress
+    description: Manage an organization's private network ingress desired state.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel

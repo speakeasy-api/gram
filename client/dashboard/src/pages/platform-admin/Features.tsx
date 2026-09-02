@@ -113,6 +113,13 @@ const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
       "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
     enabledKey: "platformMcpEnabled",
   },
+  [FeatureName.NetworkIngress]: {
+    kind: "toggle",
+    label: "Private Network Ingress",
+    description:
+      "Staff-managed entitlement for private MCP ingress. Provider changes also require the organization-targeted rollout gate.",
+    enabledKey: "networkIngressEnabled",
+  },
   [FeatureName.RemoteSessionAutoRefresh]: {
     kind: "toggle",
     label: "Automatic Remote Session Refresh",
