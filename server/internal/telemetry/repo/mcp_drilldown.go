@@ -79,17 +79,21 @@ type ListMCPTraceReferencesParams struct {
 	// rarely what a drill-down wants — the caller usually arrives here holding a
 	// failure class the overview named.
 	Outcomes []string
-	// BeforeUnixNano and BeforeTraceID continue a previous page. They are the
-	// composite key the ordering below uses; paging on the timestamp alone
-	// would skip every remaining trace sharing the boundary nanosecond, which
-	// on a busy server silently drops occurrences from both pages.
-	BeforeUnixNano int64
-	BeforeTraceID  string
-	Limit          int
+	// BeforeUnixNano, BeforeTraceID, and BeforeToolCallID continue a previous
+	// page. They are the composite key the ordering below uses. Paging on the
+	// timestamp alone would skip every remaining call sharing the boundary
+	// nanosecond. Paging on (time, trace_id) alone would skip remaining calls
+	// in the same session — hook-observed traffic shares a trace_id across
+	// every tool call in the session.
+	BeforeUnixNano   int64
+	BeforeTraceID    string
+	BeforeToolCallID string
+	Limit            int
 }
 
 type MCPTraceReferenceRow struct {
 	TraceID    string `ch:"trace_id"`
+	ToolCallID string `ch:"tool_call_id"`
 	OccurredAt int64  `ch:"event_time_ns"`
 	ToolName   string `ch:"tool_name"`
 	Outcome    string `ch:"outcome"`
@@ -120,6 +124,7 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 
 	sb := sq.Select(
 		"trace_id",
+		"tool_call_id",
 		"event_time_ns",
 		"tool_name",
 		"outcome",
@@ -130,15 +135,20 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 		sb = sb.Where(squirrel.Eq{"outcome": arg.Outcomes})
 	}
 	if arg.BeforeUnixNano > 0 {
-		if arg.BeforeTraceID != "" {
+		if arg.BeforeTraceID != "" && arg.BeforeToolCallID != "" {
+			sb = sb.Where("(event_time_ns, trace_id, tool_call_id) < (?, ?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID, arg.BeforeToolCallID)
+		} else if arg.BeforeTraceID != "" {
+			// A cursor without a call id keeps the (time, trace) exclusive
+			// boundary so a token minted before that half existed still pages
+			// one-call-per-trace traffic correctly.
 			sb = sb.Where("(event_time_ns, trace_id) < (?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID)
 		} else {
 			sb = sb.Where("event_time_ns < ?", arg.BeforeUnixNano)
 		}
 	}
-	// Ordered by time then trace id so a page boundary is deterministic when
-	// several traces share a nanosecond.
-	sb = sb.OrderBy("event_time_ns DESC", "trace_id DESC").Limit(uint64(limit))
+	// Ordered by time, then trace, then call so a page boundary is
+	// deterministic when several calls share a session and a nanosecond.
+	sb = sb.OrderBy("event_time_ns DESC", "trace_id DESC", "tool_call_id DESC").Limit(uint64(limit))
 
 	query, args, err := sb.ToSql()
 	if err != nil {

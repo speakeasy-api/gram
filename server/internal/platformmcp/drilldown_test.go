@@ -267,14 +267,23 @@ func TestFailureRate_RoundsServerSide(t *testing.T) {
 func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 	t.Parallel()
 
-	position, traceID, traversed, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", 40))
+	position, traceID, toolCallID, traversed, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", "call-9", 40))
 	require.NoError(t, err)
 	require.Equal(t, int64(1_700_000_000_000_000_000), position)
 	require.Equal(t, "abc123", traceID)
+	require.Equal(t, "call-9", toolCallID)
 	require.Equal(t, 40, traversed)
 
+	// A three-field cursor minted before the call-id half existed still decodes.
+	legacyPosition, legacyTraceID, legacyCallID, legacyTraversed, err := parseCursorPosition("t:1700000000000000000:40:abc123")
+	require.NoError(t, err)
+	require.Equal(t, int64(1_700_000_000_000_000_000), legacyPosition)
+	require.Equal(t, "abc123", legacyTraceID)
+	require.Empty(t, legacyCallID)
+	require.Equal(t, 40, legacyTraversed)
+
 	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1:0:x", "t:0:0:x", "t:1700000000", "t:1700000000:x", "t:1700000000:abc:x", "t:1700000000:-1:x"} {
-		_, _, _, err := parseCursorPosition(value)
+		_, _, _, _, err := parseCursorPosition(value)
 		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
 	}
 }
@@ -286,7 +295,7 @@ func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 func TestCursorPosition_RefusesATraversalPastTheCap(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", maxTraceTraversal+1))
+	_, _, _, _, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", "call-9", maxTraceTraversal+1))
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 

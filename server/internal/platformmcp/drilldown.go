@@ -269,7 +269,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	// The cursor resolves only against the query that minted it, so a position
 	// cannot be replayed on a different MCP, outcome class, or window.
 	scope := traceCursorScope(target, input.Outcome)
-	before, beforeTraceID, traversed, err := s.decodeTraceCursor(input.Cursor, principal, scope, target.now)
+	before, beforeTraceID, beforeToolCallID, traversed, err := s.decodeTraceCursor(input.Cursor, principal, scope, target.now)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -278,6 +278,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		GetMCPOutcomeBreakdownParams: target.outcomeParams(),
 		BeforeUnixNano:               before,
 		BeforeTraceID:                beforeTraceID,
+		BeforeToolCallID:             beforeToolCallID,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit: maxTraceReferences + 1,
@@ -338,7 +339,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	traversed += len(rows)
 	if more && len(rows) > 0 && traversed < maxTraceTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatCursorPosition(last.OccurredAt, last.TraceID, traversed), target.now)
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatCursorPosition(last.OccurredAt, last.TraceID, last.ToolCallID, traversed), target.now)
 		if err != nil {
 			return QueryMCPTracesOutput{}, fmt.Errorf("mint trace cursor: %w", err)
 		}
@@ -630,19 +631,19 @@ func maskToken(value string) string {
 	return string(runes[0]) + strings.Repeat("*", min(len(runes)-1, 3))
 }
 
-func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, int, error) {
+func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, string, int, error) {
 	if cursor == "" {
-		return 0, "", 0, nil
+		return 0, "", "", 0, nil
 	}
 	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	position, traceID, traversed, err := parseCursorPosition(value)
+	position, traceID, toolCallID, traversed, err := parseCursorPosition(value)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, traversed, nil
+	return position, traceID, toolCallID, traversed, nil
 }
 
 // sortToolEvents puts the tool a caller should look at first at the top:
@@ -667,36 +668,44 @@ func sortToolEvents(events []MCPToolEvents) {
 // everything else a caller holds between calls. The count travels inside the
 // sealed token rather than beside it, so a caller cannot reset its own
 // traversal budget by editing what it was handed.
-func formatCursorPosition(unixNano int64, traceID string, traversed int) string {
-	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + traceID
+func formatCursorPosition(unixNano int64, traceID, toolCallID string, traversed int) string {
+	pos := "t:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + traceID
+	if toolCallID != "" {
+		pos += ":" + toolCallID
+	}
+	return pos
 }
 
 // parseCursorPosition recovers the composite page key and the traversal count.
-// Both halves of the key are required: the repo orders by (event_time_ns,
-// trace_id), and a cursor carrying only the timestamp would skip every trace
-// sharing the boundary nanosecond.
-func parseCursorPosition(value string) (int64, string, int, error) {
+// Time, trace id, and tool-call id are required to page without skipping
+// remaining calls that share a session. A three-field cursor (no call id) is
+// still accepted so a token minted before that half existed keeps working.
+func parseCursorPosition(value string) (int64, string, string, int, error) {
 	rest, ok := strings.CutPrefix(value, "t:")
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	timestamp, rest, ok := strings.Cut(rest, ":")
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	count, traceID, ok := strings.Cut(rest, ":")
-	if !ok || traceID == "" {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+	count, rest, ok := strings.Cut(rest, ":")
+	if !ok || rest == "" {
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
+	}
+	traceID, toolCallID, _ := strings.Cut(rest, ":")
+	if traceID == "" {
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	position, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || position <= 0 {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	traversed, err := strconv.Atoi(count)
 	if err != nil || traversed < 0 || traversed > maxTraceTraversal {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, traversed, nil
+	return position, traceID, toolCallID, traversed, nil
 }
 
 // fitRows drops trailing rows until the serialized result fits the response

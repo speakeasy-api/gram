@@ -282,6 +282,67 @@ FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
 
+-- Per-tool-call MCP summaries for diagnostics and drill-down. trace_summaries
+-- is one row per trace_id, so a session that called several MCP servers
+-- collapses to a single max(mcp_server_url) / any(tool_name) and mixes those
+-- servers when a caller filters by one of them. This table keeps one row per
+-- (project, trace, tool call) so a Datadog drill-down does not include Linear
+-- or GitHub tools from the same session. tool_call_id mirrors the session MV
+-- (Claude tool_use_id, then gen_ai.tool.call.id, then the row id).
+CREATE TABLE IF NOT EXISTS mcp_call_summaries (
+    gram_project_id UUID,
+    trace_id FixedString(32),
+    tool_call_id String,
+
+    event_source SimpleAggregateFunction(max, String),
+    tool_name SimpleAggregateFunction(max, String),
+    -- Hosted MCP traffic is identified by toolset slug. max() so an empty
+    -- sibling row loses to the populated value across part merges.
+    toolset_slug SimpleAggregateFunction(max, String),
+    -- Hook-observed traffic is identified by the URL the client called.
+    mcp_server_url SimpleAggregateFunction(max, String),
+    hook_source SimpleAggregateFunction(max, String),
+
+    start_time_unix_nano SimpleAggregateFunction(min, Int64),
+    http_status_code SimpleAggregateFunction(max, Int32),
+    has_result SimpleAggregateFunction(max, UInt8),
+    has_error SimpleAggregateFunction(max, UInt8)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, trace_id, tool_call_id)
+TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Per-tool-call MCP summaries so drill-down can filter by server without mixing other servers from the same session';
+
+-- Same part-level minmax pruning as idx_trace_summaries_start_time: the sort
+-- key is (project, trace, call), so a time window cannot prune by primary key.
+CREATE INDEX IF NOT EXISTS idx_mcp_call_summaries_start_time ON mcp_call_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_call_summaries_mv TO mcp_call_summaries AS
+SELECT
+    gram_project_id,
+    trace_id,
+    multiIf(
+        toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+        toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+        toString(id)
+    ) AS tool_call_id,
+    max(event_source) AS event_source,
+    max(tool_name) AS tool_name,
+    max(toolset_slug) AS toolset_slug,
+    max(toString(attributes.gram.mcp.server_url)) AS mcp_server_url,
+    max(hook_source) AS hook_source,
+    min(time_unix_nano) AS start_time_unix_nano,
+    max(toInt32OrZero(toString(attributes.http.response.status_code))) AS http_status_code,
+    max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
+    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error
+FROM telemetry_logs
+WHERE telemetry_logs.trace_id IS NOT NULL AND telemetry_logs.trace_id != ''
+  AND (
+    (telemetry_logs.event_source != 'hook' AND telemetry_logs.toolset_slug != '')
+    OR (telemetry_logs.event_source = 'hook' AND toString(telemetry_logs.attributes.gram.mcp.server_url) != '')
+  )
+GROUP BY gram_project_id, trace_id, tool_call_id;
+
 CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
     gram_project_id UUID,
     canonical_server_url String,
