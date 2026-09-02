@@ -46,6 +46,7 @@ func TestBuildListAIDetectionSummariesQuery_CanonicalFoldDisablesConditionCache(
 		OrganizationID:       "org_0123456789",
 		Categories:           nil,
 		UserEmails:           []string{"member@example.com"},
+		ExactUserEmail:       "member@example.com",
 		CanonicalIdentityOrg: "org_0123456789",
 	}
 	query, _, err := buildListAIDetectionSummariesQuery(arg)
