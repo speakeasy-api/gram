@@ -18,16 +18,21 @@ export type UpdateTunneledMcpServerForm = {
    */
   id: string;
   /**
-   * Human-readable display name for the tunneled MCP server
+   * Human-readable display name for the tunneled MCP server. Omit to leave unchanged.
    */
-  name: string;
+  name?: string | undefined;
+  /**
+   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.
+   */
+  resourceIdentifier?: string | undefined;
 };
 
 /** @internal */
 export type UpdateTunneledMcpServerForm$Outbound = {
   allow_public?: boolean | undefined;
   id: string;
-  name: string;
+  name?: string | undefined;
+  resource_identifier?: string | undefined;
 };
 
 /** @internal */
@@ -38,11 +43,13 @@ export const UpdateTunneledMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     allowPublic: z.optional(z.boolean()),
     id: z.string(),
-    name: z.string(),
+    name: z.optional(z.string()),
+    resourceIdentifier: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       allowPublic: "allow_public",
+      resourceIdentifier: "resource_identifier",
     });
   }),
 );

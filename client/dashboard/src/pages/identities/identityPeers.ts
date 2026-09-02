@@ -9,11 +9,28 @@ import { unwrapAsync } from "@gram/client/types/fp";
  * identity ever been seen"; ranking a week's spend against an all-time peer
  * set would put a number and its context on different clocks.
  */
+/**
+ * Which key telemetry groups the roster by.
+ *
+ * "internal" groups by the Gram user id, which is what every identity holding
+ * a directory row or an address is found under. An agent that reports only the
+ * id it gave itself has no such row: it exists solely under
+ * external_user_id, and an internal read simply does not contain it — the
+ * identity's own page would then lose its accounts, agent surfaces and peer
+ * context to a roster it was never in.
+ */
+export type IdentityRosterUserType = "internal" | "external";
+
 export function identityPeersQueryKey(
   organizationId: string,
   projectSlug: string,
   from: Date,
   to: Date,
+  // The AI-account class the roster was read through, or "" for every account.
+  // Part of the key because the same window returns different figures under a
+  // scope, and an unscoped read must not answer a scoped one from cache.
+  accountType = "",
+  userType: IdentityRosterUserType = "internal",
 ): (string | number)[] {
   return [
     "identities",
@@ -22,6 +39,8 @@ export function identityPeersQueryKey(
     projectSlug,
     from.getTime(),
     to.getTime(),
+    accountType,
+    userType,
   ];
 }
 
@@ -30,6 +49,8 @@ export async function fetchIdentityPeers(
   gramProject: string,
   from: Date,
   to: Date,
+  accountType = "",
+  userType: IdentityRosterUserType = "internal",
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -40,10 +61,10 @@ export async function fetchIdentityPeers(
         gramProject,
         searchUsersPayload: {
           cursor,
-          filter: { from, to },
+          filter: { from, to, ...(accountType ? { accountType } : {}) },
           limit: 1000,
           sort: "desc",
-          userType: "internal",
+          userType,
           // Deliberately NOT Source.AgentMetrics, which the all-time roster
           // uses: that view carries token counts but reports zero cost, no
           // chat counts, no hook sources and no linked accounts — every
@@ -58,6 +79,84 @@ export async function fetchIdentityPeers(
   } while (cursor);
 
   return users;
+}
+
+/**
+ * One person's roster rows folded into a single summary.
+ *
+ * The roster keys a row per address, so an identity known by several — a work
+ * address plus the one a personal subscription was signed up with — arrives as
+ * several rows. Left apart they rank as separate people and each carries only
+ * its own accounts and hook sources, so the panels that read `self` see a
+ * fraction of the person.
+ */
+export function mergeUserSummaries(rows: UserSummary[]): UserSummary {
+  const [first, ...rest] = rows;
+  if (!first) throw new Error("mergeUserSummaries needs at least one row");
+  if (rest.length === 0) return first;
+
+  const sum = (pick: (row: UserSummary) => number): number =>
+    rows.reduce((total, row) => total + pick(row), 0);
+  const foldBy = <T>(
+    items: T[],
+    key: (item: T) => string,
+    add: (a: T, b: T) => T,
+  ): T[] => {
+    const byKey = new Map<string, T>();
+    for (const item of items) {
+      const existing = byKey.get(key(item));
+      byKey.set(key(item), existing ? add(existing, item) : item);
+    }
+    return [...byKey.values()];
+  };
+
+  const totalChatRequests = sum((row) => row.totalChatRequests);
+  const totalTokens = sum((row) => row.totalTokens);
+
+  return {
+    ...first,
+    accountTypes: [...new Set(rows.flatMap((row) => row.accountTypes ?? []))],
+    accounts: rows.flatMap((row) => row.accounts ?? []),
+    // Compared as BigInt: these are nanosecond counts sent as strings because
+    // they do not survive a double, so neither Number nor a string ordering
+    // would rank them.
+    firstSeenUnixNano: rows
+      .map((row) => row.firstSeenUnixNano)
+      .reduce((a, b) => (BigInt(a) <= BigInt(b) ? a : b)),
+    lastSeenUnixNano: rows
+      .map((row) => row.lastSeenUnixNano)
+      .reduce((a, b) => (BigInt(a) >= BigInt(b) ? a : b)),
+    hookSources: foldBy(
+      rows.flatMap((row) => row.hookSources),
+      (source) => source.source,
+      (a, b) => ({ ...a, eventCount: a.eventCount + b.eventCount }),
+    ),
+    tools: foldBy(
+      rows.flatMap((row) => row.tools),
+      (tool) => tool.urn,
+      (a, b) => ({
+        ...a,
+        count: a.count + b.count,
+        successCount: a.successCount + b.successCount,
+        failureCount: a.failureCount + b.failureCount,
+      }),
+    ),
+    cacheCreationInputTokens: sum((row) => row.cacheCreationInputTokens),
+    cacheReadInputTokens: sum((row) => row.cacheReadInputTokens),
+    toolCallFailure: sum((row) => row.toolCallFailure),
+    toolCallSuccess: sum((row) => row.toolCallSuccess),
+    totalChatRequests,
+    totalChats: sum((row) => row.totalChats),
+    totalCost: sum((row) => row.totalCost),
+    totalInputTokens: sum((row) => row.totalInputTokens),
+    totalOutputTokens: sum((row) => row.totalOutputTokens),
+    totalTokens,
+    totalToolCalls: sum((row) => row.totalToolCalls),
+    // Re-derived rather than averaged: averaging per-row averages weights a
+    // handful of requests the same as a thousand.
+    avgTokensPerRequest:
+      totalChatRequests > 0 ? totalTokens / totalChatRequests : 0,
+  };
 }
 
 /**

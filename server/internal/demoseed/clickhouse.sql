@@ -114,6 +114,16 @@ SELECT
     ',"user.roles":', rolesjson,
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
+    -- The account the call was made through, matching the chat rows below so
+    -- an account-scoped read of someone's usage keeps its tool calls; without
+    -- it every tool count drops to zero the moment a filter is applied. Only
+    -- the Claude half can be personal: the two seeded personal accounts are
+    -- Anthropic ones, so labelling a Cursor call personal would attribute it
+    -- to an account that does not exist.
+    ',"gram.account_type":"', if(hook = 'claude-code'
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', hook, '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -299,8 +309,17 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.provider":"anthropic"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
-    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai', 'flat_rate', 'metered'), '"}'
+    -- The contractor works entirely on his own subscription; the manager
+    -- splits, roughly a third of his chats going through the personal Claude
+    -- login user_accounts already lists for him. A person who is wholly one or
+    -- wholly the other never exercises the account filter on the identity
+    -- Usage tab, which exists precisely for the split case.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
+    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'flat_rate', 'metered'), '"}'
   ),
   '{"service.name":"claude-code","gram.deployment.id":"demo-seed"}',
   proj,
@@ -657,7 +676,13 @@ SELECT
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    -- Same split as the chat rows above, keyed the same way so a chat's
+    -- score lands on the account that ran it. Odd rows only: those are the
+    -- Anthropic ones, and both seeded personal accounts are Anthropic.
+    ',"gram.account_type":"', if(i % 2 = 1
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -775,10 +800,19 @@ FROM (
   FROM numbers(180)
 );
 
--- Authz challenges (org home "Recent challenges" panel + /access/challenges).
+-- Authz challenges (org home "Recent challenges" panel, /access/challenges, and
+-- the per-identity Access and Security tabs).
+--
 -- user_id values are demo members (organization_user_relationships rows exist,
 -- so the member-suppression filter keeps them visible); one api_key bucket
 -- stays visible regardless of membership.
+--
+-- The subject and the scope are drawn from DIFFERENT hashes on purpose. Keying
+-- both off `number % 3` locked each person to a single scope forever, so every
+-- identity's Access tab listed one action repeated N times and the whole panel
+-- read as a stuck query. Outcomes are mixed for the same reason: a log that is
+-- 100% denials says nothing about which denials matter, and the donut on the
+-- Access tab has only one segment to draw.
 INSERT INTO authz_challenges
   (timestamp, organization_id, project_id, trace_id, span_id, request_id,
    principal_urn, principal_type, user_id, user_email, api_key_id,
@@ -796,34 +830,56 @@ SELECT
   lower(hex(MD5(concat('gram-demo-chal-', toString(number))))),
   substring(lower(hex(MD5(concat('gram-demo-chalspan-', toString(number))))), 1, 16),
   concat('req_', substring(lower(hex(MD5(concat('gram-demo-chalreq-', toString(number))))), 1, 16)),
-  if(number % 5 = 4, 'api_key:akey_demo0000000001',
-     concat('user:', arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3)))),
-  if(number % 5 = 4, 'api_key', 'user'),
-  if(number % 5 = 4, NULL,
-     arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3))),
-  if(number % 5 = 4, NULL,
-     arrayElement(['jonas@demo.getgram.ai', 'priya@demo.getgram.ai', 'hana@demo.getgram.ai'], 1 + (number % 3))),
-  if(number % 5 = 4, 'akey_demo0000000001', NULL),
+  if(number % 7 = 6, 'api_key:akey_demo0000000001',
+     concat('user:', arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                                  1 + toUInt32(cityHash64('chal-user', number) % 6)))),
+  if(number % 7 = 6, 'api_key', 'user'),
+  if(number % 7 = 6, NULL,
+     arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, NULL,
+     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, 'akey_demo0000000001', NULL),
   [],
   'require',
-  'deny',
-  if(number % 2 = 0, 'scope_unsatisfied', 'no_grants'),
-  arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3)),
-  arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3)),
+  -- Roughly one in three is refused: enough denials to be worth reading,
+  -- not so many that the org looks locked out of its own tools.
+  if(cityHash64('chal-outcome', number) % 3 = 0, 'deny', 'allow'),
+  -- reason is a closed enum on the wire: an allow that carries an empty
+  -- reason fails response validation and the client discards the whole page,
+  -- which reads in the UI as "no authorization checks recorded".
+  if(cityHash64('chal-outcome', number) % 3 <> 0, 'grant_matched',
+     if(number % 2 = 0, 'scope_unsatisfied', 'no_grants')),
+  arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
+  arrayElement(['toolset', 'project', 'environment',
+                'environment', 'mcp', 'skill', 'chat'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
   arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                 'dec0de00-0000-4000-a000-000000000001',
                 'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3)),
   '{"project":"dec0de00-0000-4000-a000-000000000001"}',
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset', 'project', 'environment',
+                 'environment', 'mcp', 'skill', 'chat'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
   [arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                  'dec0de00-0000-4000-a000-000000000001',
                  'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3))],
   ['{"project":"dec0de00-0000-4000-a000-000000000001"}'],
   [], [], [], [],
   toUInt32(3 + number % 5)
-FROM numbers(13);
+FROM numbers(64);
 
 -- Risk findings mirror (the ClickHouse read path behind the risk overview,
 -- the Risk Events listing and the Watchdog): one row per Postgres finding,
@@ -1129,12 +1185,28 @@ SELECT throwIf(
 -- summary counts chat requests by. Without it "Chat requests" reads 0 on every
 -- identity while the chat count beside it reads correctly, which looks like a
 -- broken panel rather than absent data.
+--
+-- Request-shaped means the row reports token usage: that is what separates an
+-- LLM request from the tool-call and hook rows seeded alongside it, and it
+-- stays true of request rows added later regardless of their body text. A
+-- global floor would not catch a new insert that forgot the field, so the
+-- assert is that no such row is missing it, with a floor beside it so an
+-- empty table cannot satisfy the first check vacuously.
 SELECT throwIf(
-  (SELECT uniqExact(toString(attributes.gen_ai.response.id)) FROM telemetry_logs
+  (SELECT countIf(toString(attributes.gen_ai.response.id) = '') FROM telemetry_logs
    WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
-     AND toString(attributes.gen_ai.response.id) != ''
-   ) < 180,
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) > 0,
   'demo seed postflight: request rows missing gen_ai.response.id');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) < 180,
+  'demo seed postflight: too few request rows');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN

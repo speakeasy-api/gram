@@ -157,17 +157,18 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "public-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "public-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
 	if allowPublic {
 		_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-			Name:        tunneledServer.Name,
+			Name:        conv.ToPGText(tunneledServer.Name),
 			AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 			ID:          tunneledServer.ID,
 			ProjectID:   *authCtx.ProjectID,
@@ -543,15 +544,16 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "private-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "private-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        tunneledServer.Name,
+		Name:        conv.ToPGText(tunneledServer.Name),
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServer.ID,
 		ProjectID:   *authCtx.ProjectID,

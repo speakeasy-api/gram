@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestRevokeUserSession(t *testing.T) {
@@ -129,4 +130,27 @@ func TestRevokeUserSession_RBACForbidden(t *testing.T) {
 
 	// jti must NOT be in the revocation cache when revoke was denied.
 	require.False(t, jtiRevoked(t, ctx, ti.redis, session.Jti))
+}
+
+func TestRevokeUserSession_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "revoke-sess-sibling")
+
+	err := ti.service.RevokeUserSession(ctx, &gen.RevokeUserSessionPayload{
+		ID:               sp.sessionID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	live, err := repo.New(ti.conn).GetUserSessionByID(ctx, repo.GetUserSessionByIDParams{
+		ID:             sp.sessionID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's session must survive the caller's revoke")
+	require.False(t, live.Deleted)
 }

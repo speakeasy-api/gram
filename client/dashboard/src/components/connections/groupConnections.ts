@@ -17,13 +17,17 @@ import type { UserSessionUpstream } from "@gram/client/models/components/userses
  * admin arrives with is almost always about someone — who has access, and what
  * can they reach — rather than about a credential.
  */
-export type ConnectionGrouping = "subject" | "provider" | "client";
+export type ConnectionGrouping = "subject" | "issuer" | "provider" | "client";
 
 // "Agent" rather than "client": the OAuth client on the other side of a
 // connection is an agent, and that is what it is called everywhere else in the
 // product. `client` stays as the key, which names the protocol record.
 export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
   subject: "Person",
+  // The Gram MCP server the session was issued through, which is what the rest
+  // of the product means by "MCP server" — distinct from "Provider", the
+  // upstream the server holds tokens for.
+  issuer: "MCP server",
   provider: "Provider",
   client: "Agent",
 };
@@ -100,6 +104,15 @@ function groupKeysFor(
   switch (grouping) {
     case "subject":
       return [{ key: session.subjectUrn, label: subjectLabel(session) }];
+    case "issuer":
+      return [
+        {
+          key: session.userSessionIssuerId,
+          // The slug is the server's own name; unlike an upstream's it needs
+          // no provider lookup to read.
+          label: session.issuerSlug,
+        },
+      ];
     case "client": {
       const label = session.clientName ?? "Unknown client";
       return [{ key: session.userSessionClientId ?? label, label }];

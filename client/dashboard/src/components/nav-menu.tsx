@@ -298,19 +298,23 @@ export function NavGroupProvider({
   );
 }
 
-// The sliding highlight follows the pointer (`hoveredItem ?? resolvedActive`),
-// so hovering anything moves the box off the current page and leaves nothing
-// behind saying where you are — and the collapsed icon rail, which has no room
-// for the bold label, showed no active state at all. This marker belongs to the
-// item rather than to the shared highlight, so it survives both.
-const ACTIVE_MARKER =
-  "before:bg-foreground before:absolute before:top-1/2 before:left-0 before:h-4 before:w-0.5 before:-translate-y-1/2 before:content-['']";
+// There is one card on the list and it slides: it rests on the current page
+// and follows the pointer (`hoveredItem ?? resolvedActive`), so hovering reads
+// as "this one next", not as a second selection. The active item therefore
+// draws no ground of its own — two cards at once is the thing the slide is
+// meant to avoid — and says where you are with a rule instead, which the
+// moving card cannot take with it.
+//
+// Full height rather than a centred stub: it reads as the edge of the row,
+// and it lines up with the card whenever the card is resting on it.
+const ACTIVE_ITEM =
+  "text-foreground before:bg-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:content-['']";
 
 // The same marker, but only once the sidebar collapses to icons — where an
 // expanded group's leaves are hidden and it is the only thing that can say
 // where you are.
 const ACTIVE_MARKER_ICON_RAIL =
-  "group-data-[collapsible=icon]:before:bg-foreground group-data-[collapsible=icon]:before:absolute group-data-[collapsible=icon]:before:top-1/2 group-data-[collapsible=icon]:before:left-0 group-data-[collapsible=icon]:before:h-4 group-data-[collapsible=icon]:before:w-0.5 group-data-[collapsible=icon]:before:-translate-y-1/2 group-data-[collapsible=icon]:before:content-['']";
+  "group-data-[collapsible=icon]:before:bg-foreground group-data-[collapsible=icon]:before:absolute group-data-[collapsible=icon]:before:inset-y-0 group-data-[collapsible=icon]:before:left-0 group-data-[collapsible=icon]:before:w-0.5 group-data-[collapsible=icon]:before:content-['']";
 
 // ---------------------------------------------------------------------------
 // Hook for registering item ref + hover handlers
@@ -473,7 +477,7 @@ export function NavButton({
         "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
-          ? cn("text-foreground font-semibold", ACTIVE_MARKER)
+          ? ACTIVE_ITEM
           : "text-muted-foreground hover:text-foreground font-medium",
       )}
     >
@@ -581,7 +585,7 @@ export function CollapsibleNavGroup({
               isOpen
                 ? "text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground font-medium",
-              isActiveGroup && !isOpen && ACTIVE_MARKER,
+              isActiveGroup && !isOpen && ACTIVE_ITEM,
               isActiveGroup && isOpen && ACTIVE_MARKER_ICON_RAIL,
             )}
           >
@@ -706,7 +710,7 @@ export function CollapsibleNavItem({
           className={cn(
             "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
-              ? cn("text-foreground font-semibold", ACTIVE_MARKER)
+              ? ACTIVE_ITEM
               : "text-muted-foreground hover:text-foreground",
           )}
         >

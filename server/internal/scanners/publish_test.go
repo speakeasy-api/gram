@@ -21,7 +21,7 @@ type recordingFindingPublisher struct {
 	messages []*riskv1.Finding
 }
 
-func (p *recordingFindingPublisher) Publish(_ context.Context, msg *riskv1.Finding) gcp.PublishResult {
+func (p *recordingFindingPublisher) Publish(_ context.Context, msg *riskv1.Finding, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.messages = append(p.messages, msg)
 	if len(p.results) == 0 {
 		return gcp.NewSuccessPublishResult()

@@ -927,6 +927,26 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("OpenCode picks the package up on next start; remove the copied files to uninstall.\n")
 	b.WriteString("Plugins that need authentication read the environment variables named in their `mcp.json`.\n")
 
+	// OpenClaw ships only the observability package: there is no marketplace
+	// track and no per-plugin OpenClaw output. With no hooks key nothing
+	// OpenClaw-shaped is generated, so the whole section would describe files
+	// that are not in the repo.
+	if cfg.HooksAPIKey != "" {
+		obs := OpenClawObservabilitySlug(cfg)
+		b.WriteString("\n### OpenClaw\n\n")
+		fmt.Fprintf(&b, "Install the observability package from its directory:\n\n```\nopenclaw plugins install ./%s\n```\n\n", obs)
+		b.WriteString("Add `--force` when replacing an existing install. Then enable conversation-scope hooks — ")
+		b.WriteString("without this the prompt, assistant-response and usage hooks silently never fire:\n\n")
+		b.WriteString("```json\n{\n  \"plugins\": {\n    \"entries\": {\n      \"speakeasy-observability\": {\n        \"enabled\": true,\n        \"hooks\": { \"allowConversationAccess\": true }\n      }\n    }\n  }\n}\n```\n\n")
+		b.WriteString("Restart the Gateway to load the plugin. Uninstall with `openclaw plugins uninstall speakeasy-observability`.\n\n")
+		b.WriteString("> **Coverage depends on your model-auth mode.** When a model routes through the Claude CLI harness ")
+		b.WriteString("(`agentRuntime: claude-cli`, which `openclaw models auth login` writes by default when a claude-cli ")
+		b.WriteString("profile exists), OpenClaw delegates the model and tool loop out-of-process and its tool/LLM hooks ")
+		b.WriteString("never fire. Those sessions are captured only if Speakeasy's Claude Code hooks are also deployed on ")
+		b.WriteString("the machine. For OpenClaw-side tool capture and enforcement, configure the embedded runtime ")
+		b.WriteString("(`agentRuntime: { id: \"openclaw\" }`) for the models you want covered.\n")
+	}
+
 	return []byte(b.String())
 }
 

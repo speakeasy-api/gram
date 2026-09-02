@@ -363,6 +363,11 @@
             >
               Give access
             </button>
+            {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
+            <p class="text-muted-foreground mt-2 text-xs">
+              Connect a service above to enable access.
+            </p>
+            {{end}}
           </form>
           <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
             <input type="hidden" name="state" value="{{.State}}" />

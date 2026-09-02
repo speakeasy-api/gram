@@ -5,7 +5,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -41,7 +41,7 @@ export default function RiskOverviewUsersIndex(): JSX.Element {
 }
 
 function RiskOverviewUsersIndexContent() {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -104,9 +104,17 @@ function RiskOverviewUsersIndexContent() {
               // Rows lead to the identity page rather than to the risk-only
               // user view: one person's findings, spend and access now hang
               // off a single page.
-              const href = u.externalUserId
-                ? `${orgRoutes.identities.detail.overview.href(
-                    encodeIdentityUrn(`external:${u.externalUserId}`),
+              // Findings resolved through the directory carry an address and
+              // no external id; the resolver keys on either, so both reach the
+              // person's page.
+              const identityUrn = u.externalUserId
+                ? `external:${u.externalUserId}`
+                : u.email
+                  ? `email:${u.email}`
+                  : null;
+              const href = identityUrn
+                ? `${routes.identities.detail.overview.href(
+                    encodeIdentityUrn(identityUrn),
                   )}${location.search}`
                 : null;
               const pct =

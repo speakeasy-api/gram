@@ -64,6 +64,61 @@ func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAt
 	return result.RowsAffected(), nil
 }
 
+const autoDetachMemberProviderClient = `-- name: AutoDetachMemberProviderClient :execrows
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.remote_session_client_id = c.id
+  AND l.user_session_issuer_id = $1
+  AND c.remote_session_issuer_id = $2
+  AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = $3
+      AND s.remote_session_issuer_id = $2
+      AND (
+        s.user_session_issuer_id = $1
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS mm
+            ON mm.project_id = m.project_id
+           AND mm.id = m.meta_mcp_server_id
+           AND mm.deleted IS FALSE
+          WHERE m.project_id = s.project_id
+            AND m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND mm.user_session_issuer_id = $1
+        )
+      )
+  )
+`
+
+type AutoDetachMemberProviderClientParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
+// client(s) for a removed member's upstream so the provider stops appearing on
+// the gateway's consent screen. The binding is scoped to the user_session_issuer,
+// so it must survive as long as ANY live consumer of that issuer still fronts
+// the upstream — a live member of a meta server on the issuer, or a server
+// directly issuer-gated to it (issuers can be shared across gateways/servers).
+// Run after the member row is soft-deleted so the just-removed member is
+// already excluded by the deleted filter below.
+func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -650,21 +705,26 @@ const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersFor
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
-    r.url AS upstream_url
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
-JOIN remote_mcp_servers r
+LEFT JOIN remote_mcp_servers r
   ON r.id = s.remote_mcp_server_id
  AND r.project_id = m.project_id
  AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
   AND s.remote_session_issuer_id = $3
 ORDER BY m.sort_order, m.created_at, m.id
 `
@@ -681,16 +741,19 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 	UpstreamUrl         string
 }
 
-// The meta MCP's remote-backed members that authenticate against a given
-// authorization server, filtered exactly as ListServableMetaMCPMembers so a
-// member invisible to the serving path cannot claim a credential either.
+// The meta MCP's proxied (remote or tunneled) members that authenticate
+// against a given authorization server, filtered exactly as
+// ListServableMetaMCPMembers so a member invisible to the serving path cannot
+// claim a credential either.
 //
 // A client names exactly one remote_session_issuer, so matching it against the
 // member's own is the whole lookup; the caller still fails closed on none or
 // several, since a grant records one resource.
 //
-// Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
-// excludes tunneled, hosted, and unproxied members: none has an upstream URL.
+// upstream_url is the member's RFC 8707 resource: the remote server URL or
+// the tunneled server's recorded resource identifier (empty when a tunneled
+// member records none — the claim still lands, minting an unqualified grant).
+// Hosted and unproxied members have no upstream and cannot claim.
 func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionIssuerParams) ([]ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
 	if err != nil {
@@ -780,7 +843,8 @@ SELECT
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
-    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -788,6 +852,10 @@ JOIN mcp_servers s
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
  AND s.slug IS NOT NULL
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
@@ -813,6 +881,7 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerEnvironmentID         uuid.NullUUID
 	McpServerToolVariationsGroupID uuid.NullUUID
 	McpServerRemoteSessionIssuerID uuid.NullUUID
+	TunneledResourceIdentifier     string
 }
 
 // Serving-path variant of ListMetaMCPMembers: additionally hides members
@@ -822,7 +891,10 @@ type ListServableMetaMCPMembersRow struct {
 // serverslug--toolname contract cannot address. The dashboard listing keeps
 // the unfiltered query so admins still see every member. Carries the backend
 // and dispatch columns the gateway runtime needs to classify and execute
-// against each member.
+// against each member, including a tunneled member's recorded resource
+// identifier so credential routing needs no second read per dial. A member
+// whose tunneled source is soft-deleted reads as no identifier and routes
+// anonymously; the dial then fails member-scoped on the missing tunnel.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -846,6 +918,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.TunneledResourceIdentifier,
 		); err != nil {
 			return nil, err
 		}

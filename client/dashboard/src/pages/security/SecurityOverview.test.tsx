@@ -96,15 +96,14 @@ vi.mock("@/routes", () => ({
       rulesIndex: { href: () => "/risk/rules" },
       usersIndex: { href: () => "/risk/users" },
     },
-  }),
-  // Top users link to the org-level identity page.
-  useOrgRoutes: () => ({
+    // Top users link to the identity page, which lives under the project.
     identities: {
       detail: {
         overview: { href: (urn: string) => `/identities/${urn}/overview` },
       },
     },
   }),
+  useOrgRoutes: () => ({}),
 }));
 
 vi.mock("@gram/client/react-query/riskOverview.js", () => ({

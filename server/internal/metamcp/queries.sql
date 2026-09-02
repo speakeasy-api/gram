@@ -229,7 +229,10 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- serverslug--toolname contract cannot address. The dashboard listing keeps
 -- the unfiltered query so admins still see every member. Carries the backend
 -- and dispatch columns the gateway runtime needs to classify and execute
--- against each member.
+-- against each member, including a tunneled member's recorded resource
+-- identifier so credential routing needs no second read per dial. A member
+-- whose tunneled source is soft-deleted reads as no identifier and routes
+-- anonymously; the dial then fails member-scoped on the missing tunnel.
 SELECT
     m.id,
     m.mcp_server_id,
@@ -243,7 +246,8 @@ SELECT
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
-    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -251,6 +255,10 @@ JOIN mcp_servers s
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
  AND s.slug IS NOT NULL
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
@@ -275,34 +283,42 @@ WHERE id = @id
 RETURNING *;
 
 -- name: ListMetaMCPMembersForRemoteSessionIssuer :many
--- The meta MCP's remote-backed members that authenticate against a given
--- authorization server, filtered exactly as ListServableMetaMCPMembers so a
--- member invisible to the serving path cannot claim a credential either.
+-- The meta MCP's proxied (remote or tunneled) members that authenticate
+-- against a given authorization server, filtered exactly as
+-- ListServableMetaMCPMembers so a member invisible to the serving path cannot
+-- claim a credential either.
 --
 -- A client names exactly one remote_session_issuer, so matching it against the
 -- member's own is the whole lookup; the caller still fails closed on none or
 -- several, since a grant records one resource.
 --
--- Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
--- excludes tunneled, hosted, and unproxied members: none has an upstream URL.
+-- upstream_url is the member's RFC 8707 resource: the remote server URL or
+-- the tunneled server's recorded resource identifier (empty when a tunneled
+-- member records none — the claim still lands, minting an unqualified grant).
+-- Hosted and unproxied members have no upstream and cannot claim.
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
-    r.url AS upstream_url
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
-JOIN remote_mcp_servers r
+LEFT JOIN remote_mcp_servers r
   ON r.id = s.remote_mcp_server_id
  AND r.project_id = m.project_id
  AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
   AND s.remote_session_issuer_id = @remote_session_issuer_id
 ORDER BY m.sort_order, m.created_at, m.id;
 
@@ -336,6 +352,46 @@ WHERE l.user_session_issuer_id = @member_issuer_id
 ORDER BY c.created_at
 LIMIT 1
 ON CONFLICT DO NOTHING;
+
+-- name: AutoDetachMemberProviderClient :execrows
+-- Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
+-- client(s) for a removed member's upstream so the provider stops appearing on
+-- the gateway's consent screen. The binding is scoped to the user_session_issuer,
+-- so it must survive as long as ANY live consumer of that issuer still fronts
+-- the upstream — a live member of a meta server on the issuer, or a server
+-- directly issuer-gated to it (issuers can be shared across gateways/servers).
+-- Run after the member row is soft-deleted so the just-removed member is
+-- already excluded by the deleted filter below.
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.remote_session_client_id = c.id
+  AND l.user_session_issuer_id = @gateway_issuer_id
+  AND c.remote_session_issuer_id = @remote_issuer_id
+  AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = @project_id
+      AND s.remote_session_issuer_id = @remote_issuer_id
+      AND (
+        s.user_session_issuer_id = @gateway_issuer_id
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS mm
+            ON mm.project_id = m.project_id
+           AND mm.id = m.meta_mcp_server_id
+           AND mm.deleted IS FALSE
+          WHERE m.project_id = s.project_id
+            AND m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND mm.user_session_issuer_id = @gateway_issuer_id
+        )
+      )
+  );
 
 -- name: ListMemberProviderIdentities :many
 -- Distinct provider identity pairs across a meta server's live members, for

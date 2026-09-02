@@ -23,10 +23,16 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
 
+type stripeExportOutcome string
+
 const (
 	meterStripeExportErrors    = "gram.metering.stripe_export.errors"
+	meterStripeExportReadings  = "gram.metering.stripe_export.readings"
 	stripeCustomerCacheMaxSize = 4096
 	stripeCustomerCacheTTL     = 10 * time.Minute
+
+	stripeExportOutcomeIneligible stripeExportOutcome = "ineligible"
+	stripeExportOutcomeSent       stripeExportOutcome = "sent"
 )
 
 type stripeCustomerReader interface {
@@ -56,6 +62,7 @@ type MeterReadingStripeExporter struct {
 	customers       *expirable.LRU[string, string]
 	customerLookups singleflight.Group
 	exportErrors    metric.Int64Counter
+	readings        metric.Int64Counter
 }
 
 // NewMeterReadingStripeExporter creates a Stripe meter-reading subscriber.
@@ -67,13 +74,23 @@ func NewMeterReadingStripeExporter(
 	stripeCatalog StripeCatalog,
 	enabled bool,
 ) *MeterReadingStripeExporter {
-	exportErrors, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/metering").Int64Counter(
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/metering")
+	exportErrors, err := meter.Int64Counter(
 		meterStripeExportErrors,
 		metric.WithDescription("Stripe meter-reading export failures by classified cause."),
 		metric.WithUnit("{error}"),
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterStripeExportErrors), attr.SlogError(err))
+	}
+
+	readings, err := meter.Int64Counter(
+		meterStripeExportReadings,
+		metric.WithDescription("Stripe meter readings by export disposition: ineligible or sent."),
+		metric.WithUnit("{reading}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterStripeExportReadings), attr.SlogError(err))
 	}
 
 	return &MeterReadingStripeExporter{
@@ -84,6 +101,7 @@ func NewMeterReadingStripeExporter(
 		customers:       expirable.NewLRU[string, string](stripeCustomerCacheMaxSize, nil, stripeCustomerCacheTTL),
 		customerLookups: singleflight.Group{},
 		exportErrors:    exportErrors,
+		readings:        readings,
 	}
 }
 
@@ -96,6 +114,7 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return nil
 	}
 	if reading.GetKind() == meteringv1.MeterReading_KIND_ADJUSTMENT {
+		e.recordReadingOutcome(ctx, stripeExportOutcomeIneligible)
 		return nil
 	}
 	if reading.GetKind() != meteringv1.MeterReading_KIND_USAGE {
@@ -114,6 +133,7 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return fmt.Errorf("map meter %q version %d to Stripe: %w", reading.GetMeterId(), reading.GetMeterVersion(), err)
 	}
 	if eventName == "" {
+		e.recordReadingOutcome(ctx, stripeExportOutcomeIneligible)
 		return nil
 	}
 
@@ -127,6 +147,7 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return fmt.Errorf("look up Stripe customer: %w", err)
 	}
 	if customerID == "" {
+		e.recordReadingOutcome(ctx, stripeExportOutcomeIneligible)
 		return nil
 	}
 
@@ -141,6 +162,7 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		e.recordExportError(ctx, err)
 		return fmt.Errorf("export meter reading to Stripe: %w", err)
 	}
+	e.recordReadingOutcome(ctx, stripeExportOutcomeSent)
 	return nil
 }
 
@@ -176,6 +198,14 @@ func (e *MeterReadingStripeExporter) stripeCustomerID(ctx context.Context, organ
 		return "", fmt.Errorf("unexpected Stripe customer lookup result %T", value)
 	}
 	return customerID, nil
+}
+
+func (e *MeterReadingStripeExporter) recordReadingOutcome(ctx context.Context, outcome stripeExportOutcome) {
+	if e.readings == nil {
+		return
+	}
+
+	e.readings.Add(ctx, 1, metric.WithAttributes(attr.MeteringStripeExportDisposition(outcome)))
 }
 
 func (e *MeterReadingStripeExporter) recordExportError(ctx context.Context, err error) {

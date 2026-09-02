@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { anOrganization } from "@/test/fixtures";
 
-import { TrialFacts } from "./TrialFacts";
+import { TrialFacts, TrialSummary } from "./TrialFacts";
 
 const END = "2026-05-06T01:01:00Z";
 
@@ -32,18 +32,16 @@ describe("TrialFacts", () => {
       />,
     );
 
-    expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
-      stateLabel,
-    );
-    expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+    expect(
+      screen.getByText("Trial state").nextElementSibling?.textContent,
+    ).toBe(stateLabel);
+    expect(screen.getByText("Trial tier").nextElementSibling?.textContent).toBe(
       "Enterprise",
     );
-    expect(screen.getByText("Ends").nextElementSibling?.textContent).toBe(
+    expect(screen.getByText("End date").nextElementSibling?.textContent).toBe(
       new Date(END).toLocaleDateString(),
     );
-    expect(screen.getByText("Remaining").nextElementSibling?.textContent).toBe(
-      "1 hour 1 minute",
-    );
+    expect(screen.queryByText("Remaining")).toBeNull();
   });
 
   it("keeps No trial visible", () => {
@@ -66,17 +64,17 @@ describe("TrialFacts", () => {
       />,
     );
 
-    expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+    expect(screen.getByText("Trial tier").nextElementSibling?.textContent).toBe(
       "Unknown",
     );
     expect(screen.queryByText("future_internal_tier")).toBeNull();
   });
 
-  it("updates on end-relative minute boundaries and cleans up its timer", () => {
+  it("updates the summary on end-relative boundaries and cleans up its timer", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-05-06T00:00:30.500Z");
     const view = render(
-      <TrialFacts
+      <TrialSummary
         org={anOrganization({
           trial_state: "running",
           trial_tier: "enterprise",
@@ -85,54 +83,64 @@ describe("TrialFacts", () => {
       />,
     );
 
-    const remaining = () =>
-      screen.getByText("Remaining").nextElementSibling?.textContent;
-    expect(remaining()).toBe("1 hour 2 minutes");
-
+    expect(screen.getByText("1 hour 2 minutes left")).toBeTruthy();
     act(() => {
-      vi.advanceTimersByTime(14_499);
+      vi.advanceTimersByTime(14_500);
     });
-    expect(remaining()).toBe("1 hour 2 minutes");
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(remaining()).toBe("1 hour 1 minute");
+    expect(screen.getByText("1 hour 1 minute left")).toBeTruthy();
     expect(vi.getTimerCount()).toBe(1);
 
     view.unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each([
-    ["2026-05-09T00:00:30Z", "4 days", "72 hours"],
-    ["2026-05-07T00:00:30Z", "25 hours", "24 hours"],
-  ])("updates at the formatter boundary ending at %s", (end, before, after) => {
+  it("refreshes the summary clock when transitioning into a live trial", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-05-06T00:00:00Z");
-    render(
-      <TrialFacts
+    const view = render(
+      <TrialSummary org={anOrganization({ trial_state: "converted" })} />,
+    );
+    vi.setSystemTime("2026-05-06T00:30:00Z");
+
+    view.rerender(
+      <TrialSummary
         org={anOrganization({
           trial_state: "running",
-          trial_ends_at: end,
+          trial_ends_at: "2026-05-06T01:00:00Z",
         })}
       />,
     );
 
-    const remaining = () =>
-      screen.getByText("Remaining").nextElementSibling?.textContent;
-    expect(remaining()).toBe(before);
-    act(() => {
-      vi.advanceTimersByTime(30_000);
-    });
-    expect(remaining()).toBe(after);
+    expect(screen.getByText("30 minutes left")).toBeTruthy();
   });
 
-  it("switches a live trial to expired at its exact end", () => {
+  it("updates Details to expired at the exact end", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-05-06T00:00:30Z");
+    render(
+      <TrialFacts
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: "2026-05-06T00:01:45Z",
+        })}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(75_000);
+    });
+
+    expect(
+      screen.getByText("Trial state").nextElementSibling?.textContent,
+    ).toBe("Expired");
+  });
+
+  it("switches the summary to ended at the exact end", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-05-06T00:00:30Z");
     const end = "2026-05-06T00:01:45Z";
     render(
-      <TrialFacts
+      <TrialSummary
         org={anOrganization({
           trial_state: "running",
           trial_tier: "enterprise",
@@ -145,39 +153,11 @@ describe("TrialFacts", () => {
       vi.advanceTimersByTime(75_000);
     });
 
-    expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
-      "Expired",
-    );
-    expect(screen.queryByText("Remaining")).toBeNull();
-    expect(
-      screen.getByText("Original end").nextElementSibling?.textContent,
-    ).toBe(new Date(end).toLocaleDateString());
-    expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
-      "Enterprise",
+    expect(screen.getByText("Trial ended")).toBeTruthy();
+    expect(screen.getByText(/End date/).textContent).toContain(
+      new Date(end).toLocaleDateString(),
     );
     expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("refreshes a stale clock when transitioning into a live trial", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime("2026-05-06T00:00:00Z");
-    const view = render(
-      <TrialFacts org={anOrganization({ trial_state: "converted" })} />,
-    );
-    vi.setSystemTime("2026-05-06T00:30:00Z");
-
-    view.rerender(
-      <TrialFacts
-        org={anOrganization({
-          trial_state: "running",
-          trial_ends_at: "2026-05-06T01:00:00Z",
-        })}
-      />,
-    );
-
-    expect(screen.getByText("Remaining").nextElementSibling?.textContent).toBe(
-      "30 minutes",
-    );
   });
 
   it.each([undefined, "not-a-date"])(
@@ -185,35 +165,31 @@ describe("TrialFacts", () => {
     (end) => {
       vi.useFakeTimers();
       render(
-        <TrialFacts
-          org={anOrganization({
-            trial_state: "running",
-            trial_ends_at: end,
-          })}
+        <TrialSummary
+          org={anOrganization({ trial_state: "running", trial_ends_at: end })}
         />,
       );
 
-      expect(screen.getByText("Ends").nextElementSibling?.textContent).toBe(
-        "Unknown",
-      );
-      expect(
-        screen.getByText("Remaining").nextElementSibling?.textContent,
-      ).toBe("Unknown");
+      expect(screen.getByText("Trial status unknown")).toBeTruthy();
+      expect(screen.getByText(/End date/).textContent).toContain("Unknown");
       expect(vi.getTimerCount()).toBe(0);
     },
   );
 
-  it("labels an unknown future trial state safely", () => {
-    render(
-      <TrialFacts
-        org={anOrganization({ trial_state: "future_state" as "running" })}
-      />,
-    );
+  it.each(["future_state", "constructor", "toString"])(
+    "labels unknown trial state %s safely",
+    (trialState) => {
+      render(
+        <TrialFacts
+          org={anOrganization({ trial_state: trialState as "running" })}
+        />,
+      );
 
-    expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
-      "Unknown",
-    );
-  });
+      expect(
+        screen.getByText("Trial state").nextElementSibling?.textContent,
+      ).toBe("Unknown");
+    },
+  );
 
   it.each([
     ["converted", "Converted", "Conversion date"],
@@ -237,15 +213,15 @@ describe("TrialFacts", () => {
         />,
       );
 
-      expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
-        stateLabel,
-      );
-      expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
-        "Enterprise",
-      );
       expect(
-        screen.getByText("Original end").nextElementSibling?.textContent,
-      ).toBe(new Date(end).toLocaleDateString());
+        screen.getByText("Trial state").nextElementSibling?.textContent,
+      ).toBe(stateLabel);
+      expect(
+        screen.getByText("Trial tier").nextElementSibling?.textContent,
+      ).toBe("Enterprise");
+      expect(screen.getByText("End date").nextElementSibling?.textContent).toBe(
+        new Date(end).toLocaleDateString(),
+      );
 
       if (lifecycleLabel) {
         const lifecycleDate = trialState === "converted" ? converted : demoted;
@@ -268,12 +244,12 @@ describe("TrialFacts", () => {
     (trialState) => {
       render(<TrialFacts org={anOrganization({ trial_state: trialState })} />);
 
-      expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+      expect(
+        screen.getByText("Trial tier").nextElementSibling?.textContent,
+      ).toBe("Unknown");
+      expect(screen.getByText("End date").nextElementSibling?.textContent).toBe(
         "Unknown",
       );
-      expect(
-        screen.getByText("Original end").nextElementSibling?.textContent,
-      ).toBe("Unknown");
       if (trialState !== "expired") {
         expect(
           screen.getByText(

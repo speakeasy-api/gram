@@ -1120,7 +1120,13 @@ function PolicyCenterContent() {
                 <dt className="text-muted-foreground">Policy</dt>
                 <dd>{row.riskPolicyName}</dd>
                 <dt className="text-muted-foreground">User</dt>
-                <dd className="break-all">{row.userId || "Unknown user"}</dd>
+                <dd className="break-all">
+                  <IdentityLink
+                    identifier={row.userId ? { userId: row.userId } : null}
+                  >
+                    {row.userId || "Unknown user"}
+                  </IdentityLink>
+                </dd>
                 <dt className="text-muted-foreground">Quarantined</dt>
                 <dd>
                   <PolicyDateCell date={row.createdAt} />

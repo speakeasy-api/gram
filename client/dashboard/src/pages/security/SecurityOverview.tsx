@@ -27,7 +27,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
-import { useOrgRoutes, useRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -155,7 +155,6 @@ function NoPoliciesEmptyState() {
 
 function SecurityOverviewContent() {
   const routes = useRoutes();
-  const orgRoutes = useOrgRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -267,9 +266,16 @@ function SecurityOverviewContent() {
     return (overview?.topUsers ?? []).map((user) => {
       // Bars lead to the person's identity page, where these findings sit
       // beside their access, spend and devices.
-      const href = user.externalUserId
-        ? `${orgRoutes.identities.detail.overview.href(
-            encodeIdentityUrn(`external:${user.externalUserId}`),
+      // Findings resolved through the directory carry an address and no
+      // external id; the resolver keys on either, so both reach the person.
+      const identityUrn = user.externalUserId
+        ? `external:${user.externalUserId}`
+        : user.email
+          ? `email:${user.email}`
+          : null;
+      const href = identityUrn
+        ? `${routes.identities.detail.overview.href(
+            encodeIdentityUrn(identityUrn),
           )}${location.search}`
         : undefined;
       return {
@@ -279,7 +285,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topUsers, orgRoutes.identities, location.search]);
+  }, [overview?.topUsers, routes.identities, location.search]);
 
   if (overviewQuery.error) {
     return (

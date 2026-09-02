@@ -30,6 +30,8 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
+import DataExports from "./pages/data-exports/DataExports";
+import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -49,15 +51,9 @@ import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
-import {
-  InsightsEmployeeDetailPage,
-  InsightsEmployeesLayout,
-  InsightsHooksPage,
-  InsightsRoot,
-} from "./pages/insights/Insights";
+import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import IdentitiesIndex, {
-  IdentitiesIndexRedirect,
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
@@ -68,6 +64,7 @@ import IdentityUsage from "./pages/identities/IdentityUsage";
 import IdentitySecurity from "./pages/identities/IdentitySecurity";
 import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
+import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -646,21 +643,70 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
   },
-  // Superseded by the org-level Identities index, which lists the same people
-  // plus the identities the directory has never heard of. The routes stay so
-  // existing links keep working: the index redirects, and the enrollment detail
-  // (its data-flow graph has no equivalent yet) still renders.
-  employees: {
-    title: "Employee Enrollment",
-    url: "employees",
+  // One page per person, reached from every surface that renders a human. The
+  // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
+  // url-encoded; the resolver folds every identifier for a subject onto the
+  // same canonical URN, so links built from different systems converge here.
+  //
+  // Project-level, where Employee Enrollment sat: a project is how an
+  // organization segments the people it manages, and usage, cost, chats and
+  // risk are all recorded per project. The org-scoped reads behind the page —
+  // identity resolution, the directory, roles, devices, the audit trail and the
+  // challenge log — answer the same whichever project you arrive from.
+  identities: {
+    title: "Identities",
+    url: "identities",
     icon: "users",
-    component: InsightsEmployeesLayout,
-    indexComponent: IdentitiesIndexRedirect,
+    component: IdentitiesRoot,
+    indexComponent: IdentitiesIndex,
     subPages: {
       detail: {
-        title: "Employee Detail",
-        url: ":userSlug",
-        component: InsightsEmployeeDetailPage,
+        title: "Identity",
+        url: ":identityUrn",
+        component: IdentityDetailRoot,
+        indexComponent: IdentityDetailIndexRedirect,
+        subPages: {
+          overview: {
+            title: "Identity Overview",
+            url: "overview",
+            component: IdentityOverview,
+          },
+          access: {
+            title: "Identity Access",
+            url: "access",
+            component: IdentityAccess,
+          },
+          usage: {
+            title: "Identity Usage",
+            url: "usage",
+            component: IdentityUsage,
+          },
+          security: {
+            title: "Identity Security",
+            url: "security",
+            component: IdentitySecurity,
+          },
+          cost: {
+            title: "Identity Cost",
+            url: "cost",
+            component: IdentityCost,
+          },
+          connections: {
+            title: "Identity Connections",
+            url: "connections",
+            component: IdentityConnections,
+          },
+          devices: {
+            title: "Identity Devices",
+            url: "devices",
+            component: IdentityDevices,
+          },
+          activity: {
+            title: "Identity Activity",
+            url: "activity",
+            component: IdentityActivity,
+          },
+        },
       },
     },
   },
@@ -1087,12 +1133,24 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
-  data: {
+  legacyData: {
     title: "Event Feed",
     url: "data",
     icon: "activity",
+    component: LegacyDataRedirect,
+  },
+  data: {
+    title: "Event Feed",
+    url: "data/event-feed",
+    icon: "activity",
     stage: "preview",
     component: EventFeed,
+  },
+  dataExports: {
+    title: "Exports",
+    url: "data/exports",
+    icon: "send",
+    component: DataExports,
   },
   skills: {
     title: "Skills",
@@ -1212,67 +1270,6 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Killswitch detail",
         url: ":killswitchId",
         component: KillswitchDetail,
-      },
-    },
-  },
-  // One page per person, reached from every surface that renders a human. The
-  // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
-  // url-encoded; the resolver folds every identifier for a subject onto the
-  // same canonical URN, so links built from different systems converge here.
-  //
-  // Org-level because that is what an identity is: `identity.resolve`, the
-  // directory, roles, devices, the audit trail and the challenge log are all
-  // org-scoped. Only the telemetry panels are per-project, and they take the
-  // project as a filter in the page header rather than as a route segment.
-  identities: {
-    title: "Identities",
-    url: "identities",
-    icon: "users",
-    component: IdentitiesRoot,
-    indexComponent: IdentitiesIndex,
-    subPages: {
-      detail: {
-        title: "Identity",
-        url: ":identityUrn",
-        component: IdentityDetailRoot,
-        indexComponent: IdentityDetailIndexRedirect,
-        subPages: {
-          overview: {
-            title: "Identity Overview",
-            url: "overview",
-            component: IdentityOverview,
-          },
-          access: {
-            title: "Identity Access",
-            url: "access",
-            component: IdentityAccess,
-          },
-          usage: {
-            title: "Identity Usage",
-            url: "usage",
-            component: IdentityUsage,
-          },
-          security: {
-            title: "Identity Security",
-            url: "security",
-            component: IdentitySecurity,
-          },
-          cost: {
-            title: "Identity Cost",
-            url: "cost",
-            component: IdentityCost,
-          },
-          devices: {
-            title: "Identity Devices",
-            url: "devices",
-            component: IdentityDevices,
-          },
-          activity: {
-            title: "Identity Activity",
-            url: "activity",
-            component: IdentityActivity,
-          },
-        },
       },
     },
   },

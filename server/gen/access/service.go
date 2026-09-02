@@ -311,6 +311,12 @@ type ListChallengesPayload struct {
 	// Fetch specific challenges by ID. When set, other filters and pagination are
 	// ignored.
 	Ids []string
+	// Inclusive start of the window to list challenges from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to list challenges from. Omit for the whole
+	// history.
+	To *string
 	// Maximum number of results to return.
 	Limit int
 	// Number of results to skip.
@@ -407,7 +413,13 @@ type ListShadowMCPInventoryServersForUserPayload struct {
 	ProjectID string
 	// The identifiers to attribute usage to, matched against the reported email or
 	// user id. Pass every identifier the subject is known by.
-	UserKeys     []string
+	UserKeys []string
+	// Inclusive start of the window to attribute calls from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to attribute calls from. Omit for the whole
+	// history.
+	To           *string
 	Limit        int
 	SessionToken *string
 }

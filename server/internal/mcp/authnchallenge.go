@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -273,6 +275,7 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 	err := usersessions_repo.New(s.db).TouchUserSessionLastUsed(ctx, usersessions_repo.TouchUserSessionLastUsedParams{
 		NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Jti:                 jti,
 		UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-userSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
@@ -313,7 +316,11 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		legacySession, ok := s.validateLegacyToolsetAudience(ctx, token, endpoint, err)
+		if !ok {
+			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		}
+		session = legacySession
 	}
 
 	// The consent-screen tool selection loads for every subject kind —
@@ -324,7 +331,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	if err != nil {
 		return ctx, nil, nil, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
-	if toolSelection != nil && toolSelection.Resource != endpointToolSelectionResource(endpoint) {
+	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
 		// issuer; a selection consented on endpoint A must not authorize
 		// same-named tools on endpoint B. Reject into reauth.
@@ -338,6 +345,23 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
 	return newCtx, &subject, toolSelection, nil
+}
+
+// validateLegacyToolsetAudience re-validates a bearer that failed the primary
+// audience check against the pre-migration toolset-URN audience (AIS-633;
+// counted acceptance, deleted by AIS-646). ok is false when inapplicable or
+// the legacy validation fails too — callers surface the original error.
+func (s *Service) validateLegacyToolsetAudience(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint, primaryErr error) (sessiontokens.ValidatedSession, bool) {
+	legacyAudience, ok := endpoint.legacyToolsetAudienceURN()
+	if !ok || !errors.Is(primaryErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	session, err := s.userSessionSigner.ValidateBearer(ctx, token, legacyAudience, s.chatSessionsManager)
+	if err != nil {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
+	return session, true
 }
 
 // contextForSessionSubject stamps the request context for a resolved session
@@ -632,8 +656,9 @@ var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not m
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        endpoint.UserSessionIssuerID,
-		ProjectID: endpoint.ProjectID,
+		ID:             endpoint.UserSessionIssuerID,
+		ProjectID:      endpoint.ProjectID,
+		OrganizationID: endpoint.OrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

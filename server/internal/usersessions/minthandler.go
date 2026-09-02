@@ -114,8 +114,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:        target.issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             target.issuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

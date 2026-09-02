@@ -1,4 +1,4 @@
-import { useSeriesColors } from "./useSeriesColors";
+import { useOtherSeriesColor, useSeriesColors } from "./useSeriesColors";
 
 export type ShareBarSegment = {
   key: string;
@@ -17,7 +17,9 @@ export type ShareBarSegment = {
  * breakdown, or an allow/deny split, where the parts sum to something
  * meaningful and a stack of separate bars would hide that they do.
  *
- * Segments are drawn in the order given, so sort before passing them in.
+ * Segments are drawn in the order given, so sort before passing them in: past
+ * the length of the categorical ramp the tail folds into a single neutral
+ * share, so no two segments are ever handed the same colour.
  */
 export function ShareBar({
   segments,
@@ -27,6 +29,7 @@ export function ShareBar({
   ariaLabel: string;
 }): JSX.Element | null {
   const colors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
   // With nothing to divide there are no shares to show, and every segment
   // would round to a 0%-wide sliver.
@@ -34,11 +37,54 @@ export function ShareBar({
     return null;
   }
 
-  const shares = segments.map((segment, i) => ({
+  // The categorical ramp is finite, and cycling it would hand two segments the
+  // same colour — the bar and its legend then claim two different things are
+  // one. Callers pass sorted segments, so the tail is the small end: it folds
+  // into a single neutral rollup that reads as "the rest" rather than as a
+  // series of its own.
+  const named =
+    segments.length > colors.length
+      ? segments.slice(0, colors.length - 1)
+      : segments;
+  const folded = segments.slice(named.length);
+  const shares = named.map((segment, i) => ({
     ...segment,
-    color: colors[i % colors.length] ?? "",
+    color: colors[i] ?? "",
     percent: (segment.value / total) * 100,
   }));
+  if (folded.length > 0) {
+    const foldedValue = folded.reduce((sum, segment) => sum + segment.value, 0);
+    // No valueLabel: the folded segments may carry unit-bearing labels of
+    // their own (a currency, say), which the fold cannot re-derive, so it
+    // states its share instead.
+    shares.push({
+      key: "__other__",
+      label: `${folded.length} more`,
+      value: foldedValue,
+      color: otherColor,
+      percent: (foldedValue / total) * 100,
+    });
+  }
+
+  // Every segment claims at least a hairline, which on a long tail pushes the
+  // requested widths past 100%. Flexbox would then shrink every segment to
+  // fit, including the ones whose width is the measurement being shown, so the
+  // overflow is taken back from the segments that have room to spare instead.
+  const MIN_PERCENT = 0.5;
+  const widths = shares.map((share) => Math.max(share.percent, MIN_PERCENT));
+  const overflow = widths.reduce((sum, width) => sum + width, 0) - 100;
+  if (overflow > 0) {
+    const headroom = widths.reduce(
+      (sum, width) => sum + Math.max(width - MIN_PERCENT, 0),
+      0,
+    );
+    if (headroom > 0) {
+      for (const [i, width] of widths.entries()) {
+        const spare = Math.max(width - MIN_PERCENT, 0);
+        widths[i] = width - (spare / headroom) * overflow;
+      }
+    }
+  }
 
   return (
     <div>
@@ -47,13 +93,11 @@ export function ShareBar({
         role="img"
         aria-label={ariaLabel}
       >
-        {shares.map((share) => (
+        {shares.map((share, i) => (
           <div
             key={share.key}
-            // A share below ~1% still deserves to be visible as a hairline
-            // rather than collapse to nothing.
             style={{
-              width: `${Math.max(share.percent, 0.5)}%`,
+              width: `${widths[i]}%`,
               backgroundColor: share.color,
             }}
           />

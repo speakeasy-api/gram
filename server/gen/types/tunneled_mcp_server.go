@@ -27,6 +27,9 @@ type TunneledMcpServer struct {
 	AllowPublic bool
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string
 	// Number of active tunnel connections currently visible in Redis

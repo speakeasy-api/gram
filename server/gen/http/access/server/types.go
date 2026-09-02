@@ -7519,10 +7519,12 @@ func NewListShadowMCPInventoryUsersPayload(projectID string, serverURL string, l
 
 // NewListShadowMCPInventoryServersForUserPayload builds a access service
 // listShadowMCPInventoryServersForUser endpoint payload.
-func NewListShadowMCPInventoryServersForUserPayload(projectID string, userKeys []string, limit int, sessionToken *string) *access.ListShadowMCPInventoryServersForUserPayload {
+func NewListShadowMCPInventoryServersForUserPayload(projectID string, userKeys []string, from *string, to *string, limit int, sessionToken *string) *access.ListShadowMCPInventoryServersForUserPayload {
 	v := &access.ListShadowMCPInventoryServersForUserPayload{}
 	v.ProjectID = projectID
 	v.UserKeys = userKeys
+	v.From = from
+	v.To = to
 	v.Limit = limit
 	v.SessionToken = sessionToken
 
@@ -7565,7 +7567,7 @@ func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string
 
 // NewListChallengesPayload builds a access service listChallenges endpoint
 // payload.
-func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, ids []string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
+func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
 	v := &access.ListChallengesPayload{}
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
@@ -7573,6 +7575,8 @@ func NewListChallengesPayload(outcome *string, principalUrn *string, scope *stri
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids
+	v.From = from
+	v.To = to
 	v.Limit = limit
 	v.Offset = offset
 	v.ApikeyToken = apikeyToken

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -61,7 +63,37 @@ func servePublicHTTP(
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(body))
+	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
+}
+
+// eofOnCloseBody stands in for the request body net/http hands a handler.
+// Closing a server request body that the handler left unconsumed returns
+// io.EOF (see (*body).Close in net/http/transfer.go, which sets sawEOF without
+// clearing err), but httptest.NewRequest wraps a plain reader in io.NopCloser,
+// whose Close returns nil. Tests that care what a handler does with that EOF
+// have to supply it themselves.
+type eofOnCloseBody struct {
+	io.Reader
+}
+
+func (eofOnCloseBody) Close() error { return io.EOF }
+
+// servePublicHTTPWithBody is servePublicHTTP over a caller-supplied body, for
+// tests that need control over what Read and Close return.
+func servePublicHTTPWithBody(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	mcpSlug string,
+	body io.ReadCloser,
+	contentLength int64,
+	authToken string,
+	extraHeaders map[string]string,
+) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, body)
+	req.ContentLength = contentLength
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
@@ -463,6 +495,53 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
+}
+
+// A body that is not valid JSON is a JSON-RPC parse error (-32700), not an
+// invalid request (-32600).
+func TestServePublic_MalformedBodyIsParseError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-parse-error")
+
+	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte("{not valid json"), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to decode request body")
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeParseError, shareable.Code)
+	require.Equal(t, oops.MCPCodeParseError, shareable.Code.MCPCode())
+}
+
+// Valid JSON of the wrong shape (a type error, not a syntax error) stays an
+// invalid request (-32600), not a parse error (-32700).
+func TestServePublic_WrongTypeBodyIsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-type-error")
+
+	unauthCtx := context.Background()
+	// `method` is a number where a string is expected: syntactically valid JSON,
+	// so json.Unmarshal returns a type error, not a syntax error.
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte(`{"jsonrpc":"2.0","id":1,"method":123}`), "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Equal(t, oops.MCPCodeInvalidRequest, shareable.Code.MCPCode())
 }
 
 // requireCacheHints asserts the caching members MCP 2026-07-28 requires on a

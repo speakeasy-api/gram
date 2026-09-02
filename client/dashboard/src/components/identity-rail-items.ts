@@ -1,5 +1,5 @@
 import type { IdentityRailItem } from "@/components/identity-rail";
-import type { useOrgRoutes } from "@/routes";
+import type { useRoutes } from "@/routes";
 
 /**
  * The identity page's sub-pages, in reading order: what needs attention first,
@@ -10,7 +10,7 @@ import type { useOrgRoutes } from "@/routes";
  * location, so a literal match on the colon in `user:...` never lands.
  */
 export function identityRailItems(
-  routes: ReturnType<typeof useOrgRoutes>,
+  routes: ReturnType<typeof useRoutes>,
   encodedUrn: string,
   /**
    * The current query string, carried onto every rail link: the window and the
@@ -52,8 +52,17 @@ export function identityRailItems(
       active: detail.cost.active,
     },
     {
+      key: "connections",
+      title: "Connections",
+      href: `${detail.connections.href(encodedUrn)}${search}`,
+      active: detail.connections.active,
+    },
+    {
+      // "Devices" undersold the tab once the linked provider accounts moved
+      // in beside them: both answer the same question — the machines and the
+      // logins this person works through.
       key: "devices",
-      title: "Devices",
+      title: "Accounts & devices",
       href: `${detail.devices.href(encodedUrn)}${search}`,
       active: detail.devices.active,
     },

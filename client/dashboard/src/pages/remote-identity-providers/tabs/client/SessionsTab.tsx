@@ -133,7 +133,17 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                 >
                   <td className="px-3 py-3">
                     <Text small as="div" className="break-all">
-                      <IdentityLink identifier={{ urn: session.subjectUrn }}>
+                      <IdentityLink
+                        // Session subjects can also be anonymous, which names
+                        // no subject the identity resolver can address; those
+                        // stay plain text.
+                        identifier={
+                          session.subjectUrn.startsWith("user:") ||
+                          session.subjectUrn.startsWith("apikey:")
+                            ? { urn: session.subjectUrn }
+                            : null
+                        }
+                      >
                         {session.subjectDisplayName ??
                           session.subjectEmail ??
                           session.subjectUrn}

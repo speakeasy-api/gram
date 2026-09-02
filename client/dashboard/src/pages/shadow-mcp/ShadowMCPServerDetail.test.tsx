@@ -59,14 +59,7 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 vi.mock("@/routes", () => ({
   useRoutes: mocks.useRoutes,
-  // The user column links to the org-level identity page.
-  useOrgRoutes: () => ({
-    identities: {
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}/overview` },
-      },
-    },
-  }),
+  useOrgRoutes: () => ({}),
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -442,12 +435,12 @@ describe("ShadowMCPServerDetail", () => {
       isLoading: false,
     });
     mocks.useNavigate.mockReturnValue(mocks.navigate);
+    // The user column opens the project-level identity page.
     mocks.useRoutes.mockReturnValue({
-      employees: {
-        detail: { href: (userSlug: string) => `/employees/${userSlug}` },
-      },
       identities: {
-        overview: { href: (urn: string) => `/identities/${urn}/overview` },
+        detail: {
+          overview: { href: (urn: string) => `/identities/${urn}/overview` },
+        },
       },
     });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
@@ -540,7 +533,7 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
     fireEvent.click(emailRow!);
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/employees/alex%40example.com",
+      "/identities/email%3Aalex%40example.com/overview",
     );
 
     const noEmailRow = screen.getByText("sam@example.com").closest("tr");

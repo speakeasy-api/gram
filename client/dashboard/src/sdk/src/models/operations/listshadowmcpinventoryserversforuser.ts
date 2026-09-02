@@ -15,6 +15,14 @@ export type ListShadowMCPInventoryServersForUserRequest = {
    * The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.
    */
   userKeys: Array<string>;
+  /**
+   * Inclusive start of the window to attribute calls from. Omit for the whole history.
+   */
+  from?: Date | undefined;
+  /**
+   * Exclusive end of the window to attribute calls from. Omit for the whole history.
+   */
+  to?: Date | undefined;
   limit?: number | undefined;
   /**
    * Session header
@@ -58,6 +66,8 @@ export function listShadowMCPInventoryServersForUserSecurityToJSON(
 export type ListShadowMCPInventoryServersForUserRequest$Outbound = {
   project_id: string;
   user_keys: Array<string>;
+  from?: string | undefined;
+  to?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
 };
@@ -71,6 +81,8 @@ export const ListShadowMCPInventoryServersForUserRequest$outboundSchema:
     z.object({
       projectId: z.string(),
       userKeys: z.array(z.string()),
+      from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+      to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
       limit: z._default(z.int(), 50),
       gramSession: z.optional(z.string()),
     }),

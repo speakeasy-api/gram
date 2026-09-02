@@ -33,13 +33,34 @@ export function IdentityRail({
           to={item.href}
           aria-current={item.active ? "page" : undefined}
           className={cn(
-            "shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2",
+            // Every side is declared on every item, transparent where it is
+            // not drawn: the open section gains three edges, and an item that
+            // only grows them when selected moves the whole rail by a pixel
+            // each time you change section.
+            "shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+            "lg:border-t lg:border-r lg:border-b lg:border-l-2",
             item.active
-              ? // The open section lifts off the recessed ground. In dark
-                // mode --card is the ground itself, so the lighter --accent
-                // step carries it, matching the table row hover.
-                "bg-card dark:bg-accent/70 border-foreground text-foreground"
-              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40",
+              ? // The open section lifts off the recessed ground as a card:
+                // the heavy left edge says which one it is, the three light
+                // edges close it. In dark mode --card is the ground itself,
+                // so the lighter --accent step carries it, matching the table
+                // row hover.
+                cn(
+                  "bg-card dark:bg-accent/70 text-foreground",
+                  "border-b-foreground lg:border-l-foreground",
+                  "lg:border-t-border lg:border-r-border lg:border-b-border",
+                )
+              : cn(
+                  "text-muted-foreground hover:text-foreground",
+                  // Hover darkens only the edge that is actually drawn at this
+                  // breakpoint. Colouring it on every side lit up the bottom
+                  // and right rules of the rail layout too, which read as half
+                  // a box appearing around the row.
+                  "border-b-border hover:border-b-foreground/40",
+                  "lg:border-l-border lg:hover:border-l-foreground/40",
+                  "lg:border-t-transparent lg:border-r-transparent lg:border-b-transparent",
+                  "lg:hover:border-t-transparent lg:hover:border-r-transparent lg:hover:border-b-transparent",
+                ),
           )}
         >
           {item.title}
