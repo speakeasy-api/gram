@@ -243,10 +243,6 @@ var _ = Service("agent", func() {
 				Minimum(0)
 				Maximum(2147483647)
 			})
-			Attribute("match_count", Int, "Number of matches reported by the agent. Echoed into the scan receipt as reported.", func() {
-				Minimum(0)
-				Maximum(100)
-			})
 			Attribute("matches", ArrayOf(AIScanMatchModel), "Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.", func() {
 				MaxLength(100)
 			})
@@ -256,7 +252,7 @@ var _ = Service("agent", func() {
 			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.")
 			Attribute("serial_number", String, "Hardware serial number of the machine that was scanned, when the agent can read it.")
 			Attribute("hostname", String, "Hostname of the machine that was scanned, when the agent can read it.")
-			Required("scan_started_at", "scan_completed_at", "target_list_version", "match_count", "matches")
+			Required("scan_started_at", "scan_completed_at", "target_list_version", "matches")
 		})
 
 		HTTP(func() {

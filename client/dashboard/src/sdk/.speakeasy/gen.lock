@@ -8625,7 +8625,7 @@ examples:
   reportAgentAIScan:
     speakeasy-default-report-agent-AI-scan:
       requestBody:
-        application/json: {"match_count": 917918, "matches": [{"category": "local_model", "signal": "running", "target_id": "<id>"}], "scan_completed_at": "2026-04-20T00:30:34.871Z", "scan_started_at": "2026-12-21T19:48:10.987Z", "target_list_version": 275214}
+        application/json: {"matches": [{"category": "local_model", "signal": "running", "target_id": "<id>"}], "scan_completed_at": "2026-04-20T00:30:34.871Z", "scan_started_at": "2026-12-21T19:48:10.987Z", "target_list_version": 275214}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}

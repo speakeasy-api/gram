@@ -12,10 +12,6 @@ import {
 
 export type ReportAIScanRequestBody = {
   /**
-   * Number of matches reported by the agent. Echoed into the scan receipt as reported.
-   */
-  matchCount: number;
-  /**
    * Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.
    */
   matches: Array<AIScanMatch>;
@@ -35,7 +31,6 @@ export type ReportAIScanRequestBody = {
 
 /** @internal */
 export type ReportAIScanRequestBody$Outbound = {
-  match_count: number;
   matches: Array<AIScanMatch$Outbound>;
   scan_completed_at: string;
   scan_started_at: string;
@@ -48,7 +43,6 @@ export const ReportAIScanRequestBody$outboundSchema: z.ZodMiniType<
   ReportAIScanRequestBody
 > = z.pipe(
   z.object({
-    matchCount: z.int(),
     matches: z.array(AIScanMatch$outboundSchema),
     scanCompletedAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
     scanStartedAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -56,7 +50,6 @@ export const ReportAIScanRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      matchCount: "match_count",
       scanCompletedAt: "scan_completed_at",
       scanStartedAt: "scan_started_at",
       targetListVersion: "target_list_version",

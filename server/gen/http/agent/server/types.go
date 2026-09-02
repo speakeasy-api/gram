@@ -58,9 +58,6 @@ type ReportAIScanRequestBody struct {
 	// Version of the target list compiled into the agent binary that ran the scan.
 	// Echoed into the scan receipt as reported.
 	TargetListVersion *int `form:"target_list_version,omitempty" json:"target_list_version,omitempty" xml:"target_list_version,omitempty"`
-	// Number of matches reported by the agent. Echoed into the scan receipt as
-	// reported.
-	MatchCount *int `form:"match_count,omitempty" json:"match_count,omitempty" xml:"match_count,omitempty"`
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches,omitempty" json:"matches,omitempty" xml:"matches,omitempty"`
@@ -3048,7 +3045,6 @@ func NewReportAIScanPayload(body *ReportAIScanRequestBody, apikeyToken *string, 
 		ScanStartedAt:     *body.ScanStartedAt,
 		ScanCompletedAt:   *body.ScanCompletedAt,
 		TargetListVersion: *body.TargetListVersion,
-		MatchCount:        *body.MatchCount,
 	}
 	v.Matches = make([]*agent.AIScanMatch, len(body.Matches))
 	for i, val := range body.Matches {
@@ -3135,9 +3131,6 @@ func ValidateReportAIScanRequestBody(body *ReportAIScanRequestBody) (err error) 
 	if body.TargetListVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("target_list_version", "body"))
 	}
-	if body.MatchCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("match_count", "body"))
-	}
 	if body.Matches == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
 	}
@@ -3155,16 +3148,6 @@ func ValidateReportAIScanRequestBody(body *ReportAIScanRequestBody) (err error) 
 	if body.TargetListVersion != nil {
 		if *body.TargetListVersion > 2.147483647e+09 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", *body.TargetListVersion, 2.147483647e+09, false))
-		}
-	}
-	if body.MatchCount != nil {
-		if *body.MatchCount < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", *body.MatchCount, 0, true))
-		}
-	}
-	if body.MatchCount != nil {
-		if *body.MatchCount > 100 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", *body.MatchCount, 100, false))
 		}
 	}
 	if len(body.Matches) > 100 {

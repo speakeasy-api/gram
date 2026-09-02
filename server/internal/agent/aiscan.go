@@ -70,10 +70,6 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	if payload.TargetListVersion < 0 || payload.TargetListVersion > math.MaxInt32 {
 		return oops.E(oops.CodeBadRequest, nil, "target_list_version must be between 0 and 2147483647")
 	}
-	if payload.MatchCount < 0 || payload.MatchCount > 100 {
-		return oops.E(oops.CodeBadRequest, nil, "match_count must be between 0 and 100")
-	}
-
 	serial := normalizeSerial(payload.SerialNumber)
 	receivedAt := time.Now().UTC()
 
@@ -129,7 +125,7 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		ScanStartedAt:     startedAt,
 		ScanCompletedAt:   completedAt,
 		TargetListVersion: int32(payload.TargetListVersion), // validated against the Int32 range above
-		MatchCount:        uint32(payload.MatchCount),       // validated against [0, 100] above
+		MatchCount:        uint32(len(payload.Matches)),     // #nosec G115 -- the Goa payload caps matches at 100 entries.
 		ReceivedAt:        receivedAt,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error recording ai scan receipt").LogError(ctx, s.logger)

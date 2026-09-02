@@ -1,15 +1,20 @@
 package agent_test
 
 import (
+	"bytes"
 	"context"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	agentserver "github.com/speakeasy-api/gram/server/gen/http/agent/server"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -55,6 +60,41 @@ func aiScanReceipts(t *testing.T, ti *testInstance, orgID string) []telemetryrep
 	return rows
 }
 
+func TestReportAIScan_HTTPAcceptsBodyWithoutMatchCount(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/rpc/agent.reportAIScan", bytes.NewBufferString(`{
+		"scan_started_at": "2026-08-31T12:00:00Z",
+		"scan_completed_at": "2026-08-31T12:00:02Z",
+		"target_list_version": 3,
+		"matches": []
+	}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Gram-Key", "test-key")
+
+	var decoded *gen.ReportAIScanPayload
+	handler := agentserver.NewReportAIScanHandler(
+		func(_ context.Context, payload any) (any, error) {
+			var ok bool
+			decoded, ok = payload.(*gen.ReportAIScanPayload)
+			require.True(t, ok)
+			return nil, nil
+		},
+		nil,
+		goahttp.RequestDecoder,
+		goahttp.ResponseEncoder,
+		nil,
+		nil,
+	)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.NotNil(t, decoded)
+	require.Empty(t, decoded.Matches)
+}
+
 func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
@@ -68,7 +108,6 @@ func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 		ScanStartedAt:     started.Format(time.RFC3339),
 		ScanCompletedAt:   completed.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        2,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: new("1.7.2")},
 			{TargetID: "ollama", Category: "local_model", Signal: "running", Version: nil},
@@ -119,7 +158,6 @@ func TestReportAIScan_ZeroMatchesLandsReceiptOnly(t *testing.T) {
 		ScanStartedAt:     started.Format(time.RFC3339),
 		ScanCompletedAt:   started.Add(5 * time.Second).Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             new("developer@example.com"),
 		SerialNumber:      new("SERIAL-CLEAN"),
@@ -149,7 +187,6 @@ func TestReportAIScan_StoresUnknownTargetIDsAsReported(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 9,
-		MatchCount:        2,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "brand-new-tool", Category: "harness", Signal: "installed", Version: nil},
 			{TargetID: "cursor", Category: "local_model", Signal: "installed", Version: nil},
@@ -186,7 +223,6 @@ func TestReportAIScan_PreservesFirstSeenAcrossReports(t *testing.T) {
 		ScanStartedAt:     firstReportedCompletion.Add(-10 * time.Second).Format(time.RFC3339),
 		ScanCompletedAt:   firstReportedCompletion.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        1,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "claude-code", Category: "harness", Signal: "installed", Version: nil},
 		},
@@ -207,7 +243,6 @@ func TestReportAIScan_PreservesFirstSeenAcrossReports(t *testing.T) {
 		ScanStartedAt:     secondReportedCompletion.Add(-10 * time.Second).Format(time.RFC3339),
 		ScanCompletedAt:   secondReportedCompletion.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        1,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "claude-code", Category: "harness", Signal: "installed", Version: nil},
 		},
@@ -242,7 +277,6 @@ func TestReportAIScan_OrgKeyRequiresVouchedEmail(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             nil,
 		SerialNumber:      nil,
@@ -263,7 +297,6 @@ func TestReportAIScan_RejectsMalformedVouchedEmailWithoutWriting(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        1,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: nil},
 		},
@@ -292,7 +325,6 @@ func TestReportAIScan_PerUserKeyAttributesToKeyOwner(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 3,
-		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             new("someone-else@example.com"),
 		SerialNumber:      nil,
@@ -305,7 +337,7 @@ func TestReportAIScan_PerUserKeyAttributesToKeyOwner(t *testing.T) {
 	require.Equal(t, "owner@example.com", receipts[0].UserEmail)
 }
 
-func TestReportAIScan_PersistsReportedReceiptMetadata(t *testing.T) {
+func TestReportAIScan_DerivesReceiptCountFromMatches(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	ctx, orgID := withUniqueScanOrg(t, ctx)
@@ -315,9 +347,15 @@ func TestReportAIScan_PersistsReportedReceiptMetadata(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: math.MaxInt32,
-		MatchCount:        7,
 		Matches: []*gen.AIScanMatch{
-			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-1", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-2", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-3", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-4", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-5", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-6", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-7", Category: "harness", Signal: "installed", Version: nil},
+			{TargetID: "count-test-8", Category: "harness", Signal: "installed", Version: nil},
 		},
 		Email:        new("developer@example.com"),
 		SerialNumber: new("SERIAL-COUNT"),
@@ -328,7 +366,7 @@ func TestReportAIScan_PersistsReportedReceiptMetadata(t *testing.T) {
 	receipts := aiScanReceipts(t, ti, orgID)
 	require.Len(t, receipts, 1)
 	require.EqualValues(t, math.MaxInt32, receipts[0].TargetListVersion, "receipt must preserve the agent-reported target list version")
-	require.EqualValues(t, 7, receipts[0].MatchCount, "receipt must preserve the agent-reported count")
+	require.EqualValues(t, 8, receipts[0].MatchCount, "receipt count must be derived from the matches array")
 }
 
 func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
@@ -352,7 +390,6 @@ func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
 			ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 			ScanCompletedAt:   now.Format(time.RFC3339),
 			TargetListVersion: 3,
-			MatchCount:        1,
 			Matches:           []*gen.AIScanMatch{testCase.match},
 			Email:             new("developer@example.com"),
 			SerialNumber:      new("SERIAL-INVALID"),

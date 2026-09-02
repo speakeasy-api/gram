@@ -78875,12 +78875,6 @@ components:
         ReportAIScanRequestBody:
             type: object
             properties:
-                match_count:
-                    type: integer
-                    description: Number of matches reported by the agent. Echoed into the scan receipt as reported.
-                    format: int64
-                    minimum: 0
-                    maximum: 100
                 matches:
                     type: array
                     items:
@@ -78905,7 +78899,6 @@ components:
                 - scan_started_at
                 - scan_completed_at
                 - target_list_version
-                - match_count
                 - matches
         ReportSessionMovedRequestBody:
             type: object

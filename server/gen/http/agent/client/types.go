@@ -58,9 +58,6 @@ type ReportAIScanRequestBody struct {
 	// Version of the target list compiled into the agent binary that ran the scan.
 	// Echoed into the scan receipt as reported.
 	TargetListVersion int `form:"target_list_version" json:"target_list_version" xml:"target_list_version"`
-	// Number of matches reported by the agent. Echoed into the scan receipt as
-	// reported.
-	MatchCount int `form:"match_count" json:"match_count" xml:"match_count"`
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches" json:"matches" xml:"matches"`
@@ -1744,7 +1741,6 @@ func NewReportAIScanRequestBody(p *agent.ReportAIScanPayload) *ReportAIScanReque
 		ScanStartedAt:     p.ScanStartedAt,
 		ScanCompletedAt:   p.ScanCompletedAt,
 		TargetListVersion: p.TargetListVersion,
-		MatchCount:        p.MatchCount,
 	}
 	if p.Matches != nil {
 		body.Matches = make([]*AIScanMatchRequestBody, len(p.Matches))
