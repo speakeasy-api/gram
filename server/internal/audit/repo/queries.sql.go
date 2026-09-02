@@ -240,12 +240,24 @@ WITH filtered_logs AS (
 )
 SELECT
   actor_counts.actor_id AS value,
-  COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
+  -- Directory name first, for the same reason ListAuditLogs joins it: the
+  -- stored value is the acting user's email, so the filter dropdown would
+  -- otherwise list addresses while the feed beside it lists names.
+  COALESCE(
+    NULLIF(u.display_name, ''),
+    latest_actor_names.actor_display_name,
+    actor_counts.actor_id
+  ) AS display_name,
   actor_counts.count,
   actor_counts.is_user_actor,
   actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
+LEFT JOIN organization_user_relationships actor_membership
+  ON actor_counts.is_user_actor
+  AND actor_membership.organization_id = $1
+  AND actor_membership.user_id = actor_counts.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 `
 
@@ -264,6 +276,9 @@ type ListAuditActorFacetsRow struct {
 
 // Assistant activity events are excluded: facets power the platform audit
 // feed, which hides them (see ListAuditLogs).
+// Scoped through this organization's memberships for the same reason
+// ListAuditLogs is: the directory spans every tenant, and a facet label is
+// read by whoever can read the feed.
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -291,9 +306,14 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug
+SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
+LEFT JOIN organization_user_relationships actor_membership
+  ON a.actor_type = 'user'
+  AND actor_membership.organization_id = a.organization_id
+  AND actor_membership.user_id = a.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 WHERE a.organization_id = $1
   AND (
     $2::uuid IS NULL
@@ -335,6 +355,16 @@ WHERE a.organization_id = $1
     $10::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = $10::text
   )
+  -- Half-open window, so consecutive ranges neither double-count a row nor
+  -- drop one that lands exactly on a boundary.
+  AND (
+    $11::timestamptz IS NULL
+    OR a.created_at >= $11::timestamptz
+  )
+  AND (
+    $12::timestamptz IS NULL
+    OR a.created_at < $12::timestamptz
+  )
 ORDER BY a.seq DESC
 LIMIT 51
 `
@@ -350,34 +380,51 @@ type ListAuditLogsParams struct {
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	CreatedFrom            pgtype.Timestamptz
+	CreatedTo              pgtype.Timestamptz
 }
 
 type ListAuditLogsRow struct {
-	ID                 uuid.UUID
-	Seq                int64
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	ActorID            string
-	ActorType          string
-	ActorDisplayName   pgtype.Text
-	ActorSlug          pgtype.Text
-	Action             string
-	SubjectID          string
-	SubjectType        string
-	SubjectDisplayName pgtype.Text
-	SubjectSlug        pgtype.Text
-	BeforeSnapshot     []byte
-	AfterSnapshot      []byte
-	Metadata           []byte
-	ActingSurface      pgtype.Text
-	ActingClientID     pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	ProjectSlug        pgtype.Text
+	ID                   uuid.UUID
+	Seq                  int64
+	OrganizationID       string
+	ProjectID            uuid.NullUUID
+	ActorID              string
+	ActorType            string
+	ActorDisplayName     pgtype.Text
+	ActorSlug            pgtype.Text
+	Action               string
+	SubjectID            string
+	SubjectType          string
+	SubjectDisplayName   pgtype.Text
+	SubjectSlug          pgtype.Text
+	BeforeSnapshot       []byte
+	AfterSnapshot        []byte
+	Metadata             []byte
+	ActingSurface        pgtype.Text
+	ActingClientID       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	ProjectSlug          pgtype.Text
+	ActorUserDisplayName pgtype.Text
 }
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
 // audit feed. The private admin caller can explicitly include all events.
+// The actor name is resolved at read time rather than trusted from the row.
+// Every writer stores the acting user's EMAIL in actor_display_name, so the
+// stored value renders the feed as a column of addresses; joining the
+// directory repairs the rows already written, and keeps names current when
+// someone is renamed. The stored value remains the fallback for actors with
+// no directory row: API keys and system actors. A soft-deleted user still
+// resolves, deliberately — they really did perform the action, and their name
+// is both more useful and less identifying than the email the row stored.
+// The directory is global, so the lookup goes through this organization's
+// memberships rather than straight at users.id: an actor id that never
+// belonged here resolves to no name at all instead of naming a stranger from
+// another tenant. Soft-deleted memberships count — a departed member is
+// exactly the actor whose name this is meant to keep resolving — and the
+// unique (organization_id, user_id) pair means the join cannot fan a row out.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
@@ -390,6 +437,8 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 	)
 	if err != nil {
 		return nil, err
@@ -419,6 +468,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.ActingClientID,
 			&i.CreatedAt,
 			&i.ProjectSlug,
+			&i.ActorUserDisplayName,
 		); err != nil {
 			return nil, err
 		}

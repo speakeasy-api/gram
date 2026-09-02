@@ -4,7 +4,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 
-export type EmployeeStatus = "enrolled" | "not_enrolled";
+type EmployeeStatus = "enrolled" | "not_enrolled";
 
 // One linked AI account for an employee. Identity is (provider, email): the same
 // email on two providers is two distinct accounts, so provider is always shown.

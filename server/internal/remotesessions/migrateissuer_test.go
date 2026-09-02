@@ -164,7 +164,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	client, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ProjectID:      *authCtx.ProjectID,
 		ID:             clientUUID,
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, targetID, client.RemoteSessionClient.RemoteSessionIssuerID, "the client should now point at the target issuer")

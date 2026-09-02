@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,7 +63,37 @@ func servePublicHTTP(
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(body))
+	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
+}
+
+// eofOnCloseBody stands in for the request body net/http hands a handler.
+// Closing a server request body that the handler left unconsumed returns
+// io.EOF (see (*body).Close in net/http/transfer.go, which sets sawEOF without
+// clearing err), but httptest.NewRequest wraps a plain reader in io.NopCloser,
+// whose Close returns nil. Tests that care what a handler does with that EOF
+// have to supply it themselves.
+type eofOnCloseBody struct {
+	io.Reader
+}
+
+func (eofOnCloseBody) Close() error { return io.EOF }
+
+// servePublicHTTPWithBody is servePublicHTTP over a caller-supplied body, for
+// tests that need control over what Read and Close return.
+func servePublicHTTPWithBody(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	mcpSlug string,
+	body io.ReadCloser,
+	contentLength int64,
+	authToken string,
+	extraHeaders map[string]string,
+) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, body)
+	req.ContentLength = contentLength
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {

@@ -1832,10 +1832,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Build OpenAI-compatible response
 	openAIResp := openrouter.OpenAIChatResponse{
-		ID:      response.MessageID,
-		Object:  "chat.completion",
-		Created: time.Now().Unix(),
-		Model:   response.Model,
+		ID:       response.MessageID,
+		Object:   "chat.completion",
+		Created:  time.Now().Unix(),
+		Model:    response.Model,
+		Provider: response.Provider,
 		Choices: []openrouter.ResponseChoice{
 			{
 				Message:      *response.Message,

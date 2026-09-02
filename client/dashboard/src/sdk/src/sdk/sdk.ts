@@ -20,6 +20,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -50,7 +51,6 @@ import { OrganizationRemoteSessionIssuers } from "./organizationremotesessioniss
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { Otel } from "./otel.js";
-import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
@@ -176,6 +176,11 @@ export class Gram extends ClientSDK {
   private _cliAuth?: CliAuth;
   get cliAuth(): CliAuth {
     return (this._cliAuth ??= new CliAuth(this._options));
+  }
+
+  private _dataExports?: DataExports;
+  get dataExports(): DataExports {
+    return (this._dataExports ??= new DataExports(this._options));
   }
 
   private _deployments?: Deployments;
@@ -322,11 +327,6 @@ export class Gram extends ClientSDK {
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
-  }
-
-  private _otelForwarding?: OtelForwarding;
-  get otelForwarding(): OtelForwarding {
-    return (this._otelForwarding ??= new OtelForwarding(this._options));
   }
 
   private _packages?: Packages;

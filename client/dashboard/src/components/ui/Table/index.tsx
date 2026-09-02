@@ -552,7 +552,7 @@ const Body = React.forwardRef(function Body<T extends object>(
   return (
     <BodyContainer ref={ref} className={cn(hasMore && "pb-16", className)}>
       {data.length === 0 ? (
-        <NoResultsMessage>{noResultsMessage}</NoResultsMessage>
+        <NoResultsRow>{noResultsMessage}</NoResultsRow>
       ) : (
         data.map(renderBodyRow)
       )}
@@ -611,6 +611,29 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
       onClick();
     };
 
+    // A click that started on a control inside the row belongs to that control:
+    // without this a row-level navigation also fires for the actions menu, a
+    // link, or a checkbox, and steals it.
+    const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+      if (!onClick) return;
+      if (event.target instanceof Element) {
+        // A row action rendered through a portal — a dropdown menu, a dialog —
+        // sits outside the <tr> in the DOM but still bubbles here through
+        // React's tree. Nothing outside the row is the row's own click.
+        if (!event.currentTarget.contains(event.target)) return;
+        const control = event.target.closest(
+          // Portalled menu items and other composite widgets are divs carrying
+          // an interactive role rather than native elements, so match on role
+          // as well as on tag.
+          'a,button,input,select,textarea,[role="button"],[role="link"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="checkbox"],[role="option"]',
+        );
+        // Bounded to this row: an unbounded closest() would also match a
+        // clickable ancestor wrapping the whole table.
+        if (control && event.currentTarget.contains(control)) return;
+      }
+      onClick();
+    };
+
     return (
       <tr
         ref={ref}
@@ -625,7 +648,7 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
             "cursor-pointer hover:bg-accent focus-visible:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
-        onClick={onClick}
+        onClick={handleClick}
         onKeyDown={isClickable ? handleKeyDown : onKeyDown}
         tabIndex={isClickable ? 0 : tabIndex}
       >
@@ -833,29 +856,37 @@ function Cell<T extends object>(
   return <CellContainer className={className}>{content}</CellContainer>;
 }
 
-function NoResultsMessage({
-  className,
-  children,
-}: PropsWithChildrenAndClassName) {
-  const Wrapper = ({ children, className }: PropsWithChildrenAndClassName) => (
-    <div
+// The row itself, for the one caller that already sits inside a <tbody>: the
+// automatic empty state Table.Body renders in place of its rows.
+function NoResultsRow({ className, children }: PropsWithChildrenAndClassName) {
+  return (
+    <tr
       className={cn(
         "[grid-column:1/-1] grid [grid-template-columns:subgrid]",
         className,
       )}
     >
-      {children}
-    </div>
+      {/* Padded to the same inset as a data cell: the message sits in the grid
+          where a row would, so flush-left text reads as a broken row. */}
+      <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
+        {children}
+      </td>
+    </tr>
   );
+}
 
-  const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <div className="[grid-column:1/-1]">{children}</div>
-  );
-
+// Carries its own <tbody>, because callers place it as a direct child of
+// <Table> in place of a Table.Body. A bare <tr> there is invalid markup: the
+// browser hoists it into a section of its own and the hydrated tree stops
+// matching the rendered one.
+function NoResultsMessage({
+  className,
+  children,
+}: PropsWithChildrenAndClassName) {
   return (
-    <Wrapper className={className}>
-      <ContentWrapper>{children}</ContentWrapper>
-    </Wrapper>
+    <BodyContainer>
+      <NoResultsRow className={className}>{children}</NoResultsRow>
+    </BodyContainer>
   );
 }
 

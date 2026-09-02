@@ -45,9 +45,6 @@ const platformToolsetMaxBodyBytes = 1 << 20
 // are intentionally not honored here.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	slug := chi.URLParam(r, "toolsetSlug")
 	if slug == "" {

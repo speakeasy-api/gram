@@ -32,8 +32,9 @@ fi
 # exactly like one that was never booted -- the port isn't listening in any of
 # the three cases, and worktrunk tracks no hook liveness. `git:workboot` (the
 # post-start hook) closes that gap with two markers in the worktree's git dir:
-# its pid while the boot runs, and the exit code if the boot failed. Echoes
-# `booting`, `failed`, or nothing.
+# its pid while the boot runs, and the exit code if the boot failed. A booted
+# worktree is then handed over paused, which `mise run pause` records with a
+# third marker. Echoes `booting`, `failed`, `paused`, or nothing.
 boot_state() {
     local gitdir pid
     gitdir="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)"
@@ -52,6 +53,8 @@ boot_state() {
     # would fail the whole script through the caller's assignment.
     if [ -f "$gitdir/gram-stack-boot.failed" ]; then
         echo failed
+    elif [ -f "$gitdir/gram-stack-paused" ]; then
+        echo paused
     fi
 }
 
@@ -75,6 +78,10 @@ while IFS=$'\t' read -r marker branch active url path; do
         booting,true) state=$'\033[33m◐ seeding\033[0m' ;;
         booting,*) state=$'\033[33m◐ booting\033[0m' ;;
         failed,*) state=$'\033[31m✗ failed\033[0m ' ; failures=$((failures + 1)) ;;
+        # Regardless of port liveness: `mise run pause` parks a placeholder
+        # server on the site port (it answers with a page that wakes the
+        # stack), so `url_active` is true for a paused worktree too.
+        paused,*) state=$'\033[90m◼ paused\033[0m ' ;;
         *,true) state=$'\033[32m● up\033[0m     ' ;;
         *) state=$'\033[31m○ down\033[0m   ' ;;
     esac

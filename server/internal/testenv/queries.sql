@@ -839,3 +839,19 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+-- Writes an issuer that belongs to an organization and to no project. No
+-- production surface creates one: CreateUserSessionIssuer always writes a
+-- project_id. Tests need such a row to exercise the organization-tier arm of
+-- the issuer predicates, the delete path's sweep for owners in a project other
+-- than the caller's included.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
+RETURNING id;

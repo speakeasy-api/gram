@@ -225,21 +225,16 @@ export function MaskedMatch({
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the value can never be revealed — render a static,
-  // non-interactive placeholder so reveal-all can't flip it open either.
+  // Without chat:read the plaintext can never be revealed — keep the
+  // fingerprint on screen so a reviewer can still correlate and inspect the
+  // finding before suppressing it. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
-      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-xs",
-            contrast ? "text-background/70" : "text-muted-foreground",
-          )}
-        >
-          <Lock className="h-3 w-3" />
-          <span>Hidden</span>
-        </span>
-      </SimpleTooltip>
+      <LockedRedactedMatch
+        matchRedacted={matchRedacted}
+        contrast={contrast}
+        wrap={wrap}
+      />
     );
   }
 
@@ -317,6 +312,47 @@ function prettyJSON(s: string): string {
   }
 }
 
+// Static fingerprint for callers who lack chat:read. The lock explains why
+// the plaintext stays withheld; the fingerprint itself is the reviewable
+// token the list endpoints already ship as match_redacted.
+function LockedRedactedMatch({
+  matchRedacted,
+  contrast = false,
+  wrap = false,
+}: {
+  matchRedacted: string;
+  contrast?: boolean;
+  wrap?: boolean;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+      <span
+        className={cn(
+          "inline-flex max-w-full min-w-0 gap-1 text-xs",
+          wrap ? "items-start" : "items-center",
+          contrast ? "text-background/70" : "text-muted-foreground",
+        )}
+      >
+        <Lock
+          role="img"
+          aria-label={REVEAL_DENIED_REASON}
+          className="h-3 w-3 shrink-0"
+        />
+        <span
+          className={cn(
+            "min-w-0 font-mono",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
+          )}
+        >
+          {matchRedacted}
+        </span>
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 // A judge rationale rendered for a cell that has no reveal affordance. Clamped
 // to two lines rather than one: a rationale is a sentence or two, and a
 // single-line clip leaves only the first few words.
@@ -353,32 +389,29 @@ export function EventMatchDialog({
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
-  if (!resultId || !hasRevealableEvent(matchRedacted)) {
+  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
     return summary ? <RationaleText text={summary} /> : <span>-</span>;
   }
 
   // Without chat:read the event payload can never be revealed, so there's no
-  // trigger to render. The rationale still stands on its own.
+  // trigger to render. The rationale still stands on its own; with none, the
+  // redacted fingerprint is the reviewable token (same as MaskedMatch).
   if (!canReveal) {
-    return (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-          <Lock
-            role="img"
-            aria-label={REVEAL_DENIED_REASON}
-            className="text-muted-foreground h-3 w-3 shrink-0"
-          />
-        </SimpleTooltip>
-        {/* The rationale reads as ordinary text, so without a label the lock is
-         * the only signal that the event itself is withheld. With no rationale
-         * to show, fall back to the same "Hidden" text MaskedMatch uses. */}
-        {summary ? (
+    if (summary) {
+      return (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+            <Lock
+              role="img"
+              aria-label={REVEAL_DENIED_REASON}
+              className="text-muted-foreground h-3 w-3 shrink-0"
+            />
+          </SimpleTooltip>
           <RationaleText text={summary} />
-        ) : (
-          <span className="text-muted-foreground text-xs">Hidden</span>
-        )}
-      </span>
-    );
+        </span>
+      );
+    }
+    return <LockedRedactedMatch matchRedacted={matchRedacted} />;
   }
 
   return (

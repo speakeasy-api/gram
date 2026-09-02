@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
@@ -17,6 +18,7 @@ import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -85,6 +87,7 @@ function useNow(): number {
 /** What a sub-row stands for, given what its parent row stands for. */
 const CHILD_OF: Record<ConnectionGrouping, "agent" | "person"> = {
   subject: "agent",
+  issuer: "person",
   provider: "person",
   client: "person",
 };
@@ -179,13 +182,29 @@ function ClientIcon({ label }: { label: string }): JSX.Element {
   );
 }
 
-function GroupIcon({ group }: { group: ConnectionGroup }): JSX.Element {
+function GroupIcon({
+  group,
+  grouping,
+}: {
+  group: ConnectionGroup;
+  grouping: ConnectionGrouping;
+}): JSX.Element {
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
     );
   }
   if (group.client) return <ClientIcon label={group.label} />;
+  // An MCP server group has no identity or registration behind it, but it is
+  // the identity page's default grouping — an empty cell on every row there
+  // reads as a failed avatar rather than as a deliberate blank.
+  if (grouping === "issuer") {
+    return (
+      <span className="bg-muted/50 flex size-6 shrink-0 items-center justify-center">
+        <Icon name="server" className="text-muted-foreground size-3.5" />
+      </span>
+    );
+  }
 
   // Provider groups have neither an identity nor a registration to show, but
   // the cell still has to be occupied or every column after it shifts left.
@@ -403,25 +422,53 @@ function ConnectionGroupRow({
       )}
     >
       <div className={cn(CONNECTION_ROW_FRAME, "hover:bg-muted/30 py-2.5")}>
-        <button
-          type="button"
-          onClick={() => setExpanded((open) => !open)}
-          className={CONNECTION_ROW_GRID}
-          aria-expanded={expanded}
+        {/* The toggle is the chevron, not the whole row. A row that is itself
+            a button flattens the identity link inside it: assistive technology
+            cannot reach the link, and Enter on it expands the row instead of
+            opening the profile. The row still expands on a click anywhere that
+            is not a control, so the mouse affordance is unchanged. */}
+        <div
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("a,button")
+            ) {
+              return;
+            }
+            setExpanded((open) => !open);
+          }}
+          className={cn(CONNECTION_ROW_GRID, "cursor-pointer text-left")}
         >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground size-3.5 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
+            onClick={() => setExpanded((open) => !open)}
+            className="focus-visible:ring-ring flex size-3.5 shrink-0 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground size-3.5 shrink-0 transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+          </button>
 
-          <GroupIcon group={group} />
+          <GroupIcon group={group} grouping={grouping} />
 
           <span className="flex min-w-0 items-center gap-2">
-            <span className="text-foreground truncate text-sm font-medium">
-              {group.label}
-            </span>
+            {group.identity?.urn ? (
+              <IdentityLink
+                identifier={{ urn: group.identity.urn }}
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {group.label}
+              </IdentityLink>
+            ) : (
+              <span className="text-foreground truncate text-sm font-medium">
+                {group.label}
+              </span>
+            )}
             {/* Absent unless the row names a registration, which is what
                 grouping by agent makes it. */}
             <ClientCredentialBadge
@@ -449,11 +496,15 @@ function ConnectionGroupRow({
             ) : grouping !== "provider" ? (
               // Said rather than left blank: reaching only native tools is a
               // real state, and an empty slot beside every other row's provider
-              // count reads as data we failed to load.
-              <span className="text-muted-foreground/70">
-                {" "}
-                · Speakeasy tools only
-              </span>
+              // count reads as data we failed to load. Short enough to survive
+              // the column, with the sentence in the tooltip — spelled out it
+              // truncated to "Speakeasy to…", which says nothing.
+              <SimpleTooltip tooltip="Reaches Speakeasy-native tools only — this session holds no upstream provider tokens.">
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  · no upstreams
+                </span>
+              </SimpleTooltip>
             ) : null}
           </span>
 
@@ -466,7 +517,7 @@ function ConnectionGroupRow({
             <StatusDot state={groupState} />
             {showStateLabel ? groupPresentation.label : ""}
           </span>
-        </button>
+        </div>
 
         <span className={CONNECTION_ACTIONS_SLOT}>
           {actions.length > 0 ? <MoreActions actions={actions} /> : null}
@@ -553,6 +604,7 @@ export function ConnectionsList({
   onRevoked,
   clients,
   project,
+  bordered = true,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -571,6 +623,12 @@ export function ConnectionsList({
    * the literal "default" and both the lookup and its refresh would miss.
    */
   project?: { slug: string; id: string };
+  /**
+   * Whether the table draws its own frame. Off for a caller that already
+   * encloses it — a panel with its own border and heading — where a second box
+   * inside the first reads as a table nested in a table.
+   */
+  bordered?: boolean;
 }): JSX.Element {
   const now = useNow();
   const { active, inactive } = useMemo(
@@ -600,7 +658,7 @@ export function ConnectionsList({
       {/* Header and rows share one box rather than the header floating above
           it: unenclosed, the column labels read as a caption hanging off the
           grouping control above them instead of as the top of this table. */}
-      <div className="border-border border">
+      <div className={cn(bordered && "border-border border")}>
         {/* Fixed to the body row's height rather than padded to approximate it:
             a group row is `py-2.5` around a `size-6` icon, so 44px. The header
             has no icon, so equal padding would leave it visibly shorter. */}
@@ -642,7 +700,9 @@ export function ConnectionsList({
           {/* No column header of its own — the labels above still apply, and
               repeating them would make this read as a second table rather than
               the tail of the first. */}
-          <div className="border-border border">{rows(inactive)}</div>
+          <div className={cn(bordered && "border-border border")}>
+            {rows(inactive)}
+          </div>
         </div>
       ) : null}
     </div>

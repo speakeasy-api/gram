@@ -194,6 +194,9 @@ export function ClientsAndSessionsTab({
             void clientsQuery.refetch();
           }}
           onRevoked={onClientOrSessionRevoked}
+          // Every session here was issued by this server, so filing them by
+          // MCP server draws one group and an option that appears broken.
+          hideGroupings={["issuer"]}
         />
       </Stack>
     </Stack>
