@@ -1,5 +1,25 @@
 -- Every query pins both organization_id and project_id. Resource UUIDs and
 -- tenant-pinned foreign keys are integrity controls, not authorization bounds.
+
+-- Resolve the active OTEL destination for one project data source.
+-- name: GetActiveOtelRouteDestination :one
+SELECT
+  destination.endpoint_url,
+  destination.headers_encrypted,
+  COALESCE(destination.sensitive_data, 'exclude') = 'include' AS include_sensitive_data
+FROM data_export_routes AS route
+JOIN otel_destinations AS destination
+  ON destination.organization_id = route.organization_id
+ AND destination.project_id = route.project_id
+ AND destination.id = route.otel_destination_id
+WHERE route.organization_id = @organization_id
+  AND route.project_id = @project_id
+  AND route.data_source = @data_source
+  AND route.enabled IS TRUE
+  AND route.deleted IS FALSE
+  AND route.otel_destination_id IS NOT NULL
+  AND destination.deleted IS FALSE;
+
 -- List active destinations in stable creation order for the management API.
 -- name: ListOtelDestinations :many
 SELECT *

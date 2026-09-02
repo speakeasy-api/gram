@@ -60,13 +60,14 @@ func TestLimitEmbeddingInputs_OtherModelsPreserveLegacyByteLimit(t *testing.T) {
 	t.Parallel()
 
 	input := strings.Repeat("x", legacyMaxEmbeddingInputBytes+1)
-	selected, err := SelectEmbeddingInputFallbacks(
+	selected, fallbackSelections, err := SelectEmbeddingInputFallbacks(
 		"qwen/qwen3-embedding-8b",
 		[]string{input},
 		[][]string{{"fallback"}},
 	)
 	require.NoError(t, err)
 	require.Equal(t, input, selected[0])
+	require.Empty(t, fallbackSelections)
 
 	limited, truncatedCount, err := limitEmbeddingInputs("qwen/qwen3-embedding-8b", selected)
 	require.NoError(t, err)
@@ -117,13 +118,18 @@ func TestSelectEmbeddingInputFallbacks_OpenAIUsesOrderedFallbacks(t *testing.T) 
 	t.Run("uses first fallback that fits", func(t *testing.T) {
 		t.Parallel()
 
-		selected, err := SelectEmbeddingInputFallbacks(
+		selected, fallbackSelections, err := SelectEmbeddingInputFallbacks(
 			openAITextEmbedding3Small,
 			[]string{dense},
 			[][]string{{compact, minimal}},
 		)
 		require.NoError(t, err)
 		require.Equal(t, compact, selected[0])
+		require.Equal(t, []EmbeddingInputFallbackSelection{{
+			InputIndex:         0,
+			FallbackIndex:      0,
+			RequiresTruncation: false,
+		}}, fallbackSelections)
 
 		limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, selected)
 		require.NoError(t, err)
@@ -134,13 +140,18 @@ func TestSelectEmbeddingInputFallbacks_OpenAIUsesOrderedFallbacks(t *testing.T) 
 	t.Run("continues to name and description", func(t *testing.T) {
 		t.Parallel()
 
-		selected, err := SelectEmbeddingInputFallbacks(
+		selected, fallbackSelections, err := SelectEmbeddingInputFallbacks(
 			openAITextEmbedding3Small,
 			[]string{dense},
 			[][]string{{"top-level\n" + dense, minimal}},
 		)
 		require.NoError(t, err)
 		require.Equal(t, minimal, selected[0])
+		require.Equal(t, []EmbeddingInputFallbackSelection{{
+			InputIndex:         0,
+			FallbackIndex:      1,
+			RequiresTruncation: false,
+		}}, fallbackSelections)
 
 		limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, selected)
 		require.NoError(t, err)
@@ -152,13 +163,18 @@ func TestSelectEmbeddingInputFallbacks_OpenAIUsesOrderedFallbacks(t *testing.T) 
 		t.Parallel()
 
 		finalFallback := "MINIMAL\n" + dense
-		selected, err := SelectEmbeddingInputFallbacks(
+		selected, fallbackSelections, err := SelectEmbeddingInputFallbacks(
 			openAITextEmbedding3Small,
 			[]string{"PRIMARY\n" + dense},
 			[][]string{{"TOP-LEVEL\n" + dense, finalFallback}},
 		)
 		require.NoError(t, err)
 		require.Equal(t, finalFallback, selected[0])
+		require.Equal(t, []EmbeddingInputFallbackSelection{{
+			InputIndex:         0,
+			FallbackIndex:      1,
+			RequiresTruncation: true,
+		}}, fallbackSelections)
 
 		limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, selected)
 		require.NoError(t, err)

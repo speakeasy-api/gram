@@ -898,40 +898,63 @@ func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) 
 	return limited, truncatedCount, nil
 }
 
+// EmbeddingInputFallbackSelection describes a fallback chosen for one
+// embedding input.
+type EmbeddingInputFallbackSelection struct {
+	// InputIndex identifies the selected input in the request.
+	InputIndex int
+
+	// FallbackIndex is zero-based within the supplied fallback list, or -1 when
+	// the primary input remains selected.
+	FallbackIndex int
+
+	// RequiresTruncation reports whether the selected representation still
+	// exceeds the model's per-input token limit.
+	RequiresTruncation bool
+}
+
 // SelectEmbeddingInputFallbacks selects the first representation for each
-// input that fits the model's per-input token limit. Selection is currently
-// supported only for openai/text-embedding-3-small; other models are returned
-// unchanged because their tokenizer and token limit are not declared here. If
-// every representation is oversized, the final fallback is returned for the
-// client to truncate.
-func SelectEmbeddingInputFallbacks(model string, inputs []string, inputFallbacks [][]string) ([]string, error) {
+// input that fits the model's per-input token limit and reports inputs that
+// required a fallback. Selection is currently supported only for
+// openai/text-embedding-3-small; other models are returned unchanged because
+// their tokenizer and token limit are not declared here. If every
+// representation is oversized, the final fallback is returned for the client
+// to truncate.
+func SelectEmbeddingInputFallbacks(
+	model string,
+	inputs []string,
+	inputFallbacks [][]string,
+) ([]string, []EmbeddingInputFallbackSelection, error) {
 	if model != openAITextEmbedding3Small || len(inputFallbacks) == 0 {
-		return inputs, nil
+		return inputs, nil, nil
 	}
 
 	var (
-		codec    tokenizer.Codec
-		selected []string
+		codec              tokenizer.Codec
+		selected           []string
+		fallbackSelections []EmbeddingInputFallbackSelection
 	)
 	for i, input := range inputs {
 		candidate := input
+		fallbackIndex := -1
 		_, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, candidate, i)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !exceedsLimit {
 			continue
 		}
 
 		if i < len(inputFallbacks) {
-			for _, fallback := range inputFallbacks[i] {
+			for index, fallback := range inputFallbacks[i] {
 				if fallback == "" || fallback == candidate {
 					continue
 				}
 				candidate = fallback
+				fallbackIndex = index
 				_, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, candidate, i)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				if !exceedsLimit {
 					break
@@ -939,19 +962,23 @@ func SelectEmbeddingInputFallbacks(model string, inputs []string, inputFallbacks
 			}
 		}
 
-		if candidate == input {
-			continue
+		if candidate != input {
+			if selected == nil {
+				selected = slices.Clone(inputs)
+			}
+			selected[i] = candidate
 		}
-		if selected == nil {
-			selected = slices.Clone(inputs)
-		}
-		selected[i] = candidate
+		fallbackSelections = append(fallbackSelections, EmbeddingInputFallbackSelection{
+			InputIndex:         i,
+			FallbackIndex:      fallbackIndex,
+			RequiresTruncation: exceedsLimit,
+		})
 	}
 
 	if selected == nil {
-		return inputs, nil
+		selected = inputs
 	}
-	return selected, nil
+	return selected, fallbackSelections, nil
 }
 
 func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
