@@ -649,6 +649,22 @@ func TestCanonicalAgentTurnIDExtractsLegacyOpenCodeMessageID(t *testing.T) {
 	require.Equal(t, "opencode:msg-output", canonicalAgentTurnID(payload))
 }
 
+func TestCanonicalAgentTurnIDAcceptsOpenClawRunID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("openclaw", "prompt.submitted", "openclaw-session")
+	payload.Session.TurnID = new("run-oclaw-1")
+	require.Equal(t, "openclaw:run-oclaw-1", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDAcceptsProxiedOpenClawTurnID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", "openclaw-proxied")
+	payload.Session.TurnID = new(agentTurnPrefix + "openclaw:run-oclaw-1")
+	require.Equal(t, "openclaw:run-oclaw-1", canonicalAgentTurnID(payload))
+}
+
 func TestCanonicalAgentTurnIDRejectsSpoofedProviderPrefix(t *testing.T) {
 	t.Parallel()
 

@@ -312,7 +312,7 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
 RETURNING id, content, tool_calls, model, user_id, external_user_id, source;
 
