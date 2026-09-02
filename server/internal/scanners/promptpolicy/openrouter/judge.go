@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -111,6 +112,11 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	// HasContent keeps those events in scope.
 	if strings.TrimSpace(in.Prompt) == "" || !in.Message.HasContent() {
 		return nil, nil
+	}
+
+	ctx, classifyErr := hostedinference.WithInternal(ctx, hostedinference.CallCategoryPromptScanner)
+	if classifyErr != nil {
+		return nil, fmt.Errorf("classify prompt-policy inference: %w", classifyErr)
 	}
 
 	ctx, span := j.tracer.Start(ctx, "risk.judge.evaluate", trace.WithAttributes(
@@ -207,7 +213,6 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
-
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,

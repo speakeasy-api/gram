@@ -118,6 +118,7 @@ var _ = Service("businessMemories", func() {
 
 	Method("searchBusinessMemories", func() {
 		Description("Run semantic search over active memories in the active project. Requires organization admin.")
+		shared.DeclareHostedInferenceErrors()
 		Payload(func() {
 			Attribute("query", String, "Natural-language semantic search query.", func() {
 				MinLength(1)
@@ -139,6 +140,7 @@ var _ = Service("businessMemories", func() {
 		})
 		HTTP(func() {
 			POST("/rpc/businessMemories.search")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -105,6 +106,10 @@ func NewSearchClient(completions CompletionProvider) *SearchClient {
 // summarizer. No results with a nil error is a real answer.
 func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, SearchUsage, error) {
 	temperature := 0.0
+	ctx, err := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantResearch)
+	if err != nil {
+		return nil, SearchUsage{}, fmt.Errorf("classify assistant research inference: %w", err)
+	}
 	response, err := c.completions.GetCompletion(ctx, openrouter.CompletionRequest{
 		OrgID:     orgID,
 		ProjectID: projectID,

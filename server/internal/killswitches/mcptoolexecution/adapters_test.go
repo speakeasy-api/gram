@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -98,6 +99,34 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, killswitches.PrincipalCandidateResultCandidates, result.Kind())
 	require.Equal(t, []killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: killswitches.PrincipalKey(activeUser)}}, result.Candidates())
+
+	sessionID := "session"
+	validatedContext := contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: orgID, UserID: activeUser, SessionID: &sessionID}, false)
+	provenance, ok := contextvalues.ValidatedGramSessionActingUser(validatedContext)
+	require.True(t, ok)
+	result, err = adapter.DeriveCandidates(t.Context(), organization, provenance)
+	require.NoError(t, err)
+	require.Equal(t, []killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: killswitches.PrincipalKey(activeUser)}}, result.Candidates())
+
+	chatContext := contextvalues.WithValidatedChatSessionActingUser(t.Context(), orgID, activeUser, sessionID)
+	chatProvenance, ok := contextvalues.ValidatedChatSessionActingUser(chatContext)
+	require.True(t, ok)
+	result, err = adapter.DeriveCandidates(t.Context(), organization, chatProvenance)
+	require.NoError(t, err)
+	require.Equal(t, []killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: killswitches.PrincipalKey(activeUser)}}, result.Candidates())
+
+	inactiveContext := contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: orgID, UserID: inactiveUser, SessionID: &sessionID}, false)
+	inactiveProvenance, ok := contextvalues.ValidatedGramSessionActingUser(inactiveContext)
+	require.True(t, ok)
+	result, err = adapter.DeriveCandidates(t.Context(), organization, inactiveProvenance)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.PrincipalCandidateResultUnsupported, result.Kind())
+
+	foreignContext := contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: otherOrg, UserID: crossOrgUser, SessionID: &sessionID}, false)
+	foreignProvenance, ok := contextvalues.ValidatedGramSessionActingUser(foreignContext)
+	require.True(t, ok)
+	_, err = adapter.DeriveCandidates(t.Context(), organization, foreignProvenance)
+	require.Error(t, err, "tenant-bound provenance must not cross organizations")
 
 	for name, userID := range map[string]string{
 		"inactive member":     inactiveUser,

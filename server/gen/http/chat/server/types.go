@@ -1710,9 +1710,27 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SummarizeUnauthorizedResponseBody is the type of the "chat" service
-// "summarize" endpoint HTTP response body for the "unauthorized" error.
-type SummarizeUnauthorizedResponseBody struct {
+// SummarizeUnavailableResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unavailable" error.
+type SummarizeUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeAiAccessDeniedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "ai_access_denied" error.
+type SummarizeAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1731,6 +1749,24 @@ type SummarizeUnauthorizedResponseBody struct {
 // SummarizeForbiddenResponseBody is the type of the "chat" service "summarize"
 // endpoint HTTP response body for the "forbidden" error.
 type SummarizeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeUnauthorizedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1890,9 +1926,28 @@ type SummarizeGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SummarizeToolCallUnauthorizedResponseBody is the type of the "chat" service
-// "summarizeToolCall" endpoint HTTP response body for the "unauthorized" error.
-type SummarizeToolCallUnauthorizedResponseBody struct {
+// SummarizeToolCallUnavailableResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unavailable" error.
+type SummarizeToolCallUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallAiAccessDeniedResponseBody is the type of the "chat"
+// service "summarizeToolCall" endpoint HTTP response body for the
+// "ai_access_denied" error.
+type SummarizeToolCallAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1911,6 +1966,24 @@ type SummarizeToolCallUnauthorizedResponseBody struct {
 // SummarizeToolCallForbiddenResponseBody is the type of the "chat" service
 // "summarizeToolCall" endpoint HTTP response body for the "forbidden" error.
 type SummarizeToolCallForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallUnauthorizedResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeToolCallUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4243,10 +4316,24 @@ func NewSetPinnedGatewayErrorResponseBody(res *goa.ServiceError) *SetPinnedGatew
 	return body
 }
 
-// NewSummarizeUnauthorizedResponseBody builds the HTTP response body from the
+// NewSummarizeUnavailableResponseBody builds the HTTP response body from the
 // result of the "summarize" endpoint of the "chat" service.
-func NewSummarizeUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeUnauthorizedResponseBody {
-	body := &SummarizeUnauthorizedResponseBody{
+func NewSummarizeUnavailableResponseBody(res *goa.ServiceError) *SummarizeUnavailableResponseBody {
+	body := &SummarizeUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeAiAccessDeniedResponseBody builds the HTTP response body from
+// the result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeAiAccessDeniedResponseBody(res *goa.ServiceError) *SummarizeAiAccessDeniedResponseBody {
+	body := &SummarizeAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4261,6 +4348,20 @@ func NewSummarizeUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeUnaut
 // result of the "summarize" endpoint of the "chat" service.
 func NewSummarizeForbiddenResponseBody(res *goa.ServiceError) *SummarizeForbiddenResponseBody {
 	body := &SummarizeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeUnauthorizedResponseBody {
+	body := &SummarizeUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4383,10 +4484,24 @@ func NewSummarizeGatewayErrorResponseBody(res *goa.ServiceError) *SummarizeGatew
 	return body
 }
 
-// NewSummarizeToolCallUnauthorizedResponseBody builds the HTTP response body
+// NewSummarizeToolCallUnavailableResponseBody builds the HTTP response body
 // from the result of the "summarizeToolCall" endpoint of the "chat" service.
-func NewSummarizeToolCallUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeToolCallUnauthorizedResponseBody {
-	body := &SummarizeToolCallUnauthorizedResponseBody{
+func NewSummarizeToolCallUnavailableResponseBody(res *goa.ServiceError) *SummarizeToolCallUnavailableResponseBody {
+	body := &SummarizeToolCallUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallAiAccessDeniedResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallAiAccessDeniedResponseBody(res *goa.ServiceError) *SummarizeToolCallAiAccessDeniedResponseBody {
+	body := &SummarizeToolCallAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4401,6 +4516,20 @@ func NewSummarizeToolCallUnauthorizedResponseBody(res *goa.ServiceError) *Summar
 // the result of the "summarizeToolCall" endpoint of the "chat" service.
 func NewSummarizeToolCallForbiddenResponseBody(res *goa.ServiceError) *SummarizeToolCallForbiddenResponseBody {
 	body := &SummarizeToolCallForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeToolCallUnauthorizedResponseBody {
+	body := &SummarizeToolCallUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

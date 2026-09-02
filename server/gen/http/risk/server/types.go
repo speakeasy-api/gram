@@ -1400,9 +1400,28 @@ type ListRiskEvalReviewsResponseBody struct {
 	Reviews []*RiskPolicyEvalReviewResponseBody `form:"reviews" json:"reviews" xml:"reviews"`
 }
 
-// CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
-// "createRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
-type CreateRiskPolicyUnauthorizedResponseBody struct {
+// CreateRiskPolicyUnavailableResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "unavailable" error.
+type CreateRiskPolicyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyAiAccessDeniedResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type CreateRiskPolicyAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1421,6 +1440,24 @@ type CreateRiskPolicyUnauthorizedResponseBody struct {
 // CreateRiskPolicyForbiddenResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body for the "forbidden" error.
 type CreateRiskPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
+type CreateRiskPolicyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2134,9 +2171,28 @@ type GetRiskPolicyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
-// "updateRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
-type UpdateRiskPolicyUnauthorizedResponseBody struct {
+// UpdateRiskPolicyUnavailableResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "unavailable" error.
+type UpdateRiskPolicyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskPolicyAiAccessDeniedResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type UpdateRiskPolicyAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2155,6 +2211,24 @@ type UpdateRiskPolicyUnauthorizedResponseBody struct {
 // UpdateRiskPolicyForbiddenResponseBody is the type of the "risk" service
 // "updateRiskPolicy" endpoint HTTP response body for the "forbidden" error.
 type UpdateRiskPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
+type UpdateRiskPolicyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9238,10 +9312,29 @@ type DeleteRiskExclusionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// SuggestCustomDetectionRuleUnavailableResponseBody is the type of the "risk"
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
-// "unauthorized" error.
-type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
+// "unavailable" error.
+type SuggestCustomDetectionRuleUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestCustomDetectionRuleAiAccessDeniedResponseBody is the type of the
+// "risk" service "suggestCustomDetectionRule" endpoint HTTP response body for
+// the "ai_access_denied" error.
+type SuggestCustomDetectionRuleAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9261,6 +9354,25 @@ type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
 // "forbidden" error.
 type SuggestCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "suggestCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9428,9 +9540,28 @@ type SuggestCustomDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SuggestExclusionUnauthorizedResponseBody is the type of the "risk" service
-// "suggestExclusion" endpoint HTTP response body for the "unauthorized" error.
-type SuggestExclusionUnauthorizedResponseBody struct {
+// SuggestExclusionUnavailableResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unavailable" error.
+type SuggestExclusionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionAiAccessDeniedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type SuggestExclusionAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9449,6 +9580,24 @@ type SuggestExclusionUnauthorizedResponseBody struct {
 // SuggestExclusionForbiddenResponseBody is the type of the "risk" service
 // "suggestExclusion" endpoint HTTP response body for the "forbidden" error.
 type SuggestExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SuggestExclusionUnauthorizedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unauthorized" error.
+type SuggestExclusionUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -12317,10 +12466,24 @@ func NewListRiskEvalReviewsResponseBody(res *risk.ListRiskEvalReviewsResult) *Li
 	return body
 }
 
-// NewCreateRiskPolicyUnauthorizedResponseBody builds the HTTP response body
+// NewCreateRiskPolicyUnavailableResponseBody builds the HTTP response body
 // from the result of the "createRiskPolicy" endpoint of the "risk" service.
-func NewCreateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *CreateRiskPolicyUnauthorizedResponseBody {
-	body := &CreateRiskPolicyUnauthorizedResponseBody{
+func NewCreateRiskPolicyUnavailableResponseBody(res *goa.ServiceError) *CreateRiskPolicyUnavailableResponseBody {
+	body := &CreateRiskPolicyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyAiAccessDeniedResponseBody builds the HTTP response body
+// from the result of the "createRiskPolicy" endpoint of the "risk" service.
+func NewCreateRiskPolicyAiAccessDeniedResponseBody(res *goa.ServiceError) *CreateRiskPolicyAiAccessDeniedResponseBody {
+	body := &CreateRiskPolicyAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12335,6 +12498,20 @@ func NewCreateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *CreateR
 // the result of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyForbiddenResponseBody(res *goa.ServiceError) *CreateRiskPolicyForbiddenResponseBody {
 	body := &CreateRiskPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createRiskPolicy" endpoint of the "risk" service.
+func NewCreateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *CreateRiskPolicyUnauthorizedResponseBody {
+	body := &CreateRiskPolicyUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12891,10 +13068,24 @@ func NewGetRiskPolicyGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskPol
 	return body
 }
 
-// NewUpdateRiskPolicyUnauthorizedResponseBody builds the HTTP response body
+// NewUpdateRiskPolicyUnavailableResponseBody builds the HTTP response body
 // from the result of the "updateRiskPolicy" endpoint of the "risk" service.
-func NewUpdateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *UpdateRiskPolicyUnauthorizedResponseBody {
-	body := &UpdateRiskPolicyUnauthorizedResponseBody{
+func NewUpdateRiskPolicyUnavailableResponseBody(res *goa.ServiceError) *UpdateRiskPolicyUnavailableResponseBody {
+	body := &UpdateRiskPolicyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskPolicyAiAccessDeniedResponseBody builds the HTTP response body
+// from the result of the "updateRiskPolicy" endpoint of the "risk" service.
+func NewUpdateRiskPolicyAiAccessDeniedResponseBody(res *goa.ServiceError) *UpdateRiskPolicyAiAccessDeniedResponseBody {
+	body := &UpdateRiskPolicyAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12909,6 +13100,20 @@ func NewUpdateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *UpdateR
 // the result of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyForbiddenResponseBody(res *goa.ServiceError) *UpdateRiskPolicyForbiddenResponseBody {
 	body := &UpdateRiskPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskPolicyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateRiskPolicy" endpoint of the "risk" service.
+func NewUpdateRiskPolicyUnauthorizedResponseBody(res *goa.ServiceError) *UpdateRiskPolicyUnauthorizedResponseBody {
+	body := &UpdateRiskPolicyUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -18449,11 +18654,26 @@ func NewDeleteRiskExclusionGatewayErrorResponseBody(res *goa.ServiceError) *Dele
 	return body
 }
 
-// NewSuggestCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
+// NewSuggestCustomDetectionRuleUnavailableResponseBody builds the HTTP
 // response body from the result of the "suggestCustomDetectionRule" endpoint
 // of the "risk" service.
-func NewSuggestCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *SuggestCustomDetectionRuleUnauthorizedResponseBody {
-	body := &SuggestCustomDetectionRuleUnauthorizedResponseBody{
+func NewSuggestCustomDetectionRuleUnavailableResponseBody(res *goa.ServiceError) *SuggestCustomDetectionRuleUnavailableResponseBody {
+	body := &SuggestCustomDetectionRuleUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestCustomDetectionRuleAiAccessDeniedResponseBody builds the HTTP
+// response body from the result of the "suggestCustomDetectionRule" endpoint
+// of the "risk" service.
+func NewSuggestCustomDetectionRuleAiAccessDeniedResponseBody(res *goa.ServiceError) *SuggestCustomDetectionRuleAiAccessDeniedResponseBody {
+	body := &SuggestCustomDetectionRuleAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -18469,6 +18689,21 @@ func NewSuggestCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError
 // "risk" service.
 func NewSuggestCustomDetectionRuleForbiddenResponseBody(res *goa.ServiceError) *SuggestCustomDetectionRuleForbiddenResponseBody {
 	body := &SuggestCustomDetectionRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "suggestCustomDetectionRule" endpoint
+// of the "risk" service.
+func NewSuggestCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *SuggestCustomDetectionRuleUnauthorizedResponseBody {
+	body := &SuggestCustomDetectionRuleUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -18599,10 +18834,24 @@ func NewSuggestCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewSuggestExclusionUnauthorizedResponseBody builds the HTTP response body
+// NewSuggestExclusionUnavailableResponseBody builds the HTTP response body
 // from the result of the "suggestExclusion" endpoint of the "risk" service.
-func NewSuggestExclusionUnauthorizedResponseBody(res *goa.ServiceError) *SuggestExclusionUnauthorizedResponseBody {
-	body := &SuggestExclusionUnauthorizedResponseBody{
+func NewSuggestExclusionUnavailableResponseBody(res *goa.ServiceError) *SuggestExclusionUnavailableResponseBody {
+	body := &SuggestExclusionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionAiAccessDeniedResponseBody builds the HTTP response body
+// from the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionAiAccessDeniedResponseBody(res *goa.ServiceError) *SuggestExclusionAiAccessDeniedResponseBody {
+	body := &SuggestExclusionAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -18617,6 +18866,20 @@ func NewSuggestExclusionUnauthorizedResponseBody(res *goa.ServiceError) *Suggest
 // the result of the "suggestExclusion" endpoint of the "risk" service.
 func NewSuggestExclusionForbiddenResponseBody(res *goa.ServiceError) *SuggestExclusionForbiddenResponseBody {
 	body := &SuggestExclusionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSuggestExclusionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "suggestExclusion" endpoint of the "risk" service.
+func NewSuggestExclusionUnauthorizedResponseBody(res *goa.ServiceError) *SuggestExclusionUnauthorizedResponseBody {
+	body := &SuggestExclusionUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -175,6 +176,10 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 	}
 
 	// Use Haiku (cheaper model) for segmentation
+	analysisCtx, err := hostedinference.WithBackground(analysisCtx, hostedinference.CallCategoryChatResolution)
+	if err != nil {
+		return nil, fmt.Errorf("classify chat-resolution segmentation: %w", err)
+	}
 	response, err := s.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{

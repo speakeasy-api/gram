@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -145,6 +146,10 @@ func (c *Client) AgentChat(
 	prompt string,
 	opts AgentChatOptions,
 ) (string, error) {
+	ctx, err := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantChat)
+	if err != nil {
+		return "", fmt.Errorf("classify assistant chat: %w", err)
+	}
 	if opts.AgentTimeout != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *opts.AgentTimeout)

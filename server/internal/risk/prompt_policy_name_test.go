@@ -100,7 +100,10 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 				completionClient: client,
 			}
 
-			got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", tt.existing)
+			got, err := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", tt.existing)
+			if err != nil {
+				t.Fatalf("generatePromptPolicyName() error = %v", err)
+			}
 			if got != tt.want {
 				t.Fatalf("generatePromptPolicyName() = %q, want %q", got, tt.want)
 			}
@@ -116,7 +119,10 @@ func TestGeneratePromptPolicyNameWithoutCompletionClient(t *testing.T) {
 	t.Parallel()
 
 	svc := &Service{logger: testenv.NewLogger(t)}
-	got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)
+	got, err := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)
+	if err != nil {
+		t.Fatalf("generatePromptPolicyName() error = %v", err)
+	}
 	want := "Prompt Policy: Block destructive deletes"
 	if got != want {
 		t.Fatalf("generatePromptPolicyName() = %q, want %q", got, want)

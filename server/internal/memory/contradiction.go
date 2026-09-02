@@ -10,6 +10,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -110,7 +111,11 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 		DisableResponseHealing: false,
 	}
 
-	response, err := s.completions.GetObjectCompletion(ctx, req)
+	callCtx, err := hostedinference.WithUnsupported(ctx, hostedinference.CallCategoryAssistantMemory)
+	if err != nil {
+		return false, fmt.Errorf("classify assistant memory contradiction inference: %w", err)
+	}
+	response, err := s.completions.GetObjectCompletion(callCtx, req)
 	if err != nil {
 		return false, fmt.Errorf("contradiction completion: %w", err)
 	}

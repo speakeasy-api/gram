@@ -343,6 +343,7 @@ var _ = Service("chat", func() {
 
 	Method("summarize", func() {
 		Description("Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.")
+		shared.DeclareHostedInferenceErrors()
 
 		Security(security.Session, security.ProjectSlug)
 
@@ -362,6 +363,7 @@ var _ = Service("chat", func() {
 
 		HTTP(func() {
 			POST("/rpc/chat.summarize")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -374,6 +376,7 @@ var _ = Service("chat", func() {
 
 	Method("summarizeToolCall", func() {
 		Description("Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.")
+		shared.DeclareHostedInferenceErrors()
 
 		Security(security.Session, security.ProjectSlug)
 
@@ -390,6 +393,7 @@ var _ = Service("chat", func() {
 
 		HTTP(func() {
 			POST("/rpc/chat.summarizeToolCall")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

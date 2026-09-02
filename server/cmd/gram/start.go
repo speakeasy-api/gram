@@ -983,6 +983,11 @@ func newStartCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
 
+			aiAccess, err := newAIAccessEnforcement(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
@@ -993,6 +998,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
+			completionsClient = completionsClient.WithHostedInferenceCheckpoint(aiAccess.hostedInference)
 
 			memorySvc := memory.NewMemoryService(
 				logger,
@@ -1154,7 +1160,7 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), aiAccess.hostedInference)
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithTurnStream(turnStream)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
@@ -1375,15 +1381,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create hooks acting-user signer: %w", err)
 			}
-			killswitchRegistry, err := mcptoolexecution.NewRegistry(db)
-			if err != nil {
-				return fmt.Errorf("create hooks kill-switch registry: %w", err)
-			}
-			killswitchEvaluator, err := killswitches.NewEvaluator(db, killswitchRegistry, hooks.AIAccessEvaluationTimeout, meterProvider, logger)
-			if err != nil {
-				return fmt.Errorf("create hooks kill-switch evaluator: %w", err)
-			}
-			hookAIAccess, err := hooks.NewHookAIAccessCheckpoint(killswitchRegistry, killswitchEvaluator, hookActingSigner)
+			hookAIAccess, err := hooks.NewHookAIAccessCheckpoint(aiAccess.registry, aiAccess.evaluator, hookActingSigner)
 			if err != nil {
 				return fmt.Errorf("create hooks ai_access checkpoint: %w", err)
 			}
@@ -1391,7 +1389,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create LiteLLM acting-principal signer: %w", err)
 			}
-			litellmAIAccess, err := litellm.NewLiteLLMAIAccessCheckpoint(killswitchRegistry, killswitchEvaluator, litellmActingSigner)
+			litellmAIAccess, err := litellm.NewLiteLLMAIAccessCheckpoint(aiAccess.registry, aiAccess.evaluator, litellmActingSigner)
 			if err != nil {
 				return fmt.Errorf("create LiteLLM ai_access checkpoint: %w", err)
 			}

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/businessmemory/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
@@ -301,9 +302,12 @@ func (j *Judge) persist(
 	}
 	var vectors [][]float32
 	if len(inputs) > 0 {
-		var err error
+		callCtx, err := hostedinference.WithBackground(ctx, hostedinference.CallCategoryBusinessMemoryJudge)
+		if err != nil {
+			return nil, fmt.Errorf("classify business-memory judge inference: %w", err)
+		}
 		vectors, err = j.client.CreateEmbeddings(
-			ctx,
+			callCtx,
 			in.OrgID,
 			embeddingModel,
 			inputs,

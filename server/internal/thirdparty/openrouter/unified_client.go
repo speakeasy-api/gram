@@ -18,9 +18,11 @@ import (
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
+	or_retry "github.com/OpenRouterTeam/go-sdk/retry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -50,6 +52,7 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+	inferenceCheckpoint    hostedinference.AttemptCheckpoint
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
@@ -63,16 +66,80 @@ func NewUnifiedClient(
 	chatTitleGenerator ChatTitleGenerator,
 	telemetryLogger TelemetryLogger,
 ) *ChatClient {
+	httpClient := guardianPolicy.PooledClient()
+	// Provider redirects are never followed implicitly. Following a 307/308
+	// would create another provider attempt inside http.Client.Do, outside the
+	// call site's per-attempt checkpoint. Treat the redirect as the response.
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	return &ChatClient{
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             guardianPolicy.PooledClient(),
+		httpClient:             httpClient,
 		provisioner:            provisioner,
 		keyResolver:            keyResolver,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
+		inferenceCheckpoint:    nil,
 	}
+}
+
+// WithHostedInferenceCheckpoint returns a client copy with the production
+// pre-provider checkpoint installed. NewUnifiedClient deliberately leaves it
+// unset so tests, local tooling, and non-production composition retain their
+// existing behavior unless they opt in explicitly.
+func (c *ChatClient) WithHostedInferenceCheckpoint(checkpoint hostedinference.AttemptCheckpoint) *ChatClient {
+	if c == nil {
+		return nil
+	}
+	result := *c
+	if checkpoint == nil {
+		checkpoint = unavailableInferenceCheckpoint{}
+	}
+	result.inferenceCheckpoint = checkpoint
+	return &result
+}
+
+type unavailableInferenceCheckpoint struct{}
+
+func (unavailableInferenceCheckpoint) Check(context.Context, string) error {
+	return hostedinference.ErrCheckpointUnavailable
+}
+
+func (c *ChatClient) checkHostedInference(ctx context.Context, organizationID string) error {
+	if c.inferenceCheckpoint == nil {
+		return nil // explicitly unchecked standalone/test construction
+	}
+	if err := c.inferenceCheckpoint.Check(ctx, organizationID); err != nil {
+		return fmt.Errorf("check hosted-inference access: %w", err)
+	}
+	return nil
+}
+
+// hostedInferenceHTTPClient puts the checkpoint inside the OpenRouter SDK's
+// retry loop. Every SDK attempt therefore re-evaluates ai_access immediately
+// before the existing Guardian client performs network I/O. Checkpoint errors
+// are permanent so the SDK returns denials and evaluator outages directly
+// instead of retrying them.
+type hostedInferenceHTTPClient struct {
+	delegate       or_base.HTTPClient
+	checkpoint     hostedinference.AttemptCheckpoint
+	organizationID string
+}
+
+func (c *hostedInferenceHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if c.checkpoint != nil {
+		if err := c.checkpoint.Check(req.Context(), c.organizationID); err != nil {
+			return nil, or_retry.Permanent(err) //nolint:wrapcheck // The SDK requires its permanent-error wrapper to remain outermost.
+		}
+	}
+	resp, err := c.delegate.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send hosted-inference request: %w", err)
+	}
+	return resp, nil
 }
 
 // ResolveKey exposes key resolution so callers can scope rate-limit buckets to
@@ -364,6 +431,9 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 
 // GetCompletion makes a non-streaming completion request to OpenRouter and applies capture/tracking strategies.
 func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+		return nil, err
+	}
 	start := time.Now()
 
 	// Build request body (non-streaming)
@@ -384,6 +454,9 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		body     []byte
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+			return nil, err
+		}
 		var err error
 		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
 		if err != nil {
@@ -484,6 +557,10 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		return nil, fmt.Errorf("web search is not available on the streaming path: its citations would be dropped")
 	}
 
+	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+		return nil, err
+	}
+
 	// Build request body (streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -491,6 +568,11 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	}
 	reqBody := initResult.requestBody
 	reqBody.Stream = true
+
+	// Re-evaluate immediately before the actual provider attempt.
+	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+		return nil, err
+	}
 
 	// Make HTTP request
 	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
@@ -872,6 +954,9 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 }
 
 func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+	if err := c.checkHostedInference(ctx, orgID); err != nil {
+		return nil, err
+	}
 	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
 		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
@@ -900,7 +985,14 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 	}
 	inputs = truncatedInputs
 
-	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	orClient := or_base.New(
+		or_base.WithSecurity(openrouterKey),
+		or_base.WithClient(&hostedInferenceHTTPClient{
+			delegate:       c.httpClient,
+			checkpoint:     c.inferenceCheckpoint,
+			organizationID: orgID,
+		}),
+	)
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),

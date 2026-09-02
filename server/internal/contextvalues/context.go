@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 )
 
@@ -28,10 +29,13 @@ type AuthContext struct {
 	IsAdmin               bool
 	// SupportOrganizationID is set only after session authentication validates
 	// a time-bounded platform-admin support session for this organization.
-	SupportOrganizationID     string
-	gramSessionValidated      bool
-	supportSessionValidated   bool
-	legacySessionImpersonated bool
+	SupportOrganizationID              string
+	gramSessionValidated               bool
+	validatedGramSessionOrganizationID string
+	validatedGramSessionUserID         string
+	validatedGramSessionSessionID      string
+	supportSessionValidated            bool
+	legacySessionImpersonated          bool
 }
 
 // WithValidatedGramSession records provenance established by sessions.Authenticate.
@@ -39,6 +43,11 @@ type AuthContext struct {
 func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyImpersonated bool) context.Context {
 	validated := *authCtx
 	validated.gramSessionValidated = true
+	validated.validatedGramSessionOrganizationID = authCtx.ActiveOrganizationID
+	validated.validatedGramSessionUserID = authCtx.UserID
+	if authCtx.SessionID != nil {
+		validated.validatedGramSessionSessionID = *authCtx.SessionID
+	}
 	validated.legacySessionImpersonated = legacyImpersonated
 	return SetAuthContext(ctx, &validated)
 }
@@ -79,6 +88,102 @@ func IsOrdinaryGramUserSession(ctx context.Context) bool {
 func IsLegacyImpersonatedSession(ctx context.Context) bool {
 	authCtx, ok := GetAuthContext(ctx)
 	return ok && authCtx != nil && authCtx.gramSessionValidated && authCtx.legacySessionImpersonated
+}
+
+// GramSessionActingUser is opaque, tenant-bound provenance for an acting user
+// established by ordinary Gram session authentication. It cannot be assembled
+// from attribution fields such as API-key owners, assistant owners, chat users,
+// external user IDs, or anonymous organization context.
+type GramSessionActingUser struct {
+	organizationID string
+	userID         string
+	sessionID      string
+}
+
+// ActingUserProvenance is implemented only by opaque acting-user values minted
+// after an ordinary Gram session or a qualifying session-backed chat JWT is
+// validated. Callers can inspect but cannot manufacture implementations.
+type ActingUserProvenance interface {
+	OrganizationID() string
+	UserID() string
+	SessionID() string
+	validatedActingUserProvenance()
+}
+
+// ValidatedGramSessionActingUser derives acting-user provenance only from an
+// authenticated customer Gram session. The frozen identity snapshot is composed
+// with IsOrdinaryGramUserSession so support, impersonation, API-key attribution,
+// and every alternate or elevated acting surface remain excluded.
+func ValidatedGramSessionActingUser(ctx context.Context) (GramSessionActingUser, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || !IsOrdinaryGramUserSession(ctx) ||
+		authCtx.supportSessionValidated || authCtx.legacySessionImpersonated ||
+		authCtx.validatedGramSessionOrganizationID == "" ||
+		authCtx.validatedGramSessionOrganizationID == constants.DemoOrganizationID ||
+		authCtx.validatedGramSessionUserID == "" ||
+		authCtx.validatedGramSessionSessionID == "" {
+		return GramSessionActingUser{organizationID: "", userID: "", sessionID: ""}, false
+	}
+	return GramSessionActingUser{
+		organizationID: authCtx.validatedGramSessionOrganizationID,
+		userID:         authCtx.validatedGramSessionUserID,
+		sessionID:      authCtx.validatedGramSessionSessionID,
+	}, true
+}
+
+// OrganizationID returns the authenticated active organization.
+func (p GramSessionActingUser) OrganizationID() string { return p.organizationID }
+
+// UserID returns the authenticated acting user.
+func (p GramSessionActingUser) UserID() string { return p.userID }
+
+// SessionID returns the validated Gram session identifier.
+func (p GramSessionActingUser) SessionID() string { return p.sessionID }
+
+func (GramSessionActingUser) validatedActingUserProvenance() {}
+
+type chatSessionActingUser struct {
+	organizationID string
+	userID         string
+	sessionID      string
+}
+
+func (p chatSessionActingUser) OrganizationID() string       { return p.organizationID }
+func (p chatSessionActingUser) UserID() string               { return p.userID }
+func (p chatSessionActingUser) SessionID() string            { return p.sessionID }
+func (chatSessionActingUser) validatedActingUserProvenance() {}
+
+type chatSessionActingUserContextKey struct{}
+
+// WithValidatedChatSessionActingUser records provenance from a validated chat
+// JWT whose signed ordinary-session claim matches its nonempty tenant, user, and
+// session claims. Only auth/chatsessions may call this after token validation.
+func WithValidatedChatSessionActingUser(ctx context.Context, organizationID, userID, sessionID string) context.Context {
+	if organizationID == "" || organizationID == constants.DemoOrganizationID || userID == "" || sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, chatSessionActingUserContextKey{}, chatSessionActingUser{
+		organizationID: organizationID,
+		userID:         userID,
+		sessionID:      sessionID,
+	})
+}
+
+// ValidatedChatSessionActingUser returns only opaque provenance stamped during
+// chat JWT authorization. UserID and SessionID attribution fields alone do not
+// satisfy it.
+func ValidatedChatSessionActingUser(ctx context.Context) (ActingUserProvenance, bool) {
+	provenance, ok := ctx.Value(chatSessionActingUserContextKey{}).(chatSessionActingUser)
+	return provenance, ok
+}
+
+// ValidatedHostedInferenceActingUser returns either supported ordinary-session
+// provenance. Both forms are immutable snapshots of the validated identity.
+func ValidatedHostedInferenceActingUser(ctx context.Context) (ActingUserProvenance, bool) {
+	if provenance, ok := ValidatedGramSessionActingUser(ctx); ok {
+		return provenance, true
+	}
+	return ValidatedChatSessionActingUser(ctx)
 }
 
 // WithValidatedSupportSession records the support decision made during session

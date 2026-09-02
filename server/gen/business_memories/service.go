@@ -197,3 +197,13 @@ func MakeUnexpected(err error) *goa.ServiceError {
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
 }
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
+}
+
+// MakeAiAccessDenied builds a goa.ServiceError from an error.
+func MakeAiAccessDenied(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "ai_access_denied", false, false, false)
+}

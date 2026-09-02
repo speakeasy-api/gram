@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -71,53 +72,57 @@ func (a *AuthenticatedUserPrincipalAdapter) ValidateCurrentOrganization(ctx cont
 	return member, nil
 }
 
-// DeriveCandidates accepts only mcpidentity.Identity provenance stamped by a
-// serving surface after credential validation. Checkpoints call it only when
-// mcpidentity.FromContext returns ok: unstamped traffic is classified
-// unattributed at the checkpoint and never reaches derivation — that skip is
-// the authoritative unsupported/no-candidate outcome for such traffic, not a
-// failure. Any non-Identity source here is therefore a checkpoint wiring bug
-// and errors.
-//
-// Only KindUserSession claims an authoritative acting user; that claim is
-// then revalidated as an active organization membership before producing the
-// single concrete candidate. Anonymous, API-key, assistant, and chat-session
-// provenance are deliberately unsupported. A stamped identity with a zero or
-// unknown kind, a malformed authoritative claim, or a membership lookup
-// failure is an error and follows the definition's fail-closed policy.
+// DeriveCandidates accepts either MCP identity provenance stamped after MCP
+// credential validation or opaque contextvalues session-backed acting-user
+// provenance. Both supported forms are revalidated as an active membership in
+// the same organization for every derivation. Anonymous, API-key, assistant,
+// unstamped chat-session, support, legacy impersonation, attribution, and owner
+// substitutes never produce candidates. Malformed authoritative claims,
+// cross-tenant provenance, and lookup failures are errors and follow the
+// definition's fail-closed policy.
 func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context, organizationID killswitches.OrganizationID, source any) (killswitches.PrincipalCandidateResult, error) {
-	identity, ok := source.(mcpidentity.Identity)
-	if !ok {
-		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unsupported principal source type %T", source)
-	}
 	if organizationID == "" {
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("organization ID is required")
 	}
 
+	if provenance, ok := source.(contextvalues.ActingUserProvenance); ok {
+		if provenance.OrganizationID() != string(organizationID) {
+			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("acting-user provenance belongs to another organization")
+		}
+		return a.deriveActiveUser(ctx, organizationID, provenance.UserID())
+	}
+
+	identity, ok := source.(mcpidentity.Identity)
+	if !ok {
+		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unsupported principal source type %T", source)
+	}
 	switch identity.Kind() {
 	case mcpidentity.KindUserSession:
-		userID := identity.UserID()
-		key, canonical := canonicalUserKey(userID)
-		if !canonical || string(key) != userID {
-			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("authoritative user provenance carries a non-canonical user ID")
-		}
-		member, err := a.ValidateCurrentOrganization(ctx, organizationID, key)
-		if err != nil {
-			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("revalidate active organization membership: %w", err)
-		}
-		if !member {
-			return killswitches.UnsupportedPrincipalCandidateResult(), nil
-		}
-		result, err := killswitches.NewPrincipalCandidateResult([]killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: key}})
-		if err != nil {
-			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("build principal candidate: %w", err)
-		}
-		return result, nil
+		return a.deriveActiveUser(ctx, organizationID, identity.UserID())
 	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindChatSession:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind())
 	}
+}
+
+func (a *AuthenticatedUserPrincipalAdapter) deriveActiveUser(ctx context.Context, organizationID killswitches.OrganizationID, userID string) (killswitches.PrincipalCandidateResult, error) {
+	key, canonical := canonicalUserKey(userID)
+	if !canonical || string(key) != userID {
+		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("authoritative user provenance carries a non-canonical user ID")
+	}
+	member, err := a.ValidateCurrentOrganization(ctx, organizationID, key)
+	if err != nil {
+		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("revalidate active organization membership: %w", err)
+	}
+	if !member {
+		return killswitches.UnsupportedPrincipalCandidateResult(), nil
+	}
+	result, err := killswitches.NewPrincipalCandidateResult([]killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: key}})
+	if err != nil {
+		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("build principal candidate: %w", err)
+	}
+	return result, nil
 }
 
 func canonicalUserKey(input string) (killswitches.PrincipalKey, bool) {

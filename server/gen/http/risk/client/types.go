@@ -1398,9 +1398,28 @@ type ListRiskEvalReviewsResponseBody struct {
 	Reviews []*RiskPolicyEvalReviewResponseBody `form:"reviews,omitempty" json:"reviews,omitempty" xml:"reviews,omitempty"`
 }
 
-// CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
-// "createRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
-type CreateRiskPolicyUnauthorizedResponseBody struct {
+// CreateRiskPolicyUnavailableResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "unavailable" error.
+type CreateRiskPolicyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateRiskPolicyAiAccessDeniedResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type CreateRiskPolicyAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1419,6 +1438,24 @@ type CreateRiskPolicyUnauthorizedResponseBody struct {
 // CreateRiskPolicyForbiddenResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body for the "forbidden" error.
 type CreateRiskPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "createRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
+type CreateRiskPolicyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2132,9 +2169,28 @@ type GetRiskPolicyGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
-// "updateRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
-type UpdateRiskPolicyUnauthorizedResponseBody struct {
+// UpdateRiskPolicyUnavailableResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "unavailable" error.
+type UpdateRiskPolicyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateRiskPolicyAiAccessDeniedResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type UpdateRiskPolicyAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2153,6 +2209,24 @@ type UpdateRiskPolicyUnauthorizedResponseBody struct {
 // UpdateRiskPolicyForbiddenResponseBody is the type of the "risk" service
 // "updateRiskPolicy" endpoint HTTP response body for the "forbidden" error.
 type UpdateRiskPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "updateRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
+type UpdateRiskPolicyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9236,10 +9310,29 @@ type DeleteRiskExclusionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// SuggestCustomDetectionRuleUnavailableResponseBody is the type of the "risk"
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
-// "unauthorized" error.
-type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
+// "unavailable" error.
+type SuggestCustomDetectionRuleUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SuggestCustomDetectionRuleAiAccessDeniedResponseBody is the type of the
+// "risk" service "suggestCustomDetectionRule" endpoint HTTP response body for
+// the "ai_access_denied" error.
+type SuggestCustomDetectionRuleAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9259,6 +9352,25 @@ type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
 // "forbidden" error.
 type SuggestCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "suggestCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type SuggestCustomDetectionRuleUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9426,9 +9538,28 @@ type SuggestCustomDetectionRuleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SuggestExclusionUnauthorizedResponseBody is the type of the "risk" service
-// "suggestExclusion" endpoint HTTP response body for the "unauthorized" error.
-type SuggestExclusionUnauthorizedResponseBody struct {
+// SuggestExclusionUnavailableResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unavailable" error.
+type SuggestExclusionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SuggestExclusionAiAccessDeniedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "ai_access_denied"
+// error.
+type SuggestExclusionAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9447,6 +9578,24 @@ type SuggestExclusionUnauthorizedResponseBody struct {
 // SuggestExclusionForbiddenResponseBody is the type of the "risk" service
 // "suggestExclusion" endpoint HTTP response body for the "forbidden" error.
 type SuggestExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SuggestExclusionUnauthorizedResponseBody is the type of the "risk" service
+// "suggestExclusion" endpoint HTTP response body for the "unauthorized" error.
+type SuggestExclusionUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11842,9 +11991,24 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	return v
 }
 
-// NewCreateRiskPolicyUnauthorized builds a risk service createRiskPolicy
-// endpoint unauthorized error.
-func NewCreateRiskPolicyUnauthorized(body *CreateRiskPolicyUnauthorizedResponseBody) *goa.ServiceError {
+// NewCreateRiskPolicyUnavailable builds a risk service createRiskPolicy
+// endpoint unavailable error.
+func NewCreateRiskPolicyUnavailable(body *CreateRiskPolicyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateRiskPolicyAiAccessDenied builds a risk service createRiskPolicy
+// endpoint ai_access_denied error.
+func NewCreateRiskPolicyAiAccessDenied(body *CreateRiskPolicyAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -11860,6 +12024,21 @@ func NewCreateRiskPolicyUnauthorized(body *CreateRiskPolicyUnauthorizedResponseB
 // NewCreateRiskPolicyForbidden builds a risk service createRiskPolicy endpoint
 // forbidden error.
 func NewCreateRiskPolicyForbidden(body *CreateRiskPolicyForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateRiskPolicyUnauthorized builds a risk service createRiskPolicy
+// endpoint unauthorized error.
+func NewCreateRiskPolicyUnauthorized(body *CreateRiskPolicyUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12648,9 +12827,24 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	return v
 }
 
-// NewUpdateRiskPolicyUnauthorized builds a risk service updateRiskPolicy
-// endpoint unauthorized error.
-func NewUpdateRiskPolicyUnauthorized(body *UpdateRiskPolicyUnauthorizedResponseBody) *goa.ServiceError {
+// NewUpdateRiskPolicyUnavailable builds a risk service updateRiskPolicy
+// endpoint unavailable error.
+func NewUpdateRiskPolicyUnavailable(body *UpdateRiskPolicyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateRiskPolicyAiAccessDenied builds a risk service updateRiskPolicy
+// endpoint ai_access_denied error.
+func NewUpdateRiskPolicyAiAccessDenied(body *UpdateRiskPolicyAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12666,6 +12860,21 @@ func NewUpdateRiskPolicyUnauthorized(body *UpdateRiskPolicyUnauthorizedResponseB
 // NewUpdateRiskPolicyForbidden builds a risk service updateRiskPolicy endpoint
 // forbidden error.
 func NewUpdateRiskPolicyForbidden(body *UpdateRiskPolicyForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateRiskPolicyUnauthorized builds a risk service updateRiskPolicy
+// endpoint unauthorized error.
+func NewUpdateRiskPolicyUnauthorized(body *UpdateRiskPolicyUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -18986,9 +19195,24 @@ func NewSuggestCustomDetectionRuleResultOK(body *SuggestCustomDetectionRuleRespo
 	return v
 }
 
-// NewSuggestCustomDetectionRuleUnauthorized builds a risk service
-// suggestCustomDetectionRule endpoint unauthorized error.
-func NewSuggestCustomDetectionRuleUnauthorized(body *SuggestCustomDetectionRuleUnauthorizedResponseBody) *goa.ServiceError {
+// NewSuggestCustomDetectionRuleUnavailable builds a risk service
+// suggestCustomDetectionRule endpoint unavailable error.
+func NewSuggestCustomDetectionRuleUnavailable(body *SuggestCustomDetectionRuleUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSuggestCustomDetectionRuleAiAccessDenied builds a risk service
+// suggestCustomDetectionRule endpoint ai_access_denied error.
+func NewSuggestCustomDetectionRuleAiAccessDenied(body *SuggestCustomDetectionRuleAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -19004,6 +19228,21 @@ func NewSuggestCustomDetectionRuleUnauthorized(body *SuggestCustomDetectionRuleU
 // NewSuggestCustomDetectionRuleForbidden builds a risk service
 // suggestCustomDetectionRule endpoint forbidden error.
 func NewSuggestCustomDetectionRuleForbidden(body *SuggestCustomDetectionRuleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSuggestCustomDetectionRuleUnauthorized builds a risk service
+// suggestCustomDetectionRule endpoint unauthorized error.
+func NewSuggestCustomDetectionRuleUnauthorized(body *SuggestCustomDetectionRuleUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -19149,9 +19388,24 @@ func NewSuggestExclusionResultOK(body *SuggestExclusionResponseBody) *risk.Sugge
 	return v
 }
 
-// NewSuggestExclusionUnauthorized builds a risk service suggestExclusion
-// endpoint unauthorized error.
-func NewSuggestExclusionUnauthorized(body *SuggestExclusionUnauthorizedResponseBody) *goa.ServiceError {
+// NewSuggestExclusionUnavailable builds a risk service suggestExclusion
+// endpoint unavailable error.
+func NewSuggestExclusionUnavailable(body *SuggestExclusionUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSuggestExclusionAiAccessDenied builds a risk service suggestExclusion
+// endpoint ai_access_denied error.
+func NewSuggestExclusionAiAccessDenied(body *SuggestExclusionAiAccessDeniedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -19167,6 +19421,21 @@ func NewSuggestExclusionUnauthorized(body *SuggestExclusionUnauthorizedResponseB
 // NewSuggestExclusionForbidden builds a risk service suggestExclusion endpoint
 // forbidden error.
 func NewSuggestExclusionForbidden(body *SuggestExclusionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSuggestExclusionUnauthorized builds a risk service suggestExclusion
+// endpoint unauthorized error.
+func NewSuggestExclusionUnauthorized(body *SuggestExclusionUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -21623,9 +21892,33 @@ func ValidateListRiskEvalReviewsResponseBody(body *ListRiskEvalReviewsResponseBo
 	return
 }
 
-// ValidateCreateRiskPolicyUnauthorizedResponseBody runs the validations
-// defined on createRiskPolicy_unauthorized_response_body
-func ValidateCreateRiskPolicyUnauthorizedResponseBody(body *CreateRiskPolicyUnauthorizedResponseBody) (err error) {
+// ValidateCreateRiskPolicyUnavailableResponseBody runs the validations defined
+// on createRiskPolicy_unavailable_response_body
+func ValidateCreateRiskPolicyUnavailableResponseBody(body *CreateRiskPolicyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateRiskPolicyAiAccessDeniedResponseBody runs the validations
+// defined on createRiskPolicy_ai_access_denied_response_body
+func ValidateCreateRiskPolicyAiAccessDeniedResponseBody(body *CreateRiskPolicyAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -21650,6 +21943,30 @@ func ValidateCreateRiskPolicyUnauthorizedResponseBody(body *CreateRiskPolicyUnau
 // ValidateCreateRiskPolicyForbiddenResponseBody runs the validations defined
 // on createRiskPolicy_forbidden_response_body
 func ValidateCreateRiskPolicyForbiddenResponseBody(body *CreateRiskPolicyForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateRiskPolicyUnauthorizedResponseBody runs the validations
+// defined on createRiskPolicy_unauthorized_response_body
+func ValidateCreateRiskPolicyUnauthorizedResponseBody(body *CreateRiskPolicyUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22584,9 +22901,33 @@ func ValidateGetRiskPolicyGatewayErrorResponseBody(body *GetRiskPolicyGatewayErr
 	return
 }
 
-// ValidateUpdateRiskPolicyUnauthorizedResponseBody runs the validations
-// defined on updateRiskPolicy_unauthorized_response_body
-func ValidateUpdateRiskPolicyUnauthorizedResponseBody(body *UpdateRiskPolicyUnauthorizedResponseBody) (err error) {
+// ValidateUpdateRiskPolicyUnavailableResponseBody runs the validations defined
+// on updateRiskPolicy_unavailable_response_body
+func ValidateUpdateRiskPolicyUnavailableResponseBody(body *UpdateRiskPolicyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateRiskPolicyAiAccessDeniedResponseBody runs the validations
+// defined on updateRiskPolicy_ai_access_denied_response_body
+func ValidateUpdateRiskPolicyAiAccessDeniedResponseBody(body *UpdateRiskPolicyAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22611,6 +22952,30 @@ func ValidateUpdateRiskPolicyUnauthorizedResponseBody(body *UpdateRiskPolicyUnau
 // ValidateUpdateRiskPolicyForbiddenResponseBody runs the validations defined
 // on updateRiskPolicy_forbidden_response_body
 func ValidateUpdateRiskPolicyForbiddenResponseBody(body *UpdateRiskPolicyForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateRiskPolicyUnauthorizedResponseBody runs the validations
+// defined on updateRiskPolicy_unauthorized_response_body
+func ValidateUpdateRiskPolicyUnauthorizedResponseBody(body *UpdateRiskPolicyUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -31765,9 +32130,34 @@ func ValidateDeleteRiskExclusionGatewayErrorResponseBody(body *DeleteRiskExclusi
 	return
 }
 
-// ValidateSuggestCustomDetectionRuleUnauthorizedResponseBody runs the
-// validations defined on suggestCustomDetectionRule_unauthorized_response_body
-func ValidateSuggestCustomDetectionRuleUnauthorizedResponseBody(body *SuggestCustomDetectionRuleUnauthorizedResponseBody) (err error) {
+// ValidateSuggestCustomDetectionRuleUnavailableResponseBody runs the
+// validations defined on suggestCustomDetectionRule_unavailable_response_body
+func ValidateSuggestCustomDetectionRuleUnavailableResponseBody(body *SuggestCustomDetectionRuleUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSuggestCustomDetectionRuleAiAccessDeniedResponseBody runs the
+// validations defined on
+// suggestCustomDetectionRule_ai_access_denied_response_body
+func ValidateSuggestCustomDetectionRuleAiAccessDeniedResponseBody(body *SuggestCustomDetectionRuleAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -31792,6 +32182,30 @@ func ValidateSuggestCustomDetectionRuleUnauthorizedResponseBody(body *SuggestCus
 // ValidateSuggestCustomDetectionRuleForbiddenResponseBody runs the validations
 // defined on suggestCustomDetectionRule_forbidden_response_body
 func ValidateSuggestCustomDetectionRuleForbiddenResponseBody(body *SuggestCustomDetectionRuleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSuggestCustomDetectionRuleUnauthorizedResponseBody runs the
+// validations defined on suggestCustomDetectionRule_unauthorized_response_body
+func ValidateSuggestCustomDetectionRuleUnauthorizedResponseBody(body *SuggestCustomDetectionRuleUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -32007,9 +32421,33 @@ func ValidateSuggestCustomDetectionRuleGatewayErrorResponseBody(body *SuggestCus
 	return
 }
 
-// ValidateSuggestExclusionUnauthorizedResponseBody runs the validations
-// defined on suggestExclusion_unauthorized_response_body
-func ValidateSuggestExclusionUnauthorizedResponseBody(body *SuggestExclusionUnauthorizedResponseBody) (err error) {
+// ValidateSuggestExclusionUnavailableResponseBody runs the validations defined
+// on suggestExclusion_unavailable_response_body
+func ValidateSuggestExclusionUnavailableResponseBody(body *SuggestExclusionUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSuggestExclusionAiAccessDeniedResponseBody runs the validations
+// defined on suggestExclusion_ai_access_denied_response_body
+func ValidateSuggestExclusionAiAccessDeniedResponseBody(body *SuggestExclusionAiAccessDeniedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -32034,6 +32472,30 @@ func ValidateSuggestExclusionUnauthorizedResponseBody(body *SuggestExclusionUnau
 // ValidateSuggestExclusionForbiddenResponseBody runs the validations defined
 // on suggestExclusion_forbidden_response_body
 func ValidateSuggestExclusionForbiddenResponseBody(body *SuggestExclusionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSuggestExclusionUnauthorizedResponseBody runs the validations
+// defined on suggestExclusion_unauthorized_response_body
+func ValidateSuggestExclusionUnauthorizedResponseBody(body *SuggestExclusionUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
