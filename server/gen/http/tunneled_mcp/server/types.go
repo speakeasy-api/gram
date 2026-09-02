@@ -106,11 +106,12 @@ type GetServerResponseBody struct {
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// The sustained anonymous MCP request rate actually applied to this tunnel:
-	// the stored value, or the deployment default when none is stored.
+	// the stored value, or the deployment default when no rate is stored.
 	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
-	// The token-bucket capacity actually applied to this tunnel: the stored burst,
-	// twice the stored rate when only a rate is stored, or the deployment default
-	// when nothing is stored.
+	// The token-bucket capacity actually applied to this tunnel: the stored burst
+	// when a rate is stored alongside it, twice the stored rate when only a rate
+	// is stored, or the deployment default when no rate is stored (a burst stored
+	// without a rate is ignored).
 	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
@@ -167,11 +168,12 @@ type UpdateServerResponseBody struct {
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// The sustained anonymous MCP request rate actually applied to this tunnel:
-	// the stored value, or the deployment default when none is stored.
+	// the stored value, or the deployment default when no rate is stored.
 	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
-	// The token-bucket capacity actually applied to this tunnel: the stored burst,
-	// twice the stored rate when only a rate is stored, or the deployment default
-	// when nothing is stored.
+	// The token-bucket capacity actually applied to this tunnel: the stored burst
+	// when a rate is stored alongside it, twice the stored rate when only a rate
+	// is stored, or the deployment default when no rate is stored (a burst stored
+	// without a rate is ignored).
 	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
@@ -1518,11 +1520,12 @@ type TunneledMcpServerResponseBody struct {
 	// sustained rate. Unset means twice the sustained rate.
 	PublicRequestBurst *int `form:"public_request_burst,omitempty" json:"public_request_burst,omitempty" xml:"public_request_burst,omitempty"`
 	// The sustained anonymous MCP request rate actually applied to this tunnel:
-	// the stored value, or the deployment default when none is stored.
+	// the stored value, or the deployment default when no rate is stored.
 	EffectivePublicRequestRatePerSecond int `form:"effective_public_request_rate_per_second" json:"effective_public_request_rate_per_second" xml:"effective_public_request_rate_per_second"`
-	// The token-bucket capacity actually applied to this tunnel: the stored burst,
-	// twice the stored rate when only a rate is stored, or the deployment default
-	// when nothing is stored.
+	// The token-bucket capacity actually applied to this tunnel: the stored burst
+	// when a rate is stored alongside it, twice the stored rate when only a rate
+	// is stored, or the deployment default when no rate is stored (a burst stored
+	// without a rate is ignored).
 	EffectivePublicRequestBurst int `form:"effective_public_request_burst" json:"effective_public_request_burst" xml:"effective_public_request_burst"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`

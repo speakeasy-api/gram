@@ -87923,11 +87923,11 @@ components:
                     format: date-time
                 effective_public_request_burst:
                     type: integer
-                    description: 'The token-bucket capacity actually applied to this tunnel: the stored burst, twice the stored rate when only a rate is stored, or the deployment default when nothing is stored.'
+                    description: 'The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).'
                     format: int64
                 effective_public_request_rate_per_second:
                     type: integer
-                    description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when none is stored.'
+                    description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.'
                     format: int64
                 id:
                     type: string

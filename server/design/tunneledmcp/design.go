@@ -302,8 +302,8 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
 	Attribute("public_request_rate_per_second", Int, "Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.")
 	Attribute("public_request_burst", Int, "Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.")
-	Attribute("effective_public_request_rate_per_second", Int, "The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when none is stored.")
-	Attribute("effective_public_request_burst", Int, "The token-bucket capacity actually applied to this tunnel: the stored burst, twice the stored rate when only a rate is stored, or the deployment default when nothing is stored.")
+	Attribute("effective_public_request_rate_per_second", Int, "The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.")
+	Attribute("effective_public_request_burst", Int, "The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).")
 	Attribute("last_seen_at", String, func() {
 		Description("Most recent persisted heartbeat timestamp")
 		Format(FormatDateTime)

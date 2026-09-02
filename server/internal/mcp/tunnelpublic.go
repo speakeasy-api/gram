@@ -64,7 +64,11 @@ type TunnelPublicConfig struct {
 	LiveSessionCap int
 	// InitializeRate bounds anonymous initialize requests per tunnel.
 	InitializeRate ratelimit.Rate
-	// RequestRate bounds all anonymous requests per tunnel.
+	// RequestRate bounds all anonymous requests per tunnel when no limit is
+	// stored on its row. Production wiring leaves it zero so the enforced
+	// default is publiclimits.DefaultRequestRatePerSecond / DefaultRequestBurst,
+	// the same values the management API reports as effective; a non-zero
+	// value is a test seam and would make the API under-report the limit.
 	RequestRate ratelimit.Rate
 	// MaxRequestLifetime hard-bounds any single anonymous request, including
 	// SSE streams — the proxy's idle timeout alone would let an active

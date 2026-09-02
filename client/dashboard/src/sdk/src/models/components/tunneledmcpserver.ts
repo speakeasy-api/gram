@@ -66,11 +66,11 @@ export type TunneledMcpServer = {
    */
   createdAt: Date;
   /**
-   * The token-bucket capacity actually applied to this tunnel: the stored burst, twice the stored rate when only a rate is stored, or the deployment default when nothing is stored.
+   * The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).
    */
   effectivePublicRequestBurst: number;
   /**
-   * The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when none is stored.
+   * The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.
    */
   effectivePublicRequestRatePerSecond: number;
   /**

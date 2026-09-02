@@ -28,6 +28,15 @@ func TestEffective(t *testing.T) {
 	require.Equal(t, 300, rate)
 	require.Equal(t, 450, burst)
 
+	// A stored 0 is the clear sentinel on the write path and the CHECK
+	// constraint keeps it off the row, but the resolver must still read a
+	// non-positive value as "no limit" rather than a zero-rate bucket.
+	for _, v := range []int32{0, -1} {
+		rate, burst = Effective(pgtype.Int4{Int32: v, Valid: true}, pgtype.Int4{Int32: 450, Valid: true})
+		require.Equal(t, DefaultRequestRatePerSecond, rate)
+		require.Equal(t, DefaultRequestBurst, burst)
+		require.False(t, Stored(pgtype.Int4{Int32: v, Valid: true}))
+	}
 	require.False(t, Stored(unset))
 	require.True(t, Stored(pgtype.Int4{Int32: 1, Valid: true}))
 }
