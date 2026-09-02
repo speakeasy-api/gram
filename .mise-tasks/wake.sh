@@ -17,54 +17,56 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 # (the parker's Resume button and an `ensure-stack` dependency), and a wake can
 # race a pause. Duplicated rather than sourced from a helper because every file
 # under .mise-tasks/ is itself a task.
-lock="$gitdir/gram-stack-lock"
+lockfile="$gitdir/gram-stack.lock"
 
-# `ln -s` is the atomic test-and-set: creating a symlink fails if the name
-# exists, and its target carries the owner's pid, so the lock and the identity
-# of its owner appear in one step. (A lock file written after a `mkdir` has a
-# window where it exists with no owner recorded, which another process reads as
-# abandoned.) The target is a pid string and never has to resolve.
-release_lock() {
-    # Only release a lock this process still owns.
-    if [ "$(readlink "$lock" 2> /dev/null)" = "$$" ]; then
-        rm -f "$lock"
+# Held by the kernel, not by a file we have to clean up: an advisory lock on an
+# open descriptor is released when the holder dies, however it dies, so there is
+# no stale lock to detect and no takeover protocol to get wrong. Every
+# file-based scheme needed one (is the owner alive? may I clear it?) and each
+# had a window where two processes both believed they held it.
+#
+# Re-exec under the lock rather than wrapping the body: the descriptor survives
+# exec, so the lock covers this script to its last line.
+#
+# perl rather than flock(1), which macOS does not ship, and which does not tell
+# us which descriptor it used -- and the descriptor number is load-bearing here.
+# It is inherited by every child, so a long-lived one (the parker, a pitchfork
+# daemon) would go on holding this lock for hours after the script exits. Those
+# are started through `without_stack_lock`, which closes it first.
+if [ -z "${GRAM_STACK_LOCK_HELD:-}" ]; then
+    export GRAM_STACK_LOCK_HELD=1
+
+    if command -v perl > /dev/null 2>&1; then
+        perl -e '
+            $^F = 255;  # keeps the descriptor off close-on-exec
+            open(my $fh, ">>", $ARGV[0]) or die "stack lock: $!\n";
+            eval {
+                local $SIG{ALRM} = sub { die "timeout\n" };
+                alarm 60;
+                flock($fh, 2) or die "stack lock: $!\n";
+                alarm 0;
+            };
+            if ($@) {
+                print STDERR "Another pause or wake has held this worktree'"'"'s stack lock for a minute; giving up.\n";
+                exit 1;
+            }
+            $ENV{GRAM_STACK_LOCK_FD} = fileno($fh);
+            exec(@ARGV[1 .. $#ARGV]) or die "exec: $!\n";
+        ' "$lockfile" "$0" "$@"
+        exit $?
     fi
-}
 
-# Clearing a dead owner's lock cannot be done from the plain retry loop:
-# between reading the owner and removing it, another process can acquire the
-# lock, and the removal then evicts a live holder -- two commands end up
-# running against the same containers. So removal happens under its own lock,
-# which is only ever taken by exclusive create; whoever holds it re-reads the
-# owner before removing anything.
-reap_stale_lock() {
-    local reap="$lock.reap" owner
-    ln -s "$$" "$reap" 2> /dev/null || return 1
-    owner="$(readlink "$lock" 2> /dev/null || true)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
-        echo "Clearing a stack lock left behind by a dead process ($owner)." >&2
-        rm -f "$lock"
-    fi
-    rm -f "$reap"
-}
-
-locked=false
-for _ in $(seq 1 60); do
-    if ln -s "$$" "$lock" 2> /dev/null; then
-        trap release_lock EXIT
-        locked=true
-        break
-    fi
-    reap_stale_lock || true
-    sleep 1
-done
-
-if [ "$locked" != true ]; then
-    owner="$(readlink "$lock" 2> /dev/null || true)"
-    echo "Another pause or wake (pid ${owner:-unknown}) has held this worktree's stack lock for a minute; giving up." >&2
-    echo "If nothing is running, remove $lock and retry." >&2
-    exit 1
+    echo "⚠️  perl is not available; running without a stack lock." >&2
 fi
+
+# Run something that outlives this script without handing it the lock. The
+# parent keeps the descriptor, so the lock still covers the wait.
+without_stack_lock() {
+    if [ -n "${GRAM_STACK_LOCK_FD:-}" ]; then
+        eval "exec ${GRAM_STACK_LOCK_FD}>&-"
+    fi
+    "$@"
+}
 
 # A boot builds the stack from nothing and ends by pausing it. Waking underneath
 # one races its migrations and its seed.
@@ -109,11 +111,12 @@ if [ -z "$containers" ]; then
     echo "No containers for this worktree yet — running a full boot instead."
     release_port
     rm -f "$gitdir/gram-stack-paused" "$gitdir/gram-stack-lastseen"
-    # Not `exec`: a bare `zero --agent` publishes no boot marker of its own, so
-    # this lock is the only thing keeping a pause or another wake off the
-    # containers while it migrates and seeds. Running it as a child keeps the
-    # EXIT trap, and with it the lock, until the boot is done.
-    INFRA_READINESS_TIMEOUT=300 ./zero --agent
+    # A bare `zero --agent` publishes no boot marker of its own, so the lock
+    # this script holds is the only thing keeping a pause or another wake off
+    # the containers while it migrates and seeds. Run it as a child with the
+    # descriptor closed -- this shell waits, so the lock covers the whole boot,
+    # but the daemons `zero` leaves running do not inherit and keep it.
+    (without_stack_lock env INFRA_READINESS_TIMEOUT=300 ./zero --agent)
     exit $?
 fi
 
@@ -124,7 +127,9 @@ docker compose --profile "*" start > /dev/null 2>&1 || true
 
 mise run infra:start
 release_port
-mise run start
+# pitchfork's daemons outlive this script; without this they would inherit the
+# lock descriptor and hold the lock until they are stopped.
+(without_stack_lock mise run start)
 
 # A stack that is up is no longer paused, is no longer failed (a `failed`
 # marker outranks `paused` in git:workstatus, so a recovered worktree would
