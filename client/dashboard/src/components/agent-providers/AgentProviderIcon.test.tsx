@@ -14,9 +14,12 @@ describe("CopilotIcon", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
 
-    render(<CopilotIcon />);
+    const { container } = render(<CopilotIcon />);
 
     expect(consoleError).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('svg[viewBox="0 0 24 24"]')?.getAttribute("fill"),
+    ).toBe("currentColor");
   });
 });
 
