@@ -58,9 +58,13 @@ function hasNoLinkedAccount(identity: IdentityModel): boolean {
 
 export default function IdentityDetailRoot(): JSX.Element {
   return (
-    // project:read, matching both the index and the server gate on
-    // identity.resolve. The admin-only panels gate themselves.
-    <RequireScope scope={["project:read"]} level="page">
+    // org:read, matching the server gate on identity.resolve — which is what
+    // this page opens with, so a project:read-only reader would otherwise get
+    // a rendered page that fails its first request rather than a straight
+    // answer about access. The roster stays on project:read: it reads project
+    // telemetry, not the directory. org:admin carries org:read as a sub-scope,
+    // and the admin-only panels gate themselves.
+    <RequireScope scope={["org:read"]} level="page">
       <IdentityDetailContent />
     </RequireScope>
   );
