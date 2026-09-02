@@ -38,7 +38,7 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	featureClient *Client
-	audit         *audit.Logger
+	mutator       *Mutator
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -54,6 +54,7 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
+	featureClient := NewClient(logger, tracerProvider, db, redisClient)
 	return &Service{
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
 		logger:        logger,
@@ -61,8 +62,8 @@ func NewService(
 		repo:          repo.New(db),
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
-		featureClient: NewClient(logger, tracerProvider, db, redisClient),
-		audit:         auditLogger,
+		featureClient: featureClient,
+		mutator:       NewMutator(featureClient, auditLogger),
 	}
 }
 
@@ -113,106 +114,30 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 }
 
 func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
-	authCtx, orgID, org, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	authCtx, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
 	if err != nil {
 		return err
 	}
-	featureName := string(payload.FeatureName)
+	feature := Feature(payload.FeatureName)
 
 	// Disabling skills is a silent no-op (skills are always on), so it stays
 	// available to org admins and resolves before the staff-only gate below.
-	if featureName == string(FeatureSkills) && !payload.Enabled {
+	if feature == FeatureSkills && !payload.Enabled {
 		return nil
 	}
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
-	if Feature(featureName).RequiresPlatformAdmin() {
+	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
 			return err
 		}
 	}
 
-	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(featureName)})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock feature cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-	}
-	defer releaseFeatureLock()
-
-	dbtx, err := lockConn.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin feature flag transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	// changed is derived from the write itself — the insert either landed or
-	// hit the active-row conflict, the soft delete either matched a live row
-	// or found none — so the audit below records exactly the transitions that
-	// commit, immune to read-then-write races.
-	q := repo.New(dbtx)
-	changed := false
-	if payload.Enabled && featureName == string(FeatureSkills) {
-		// Skills enablement also provisions the built-in RBAC grants, so it
-		// goes through its dedicated transactional path.
-		inserted, err := EnableSkillsTx(ctx, dbtx, orgID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable Skills feature").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		}
-		changed = inserted
-	} else if payload.Enabled {
-		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
-			OrganizationID: orgID,
-			FeatureName:    featureName,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		}
-		changed = inserted > 0
-	} else {
-		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
-			OrganizationID: orgID,
-			FeatureName:    featureName,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			// Already disabled — a no-op, mirroring how enabling an enabled
-			// feature is a no-op.
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "disable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		default:
-			changed = true
-		}
-	}
-
-	if changed {
-		if org == nil {
-			row, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, orgID)
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "read organization for feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-			}
-			org = &row
-		}
-		if err := s.audit.LogOrganizationProductFeatureToggled(ctx, dbtx, audit.LogOrganizationProductFeatureToggledEvent{
-			OrganizationID:   orgID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			OrganizationName: org.Name,
-			OrganizationSlug: org.Slug,
-			FeatureName:      featureName,
-			FeatureEnabled:   payload.Enabled,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "record feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		}
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-	}
-
-	_ = s.featureClient.storeFeatureCache(ctx, orgID, Feature(featureName), payload.Enabled, "failed to cache feature flag state")
-
-	return nil
+	return s.mutator.SetFeature(ctx, orgID, feature, payload.Enabled, MutationActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		DisplayName: authCtx.Email,
+	})
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
