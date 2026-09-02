@@ -148,7 +148,7 @@ export function DeleteSetDialog({
         summary: blocked
           ? blockingCount === 1
             ? "1 remote session client still signs with this set. Detach it there before deleting."
-            : `${blockingCount} remote session clients still sign with this set. Detach it there before deleting.`
+            : `${blockingCount} remote session clients still sign with this set. Detach it from each before deleting.`
           : preflightFailed
             ? "Could not check which remote session clients reference this set. Deleting is still refused by the server if any do."
             : "No remote session clients reference this set.",
