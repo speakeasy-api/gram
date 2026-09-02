@@ -1166,6 +1166,127 @@ FROM (
   WHERE (number + 1) % 2 = 1
 );
 
+-- Gateway (meta MCP) traffic for the Acme Agent Gateway, which fronts the
+-- four mcp_servers seeded in postgres.sql. Ids reproduce
+-- demo.det_uuid('gram-demo-metamcp-1') / ('gram-demo-mcpserver-<member>') /
+-- ('gram-demo-remotemcp-<member>') so ClickHouse rows join the Postgres rows.
+--
+-- Discovery calls (list_servers / describe_server / describe_tools) land under
+-- gram.event.source = meta_discovery with a "metamcp:" urn: the runtime never
+-- gives them a "tools:" urn, so they cannot count as tool calls (the query
+-- layer's classifier), and the seed mirrors that. execute_tool writes no row
+-- of its own: the member call below IS the row, stamped with the gateway id.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Gateway discovery: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwdisc-', toString(i))))),
+  concat(
+    '{"gram.event.source":"meta_discovery"',
+    ',"gram.meta_mcp_server.id":"', gateway, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.tool.urn":"metamcp:', gateway, ':', tool_name, '"',
+    ',"http.response.status_code":200',
+    ',"http.server.request.duration":', toString(round(0.02 + (cityHash64('gwd', i) % 40) / 100, 3)),
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.external_user.id":"', email, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('metamcp:', gateway, ':', tool_name),
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
+    concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
+           substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
+    -- Funnel shape: every walk lists, most describe a server, fewer pull schemas.
+    multiIf(number % 10 < 5, 'list_servers', number % 10 < 8, 'describe_server', 'describe_tools') AS tool_name,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu', number) % 6)) AS email,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh', number) % 11))
+      + toIntervalMinute(cityHash64('gwm', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(150)
+);
+
+-- Member calls dispatched through the gateway: ordinary tool_call rows for the
+-- member (hosted members keep the "tools:http:acme:" urn + toolset slug the
+-- direct path emits; remote members the "tools:externalmcp:<remote id>:" urn
+-- the proxy emits), plus gram.meta_mcp_server.id. One row serves the member's
+-- own usage, the gateway Activity section, and the MCP listing marker alike,
+-- so call totals never double. Ops carries most of the failures.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwcall-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"', tool_urn, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    if(toolset_slug != '', concat(',"gram.toolset.slug":"', toolset_slug, '"'), ''),
+    ',"gram.event.source":"tool_call"',
+    ',"gram.mcp_server.id":"', member, '"',
+    ',"gram.meta_mcp_server.id":"', gateway, '"',
+    ',"http.response.status_code":', toString(status),
+    ',"http.server.request.duration":', toString(round(0.05 + (cityHash64('gwc', i) % 300) / 100, 3)),
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.external_user.id":"', email, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  tool_urn,
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
+    concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
+           substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
+    -- Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
+    arrayElement(['support', 'support', 'support', 'support', 'support', 'ops', 'ops', 'ops', 'linear', 'slack'],
+                 1 + (cityHash64('gwmem', number) % 10)) AS mkey,
+    lower(hex(MD5(concat('gram-demo-mcpserver-', mkey)))) AS mh,
+    concat(substring(mh, 1, 8), '-', substring(mh, 9, 4), '-5', substring(mh, 14, 3), '-8',
+           substring(mh, 18, 3), '-', substring(mh, 21, 12)) AS member,
+    lower(hex(MD5(concat('gram-demo-remotemcp-', mkey)))) AS rh,
+    concat(substring(rh, 1, 8), '-', substring(rh, 9, 4), '-5', substring(rh, 14, 3), '-8',
+           substring(rh, 18, 3), '-', substring(rh, 21, 12)) AS remote,
+    multiIf(mkey = 'support', 'acme-support-tools', mkey = 'ops', 'acme-ops', '') AS toolset_slug,
+    multiIf(
+      mkey = 'support', arrayElement(['search_logs', 'get_customer', 'query_db', 'fetch_traces'], 1 + (cityHash64('gwt', number) % 4)),
+      mkey = 'ops', arrayElement(['list_deploys', 'check_health', 'get_metrics', 'process_refund'], 1 + (cityHash64('gwt', number) % 4)),
+      mkey = 'linear', arrayElement(['list_issues', 'create_issue', 'get_issue'], 1 + (cityHash64('gwt', number) % 3)),
+      arrayElement(['send_message', 'list_channels'], 1 + (cityHash64('gwt', number) % 2))) AS tool_name,
+    if(toolset_slug != '', concat('tools:http:acme:', tool_name), concat('tools:externalmcp:', remote, ':', tool_name)) AS tool_urn,
+    if((mkey = 'ops' AND cityHash64('gwerr', number) % 5 = 0) OR cityHash64('gwbg', number) % 40 = 0, 500, 200) AS status,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu2', number) % 6)) AS email,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh2', number) % 11))
+      + toIntervalMinute(cityHash64('gwm2', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(240)
+);
+
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
 -- exit for the runner) when violated.
@@ -1174,6 +1295,20 @@ SELECT throwIf(
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 1500,
   'demo seed postflight: expected >= 1500 demo telemetry rows');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND meta_mcp_server_id != ''
+     AND event_source = 'meta_discovery') < 150,
+  'demo seed postflight: gateway discovery rows missing');
+
+SELECT throwIf(
+  (SELECT uniqExact(mcp_server_id) FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND meta_mcp_server_id != ''
+     AND event_source = 'tool_call') < 4,
+  'demo seed postflight: gateway member calls do not cover every member');
 
 SELECT throwIf(
   (SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id IN
