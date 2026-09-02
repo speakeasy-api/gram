@@ -23,6 +23,9 @@ import { useShadowMCPInventoryServersForUser } from "@gram/client/react-query/sh
 
 const OFF = { throwOnError: false } as const;
 
+/** What access.listShadowMCPInventoryServersForUser accepts in one request. */
+const MAX_USER_KEYS = 200;
+
 /**
  * The window every identity panel reads, kept in the URL so a link to a
  * sub-page carries the range the sender was looking at.
@@ -42,6 +45,18 @@ export function useIdentityWindow(): { from: Date; to: Date } {
 export function useIdentityProject(): { slug: string; id: string } {
   const project = useProject();
   return { slug: project.slug, id: project.id };
+}
+
+/**
+ * Whether telemetry can be asked about this identity at all.
+ *
+ * The summary endpoint keys on a Gram user id or an agent-reported id, and an
+ * identity carrying neither — an api-key subject, say — is not a subject it
+ * can answer for. No request is made, so the tiles have nothing to show and
+ * must say that rather than stand at zero.
+ */
+export function hasMetricsSubject(identity: IdentityModel): boolean {
+  return !!(identity.userIds[0] || identity.externalUserIds[0]);
 }
 
 /**
@@ -257,10 +272,21 @@ export function useIdentityMember(identity: IdentityModel): {
   const membersQuery = useMembers(undefined, undefined, OFF);
   const userIds = new Set(identity.userIds);
   const emails = new Set(identity.emails.map((e) => e.toLowerCase()));
-  const member = membersQuery.data?.members.find(
-    (m) => userIds.has(m.id) || emails.has(m.email.toLowerCase()),
-  );
-  return { member, query: membersQuery };
+  const members = membersQuery.data?.members ?? [];
+  // The directory id settles it outright. An address does not: an
+  // unattributed subject carries whatever address an agent reported, and more
+  // than one member can claim it — an alias, a shared mailbox, a rotated
+  // account. Taking the first of several would attach a real person's roles
+  // and challenges to an identity that may not be theirs, so an ambiguous
+  // address resolves to nobody and the panels say the identity matches no
+  // member row.
+  const byUserId = members.find((m) => userIds.has(m.id));
+  if (byUserId) return { member: byUserId, query: membersQuery };
+  const byEmail = members.filter((m) => emails.has(m.email.toLowerCase()));
+  return {
+    member: byEmail.length === 1 ? byEmail[0] : undefined,
+    query: membersQuery,
+  };
 }
 
 /**
@@ -293,7 +319,15 @@ export function useIdentityShadowServers(
   const canReadRisk = useCanReadRisk();
   // Shadow MCP attributes usage to whatever the client reported, which is an
   // address for some agents and an agent-side id for others — pass both sets.
-  const userKeys = [...identity.emails, ...identity.externalUserIds];
+  // The endpoint caps the list at MAX_USER_KEYS and rejects anything longer,
+  // and a rejected request renders as an empty panel — "no shadow servers" —
+  // which is the one answer we would not have earned. Duplicates go first (an
+  // address is commonly both an email and the reported id), then the
+  // remainder is bounded so a subject with an unusual number of aliases still
+  // gets the reading for the identifiers we could carry.
+  const userKeys = [
+    ...new Set([...identity.emails, ...identity.externalUserIds]),
+  ].slice(0, MAX_USER_KEYS);
   return useShadowMCPInventoryServersForUser(
     { projectId: project.id, userKeys, from, to, limit },
     undefined,
@@ -328,6 +362,8 @@ export function useIdentityPeers(
   peers: UserSummary[];
   self: UserSummary | undefined;
   isPending: boolean;
+  isError: boolean;
+  refetch: () => void;
 } {
   const client = useGramContext();
   const organization = useOrganization();
@@ -353,5 +389,7 @@ export function useIdentityPeers(
         identifiers.has((summary.userId || "").toLowerCase()),
     ),
     isPending: query.isPending,
+    isError: query.isError,
+    refetch: () => void query.refetch(),
   };
 }

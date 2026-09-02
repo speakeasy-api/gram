@@ -83,6 +83,8 @@ export default function IdentityOverview(): JSX.Element {
     peers,
     self,
     isPending: peersPending,
+    isError: peersFailed,
+    refetch: refetchPeers,
   } = useIdentityPeers(identity, from, to);
 
   // isLoading rather than isPending throughout: a query held behind `enabled`
@@ -94,6 +96,24 @@ export default function IdentityOverview(): JSX.Element {
     shadowQuery.isLoading ||
     devicesQuery.isLoading ||
     peersPending;
+
+  // Every feed below contributes items to one list, so a single failed read
+  // silently shortens it — and an empty list here reads as "nothing
+  // outstanding", which is the one thing a security summary must not say on
+  // data it never received.
+  const attentionFailed =
+    riskQuery.isError ||
+    challengesQuery.isError ||
+    shadowQuery.isError ||
+    devicesQuery.isError ||
+    peersFailed;
+  const retryAttention = () => {
+    void riskQuery.refetch();
+    void challengesQuery.refetch();
+    void shadowQuery.refetch();
+    void devicesQuery.refetch();
+    refetchPeers();
+  };
 
   // Which surfaces the work came through. Rides on the roster row, like the
   // accounts below it — the per-user summary carries neither.
@@ -199,6 +219,8 @@ export default function IdentityOverview(): JSX.Element {
           title="Needs attention"
           loading={attentionLoading}
           loadingRows={2}
+          error={attentionFailed}
+          onRetry={retryAttention}
           footer={
             attention.length > 0
               ? `${attention.length} item${attention.length === 1 ? "" : "s"}`
@@ -291,7 +313,7 @@ export default function IdentityOverview(): JSX.Element {
             feeds: two people with the same tool count can be running one CLI
             or juggling four, and that changes what the rest of the page
             means. Usage carries the same reading beside its tool volumes. */}
-        {(peersPending || platforms.length > 0) && (
+        {(peersPending || peersFailed || platforms.length > 0) && (
           <IdentityPanel
             title="Platforms"
             handoffLabel="Usage"
@@ -299,6 +321,8 @@ export default function IdentityOverview(): JSX.Element {
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"
+            error={peersFailed}
+            onRetry={refetchPeers}
           >
             <ShareBar
               segments={platforms.map((platform) => ({
@@ -317,6 +341,8 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Audit Logs"
             handoffHref={handoffs.auditLogs}
             loading={auditQuery.isLoading}
+            error={auditQuery.isError}
+            onRetry={() => void auditQuery.refetch()}
             footer={
               logs.length > 0
                 ? `Actor filtered to ${identity.displayName}`
@@ -346,6 +372,8 @@ export default function IdentityOverview(): JSX.Element {
             handoffLabel="Agent Sessions"
             handoffHref={handoffs.agentSessions}
             loading={chatsQuery.isLoading}
+            error={chatsQuery.isError}
+            onRetry={() => void chatsQuery.refetch()}
             footer={
               chatsQuery.data
                 ? `${chatsQuery.data.total ?? chats.length} session${

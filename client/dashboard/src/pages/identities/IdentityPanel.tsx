@@ -18,6 +18,8 @@ export function IdentityPanel({
   loading = false,
   loadingRows,
   loadingVariant,
+  error = false,
+  onRetry,
   children,
   className,
   contentClassName,
@@ -40,6 +42,18 @@ export function IdentityPanel({
   loading?: boolean;
   loadingRows?: number;
   loadingVariant?: IdentityPanelSkeletonVariant;
+  /**
+   * Whether this panel's own request came back an error.
+   *
+   * A failed read leaves the same empty data a quiet window does, and every
+   * panel here words that emptiness as a finding — "no roles assigned", "no
+   * managed device assigned", "not enrolled". Rendering those off a request
+   * that never landed states something about the person that we do not know,
+   * so a failure gets said outright instead.
+   */
+  error?: boolean;
+  /** Retries the failed request. Omit for a panel with nothing to retry. */
+  onRetry?: () => void;
   children: React.ReactNode;
   className?: string;
   /**
@@ -66,14 +80,21 @@ export function IdentityPanel({
           </Link>
         )}
       </header>
-      <div className={cn("flex-1", loading ? undefined : contentClassName)}>
+      <div
+        className={cn(
+          "flex-1",
+          loading || error ? undefined : contentClassName,
+        )}
+      >
         {loading ? (
           <IdentityPanelSkeleton rows={loadingRows} variant={loadingVariant} />
+        ) : error ? (
+          <IdentityPanelFailed onRetry={onRetry} />
         ) : (
           children
         )}
       </div>
-      {footer && !loading && (
+      {footer && !loading && !error && (
         <footer className="border-border border-t px-4 py-2.5">
           <Text variant="small" muted className="text-xs">
             {footer}
@@ -124,6 +145,33 @@ function IdentityPanelSkeleton({
           <Skeleton className="h-3 w-12 shrink-0" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * What a panel shows in place of its body when its request failed: the fact of
+ * the failure, and the way out of it.
+ */
+function IdentityPanelFailed({
+  onRetry,
+}: {
+  onRetry?: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col items-start gap-2 px-4 py-6">
+      <Text variant="small" muted className="text-xs">
+        This panel could not be loaded.
+      </Text>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-xs text-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Try again
+        </button>
+      )}
     </div>
   );
 }

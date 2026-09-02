@@ -13,6 +13,7 @@ import { SplitRankedBarList } from "@/components/chart/SplitRankedBarList";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  hasMetricsSubject,
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
@@ -41,13 +42,25 @@ export default function IdentityUsage(): JSX.Element {
   const metrics = metricsQuery.data?.metrics;
   const tools = [...(metrics?.tools ?? [])].sort((a, b) => b.count - a.count);
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
+  // Zero tool calls is a finding about how someone works, and neither of these
+  // earned it: an unsupported subject was never asked about, and a failed read
+  // did not come back.
+  const unsupported = !hasMetricsSubject(identity);
+  const metricsUnavailable = unsupported || metricsQuery.isError;
+  const tileValue = metricsUnavailable ? "—" : undefined;
+  const tileTooltip = unsupported
+    ? "This identity carries no identifier the usage endpoint can key on."
+    : metricsQuery.isError
+      ? "Usage could not be loaded."
+      : undefined;
 
   // hookSources rides on the roster row, not the per-user summary.
-  const { self, isPending: peersPending } = useIdentityPeers(
-    identity,
-    from,
-    to,
-  );
+  const {
+    self,
+    isPending: peersPending,
+    isError: peersFailed,
+    refetch: refetchPeers,
+  } = useIdentityPeers(identity, from, to);
   const agents = [...(self?.hookSources ?? [])]
     .filter((source) => source.source && source.eventCount > 0)
     .sort((a, b) => b.eventCount - a.eventCount);
@@ -75,6 +88,8 @@ export default function IdentityUsage(): JSX.Element {
               <StatTile
                 title="Tool calls"
                 value={metrics?.totalToolCalls ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="information"
                 icon="wrench"
@@ -82,15 +97,21 @@ export default function IdentityUsage(): JSX.Element {
               <StatTile
                 title="Failed calls"
                 value={metrics?.toolCallFailure ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone={
-                  (metrics?.toolCallFailure ?? 0) > 0 ? "warning" : "neutral"
+                  !metricsUnavailable && (metrics?.toolCallFailure ?? 0) > 0
+                    ? "warning"
+                    : "neutral"
                 }
                 icon="triangle-alert"
               />
               <StatTile
                 title="Chat requests"
                 value={metrics?.totalChatRequests ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="information"
                 icon="message-square"
@@ -98,6 +119,8 @@ export default function IdentityUsage(): JSX.Element {
               <StatTile
                 title="Tokens"
                 value={metrics?.totalTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="neutral"
                 icon="hash"
@@ -110,12 +133,14 @@ export default function IdentityUsage(): JSX.Element {
             tool counts can be running one CLI or juggling four, and nothing
             else on the page says which — the per-user summary does not carry
             it, only the roster row does. */}
-        {(peersPending || agents.length > 0) && (
+        {(peersPending || peersFailed || agents.length > 0) && (
           <IdentityPanel
             title="Agents"
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"
+            error={peersFailed}
+            onRetry={refetchPeers}
           >
             <ShareBar
               segments={agents.map((agent) => ({
@@ -139,6 +164,8 @@ export default function IdentityUsage(): JSX.Element {
           handoffHref={handoffs.toolLogs}
           loading={metricsQuery.isLoading}
           loadingVariant="block"
+          error={metricsQuery.isError}
+          onRetry={() => void metricsQuery.refetch()}
           footer={
             tools.length > TOP_TOOLS
               ? `Top ${TOP_TOOLS} of ${tools.length} tools by call volume`
@@ -147,7 +174,9 @@ export default function IdentityUsage(): JSX.Element {
         >
           {tools.length === 0 ? (
             <IdentityPanelEmpty>
-              No tool calls in this window.
+              {unsupported
+                ? "Tool calls are not recorded for this kind of identity."
+                : "No tool calls in this window."}
             </IdentityPanelEmpty>
           ) : (
             <div className="px-4 py-4">

@@ -84,6 +84,8 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
+          error={riskQuery.isError}
+          onRetry={() => void riskQuery.refetch()}
           footer={
             matchedOn > 0
               ? `Matched on ${matchedOn} identifier${matchedOn === 1 ? "" : "s"}`
@@ -115,6 +117,8 @@ export default function IdentitySecurity(): JSX.Element {
           handoffHref={handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
+          error={riskQuery.isError}
+          onRetry={() => void riskQuery.refetch()}
           footer={
             rules.length > TOP_RULES
               ? `Top ${TOP_RULES} of ${rules.length} rules`
@@ -145,6 +149,8 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Shadow MCP"
           handoffHref={handoffs.shadowMcp}
           loading={shadowQuery.isLoading}
+          error={shadowQuery.isError}
+          onRetry={() => void shadowQuery.refetch()}
           footer="Servers this person reached in this window, not the project-wide inventory."
         >
           {shadowServers.length === 0 ? (
@@ -173,6 +179,8 @@ export default function IdentitySecurity(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
           loading={challengesQuery.isLoading}
+          error={challengesQuery.isError}
+          onRetry={() => void challengesQuery.refetch()}
           footer={
             denied.length > 0
               ? `${denied.filter((c) => !c.resolvedAt).length} still unresolved`

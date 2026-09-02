@@ -46,11 +46,12 @@ export default function IdentityDevices(): JSX.Element {
   // Linked accounts ride on the roster row, not the per-user summary, so this
   // is the same read the Usage tab already makes for its agent surfaces.
   const { from, to } = useIdentityWindow();
-  const { self, isPending: peersPending } = useIdentityPeers(
-    identity,
-    from,
-    to,
-  );
+  const {
+    self,
+    isPending: peersPending,
+    isError: peersFailed,
+    refetch: refetchPeers,
+  } = useIdentityPeers(identity, from, to);
   const accounts = (self?.accounts ?? []).map((account) => ({
     email: account.email ?? "",
     provider: account.provider,
@@ -134,6 +135,14 @@ export default function IdentityDevices(): JSX.Element {
         <IdentityPanel
           title="Enrollment"
           loading={peersPending || devicesQuery.isLoading}
+          // Every step below reads off data that failed to arrive as a "No",
+          // and the footer then concludes "Not enrolled" — the worst possible
+          // wrong answer on this page.
+          error={peersFailed || devicesQuery.isError}
+          onRetry={() => {
+            refetchPeers();
+            void devicesQuery.refetch();
+          }}
           footer={
             enrolled
               ? "Enrolled: the directory knows this person and we have seen them work."
@@ -157,6 +166,8 @@ export default function IdentityDevices(): JSX.Element {
         <IdentityPanel
           title="Linked accounts"
           loading={peersPending}
+          error={peersFailed}
+          onRetry={refetchPeers}
           footer={
             accounts.length > 0
               ? `${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}${
@@ -192,6 +203,8 @@ export default function IdentityDevices(): JSX.Element {
           handoffLabel="Device Agent"
           handoffHref={handoffs.deviceAgent}
           loading={devicesQuery.isLoading}
+          error={devicesQuery.isError}
+          onRetry={() => void devicesQuery.refetch()}
           footer={
             // Devices match on the id OR on the MDM-reported email, because a
             // device only carries a user id when that email resolved.

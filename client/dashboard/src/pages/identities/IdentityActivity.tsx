@@ -50,6 +50,13 @@ export default function IdentityActivity(): JSX.Element {
   // isLoading rather than isPending: the chat query is held behind `enabled`
   // for a viewer without chat:read, and that is a refusal to fetch, not a wait.
   const activityLoading = auditQuery.isLoading || chatsQuery.isLoading;
+  // The chart draws both series as one shape, so a failed half would read as
+  // a quiet fortnight rather than as data that never arrived.
+  const activityFailed = auditQuery.isError || chatsQuery.isError;
+  const retryActivity = () => {
+    void auditQuery.refetch();
+    void chatsQuery.refetch();
+  };
 
   const logDates = logs.map((log) => new Date(log.createdAt));
   const chatDates = chats
@@ -69,11 +76,16 @@ export default function IdentityActivity(): JSX.Element {
           this tab can add is the shape of the window: two people with
           identical row lists can work in daily drips or in two long bursts,
           and only the columns tell them apart. */}
-      {(activityLoading || logDates.length > 0 || chatDates.length > 0) && (
+      {(activityLoading ||
+        activityFailed ||
+        logDates.length > 0 ||
+        chatDates.length > 0) && (
         <IdentityPanel
           title="Activity by day"
           loading={activityLoading}
           loadingVariant="block"
+          error={activityFailed}
+          onRetry={retryActivity}
         >
           <div className="px-4 py-4">
             <DailyActivityChart
@@ -95,6 +107,8 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.auditLogs}
           loading={auditQuery.isLoading}
           loadingRows={RECENT_ROWS}
+          error={auditQuery.isError}
+          onRetry={() => void auditQuery.refetch()}
           footer={
             // Audit logs key on the Gram user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
@@ -133,6 +147,8 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.agentSessions}
           loading={chatsQuery.isLoading}
           loadingRows={RECENT_ROWS}
+          error={chatsQuery.isError}
+          onRetry={() => void chatsQuery.refetch()}
           footer={
             chatsQuery.data
               ? `${chatsQuery.data.total ?? chats.length} session${

@@ -13,6 +13,7 @@ import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  hasMetricsSubject,
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
@@ -37,6 +38,18 @@ export default function IdentityCost(): JSX.Element {
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
+  // Zero is a finding, and neither of these earned it: an unsupported subject
+  // was never asked about, and a failed read did not come back. Both would
+  // otherwise render "$0" and "no token usage in this window" — a bill this
+  // person did not run up.
+  const unsupported = !hasMetricsSubject(identity);
+  const metricsUnavailable = unsupported || metricsQuery.isError;
+  const tileValue = metricsUnavailable ? "—" : undefined;
+  const tileTooltip = unsupported
+    ? "This identity carries no identifier the usage endpoint can key on."
+    : metricsQuery.isError
+      ? "Usage could not be loaded."
+      : undefined;
 
   const { peers } = useIdentityPeers(identity, from, to);
   const spend = metrics?.totalCost ?? 0;
@@ -90,8 +103,10 @@ export default function IdentityCost(): JSX.Element {
             <>
               <StatTile
                 title="Spend"
-                subtext={costStanding}
+                subtext={metricsUnavailable ? undefined : costStanding}
                 value={metrics?.totalCost ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="currency"
                 tone="neutral"
                 icon="credit-card"
@@ -99,6 +114,8 @@ export default function IdentityCost(): JSX.Element {
               <StatTile
                 title="Input tokens"
                 value={metrics?.totalInputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="neutral"
                 icon="arrow-down-to-line"
@@ -106,6 +123,8 @@ export default function IdentityCost(): JSX.Element {
               <StatTile
                 title="Output tokens"
                 value={metrics?.totalOutputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="neutral"
                 icon="arrow-up-from-line"
@@ -113,6 +132,8 @@ export default function IdentityCost(): JSX.Element {
               <StatTile
                 title="Cache reads"
                 value={metrics?.cacheReadInputTokens ?? 0}
+                displayValue={tileValue}
+                tooltip={tileTooltip}
                 format="compact"
                 tone="neutral"
                 icon="database"
@@ -132,11 +153,15 @@ export default function IdentityCost(): JSX.Element {
             handoffHref={handoffs.costs}
             loading={metricsQuery.isLoading}
             loadingVariant="block"
+            error={metricsQuery.isError}
+            onRetry={() => void metricsQuery.refetch()}
             footer={cacheShareLabel}
           >
             {tokenSegments.length === 0 ? (
               <IdentityPanelEmpty>
-                No token usage in this window.
+                {unsupported
+                  ? "Token usage is not recorded for this kind of identity."
+                  : "No token usage in this window."}
               </IdentityPanelEmpty>
             ) : (
               <div className="px-4 py-4">
@@ -154,6 +179,8 @@ export default function IdentityCost(): JSX.Element {
             handoffHref={handoffs.costs}
             loading={metricsQuery.isLoading}
             loadingVariant="block"
+            error={metricsQuery.isError}
+            onRetry={() => void metricsQuery.refetch()}
             footer={
               // Cost aggregates over every address the subject is known by,
               // which is why this can exceed what one address alone would show.
@@ -164,7 +191,9 @@ export default function IdentityCost(): JSX.Element {
           >
             {models.length === 0 ? (
               <IdentityPanelEmpty>
-                No model usage in this window.
+                {unsupported
+                  ? "Model usage is not recorded for this kind of identity."
+                  : "No model usage in this window."}
               </IdentityPanelEmpty>
             ) : (
               <div className="px-4 py-4">

@@ -43,8 +43,15 @@ export default function IdentityAccess(): JSX.Element {
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   const challengesQuery = useIdentityChallenges(identity, from, to);
   // Roles are the join of the member row and the role catalogue, so both have
-  // to land before the panels can say anything true about them.
+  // to land before the panels can say anything true about them — and if either
+  // read fails, "no roles assigned in this organization" is a claim about
+  // someone's access made from data we never received.
   const rolesLoading = rolesQuery.isLoading || membersQuery.isLoading;
+  const rolesFailed = rolesQuery.isError || membersQuery.isError;
+  const retryRoles = () => {
+    void rolesQuery.refetch();
+    void membersQuery.refetch();
+  };
 
   const rolesById = new Map(
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
@@ -91,6 +98,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.roles}
           loading={rolesLoading}
           loadingVariant="block"
+          error={rolesFailed}
+          onRetry={retryRoles}
           footer={
             member ? undefined : "No org member row resolves to this identity."
           }
@@ -128,6 +137,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.roles}
           loading={rolesLoading}
+          error={rolesFailed}
+          onRetry={retryRoles}
           footer={
             permissions.length > 0
               ? "Granted by the roles above, across every project."
@@ -161,6 +172,8 @@ export default function IdentityAccess(): JSX.Element {
           handoffHref={handoffs.challenges}
           loading={challengesQuery.isLoading}
           loadingRows={RECENT_CHALLENGES}
+          error={challengesQuery.isError}
+          onRetry={() => void challengesQuery.refetch()}
           footer={
             challenges.length > 0
               ? `${denied.length} denied of ${challenges.length} recorded`
