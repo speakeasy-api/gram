@@ -1238,11 +1238,13 @@ const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionCl
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = $1
 WHERE id = $2
+  AND project_id = $3
 `
 
 type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ID                      uuid.UUID
+	ProjectID               uuid.NullUUID
 }
 
 // TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
@@ -1252,7 +1254,7 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 // it. Lives beside the invariant it bypasses rather than in shared testenv,
 // because only this package's tests construct the impossible state.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID)
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

@@ -559,51 +559,6 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 	return items, nil
 }
 
-const listRemoteSessionClientsForJsonWebKeySet = `-- name: ListRemoteSessionClientsForJsonWebKeySet :many
-SELECT id, client_id
-FROM remote_session_clients
-WHERE organization_id = $1::text
-  AND json_web_key_set_id = $2::uuid
-  AND deleted IS FALSE
-ORDER BY created_at ASC, id ASC
-LIMIT $3
-`
-
-type ListRemoteSessionClientsForJsonWebKeySetParams struct {
-	OrganizationID  string
-	JsonWebKeySetID uuid.UUID
-	LimitValue      int32
-}
-
-type ListRemoteSessionClientsForJsonWebKeySetRow struct {
-	ID       uuid.UUID
-	ClientID string
-}
-
-// The referencing clients the preflight lists back to the administrator, oldest
-// first so the listing is stable across calls. Capped: the count above is the
-// authoritative number and this is only the label list, so a set referenced by
-// more clients than the cap reports a truncated list against a full count.
-func (q *Queries) ListRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg ListRemoteSessionClientsForJsonWebKeySetParams) ([]ListRemoteSessionClientsForJsonWebKeySetRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsForJsonWebKeySet, arg.OrganizationID, arg.JsonWebKeySetID, arg.LimitValue)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRemoteSessionClientsForJsonWebKeySetRow
-	for rows.Next() {
-		var i ListRemoteSessionClientsForJsonWebKeySetRow
-		if err := rows.Scan(&i.ID, &i.ClientID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockExternalKeyForJwksWrite = `-- name: LockExternalKeyForJwksWrite :one
 SELECT id, provider, algorithm
 FROM external_keys
@@ -848,6 +803,52 @@ func (q *Queries) SoftDeleteJsonWebKeySet(ctx context.Context, arg SoftDeleteJso
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const summarizeRemoteSessionClientsForJsonWebKeySet = `-- name: SummarizeRemoteSessionClientsForJsonWebKeySet :one
+SELECT
+    COUNT(*) AS client_count,
+    COALESCE(
+        (array_agg(client_id ORDER BY created_at, id))[1:$1::int],
+        '{}'::text[]
+    )::text[] AS client_ids
+FROM remote_session_clients
+WHERE organization_id = $2::text
+  AND json_web_key_set_id = $3::uuid
+  AND deleted IS FALSE
+`
+
+type SummarizeRemoteSessionClientsForJsonWebKeySetParams struct {
+	LimitValue      int32
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+}
+
+type SummarizeRemoteSessionClientsForJsonWebKeySetRow struct {
+	ClientCount int64
+	ClientIds   []string
+}
+
+// The impact summary the delete preflight reports: how many live clients
+// reference the set, and a capped list of them to name.
+//
+// One statement rather than a count plus a listing. Two statements cannot be
+// made consistent by wrapping them in a transaction, because PostgreSQL's
+// default READ COMMITTED gives every statement its own snapshot, so a client
+// attaching or detaching between them would let the preflight report a count
+// its own list contradicts. Raising the isolation level would also work, but
+// then the guarantee lives in the caller and silently disappears if anyone
+// changes how the transaction is opened; here it is structural.
+//
+// The count is unbounded and authoritative while the list is capped, so a set
+// referenced by more clients than the cap reports a truncated list against a
+// full count. array_agg returns NULL over an empty group, hence the COALESCE.
+// Ordered oldest first so the listing is stable across calls.
+func (q *Queries) SummarizeRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg SummarizeRemoteSessionClientsForJsonWebKeySetParams) (SummarizeRemoteSessionClientsForJsonWebKeySetRow, error) {
+	row := q.db.QueryRow(ctx, summarizeRemoteSessionClientsForJsonWebKeySet, arg.LimitValue, arg.OrganizationID, arg.JsonWebKeySetID)
+	var i SummarizeRemoteSessionClientsForJsonWebKeySetRow
+	err := row.Scan(&i.ClientCount, &i.ClientIds)
 	return i, err
 }
 

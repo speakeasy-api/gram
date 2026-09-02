@@ -271,7 +271,7 @@ func TestDetachClientKeySet_RefusedForPrivateKeyJWT(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	forceTokenEndpointAuthMethod(t, ctx, ti.conn, uuid.MustParse(clientID), "private_key_jwt")
+	forceTokenEndpointAuthMethod(t, ctx, ti.conn, uuid.MustParse(clientID), *authCtx.ProjectID, "private_key_jwt")
 
 	_, err = ti.service.DetachClientKeySet(ctx, &orgclientsgen.DetachClientKeySetPayload{
 		SessionToken: nil,

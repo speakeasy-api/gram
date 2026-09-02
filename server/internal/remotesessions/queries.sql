@@ -2424,4 +2424,5 @@ ORDER BY link.user_session_issuer_id;
 -- name: ForceRemoteSessionClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = @token_endpoint_auth_method
-WHERE id = @id;
+WHERE id = @id
+  AND project_id = @project_id;

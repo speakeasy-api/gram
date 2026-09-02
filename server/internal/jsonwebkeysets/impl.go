@@ -343,9 +343,9 @@ func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*g
 // before they confirm it.
 //
 // Unlike the remote_session_client delete preflight, which is informational
-// because that delete cascades, this one predicts a real refusal: it runs the
-// same count DeleteSet runs, so a non-zero client_count here is exactly the
-// condition that returns a conflict there. A missing set reports zero rather
+// because that delete cascades, this one predicts a real refusal: it counts
+// live references over the same predicate DeleteSet refuses on, so a non-zero
+// client_count here is exactly the condition that returns a conflict there. A missing set reports zero rather
 // than 404, matching DeleteSet's own idempotent treatment of an absent id.
 func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.GetSetDeletePreflightPayload) (*gensvc.JSONWebKeySetDeletePreflight, error) {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
@@ -358,47 +358,18 @@ func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.Get
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid key set id").LogError(ctx, logger)
 	}
 
-	// One transaction for both reads. They are separate queries because the count
-	// is unbounded and the listing is capped, and a client attaching or detaching
-	// between them would otherwise let the preflight report a count that its own
-	// list contradicts.
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	q := repo.New(dbtx)
-
-	count, err := q.CountRemoteSessionClientsForJsonWebKeySet(ctx, repo.CountRemoteSessionClientsForJsonWebKeySetParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		JsonWebKeySetID: id,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error counting key set references").LogError(ctx, logger)
-	}
-
-	rows, err := q.ListRemoteSessionClientsForJsonWebKeySet(ctx, repo.ListRemoteSessionClientsForJsonWebKeySetParams{
+	summary, err := repo.New(s.db).SummarizeRemoteSessionClientsForJsonWebKeySet(ctx, repo.SummarizeRemoteSessionClientsForJsonWebKeySetParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		JsonWebKeySetID: id,
 		LimitValue:      keySetClientListingCap,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing key set references").LogError(ctx, logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
 	}
 
-	clientIDs := make([]string, 0, len(rows))
-	for _, row := range rows {
-		clientIDs = append(clientIDs, row.ClientID)
-	}
-
 	return &gensvc.JSONWebKeySetDeletePreflight{
-		ClientCount: int(count),
-		ClientIds:   clientIDs,
+		ClientCount: int(summary.ClientCount),
+		ClientIds:   summary.ClientIds,
 	}, nil
 }
 

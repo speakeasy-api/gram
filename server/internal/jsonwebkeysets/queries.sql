@@ -280,15 +280,29 @@ WHERE organization_id = @organization_id::text
   AND json_web_key_set_id = @json_web_key_set_id::uuid
   AND deleted IS FALSE;
 
--- The referencing clients the preflight lists back to the administrator, oldest
--- first so the listing is stable across calls. Capped: the count above is the
--- authoritative number and this is only the label list, so a set referenced by
--- more clients than the cap reports a truncated list against a full count.
--- name: ListRemoteSessionClientsForJsonWebKeySet :many
-SELECT id, client_id
+-- The impact summary the delete preflight reports: how many live clients
+-- reference the set, and a capped list of them to name.
+--
+-- One statement rather than a count plus a listing. Two statements cannot be
+-- made consistent by wrapping them in a transaction, because PostgreSQL's
+-- default READ COMMITTED gives every statement its own snapshot, so a client
+-- attaching or detaching between them would let the preflight report a count
+-- its own list contradicts. Raising the isolation level would also work, but
+-- then the guarantee lives in the caller and silently disappears if anyone
+-- changes how the transaction is opened; here it is structural.
+--
+-- The count is unbounded and authoritative while the list is capped, so a set
+-- referenced by more clients than the cap reports a truncated list against a
+-- full count. array_agg returns NULL over an empty group, hence the COALESCE.
+-- Ordered oldest first so the listing is stable across calls.
+-- name: SummarizeRemoteSessionClientsForJsonWebKeySet :one
+SELECT
+    COUNT(*) AS client_count,
+    COALESCE(
+        (array_agg(client_id ORDER BY created_at, id))[1:sqlc.arg('limit_value')::int],
+        '{}'::text[]
+    )::text[] AS client_ids
 FROM remote_session_clients
 WHERE organization_id = @organization_id::text
   AND json_web_key_set_id = @json_web_key_set_id::uuid
-  AND deleted IS FALSE
-ORDER BY created_at ASC, id ASC
-LIMIT sqlc.arg('limit_value');
+  AND deleted IS FALSE;

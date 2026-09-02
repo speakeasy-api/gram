@@ -651,12 +651,13 @@ func createJsonWebKeySet(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 // forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum
 // does not yet accept. private_key_jwt arrives with AIM-156; until then the only
 // way to exercise the rules that guard it is to plant the value directly.
-func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, method string) {
+func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 
 	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
 		TokenEndpointAuthMethod: conv.ToPGText(method),
 		ID:                      clientID,
+		ProjectID:               conv.ToNullUUID(projectID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)

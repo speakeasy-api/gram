@@ -820,7 +820,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in
 	// a way a field patch cannot express, and it is invalid by construction on
 	// the global clients that share UpdateRemoteSessionClientForm.
-	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, whose private half signs its private_key_jwt assertions. Null when no key set is attached; a set can be attached before token_endpoint_auth_method is switched over to use it.", func() {
+	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
