@@ -72,6 +72,11 @@ func (s *Service) mirrorToolset(ctx context.Context, dbtx pgx.Tx, authCtx *conte
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "create mcp server for toolset").LogError(ctx, logger)
 		}
+		if toolset.UserSessionIssuerID.Valid {
+			if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{toolset.UserSessionIssuerID.UUID}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuer").LogError(ctx, logger)
+			}
+		}
 		deadDomain := toolset.CustomDomainID.Valid && deadDomains[toolset.CustomDomainID.UUID]
 		return s.mirrorToolsetAddress(ctx, dbtx, logger, authCtx, previous, toolset, wrapper, nil, deadDomain)
 	case err != nil:

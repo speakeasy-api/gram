@@ -3,6 +3,7 @@ package mcpservers_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,10 +17,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // seedHostedToolset inserts a live, addressable hosted toolset the way the
@@ -284,4 +290,262 @@ func TestUpdateMcpServer_ToolsetBacked_PrivateDetachesExternalOAuth(t *testing.T
 	detachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
 	require.NoError(t, err)
 	require.Equal(t, detachesBefore+1, detachesAfter)
+}
+
+// A hosted wrapper never owns its issuer: deleting it leaves the toolset's
+// issuer, its sessions, and its external OAuth reference in place.
+func TestDeleteMcpServer_ToolsetBacked_KeepsToolsetIssuerAndOAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     pgtype.Text{String: "", Valid: false},
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	created := createHostedServer(t, ctx, ti, toolset.ID, "public")
+	oauth, err := oauthrepo.New(ti.conn).CreateExternalOAuthServerMetadata(ctx, oauthrepo.CreateExternalOAuthServerMetadataParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "ext-" + uuid.NewString()[:8],
+		Metadata:  []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetExternalOAuthServer(ctx, toolsetsrepo.UpdateToolsetExternalOAuthServerParams{
+		ExternalOauthServerID: uuid.NullUUID{UUID: oauth.ID, Valid: true},
+		Slug:                  toolset.Slug,
+		ProjectID:             *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	session, err := usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		UserSessionIssuerID: issuer.ID,
+		UserSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SubjectUrn:          urn.NewUserSubject(uuid.NewString()),
+		Jti:                 "jti-" + uuid.NewString(),
+		RefreshTokenHash:    "hash-" + uuid.NewString(),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
+		ToolSelection:       nil,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	}))
+
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:             issuer.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err, "the toolset's issuer must survive its wrapper")
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: issuer.ID,
+		Jti:                 session.Jti,
+	})
+	require.NoError(t, err, "sessions minted against the toolset's issuer must survive")
+
+	after := getToolset(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.False(t, after.McpEnabled)
+	require.False(t, after.UserSessionIssuerID.Valid)
+	require.Equal(t, uuid.NullUUID{UUID: oauth.ID, Valid: true}, after.ExternalOauthServerID, "hosting removal does not detach external OAuth")
+}
+
+// Hosted servers are attached to the Default plugin toolset-keyed until
+// AIS-638; enabling through the wrapper must not add a server-keyed twin.
+func TestUpdateMcpServer_ToolsetBacked_EnableSkipsDefaultPluginAttach(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID:    defaultPlugin.ID,
+		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		DisplayName: toolset.Name,
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	created := createHostedServer(t, ctx, ti, toolset.ID, "disabled")
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            toolset.McpSlug.String,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    created.ID,
+		Name:                  nil,
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             conv.PtrEmpty(toolset.ID.String()),
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Equal(t, uuid.NullUUID{UUID: toolset.ID, Valid: true}, servers[0].ToolsetID)
+	require.False(t, servers[0].McpServerID.Valid)
+}
+
+// Disabling through the wrapper keeps external OAuth attached, as the toolset
+// path's disable does; only an enabled public->private flip detaches it.
+func TestUpdateMcpServer_ToolsetBacked_DisableKeepsExternalOAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	created := createHostedServer(t, ctx, ti, toolset.ID, "public")
+	oauth, err := oauthrepo.New(ti.conn).CreateExternalOAuthServerMetadata(ctx, oauthrepo.CreateExternalOAuthServerMetadataParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "ext-" + uuid.NewString()[:8],
+		Metadata:  []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetExternalOAuthServer(ctx, toolsetsrepo.UpdateToolsetExternalOAuthServerParams{
+		ExternalOauthServerID: uuid.NullUUID{UUID: oauth.ID, Valid: true},
+		Slug:                  toolset.Slug,
+		ProjectID:             *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	update := func(visibility string) {
+		t.Helper()
+		_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+			SessionToken:          nil,
+			ApikeyToken:           nil,
+			ProjectSlugInput:      nil,
+			ID:                    created.ID,
+			Name:                  nil,
+			EnvironmentID:         nil,
+			RemoteMcpServerID:     nil,
+			TunneledMcpServerID:   nil,
+			ToolsetID:             conv.PtrEmpty(toolset.ID.String()),
+			UnproxiedMcpServerID:  nil,
+			ToolVariationsGroupID: nil,
+			Visibility:            types.McpServerVisibility(visibility),
+		})
+		require.NoError(t, err)
+	}
+
+	update("disabled")
+	after := getToolset(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.False(t, after.McpEnabled)
+	require.Equal(t, uuid.NullUUID{UUID: oauth.ID, Valid: true}, after.ExternalOauthServerID)
+
+	update("public")
+	update("private")
+	after = getToolset(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.True(t, after.McpEnabled)
+	require.False(t, after.ExternalOauthServerID.Valid)
+}
+
+// Adopting a toolset issuer derives remote_session_issuer_id at creation, as a
+// later issuer change through the mirror would.
+func TestCreateMcpServer_ToolsetBacked_DerivesRemoteSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     pgtype.Text{String: "", Valid: false},
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	remoteIssuerID := seedBoundRemoteSessionIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuer.ID)
+
+	created := createHostedServer(t, ctx, ti, toolset.ID, "private")
+
+	wrapper, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: issuer.ID, Valid: true}, wrapper.UserSessionIssuerID)
+	require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, wrapper.RemoteSessionIssuerID)
+}
+
+// seedBoundRemoteSessionIssuer creates a remote session issuer with one client
+// bound to the given user issuer, the shape the resync derives from.
+func seedBoundRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	q := remotesessionsrepo.New(conn)
+	suffix := uuid.NewString()[:8]
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(projectID),
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              "rsi-" + suffix,
+		Issuer:                            "https://issuer-" + suffix + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://issuer-" + suffix + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://issuer-" + suffix + ".example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: issuer.ID,
+		ClientID:              "client-" + suffix,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+	return issuer.ID
 }

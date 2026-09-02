@@ -212,6 +212,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		if err := s.toolsetMirror(authCtx).SyncToolsetFromWrapper(ctx, dbtx, server); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mirror mcp server onto toolset").LogError(ctx, logger)
 		}
+		if issuerID.Valid {
+			if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuer").LogError(ctx, logger)
+			}
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -821,6 +826,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, error) {
+	// Hosted servers are attached toolset-keyed until AIS-638 re-keys plugins.
+	if server.ToolsetID.Valid {
+		return false, nil
+	}
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
@@ -940,8 +949,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 
 	// The toolset outlives its wrapper as a build artifact; only its hosting
-	// goes, and it goes before the issuer cascade so a toolset that shared the
-	// wrapper's issuer no longer counts as an owner.
+	// goes. Its issuer is the toolset's own, never minted with the wrapper, so
+	// a hosted wrapper skips the issuer cascade entirely.
 	if deleted.ToolsetID.Valid {
 		if err := s.toolsetMirror(authCtx).ClearToolsetHosting(ctx, dbtx, *authCtx.ProjectID, deleted.ToolsetID.UUID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "clear toolset hosting").LogError(ctx, logger)
@@ -952,7 +961,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.
 	var orphanCreds []remotesessions.RevokedCredentials
-	if deleted.UserSessionIssuerID.Valid {
+	if deleted.UserSessionIssuerID.Valid && !deleted.ToolsetID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
 		// Lock the issuer row before the ownership check. A concurrent meta
 		// MCP attach holds this same row lock while writing its reference, so
