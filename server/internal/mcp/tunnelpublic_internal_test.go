@@ -124,16 +124,16 @@ func TestTunnelPublicRuntimeLimitersForServer(t *testing.T) {
 	unset := pgtype.Int4{Int32: 0, Valid: false}
 	id := uuid.New()
 
-	plain := rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: unset, PublicRequestBurst: unset}) //nolint:exhaustruct // only the limit columns matter here
+	plain := rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: unset, PublicRequestBurst: unset})
 	require.Same(t, defaults.request, plain.request, "no stored rate keeps the deployment-wide request limiter")
 	require.Same(t, defaults.initialize, plain.initialize, "no stored rate keeps the deployment-wide initialize limiter")
 	require.Equal(t, id.String(), plain.requestKey)
 	require.Equal(t, id.String(), plain.initializeKey)
 
-	stored := rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: pgtype.Int4{Int32: 300, Valid: true}, PublicRequestBurst: pgtype.Int4{Int32: 450, Valid: true}}) //nolint:exhaustruct // only the limit columns matter here
+	stored := rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: pgtype.Int4{Int32: 300, Valid: true}, PublicRequestBurst: pgtype.Int4{Int32: 450, Valid: true}})
 	require.NotSame(t, defaults.request, stored.request, "a stored rate gets its own request limiter")
 	require.NotSame(t, defaults.initialize, stored.initialize, "the stored rate feeds the initialize bucket too")
 	require.Equal(t, id.String()+"@300/450", stored.requestKey, "a stored rate meters a rate-suffixed key")
 	require.Equal(t, stored.requestKey, stored.initializeKey)
-	require.Same(t, stored.request, rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: pgtype.Int4{Int32: 300, Valid: true}, PublicRequestBurst: pgtype.Int4{Int32: 450, Valid: true}}).request, "the same stored rate reuses one limiter") //nolint:exhaustruct // only the limit columns matter here
+	require.Same(t, stored.request, rt.limitersForServer(&tunneledmcprepo.TunneledMcpServer{ID: id, PublicRequestRatePerSecond: pgtype.Int4{Int32: 300, Valid: true}, PublicRequestBurst: pgtype.Int4{Int32: 450, Valid: true}}).request, "the same stored rate reuses one limiter")
 }
