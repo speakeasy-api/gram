@@ -1,0 +1,16 @@
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 126,134
+server/internal/otel/signal_relay_test.go
+  h_2620cc60cfd1e9 326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "176951611aa0d6a9a41fe9598c917b4551d1169a",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

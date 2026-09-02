@@ -1,0 +1,34 @@
+server/internal/chat/impl.go
+  h_2620cc60cfd1e9 1835-1839
+server/internal/chat/message_capture_strategy.go
+  h_2620cc60cfd1e9 442-445
+server/internal/chat/message_capture_strategy_test.go
+  h_2620cc60cfd1e9 5,12,19,120-185
+server/internal/chat/turnstream_tee.go
+  h_2620cc60cfd1e9 29,80,117-119,233
+server/internal/chat/turnstream_tee_test.go
+  h_2620cc60cfd1e9 17,31
+server/internal/metering/pipeline_test.go
+  h_2620cc60cfd1e9 93,123,174
+server/internal/thirdparty/openrouter/completion_client.go
+  h_2620cc60cfd1e9 190-196
+server/internal/thirdparty/openrouter/response_choice_test.go
+  h_2620cc60cfd1e9 25
+server/internal/thirdparty/openrouter/types.go
+  h_2620cc60cfd1e9 291-297,338-344
+server/internal/thirdparty/openrouter/unified_client.go
+  h_2620cc60cfd1e9 458,525,616,655,729-731
+server/internal/thirdparty/openrouter/unified_client_test.go
+  h_2620cc60cfd1e9 209,284,322,367,475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4f494f7942582a005611d9c2d519ef76d5d88ce6",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
