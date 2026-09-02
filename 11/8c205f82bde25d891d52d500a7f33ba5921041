@@ -1,0 +1,16 @@
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 29-30,37,103-108,408-411,413-416,418-460
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  h_9630b74bdac540 43,562-612
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "118c205f82bde25d891d52d500a7f33ba5921041",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
