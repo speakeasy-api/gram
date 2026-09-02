@@ -14,6 +14,7 @@ import (
 	stripesdk "github.com/stripe/stripe-go/v85"
 	stripewebhook "github.com/stripe/stripe-go/v85/webhook"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
@@ -114,8 +115,8 @@ type CreateCustomerInput struct {
 	// Email is the billing contact shown on Stripe receipts and Checkout. Empty leaves it unset.
 	Email string
 
-	// AccountType is the organization's gram_account_type at creation time. Empty
-	// leaves the key unset.
+	// AccountType is the organization's gram_account_type at creation time. Values
+	// outside constants.AccountTypes leave the key unset.
 	AccountType string
 
 	IdempotencyKey string
@@ -132,7 +133,8 @@ type UpdateCustomerInput struct {
 	// unchanged: callers resolve it best-effort and must not clear a working address.
 	Email string
 
-	// AccountType is the organization's current gram_account_type. Empty leaves the key unset.
+	// AccountType is the organization's current gram_account_type. Values outside
+	// constants.AccountTypes clear the key so a stale tier is never left behind.
 	AccountType string
 }
 
@@ -155,13 +157,19 @@ func contractMetadata(org organizationIdentity) map[string]string {
 	}
 }
 
-func customerMetadata(org organizationIdentity, name, accountType string) map[string]string {
+func customerMetadata(org organizationIdentity, name string) map[string]string {
 	metadata := contractMetadata(org)
 	metadata[organizationNameMetadataKey] = name
-	if accountType != "" {
-		metadata[accountTypeMetadataKey] = accountType
-	}
 	return metadata
+}
+
+// validAccountType returns the account type to stamp, or "" when it is outside
+// constants.AccountTypes.
+func validAccountType(accountType string) string {
+	if constants.IsAccountType(accountType) {
+		return accountType
+	}
+	return ""
 }
 
 // CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
@@ -575,7 +583,10 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 	params.Metadata = customerMetadata(organizationIdentity{
 		id:   input.OrganizationID,
 		slug: input.OrganizationSlug,
-	}, input.OrganizationName, input.AccountType)
+	}, input.OrganizationName)
+	if accountType := validAccountType(input.AccountType); accountType != "" {
+		params.Metadata[accountTypeMetadataKey] = accountType
+	}
 	params.SetIdempotencyKey(input.IdempotencyKey)
 
 	customer, err := c.api.createCustomer(ctx, params)
@@ -598,7 +609,10 @@ func (c *client) UpdateCustomer(ctx context.Context, input UpdateCustomerInput) 
 	params.Metadata = customerMetadata(organizationIdentity{
 		id:   input.OrganizationID,
 		slug: input.OrganizationSlug,
-	}, input.OrganizationName, input.AccountType)
+	}, input.OrganizationName)
+	// Stripe deletes a metadata key whose value is "", so an unknown or missing
+	// account type clears the stale one instead of preserving it.
+	params.Metadata[accountTypeMetadataKey] = validAccountType(input.AccountType)
 
 	if _, err := c.api.updateCustomer(ctx, input.CustomerID, params); err != nil {
 		return fmt.Errorf("update Stripe customer: %w", err)

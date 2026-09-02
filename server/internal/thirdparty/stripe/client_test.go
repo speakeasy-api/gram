@@ -1308,18 +1308,42 @@ func TestUpdateCustomerRequiresCustomerID(t *testing.T) {
 func TestCreateCustomerOmitsUnknownAccountType(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeStripeAPI{}
-	c := &client{api: api}
+	for _, accountType := range []string{"", "not-an-account-type"} {
+		api := &fakeStripeAPI{}
+		c := &client{api: api}
 
-	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
-		OrganizationID:   "<ORG_ID>",
-		OrganizationSlug: "the-customer",
-		OrganizationName: "The Customer, Inc.",
-		AccountType:      "",
-		IdempotencyKey:   "customer:<ORG_ID>",
-	})
-	require.NoError(t, err)
-	require.NotContains(t, api.customerParams.Metadata, "account_type", "an empty account type must not be stamped")
+		_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
+			OrganizationID:   "<ORG_ID>",
+			OrganizationSlug: "the-customer",
+			OrganizationName: "The Customer, Inc.",
+			AccountType:      accountType,
+			IdempotencyKey:   "customer:<ORG_ID>",
+		})
+		require.NoError(t, err)
+		require.NotContains(t, api.customerParams.Metadata, "account_type", "account type %q must not be stamped", accountType)
+	}
+}
+
+func TestUpdateCustomerClearsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	for _, accountType := range []string{"", "not-an-account-type"} {
+		api := &fakeStripeAPI{}
+		c := &client{api: api}
+
+		err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{
+			CustomerID:       "cus_test",
+			OrganizationID:   "<ORG_ID>",
+			OrganizationSlug: "the-customer",
+			OrganizationName: "The Customer, Inc.",
+			AccountType:      accountType,
+		})
+		require.NoError(t, err)
+		// Stripe deletes a metadata key when its value is set to "".
+		value, ok := api.customerUpdateParams.Metadata["account_type"]
+		require.True(t, ok, "account type %q must clear the stale key on update", accountType)
+		require.Empty(t, value)
+	}
 }
 
 func TestUpdateCustomerLeavesEmailUnchangedWhenEmpty(t *testing.T) {
