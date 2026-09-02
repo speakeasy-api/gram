@@ -1,6 +1,9 @@
 import { useState } from "react";
 
-import { ConnectionsList } from "@/components/connections/ConnectionsList";
+import {
+  ConnectionsList,
+  type ConnectionKillswitchContext,
+} from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
   type ConnectionGrouping,
@@ -55,10 +58,12 @@ export function ConnectionsListSection({
   emptyHeading = "No connections yet",
   emptyDescription = "Connections agents establish will appear here.",
   clients,
+  killswitchContext,
 }: {
   sessions: UserSession[];
   /** Registrations for this scope; surfaced by the client grouping. */
   clients?: UserSessionClient[];
+  killswitchContext?: ConnectionKillswitchContext;
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -152,6 +157,7 @@ export function ConnectionsListSection({
         canRevoke={canRevoke}
         onRevoked={onRevoked}
         clients={clients}
+        killswitchContext={killswitchContext}
       />
     </Stack>
   );

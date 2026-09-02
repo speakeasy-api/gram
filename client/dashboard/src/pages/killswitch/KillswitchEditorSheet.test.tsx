@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { KillswitchDetail } from "@gram/client/models/components/killswitchdetail.js";
 import { KillswitchEditorSheet } from "./KillswitchEditorSheet";
@@ -63,7 +64,11 @@ function renderEditor(
       .mockResolvedValue({ id: "ks-1", version: 1, replayed: false }),
     ...overrides,
   };
-  const view = render(<KillswitchEditorSheet {...props} />);
+  const view = render(
+    <MemoryRouter>
+      <KillswitchEditorSheet {...props} />
+    </MemoryRouter>,
+  );
   return { ...props, componentProps: props, ...view };
 }
 
@@ -116,6 +121,65 @@ describe("KillswitchEditorSheet", () => {
     ).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetryCapabilities).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a contextual member fixed and applies a pending server only after Selected servers", async () => {
+    const view = renderEditor({
+      createContext: {
+        userId: "user-1",
+        capabilityKey: "mcp_tool_calls",
+        originatingMcpServerId: "server-a",
+      },
+    });
+
+    expect(screen.queryByLabelText("Team member")).toBeNull();
+    expect(screen.getByText(/Alex Morgan — alex@example.test/)).not.toBeNull();
+    expect(
+      (screen.getByLabelText("MCP tool calls") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText(/All MCP servers/) as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      (screen.getByLabelText(/Selected servers/) as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(screen.queryByText("Server A")).toBeNull();
+
+    await userEvent.click(screen.getByLabelText(/Selected servers/));
+    expect(
+      screen.getByRole("button", { name: "Choose servers (1)" }),
+    ).not.toBeNull();
+    expect(screen.getByText("Server A")).not.toBeNull();
+    await userEvent.type(
+      screen.getByLabelText("Public message shown to the member"),
+      "Access is temporarily paused.",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Internal note"),
+      "Incident response.",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    expect(view.onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        capabilityKey: "mcp_tool_calls",
+        scopeType: "selected_servers",
+        serverIds: ["server-a"],
+      }),
+    );
+
+    await userEvent.click(screen.getByLabelText(/All MCP servers/));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    expect(view.onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scopeType: "all_servers",
+        serverIds: [],
+      }),
+    );
   });
 
   it("keeps coming-soon capabilities non-selectable and opens the request path", async () => {
@@ -480,7 +544,11 @@ describe("KillswitchEditorSheet", () => {
     const onSubmit = vi
       .fn()
       .mockResolvedValue({ id: "ks-1", version: 1, replayed: false });
-    renderEditor({ onSubmit });
+    renderEditor({
+      onSubmit,
+      mcpSessionsHref: (userId) =>
+        `/example/mcp-sessions?subjectUrn=${encodeURIComponent(`user:${userId}`)}`,
+    });
     await userEvent.selectOptions(
       screen.getByLabelText("Team member"),
       "user-1",
@@ -504,6 +572,11 @@ describe("KillswitchEditorSheet", () => {
       expect.any(String),
       undefined,
     );
+    expect(
+      screen
+        .getByRole("link", { name: "View this member in MCP Sessions" })
+        .getAttribute("href"),
+    ).toBe("/example/mcp-sessions?subjectUrn=user%3Auser-1");
   });
 
   it("ignores a deferred overlap preview after the draft changes", async () => {
