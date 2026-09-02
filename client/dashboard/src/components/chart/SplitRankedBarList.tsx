@@ -69,12 +69,15 @@ export function SplitRankedBarList({
             </div>
             {/* Compact, because these tracks are fixed: a call count in the
                 millions overflows its column onto the bar beside it. The exact
-                figures stay on hover. */}
+                figures stay on hover, and are what a screen reader is given —
+                the rounding is a concession to the column width, not something
+                to hand on to assistive tech. */}
             <span
               className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4"
               title={item.value.toLocaleString()}
             >
-              {formatCompact(item.value)}
+              <span aria-hidden="true">{formatCompact(item.value)}</span>
+              <span className="sr-only">{item.value.toLocaleString()}</span>
             </span>
             <span
               className="text-default-destructive col-start-4 text-right font-mono text-xs tabular-nums sm:col-start-5"
@@ -82,7 +85,14 @@ export function SplitRankedBarList({
                 failed > 0 ? `${failed.toLocaleString()} failed` : undefined
               }
             >
-              {failed > 0 ? `${formatCompact(failed)} fail` : ""}
+              <span aria-hidden="true">
+                {failed > 0 ? `${formatCompact(failed)} fail` : ""}
+              </span>
+              {failed > 0 && (
+                <span className="sr-only">
+                  {`${failed.toLocaleString()} failed`}
+                </span>
+              )}
             </span>
           </li>
         );

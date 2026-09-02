@@ -7,6 +7,7 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import {
   fetchIdentityPeers,
   identityPeersQueryKey,
+  type IdentityRosterUserType,
   mergeUserSummaries,
 } from "./identityPeers";
 
@@ -453,6 +454,17 @@ export function useIdentityPeers(
   const client = useGramContext();
   const organization = useOrganization();
   const { slug: projectSlug } = useIdentityProject();
+  // An identity known only by the id an agent reported for itself is absent
+  // from the internal roster, which groups by Gram user id — it lives under
+  // external_user_id instead. Anyone with a directory row or an address is
+  // found the usual way; only the pure-agent case switches, and it also puts
+  // that agent among agents rather than ranking it against people.
+  const userType: IdentityRosterUserType =
+    identity.userIds.length === 0 &&
+    identity.emails.length === 0 &&
+    identity.externalUserIds.length > 0
+      ? "external"
+      : "internal";
   const query = useQuery({
     queryKey: identityPeersQueryKey(
       organization.id,
@@ -460,9 +472,10 @@ export function useIdentityPeers(
       from,
       to,
       accountType,
+      userType,
     ),
     queryFn: () =>
-      fetchIdentityPeers(client, projectSlug, from, to, accountType),
+      fetchIdentityPeers(client, projectSlug, from, to, accountType, userType),
     throwOnError: false,
   });
 

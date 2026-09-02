@@ -116,9 +116,13 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     -- The account the call was made through, matching the chat rows below so
     -- an account-scoped read of someone's usage keeps its tool calls; without
-    -- it every tool count drops to zero the moment a filter is applied.
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
-      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+    -- it every tool count drops to zero the moment a filter is applied. Only
+    -- the Claude half can be personal: the two seeded personal accounts are
+    -- Anthropic ones, so labelling a Cursor call personal would attribute it
+    -- to an account that does not exist.
+    ',"gram.account_type":"', if(hook = 'claude-code'
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
       'personal', 'team'), '"',
     ',"gram.hook.source":"', hook, '"}'
   ),
@@ -673,9 +677,11 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
     -- Same split as the chat rows above, keyed the same way so a chat's
-    -- score lands on the account that ran it.
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
-      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+    -- score lands on the account that ran it. Odd rows only: those are the
+    -- Anthropic ones, and both seeded personal accounts are Anthropic.
+    ',"gram.account_type":"', if(i % 2 = 1
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
       'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),

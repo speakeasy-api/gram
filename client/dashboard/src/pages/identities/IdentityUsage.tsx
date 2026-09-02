@@ -106,8 +106,12 @@ export default function IdentityUsage(): JSX.Element {
   const { self: unscopedSelf } = useIdentityPeers(identity, from, to);
   // Only offered to someone who actually works through more than one class of
   // account: with a single class the filter can only ever return everything
-  // or nothing.
-  const showScope = (unscopedSelf?.accountTypes ?? []).length > 1;
+  // or nothing. An active scope keeps it on screen regardless — a window where
+  // the other class has no activity would otherwise take away the only control
+  // that can clear the filter, leaving the tab stuck on a scope it no longer
+  // shows.
+  const showScope =
+    scope !== "" || (unscopedSelf?.accountTypes ?? []).length > 1;
   const agents = [...(self?.hookSources ?? [])]
     .filter((source) => source.source && source.eventCount > 0)
     .sort((a, b) => b.eventCount - a.eventCount);

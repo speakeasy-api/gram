@@ -67,12 +67,20 @@ export function RankedBarList({
           </div>
           {/* Compact, because the track holding it is fixed: a token count
               runs to ten digits and a spelled-out figure overflows its column
-              onto the bar beside it. The exact number stays on hover. */}
+              onto the bar beside it. The exact number stays on hover, and is
+              what a screen reader is given — a rounded figure is the
+              concession the column width forces on sighted readers, not one
+              anybody should be stuck with. */}
           <span
             className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4"
             title={item.valueLabel ?? item.value.toLocaleString()}
           >
-            {item.valueLabel ?? formatCompact(item.value)}
+            <span aria-hidden="true">
+              {item.valueLabel ?? formatCompact(item.value)}
+            </span>
+            <span className="sr-only">
+              {item.valueLabel ?? item.value.toLocaleString()}
+            </span>
           </span>
         </li>
       ))}

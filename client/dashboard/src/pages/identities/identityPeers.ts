@@ -9,6 +9,18 @@ import { unwrapAsync } from "@gram/client/types/fp";
  * identity ever been seen"; ranking a week's spend against an all-time peer
  * set would put a number and its context on different clocks.
  */
+/**
+ * Which key telemetry groups the roster by.
+ *
+ * "internal" groups by the Gram user id, which is what every identity holding
+ * a directory row or an address is found under. An agent that reports only the
+ * id it gave itself has no such row: it exists solely under
+ * external_user_id, and an internal read simply does not contain it — the
+ * identity's own page would then lose its accounts, agent surfaces and peer
+ * context to a roster it was never in.
+ */
+export type IdentityRosterUserType = "internal" | "external";
+
 export function identityPeersQueryKey(
   organizationId: string,
   projectSlug: string,
@@ -18,6 +30,7 @@ export function identityPeersQueryKey(
   // Part of the key because the same window returns different figures under a
   // scope, and an unscoped read must not answer a scoped one from cache.
   accountType = "",
+  userType: IdentityRosterUserType = "internal",
 ): (string | number)[] {
   return [
     "identities",
@@ -27,6 +40,7 @@ export function identityPeersQueryKey(
     from.getTime(),
     to.getTime(),
     accountType,
+    userType,
   ];
 }
 
@@ -36,6 +50,7 @@ export async function fetchIdentityPeers(
   from: Date,
   to: Date,
   accountType = "",
+  userType: IdentityRosterUserType = "internal",
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -49,7 +64,7 @@ export async function fetchIdentityPeers(
           filter: { from, to, ...(accountType ? { accountType } : {}) },
           limit: 1000,
           sort: "desc",
-          userType: "internal",
+          userType,
           // Deliberately NOT Source.AgentMetrics, which the all-time roster
           // uses: that view carries token counts but reports zero cost, no
           // chat counts, no hook sources and no linked accounts — every

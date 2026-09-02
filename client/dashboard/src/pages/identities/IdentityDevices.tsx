@@ -28,14 +28,28 @@ import {
  * it is the only one flipped; the Windows and Tux marks are coloured and must
  * not be. An OS with no mark of ours renders nothing rather than a stand-in.
  */
-const OS_LOGOS: Record<string, { src: string; invertInDark: boolean }> = {
+const OS_LOGOS = {
   macos: { src: "/icons/platforms/macos.svg", invertInDark: true },
   windows: { src: "/icons/platforms/windows.svg", invertInDark: false },
   linux: { src: "/icons/platforms/linux.svg", invertInDark: false },
-};
+} as const;
 
+/**
+ * Matched on a prefix, because the providers do not agree on the string: Jamf
+ * and Kandji report the platform ("Mac"), Intune reports the operating system
+ * ("macOS", "Windows"), and a version often rides along. An exact-match table
+ * would leave whole fleets unmarked.
+ */
 function osLogo(osName: string | undefined): JSX.Element | undefined {
-  const logo = OS_LOGOS[(osName ?? "").trim().toLowerCase()];
+  const value = (osName ?? "").trim().toLowerCase();
+  const key = value.startsWith("mac")
+    ? "macos"
+    : value.startsWith("windows")
+      ? "windows"
+      : value.startsWith("linux")
+        ? "linux"
+        : undefined;
+  const logo = key ? OS_LOGOS[key] : undefined;
   if (!logo) return undefined;
   return (
     <img
