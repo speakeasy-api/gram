@@ -121,7 +121,7 @@ func run() error {
 
 	outer := http.NewServeMux()
 
-	mockHandler := mockworkos.NewHandler(logger, tp, db)
+	mockHandler := mockworkos.NewHandler(mockworkos.Config{ExternalURL: pubURL}, logger, tp, db)
 	outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mockHandler.Handler()))
 
 	oauth21Handler := oauth21.NewHandler(

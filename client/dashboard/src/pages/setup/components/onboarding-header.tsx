@@ -12,7 +12,7 @@ export function OnboardingHeader({
 }: OnboardingHeaderProps): JSX.Element {
   return (
     <header className="border-border bg-background w-full border-b">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-8 py-4">
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
           <div className="bg-border h-5 w-px" />

@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -102,6 +103,7 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /portal/generate_link", h.handleWorkosGeneratePortalLink)
 	mux.HandleFunc("GET /portal", h.handleWorkosPortalPage)
+	mux.HandleFunc("GET /portal/complete", h.handleWorkosPortalComplete)
 
 	mux.HandleFunc("GET /connections", h.handleWorkosListConnections)
 	mux.HandleFunc("GET /directories", h.handleWorkosListDirectories)
@@ -1206,9 +1208,10 @@ func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request)
 // Admin Portal
 // =============================================================================
 
-// handleWorkosListConnections returns a mock SSO connection for the organization.
-// In local dev, we always report an active connection so the onboarding wizard
-// can progress after the mock portal "Complete setup" click.
+// handleWorkosListConnections returns the organization's mock SSO connection.
+// The connection exists only after the mock portal's "Complete setup" was
+// clicked with the sso intent, so setup flows see the same unconfigured →
+// configured transition they would against WorkOS.
 func (h *Handler) handleWorkosListConnections(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
 	if orgID == "" {
@@ -1216,25 +1219,24 @@ func (h *Handler) handleWorkosListConnections(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Return a single active mock connection so the setup callback verifies success.
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": []map[string]any{
-			{
-				"id":              "conn_mock_" + orgID,
-				"organization_id": orgID,
-				"connection_type": "GenericSAML",
-				"name":            "Mock SSO Connection",
-				"state":           "active",
-				"created_at":      "2024-01-01T00:00:00Z",
-				"updated_at":      "2024-01-01T00:00:00Z",
-			},
-		},
-	})
+	connections := []map[string]any{}
+	if h.isPortalCompleted(orgID, "sso") {
+		connections = append(connections, map[string]any{
+			"id":              "conn_mock_" + orgID,
+			"organization_id": orgID,
+			"connection_type": "GenericSAML",
+			"name":            "Mock SSO Connection",
+			"state":           "active",
+			"created_at":      "2024-01-01T00:00:00Z",
+			"updated_at":      "2024-01-01T00:00:00Z",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": connections})
 }
 
-// handleWorkosListDirectories returns a mock linked directory for the
-// organization so the onboarding wizard's DSYNC verify step can progress after
-// the mock portal "Complete setup" click. Mirrors handleWorkosListConnections.
+// handleWorkosListDirectories returns the organization's mock linked
+// directory, present once the mock portal was completed with the dsync
+// intent. Mirrors handleWorkosListConnections.
 func (h *Handler) handleWorkosListDirectories(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
 	if orgID == "" {
@@ -1242,19 +1244,19 @@ func (h *Handler) handleWorkosListDirectories(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": []map[string]any{
-			{
-				"id":              "directory_mock_" + orgID,
-				"organization_id": orgID,
-				"type":            "generic scim v2.0",
-				"name":            "Mock Directory",
-				"state":           "linked",
-				"created_at":      "2024-01-01T00:00:00Z",
-				"updated_at":      "2024-01-01T00:00:00Z",
-			},
-		},
-	})
+	directories := []map[string]any{}
+	if h.isPortalCompleted(orgID, "dsync") {
+		directories = append(directories, map[string]any{
+			"id":              "directory_mock_" + orgID,
+			"organization_id": orgID,
+			"type":            "generic scim v2.0",
+			"name":            "Mock Directory",
+			"state":           "linked",
+			"created_at":      "2024-01-01T00:00:00Z",
+			"updated_at":      "2024-01-01T00:00:00Z",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": directories})
 }
 
 func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.Request) {
@@ -1278,12 +1280,16 @@ func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.
 	}
 
 	// Return a mock portal URL. In production WorkOS returns a short-lived
-	// link to their hosted admin portal; locally we just point back at the
+	// link to their hosted admin portal; locally we just point back at this
 	// dev-idp so the dashboard has something to open.
-	link := fmt.Sprintf("http://localhost:35291/mock-workos/portal?intent=%s&organization=%s", body.Intent, body.Organization)
-	if body.SuccessURL != "" {
-		link += "&success_url=" + url.QueryEscape(body.SuccessURL)
+	portalQuery := url.Values{
+		"intent":       {body.Intent},
+		"organization": {body.Organization},
 	}
+	if body.SuccessURL != "" {
+		portalQuery.Set("success_url", body.SuccessURL)
+	}
+	link := h.externalBaseURL(r) + Prefix + "/portal?" + portalQuery.Encode()
 	h.logger.InfoContext(ctx, "workos generate portal link",
 		slog.String("organization", body.Organization), slog.String("intent", body.Intent), slog.String("link", link))
 	writeJSON(w, http.StatusOK, map[string]string{"link": link})
@@ -1329,13 +1335,49 @@ func (h *Handler) handleWorkosPortalPage(w http.ResponseWriter, r *http.Request)
 	org := r.URL.Query().Get("organization")
 	successURL := r.URL.Query().Get("success_url")
 
+	// "Complete setup" goes through the mock first so the setup is recorded
+	// before the dashboard's callback asks whether it worked.
 	var buttonHTML string
 	if successURL != "" {
-		buttonHTML = fmt.Sprintf(`<a class="btn" href="%s">Complete setup</a>`, successURL)
+		completeQuery := url.Values{
+			"intent":       {intent},
+			"organization": {org},
+			"success_url":  {successURL},
+		}
+		completeURL := Prefix + "/portal/complete?" + completeQuery.Encode()
+		buttonHTML = fmt.Sprintf(`<a class="btn" href="%s">Complete setup</a>`, html.EscapeString(completeURL))
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, portalPageHTML, intent, org, buttonHTML)
+}
+
+// externalBaseURL is where browsers reach this dev-idp. It prefers the
+// configured external URL and falls back to the host the request arrived on.
+func (h *Handler) externalBaseURL(r *http.Request) string {
+	if base := strings.TrimRight(h.cfg.ExternalURL, "/"); base != "" {
+		return base
+	}
+	return "http://" + r.Host
+}
+
+// handleWorkosPortalComplete records that the admin portal flow for an
+// organization and intent finished, then sends the browser on to the
+// dashboard's success URL. From here on the matching connection or directory
+// shows up in the list endpoints.
+func (h *Handler) handleWorkosPortalComplete(w http.ResponseWriter, r *http.Request) {
+	intent := r.URL.Query().Get("intent")
+	org := r.URL.Query().Get("organization")
+	successURL := r.URL.Query().Get("success_url")
+	if intent == "" || org == "" || successURL == "" {
+		writeWorkosError(w, http.StatusBadRequest, "intent, organization and success_url are required")
+		return
+	}
+
+	h.markPortalCompleted(org, intent)
+	h.logger.InfoContext(r.Context(), "workos portal setup completed",
+		slog.String("organization", org), slog.String("intent", intent))
+	http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 }
 
 // =============================================================================

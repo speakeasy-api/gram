@@ -94,7 +94,7 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import type { Step } from "@/pages/setup/types";
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,

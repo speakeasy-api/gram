@@ -37,22 +37,62 @@ type passwordlessState struct {
 }
 
 // Handler serves the mock-workos mode's HTTP routes.
+// Config carries the settings the mock needs from the dev-idp process.
+type Config struct {
+	// ExternalURL is the dev-idp's externally reachable base URL (no
+	// trailing slash). Links handed back to the dashboard, such as the mock
+	// admin portal, are built on it so they reach this dev-idp instance
+	// even when several worktrees run on remapped ports.
+	ExternalURL string
+}
+
 type Handler struct {
+	cfg    Config
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *sql.DB
 
 	pwlMu       sync.Mutex
 	pwlSessions map[string]*passwordlessState // keyed by session ID
+
+	// Admin portal setups completed through the mock portal page. SSO
+	// connections and directories only exist for an organization once the
+	// matching intent has been completed, so a fresh dev-idp reports nothing
+	// configured until someone clicks through the portal. Restarting dev-idp
+	// resets it.
+	portalMu        sync.Mutex
+	portalCompleted map[portalSetup]bool
 }
 
-func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
+// portalSetup identifies one admin portal flow: an organization plus the
+// WorkOS intent ("sso" or "dsync") it was opened with.
+type portalSetup struct {
+	organization string
+	intent       string
+}
+
+func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
+		cfg:         cfg,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"),
 		logger:      logger.With(slog.String("component", "devidp."+Mode)),
 		db:          db,
 		pwlSessions: make(map[string]*passwordlessState),
+
+		portalCompleted: make(map[portalSetup]bool),
 	}
+}
+
+func (h *Handler) markPortalCompleted(organization, intent string) {
+	h.portalMu.Lock()
+	defer h.portalMu.Unlock()
+	h.portalCompleted[portalSetup{organization: organization, intent: intent}] = true
+}
+
+func (h *Handler) isPortalCompleted(organization, intent string) bool {
+	h.portalMu.Lock()
+	defer h.portalMu.Unlock()
+	return h.portalCompleted[portalSetup{organization: organization, intent: intent}]
 }
 
 // Handler returns the http.Handler that should be mounted under

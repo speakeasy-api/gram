@@ -70,3 +70,12 @@ export interface AgentPlatform {
   /** Platform-specific setup instructions shown when the card is expanded. */
   setupSteps: PlatformSetupStep[];
 }
+
+/** One entry in a multi-step flow's step list. */
+export interface Step {
+  id: string;
+  title: string;
+  description: string;
+  /** Optional inline marker after the title, e.g. "Required" / "Optional". */
+  badge?: string;
+}
