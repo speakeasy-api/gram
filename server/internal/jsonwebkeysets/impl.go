@@ -35,6 +35,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// keySetClientListingCap bounds the client_ids GetSetDeletePreflight lists. The
+// count it reports alongside is unbounded and authoritative, so a set with more
+// referencing clients than this reports a truncated list against a full count.
+const keySetClientListingCap = 50
+
 type Service struct {
 	tracer          trace.Tracer
 	logger          *slog.Logger
@@ -535,8 +540,3 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 
 	return nil
 }
-
-// keySetClientListingCap bounds the client_ids GetSetDeletePreflight lists. The
-// count it reports alongside is unbounded and authoritative, so a set with more
-// referencing clients than this reports a truncated list against a full count.
-const keySetClientListingCap = 50

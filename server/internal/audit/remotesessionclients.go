@@ -21,8 +21,8 @@ const (
 	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
 	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
 	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
-	ActionRemoteSessionClientAttachKeySet            Action = "remote-session-client:attach-key-set"
-	ActionRemoteSessionClientDetachKeySet            Action = "remote-session-client:detach-key-set"
+	ActionRemoteSessionClientAttachJsonWebKeySet     Action = "remote-session-client:attach-json-web-key-set"
+	ActionRemoteSessionClientDetachJsonWebKeySet     Action = "remote-session-client:detach-json-web-key-set"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -260,14 +260,14 @@ func (l *Logger) logRemoteSessionClientUserSessionIssuerAttachment(ctx context.C
 	})
 }
 
-// LogRemoteSessionClientKeySetAttachmentEvent describes an attach or detach of
+// LogRemoteSessionClientJsonWebKeySetAttachmentEvent describes an attach or detach of
 // a JSON Web Key Set to/from a remote_session_client. The set is captured in
 // metadata rather than as a before/after snapshot, matching the
 // user_session_issuer attachment events on this subject: the action names the
 // direction and the metadata names the set, which together fully describe the
 // change. On a detach the set recorded is the one that was removed, so the
 // entry stays readable without joining the preceding attach.
-type LogRemoteSessionClientKeySetAttachmentEvent struct {
+type LogRemoteSessionClientJsonWebKeySetAttachmentEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 
@@ -278,34 +278,24 @@ type LogRemoteSessionClientKeySetAttachmentEvent struct {
 	RemoteSessionClientURN urn.RemoteSessionClient
 	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	JsonWebKeySetURN       urn.JsonWebKeySet
-	// AdoptedOrganization records that the attach also backfilled the client's
-	// organization_id from its project, which a legacy row needs before it can
-	// hold a set at all. An ownership change is worth showing in the log even
-	// though it rides in on the attach rather than standing alone.
-	AdoptedOrganization bool
 }
 
-// LogRemoteSessionClientAttachKeySet records that a JSON Web Key Set was
+// LogRemoteSessionClientAttachJsonWebKeySet records that a JSON Web Key Set was
 // attached to a remote_session_client.
-func (l *Logger) LogRemoteSessionClientAttachKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientKeySetAttachmentEvent) error {
-	return l.logRemoteSessionClientKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientAttachKeySet, event)
+func (l *Logger) LogRemoteSessionClientAttachJsonWebKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientJsonWebKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientAttachJsonWebKeySet, event)
 }
 
-// LogRemoteSessionClientDetachKeySet records that a JSON Web Key Set was
+// LogRemoteSessionClientDetachJsonWebKeySet records that a JSON Web Key Set was
 // detached from a remote_session_client.
-func (l *Logger) LogRemoteSessionClientDetachKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientKeySetAttachmentEvent) error {
-	return l.logRemoteSessionClientKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientDetachKeySet, event)
+func (l *Logger) LogRemoteSessionClientDetachJsonWebKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientJsonWebKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientDetachJsonWebKeySet, event)
 }
 
-func (l *Logger) logRemoteSessionClientKeySetAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientKeySetAttachmentEvent) error {
-	payload := map[string]any{
+func (l *Logger) logRemoteSessionClientJsonWebKeySetAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
 		"json_web_key_set_id": event.JsonWebKeySetURN.ID.String(),
-	}
-	if event.AdoptedOrganization {
-		payload["adopted_organization"] = true
-	}
-
-	metadata, err := marshalAuditPayload(payload)
+	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

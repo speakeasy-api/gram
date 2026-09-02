@@ -31,7 +31,7 @@ func TestAttachClientKeySet(t *testing.T) {
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "keyset-attach-client")
 	setID := createJsonWebKeySet(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "keyset-attach-set")
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachKeySet)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
 	require.NoError(t, err)
 
 	attached, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{
@@ -44,7 +44,7 @@ func TestAttachClientKeySet(t *testing.T) {
 	require.NotNil(t, attached.JSONWebKeySetID)
 	require.Equal(t, setID.String(), *attached.JSONWebKeySetID)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachKeySet)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
@@ -200,7 +200,7 @@ func TestDetachClientKeySet(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachKeySet)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachJsonWebKeySet)
 	require.NoError(t, err)
 
 	detached, err := ti.service.DetachClientKeySet(ctx, &orgclientsgen.DetachClientKeySetPayload{
@@ -211,7 +211,7 @@ func TestDetachClientKeySet(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, detached.JSONWebKeySetID)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachKeySet)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachJsonWebKeySet)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 }
@@ -229,7 +229,7 @@ func TestDetachClientKeySet_AbsentSetIsNoop(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "keyset-noop-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "keyset-noop-client")
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachKeySet)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachJsonWebKeySet)
 	require.NoError(t, err)
 
 	detached, err := ti.service.DetachClientKeySet(ctx, &orgclientsgen.DetachClientKeySetPayload{
@@ -240,7 +240,7 @@ func TestDetachClientKeySet_AbsentSetIsNoop(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, detached.JSONWebKeySetID)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachKeySet)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachJsonWebKeySet)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 }
@@ -616,7 +616,7 @@ func TestAttachClientKeySet_ReattachIsNoop(t *testing.T) {
 	_, err := ti.service.AttachClientKeySet(ctx, payload)
 	require.NoError(t, err)
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachKeySet)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
 	require.NoError(t, err)
 
 	reattached, err := ti.service.AttachClientKeySet(ctx, payload)
@@ -624,7 +624,7 @@ func TestAttachClientKeySet_ReattachIsNoop(t *testing.T) {
 	require.NotNil(t, reattached.JSONWebKeySetID)
 	require.Equal(t, setID.String(), *reattached.JSONWebKeySetID)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachKeySet)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 }
