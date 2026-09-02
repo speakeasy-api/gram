@@ -56,110 +56,38 @@ type ProjectExportRow = ExportRow & {
 
 type VisualDestination = {
   key: string;
-  type: "OTEL" | "SIEM" | "S3";
+  type: "OTEL";
   name: string;
   detail: string;
   sensitive: boolean;
-  preview: boolean;
 };
 
-const TYPED_DESTINATION_PREVIEWS: VisualDestination[] = import.meta.env.DEV
-  ? [
-      {
-        key: "siem-preview",
-        type: "SIEM",
-        name: "SIEM destination",
-        detail: "Security events and findings",
-        sensitive: false,
-        preview: true,
-      },
-      {
-        key: "s3-preview",
-        type: "S3",
-        name: "S3 archive",
-        detail: "Long-term object storage",
-        sensitive: false,
-        preview: true,
-      },
-    ]
-  : [];
-
-function visualDestinations({
+function visualDestination({
   route,
   destination,
-}: ProjectExportRow): VisualDestination[] {
-  return [
-    {
-      key: route.otelDestinationId ?? `${route.id}-otel`,
-      type: "OTEL",
-      name: destination?.name ?? "Not configured",
-      detail:
-        destination?.otel.endpointUrl ?? "Configure this export to continue",
-      sensitive: destination?.sensitiveData === "include",
-      preview: false,
-    },
-    ...TYPED_DESTINATION_PREVIEWS,
-  ];
+}: ProjectExportRow): VisualDestination {
+  return {
+    key: route.otelDestinationId ?? `${route.id}-otel`,
+    type: "OTEL",
+    name: destination?.name ?? "Not configured",
+    detail:
+      destination?.otel.endpointUrl ?? "Configure this export to continue",
+    sensitive: destination?.sensitiveData === "include",
+  };
 }
 
 type VisualSource = {
   key: string;
   name: string;
   detail: string;
-  preview: boolean;
 };
 
-type VisualConnection = {
-  key: string;
-  sourceIndex: number;
-  destinationIndex: number;
-};
-
-const SOURCE_PREVIEWS: VisualSource[] = import.meta.env.DEV
-  ? [
-      {
-        key: "risk-findings-preview",
-        name: "Risk findings",
-        detail: "Detected policy and security findings",
-        preview: true,
-      },
-      {
-        key: "agent-sessions-preview",
-        name: "Agent sessions",
-        detail: "Session lifecycle and execution events",
-        preview: true,
-      },
-    ]
-  : [];
-
-function visualSources({ route }: ProjectExportRow): VisualSource[] {
-  return [
-    {
-      key: route.id,
-      name: sourceLabel(route.dataSource),
-      detail: "OTLP traces & logs",
-      preview: false,
-    },
-    ...SOURCE_PREVIEWS,
-  ];
-}
-
-function visualConnections(
-  sources: VisualSource[],
-  destinations: VisualDestination[],
-): VisualConnection[] {
-  return [
-    ...destinations.map((destination, destinationIndex) => ({
-      key: `source-0-${destination.key}`,
-      sourceIndex: 0,
-      destinationIndex,
-    })),
-    ...sources.slice(1).map((source, index) => ({
-      key: `${source.key}-destination-0`,
-      sourceIndex: index + 1,
-      destinationIndex: 0,
-    })),
-  ];
+function visualSource({ route }: ProjectExportRow): VisualSource {
+  return {
+    key: route.id,
+    name: sourceLabel(route.dataSource),
+    detail: "OTLP traces & logs",
+  };
 }
 
 type ProjectExports = {
@@ -572,97 +500,72 @@ function ExportMap({
         <div className="space-y-6">
           {exports.map((exportRow, exportIndex) => {
             const { project, route } = exportRow;
-            const sources = visualSources(exportRow);
-            const destinations = visualDestinations(exportRow);
-            const connections = visualConnections(sources, destinations);
+            const source = visualSource(exportRow);
+            const destination = visualDestination(exportRow);
             const arrowID = `${markerID}-${exportIndex}`;
             return (
               <div
                 key={route.id}
                 className="grid grid-cols-[360px_minmax(180px,260px)_minmax(360px,1fr)] items-stretch"
               >
-                <div className="space-y-3">
-                  {sources.map((source, sourceIndex) => (
-                    <div
-                      key={source.key}
+                <div className="flex min-h-24 items-center justify-between gap-4 border border-foreground px-5 py-3">
+                  <div className="min-w-0">
+                    <div className="mb-1 flex items-center gap-2">
+                      <ProjectAvatar
+                        project={project}
+                        className="size-3 min-h-3 min-w-3"
+                      />
+                      <span className="text-eyebrow text-muted-foreground">
+                        {project.name}
+                      </span>
+                    </div>
+                    <Text className="truncate font-medium">{source.name}</Text>
+                    <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+                      {source.detail}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
                       className={
-                        source.preview
-                          ? "flex min-h-24 items-center justify-between gap-4 border px-5 py-3"
-                          : "flex min-h-24 items-center justify-between gap-4 border border-foreground px-5 py-3"
+                        route.enabled
+                          ? "flex items-center gap-1.5 text-sm text-default-success"
+                          : "text-sm text-placeholder"
                       }
                     >
-                      <div className="min-w-0">
-                        {sourceIndex === 0 ? (
-                          <div className="mb-1 flex items-center gap-2">
-                            <ProjectAvatar
-                              project={project}
-                              className="size-3 min-h-3 min-w-3"
-                            />
-                            <span className="text-eyebrow text-muted-foreground">
-                              {project.name}
-                            </span>
-                          </div>
-                        ) : null}
-                        <div className="flex items-center gap-2">
-                          <Text className="truncate font-medium">
-                            {source.name}
-                          </Text>
-                          {source.preview ? (
-                            <Badge background={false} size="sm">
-                              Preview
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                          {source.detail}
-                        </span>
-                      </div>
-                      {sourceIndex === 0 ? (
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span
-                            className={
-                              route.enabled
-                                ? "flex items-center gap-1.5 text-sm text-default-success"
-                                : "text-sm text-placeholder"
-                            }
-                          >
-                            {route.enabled ? (
-                              <Icon name="check" className="size-3.5" />
-                            ) : null}
-                            {route.enabled ? "Enabled" : "Paused"}
-                          </span>
-                          <RequireScope scope="org:admin" level="component">
-                            <Switch
-                              checked={route.enabled}
-                              onCheckedChange={(enabled) =>
-                                onToggle(project, route, enabled)
-                              }
-                              disabled={mutating}
-                              aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
-                            />
-                          </RequireScope>
-                          <RequireScope scope="org:admin" level="component">
-                            <MoreActions
-                              actions={[
-                                {
-                                  label: "Configure export",
-                                  icon: "pencil",
-                                  onClick: () => onConfigure(project),
-                                },
-                                {
-                                  label: "Delete export",
-                                  icon: "trash-2",
-                                  destructive: true,
-                                  disabled: mutating,
-                                  onClick: () => onDelete(project, route),
-                                },
-                              ]}
-                            />
-                          </RequireScope>
-                        </div>
+                      {route.enabled ? (
+                        <Icon name="check" className="size-3.5" />
                       ) : null}
-                    </div>
-                  ))}
+                      {route.enabled ? "Enabled" : "Paused"}
+                    </span>
+                    <RequireScope scope="org:admin" level="component">
+                      <Switch
+                        checked={route.enabled}
+                        onCheckedChange={(enabled) =>
+                          onToggle(project, route, enabled)
+                        }
+                        disabled={mutating}
+                        aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
+                      />
+                    </RequireScope>
+                    <RequireScope scope="org:admin" level="component">
+                      <MoreActions
+                        actions={[
+                          {
+                            label: "Configure export",
+                            icon: "pencil",
+                            onClick: () => onConfigure(project),
+                          },
+                          {
+                            label: "Delete export",
+                            icon: "trash-2",
+                            destructive: true,
+                            disabled: mutating,
+                            onClick: () => onDelete(project, route),
+                          },
+                        ]}
+                      />
+                    </RequireScope>
+                  </div>
                 </div>
                 <svg
                   viewBox="0 0 200 100"
@@ -689,69 +592,38 @@ function ExportMap({
                       />
                     </marker>
                   </defs>
-                  {connections.map((connection, connectionIndex) => {
-                    const sourceY =
-                      ((connection.sourceIndex + 0.5) / sources.length) * 100;
-                    const destinationY =
-                      ((connection.destinationIndex + 0.5) /
-                        destinations.length) *
-                      100;
-                    const path = `M 0 ${sourceY} C 70 ${sourceY}, 120 ${destinationY}, 196 ${destinationY}`;
-                    return (
-                      <path
-                        key={connection.key}
-                        d={path}
-                        fill="none"
-                        className={
-                          route.enabled
-                            ? "data-export-flow-line stroke-foreground"
-                            : "stroke-muted-foreground"
-                        }
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeDasharray={route.enabled ? "8 7" : "5 6"}
-                        vectorEffect="non-scaling-stroke"
-                        markerEnd={`url(#${arrowID})`}
-                        style={{
-                          animationDelay: `-${connectionIndex * 0.2}s`,
-                        }}
-                      />
-                    );
-                  })}
+                  <path
+                    d="M 0 50 C 70 50, 120 50, 196 50"
+                    fill="none"
+                    className={
+                      route.enabled
+                        ? "data-export-flow-line stroke-foreground"
+                        : "stroke-muted-foreground"
+                    }
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray={route.enabled ? "8 7" : "5 6"}
+                    vectorEffect="non-scaling-stroke"
+                    markerEnd={`url(#${arrowID})`}
+                  />
                 </svg>
-                <div className="space-y-3">
-                  {destinations.map((destination) => (
-                    <div
-                      key={destination.key}
-                      className="flex min-h-24 items-center justify-between gap-4 border px-5 py-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge size="sm">{destination.type}</Badge>
-                          <Text className="truncate font-medium">
-                            {destination.name}
-                          </Text>
-                          {destination.preview ? (
-                            <Badge background={false} size="sm">
-                              Preview
-                            </Badge>
-                          ) : null}
-                          {destination.sensitive ? (
-                            <Badge
-                              variant="warning"
-                              background={false}
-                              size="sm"
-                            >
-                              Sensitive
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                          {destination.detail}
-                        </span>
-                      </div>
+                <div className="flex min-h-24 items-center justify-between gap-4 border px-5 py-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Badge size="sm">{destination.type}</Badge>
+                      <Text className="truncate font-medium">
+                        {destination.name}
+                      </Text>
+                      {destination.sensitive ? (
+                        <Badge variant="warning" background={false} size="sm">
+                          Sensitive
+                        </Badge>
+                      ) : null}
                     </div>
-                  ))}
+                    <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+                      {destination.detail}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
