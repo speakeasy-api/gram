@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -355,8 +356,20 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	if tunneled && resource == "" {
 		return true
 	}
-	want := strings.TrimRight(upstream, "/")
-	return want != "" && strings.TrimRight(resource, "/") == want
+	want := normalizeResource(upstream)
+	return want != "" && normalizeResource(resource) == want
+}
+
+// normalizeResource drops a trailing slash from the path only, so query
+// data is compared verbatim; a non-URL identifier is trimmed as a whole.
+func normalizeResource(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" || u.Opaque != "" {
+		return strings.TrimRight(s, "/")
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = strings.TrimRight(u.RawPath, "/")
+	return u.String()
 }
 
 // tunneledBackendIssuer yields the identity routeUpstreamToken routes a

@@ -19,6 +19,8 @@ func TestGrantRoutesToUpstream(t *testing.T) {
 		{name: "remote legacy null resource", resource: "", upstream: upstream, tunneled: false, want: false},
 		{name: "remote other upstream", resource: "https://b.example.com/mcp", upstream: upstream, tunneled: false, want: false},
 		{name: "remote bare slash is not unqualified", resource: "/", upstream: upstream, tunneled: false, want: false},
+		{name: "remote query kept verbatim", resource: upstream + "?tenant=a/", upstream: upstream + "?tenant=a", tunneled: false, want: false},
+		{name: "remote query with trailing path slash", resource: upstream + "/?t=1", upstream: upstream + "?t=1", tunneled: false, want: true},
 		{name: "tunneled unqualified grant", resource: "", upstream: "urn:tunnel:a", tunneled: true, want: true},
 		{name: "tunneled identifier match", resource: "urn:tunnel:a", upstream: "urn:tunnel:a", tunneled: true, want: true},
 		{name: "tunneled qualified elsewhere", resource: "urn:tunnel:b", upstream: "urn:tunnel:a", tunneled: true, want: false},

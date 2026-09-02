@@ -319,6 +319,9 @@ func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, di
 			if aerr != nil {
 				return nil, aerr
 			}
+			if ackRec.status == http.StatusUnauthorized || ackRec.status == http.StatusForbidden {
+				return nil, memberAuthFailure(member, dial.anonymous)
+			}
 			return nil, memberUpstreamFailure(member, ackRec.status)
 		}
 	}
