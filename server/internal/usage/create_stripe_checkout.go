@@ -58,10 +58,8 @@ type preparedStripeCheckoutIntent struct {
 	customerID string
 }
 
-// stripeOrganizationIdentity is the mutable organization view stamped onto the Stripe
-// Customer so downstream consumers can attribute it without a Gram DB lookup. It is
-// never part of a Checkout request, which must replay byte-for-byte under its
-// idempotency key.
+// stripeOrganizationIdentity is stamped onto the Stripe Customer only; Checkout
+// requests replay byte-for-byte under their idempotency key.
 type stripeOrganizationIdentity struct {
 	name        string
 	accountType string

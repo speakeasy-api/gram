@@ -15,8 +15,6 @@ const METER_DISPLAY_NAME = "Tokens under management";
 const PRICE_LOOKUP_KEY = "payg-tum";
 const PRODUCT_NAME = "AI Control Plane PAYG";
 const PORTAL_CONFIGURATION_PURPOSE = "gram-payg";
-// Shared Stripe metadata contract (see server/internal/thirdparty/stripe/client.go):
-// products are tagged so revenue tooling can classify line items without name heuristics.
 const PRODUCT_METADATA_SPEAKEASY_PRODUCT = "aicp";
 // $0.35 per 1M TUMs, linear per-unit, expressed in cents per TUM.
 const UNIT_AMOUNT_DECIMAL_CENTS = "0.000035";
@@ -457,10 +455,7 @@ async function main() {
     ["recurring.meter", price.recurring?.meter, meter.id],
   ]);
 
-  // Products created before the metadata contract existed need the tag added.
-  // Only the PAYG product may be tagged: a lookup-key match on a different
-  // product, or a product already classified as something else, is a
-  // misconfiguration to fix by hand rather than overwrite.
+  // Only the PAYG product may be tagged; a conflicting tag is fixed by hand.
   const product = await stripe<StripeProduct>(
     key,
     "GET",

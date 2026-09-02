@@ -17,18 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-// Stripe metadata contract shared across Speakeasy billing systems so downstream
-// consumers can classify and attribute Stripe objects without heuristics.
-//
-//   - Customer, Checkout Session and Subscription: speakeasy_product,
-//     organization_id, organization_slug.
-//   - Customer only: organization_name and account_type (one of
-//     constants.AccountTypes). Checkout requests are replayed under their original
-//     idempotency key and Stripe rejects a replay whose parameters differ, so
-//     values that can change within a session's lifetime never go on the session.
-//
-// Organization IDs are shared with the other Speakeasy products, so attributes
-// they own are resolved there rather than duplicated here.
+// Metadata keys stamped on Stripe objects. organization_name and account_type go on
+// the Customer only: Checkout requests are replayed under their original idempotency
+// key and Stripe rejects a replay whose parameters differ.
 const (
 	organizationIDMetadataKey   = "organization_id"
 	organizationSlugMetadataKey = "organization_slug"
@@ -164,8 +155,6 @@ func contractMetadata(org organizationIdentity) map[string]string {
 	}
 }
 
-// customerMetadata adds the mutable identity (name, account type) that only belongs
-// on the Customer, which is updated in place rather than replayed.
 func customerMetadata(org organizationIdentity, name, accountType string) map[string]string {
 	metadata := contractMetadata(org)
 	metadata[organizationNameMetadataKey] = name

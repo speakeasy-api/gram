@@ -1259,9 +1259,7 @@ func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Only values that cannot change within a session's lifetime: Checkout requests are
-	// replayed under their original idempotency key, and Stripe rejects a replay whose
-	// parameters differ. Name and account type live on the Customer instead.
+	// Name and account type are customer-only so idempotent replays stay identical.
 	want := map[string]string{
 		"speakeasy_product": "aicp",
 		"organization_id":   "<ORG_ID>",
