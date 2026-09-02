@@ -12,7 +12,7 @@ func (e ClaudeCodeSpan) AppliesTo(span *otelv1.InboundSpan) bool {
 }
 
 func (e ClaudeCodeSpan) InputContent(span *otelv1.InboundSpan) (key string, val genaiconv.InputMessages, err error) {
-	k, v := getOneAttr(span, "user_prompt")
+	k, v := getOneAttr(span, claudeCodeUserPromptKey)
 	if k == "" || v == "" {
 		return "", nil, nil
 	}
@@ -41,12 +41,12 @@ func (e ClaudeCodeSpan) SessionID(span *otelv1.InboundSpan) (key string, val str
 }
 
 func (e ClaudeCodeSpan) ExternalUserEmail(span *otelv1.InboundSpan) (key string, val string, err error) {
-	key, val = getOneAttr(span, "user.email")
+	key, val = getOneAttr(span, userEmailKey)
 	return key, val, nil
 }
 
 func (e ClaudeCodeSpan) ExternalUserID(span *otelv1.InboundSpan) (key string, val string, err error) {
-	key, val = getOneAttr(span, "user.account_id")
+	key, val = getOneAttr(span, vendorUserAccountIDKey)
 	return key, val, nil
 }
 

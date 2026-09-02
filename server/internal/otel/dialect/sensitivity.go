@@ -2,14 +2,30 @@ package dialect
 
 import "strings"
 
+// Sensitive attribute keys are shared by dialect extraction and relay redaction.
+const (
+	claudeCodeUserPromptKey  = "user_prompt"
+	codexPromptKey           = "prompt"
+	semconvInputMessagesKey  = "gen_ai.input.messages"
+	semconvOutputMessagesKey = "gen_ai.output.messages"
+	semconvUserIDKey         = "user.id"
+	userEmailKey             = "user.email"
+	vendorUserAccountIDKey   = "user.account_id"
+)
+
 var sensitiveDataExactKeys = map[string]struct{}{
+	claudeCodeUserPromptKey:      {},
+	codexPromptKey:               {},
+	semconvInputMessagesKey:      {},
+	semconvOutputMessagesKey:     {},
+	semconvUserIDKey:             {},
+	userEmailKey:                 {},
+	vendorUserAccountIDKey:       {},
 	"assistant":                  {},
 	"content":                    {},
 	"gen_ai.system_instructions": {},
-	"prompt":                     {},
 	"tool.args":                  {},
 	"tool_result":                {},
-	"user_prompt":                {},
 }
 
 var sensitiveDataPrefixes = [...]string{

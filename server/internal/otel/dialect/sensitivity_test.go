@@ -27,6 +27,7 @@ func TestIsSensitiveDataKey(t *testing.T) {
 		{key: "enduser.id", sensitive: true},
 		{key: "enduser.email", sensitive: true},
 		{key: "user.id", sensitive: true},
+		{key: "user.account_id", sensitive: true},
 		{key: "user.email", sensitive: true},
 		{key: "gen_ai.input", sensitive: false},
 		{key: "gen_ai.system", sensitive: false},
