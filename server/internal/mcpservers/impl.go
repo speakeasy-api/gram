@@ -164,6 +164,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
+	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+		return nil, err
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -352,19 +355,22 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 // unauthorized member cannot contend server-lifecycle locks. It keys on a
 // non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
 // locked row, which is authoritative if the backing changes concurrently.
-func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) error {
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
 	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+			return repo.McpServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String()))
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+		return repo.McpServer{}, err
+	}
+	return server, nil
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
@@ -617,7 +623,18 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	unlocked, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
+		return nil, err
+	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid); err != nil {
 		return nil, err
 	}
 
@@ -627,6 +644,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid); err != nil {
+		return nil, err
+	}
 	txRepo := repo.New(dbtx)
 
 	if payload.Visibility == VisibilityDisabled {
@@ -668,8 +688,8 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
-		return nil, err
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server network access mode changed concurrently; retry the update")
 	}
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
@@ -847,6 +867,22 @@ func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkacc
 	return &mode
 }
 
+func (s *Service) preflightNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if unproxied {
+		return oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	if s.networkAccessEligibility == nil {
+		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	if err := s.networkAccessEligibility.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return nil
+}
+
 func (s *Service) admitNetworkAccessMode(ctx context.Context, tx pgx.Tx, organizationID string, mode networkaccess.Mode, unproxied bool) error {
 	if mode.IsPublicOnly() {
 		return nil
@@ -888,7 +924,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
 		return err
 	}
 
