@@ -2204,6 +2204,249 @@ func DecodeGetObservabilityOverviewResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetMetaMcpServerUsageRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "getMetaMcpServerUsage"
+// endpoint
+func (c *Client) BuildGetMetaMcpServerUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMetaMcpServerUsageTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getMetaMcpServerUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMetaMcpServerUsageRequest returns an encoder for requests sent to
+// the telemetry getMetaMcpServerUsage server.
+func EncodeGetMetaMcpServerUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetMetaMcpServerUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getMetaMcpServerUsage", "*telemetry.GetMetaMcpServerUsagePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetMetaMcpServerUsageRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getMetaMcpServerUsage", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMetaMcpServerUsageResponse returns a decoder for responses returned
+// by the telemetry getMetaMcpServerUsage endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetMetaMcpServerUsageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMetaMcpServerUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMetaMcpServerUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			res := NewGetMetaMcpServerUsageResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMetaMcpServerUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMetaMcpServerUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMetaMcpServerUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMetaMcpServerUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMetaMcpServerUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMetaMcpServerUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMetaMcpServerUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMetaMcpServerUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+				}
+				err = ValidateGetMetaMcpServerUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+				}
+				return nil, NewGetMetaMcpServerUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMetaMcpServerUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+				}
+				err = ValidateGetMetaMcpServerUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+				}
+				return nil, NewGetMetaMcpServerUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getMetaMcpServerUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMetaMcpServerUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			err = ValidateGetMetaMcpServerUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMetaMcpServerUsage", err)
+			}
+			return nil, NewGetMetaMcpServerUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getMetaMcpServerUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetProjectOverviewRequest instantiates a HTTP request object with
 // method and path set to call the "telemetry" service "getProjectOverview"
 // endpoint
@@ -8355,6 +8598,34 @@ func unmarshalToolMetricResponseBodyToTelemetryToolMetric(v *ToolMetricResponseB
 		FailureCount: *v.FailureCount,
 		AvgLatencyMs: *v.AvgLatencyMs,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel
+// builds a value of type *telemetry.MetaMcpDiscoveryFunnel from a value of
+// type *MetaMcpDiscoveryFunnelResponseBody.
+func unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel(v *MetaMcpDiscoveryFunnelResponseBody) *telemetry.MetaMcpDiscoveryFunnel {
+	res := &telemetry.MetaMcpDiscoveryFunnel{
+		ListServers:    *v.ListServers,
+		DescribeServer: *v.DescribeServer,
+		DescribeTools:  *v.DescribeTools,
+		ExecuteTool:    *v.ExecuteTool,
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage builds
+// a value of type *telemetry.MetaMcpMemberUsage from a value of type
+// *MetaMcpMemberUsageResponseBody.
+func unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(v *MetaMcpMemberUsageResponseBody) *telemetry.MetaMcpMemberUsage {
+	res := &telemetry.MetaMcpMemberUsage{
+		McpServerID:  *v.McpServerID,
+		ToolCalls:    *v.ToolCalls,
+		ErrorCount:   *v.ErrorCount,
+		LastCalledAt: v.LastCalledAt,
 	}
 
 	return res

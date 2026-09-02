@@ -523,7 +523,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -532,6 +532,9 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		}
 		if body.McpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -564,6 +567,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		ToolsetSlug:       body.ToolsetSlug,
 		RemoteMcpServerID: body.RemoteMcpServerID,
 		McpServerID:       body.McpServerID,
+		MetaMcpServerID:   body.MetaMcpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
 		AccountType:       body.AccountType,
@@ -575,6 +579,53 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		if v.IncludeTimeSeries == zero {
 			v.IncludeTimeSeries = true
 		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetMetaMcpServerUsagePayload builds the payload for the telemetry
+// getMetaMcpServerUsage endpoint from CLI flags.
+func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string, telemetryGetMetaMcpServerUsageApikeyToken string, telemetryGetMetaMcpServerUsageSessionToken string, telemetryGetMetaMcpServerUsageProjectSlugInput string) (*telemetry.GetMetaMcpServerUsagePayload, error) {
+	var err error
+	var body GetMetaMcpServerUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMetaMcpServerUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMetaMcpServerUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetMetaMcpServerUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMetaMcpServerUsageSessionToken != "" {
+			sessionToken = &telemetryGetMetaMcpServerUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMetaMcpServerUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMetaMcpServerUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMetaMcpServerUsagePayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+		From:            body.From,
+		To:              body.To,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

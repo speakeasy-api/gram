@@ -528,6 +528,7 @@ trackedFiles:
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
   src/funcs/telemetryGetMcpServerActivity.ts: {}
+  src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
@@ -893,6 +894,8 @@ trackedFiles:
   src/models/components/getmcpmetadataresponsebody.ts: {}
   src/models/components/getmcpserveractivitypayload.ts: {}
   src/models/components/getmcpserveractivityresult.ts: {}
+  src/models/components/getmetamcpserverusagepayload.ts: {}
+  src/models/components/getmetamcpserverusageresult.ts: {}
   src/models/components/getmetricssummaryresult.ts: {}
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
@@ -1144,7 +1147,9 @@ trackedFiles:
   src/models/components/mcpserveractivity.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
+  src/models/components/metamcpdiscoveryfunnel.ts: {}
   src/models/components/metamcpmember.ts: {}
+  src/models/components/metamcpmemberusage.ts: {}
   src/models/components/metamcpserver.ts: {}
   src/models/components/migrateissuerrequestbody.ts: {}
   src/models/components/migrateorganizationremotesessionissuerresult.ts: {}
@@ -1781,6 +1786,7 @@ trackedFiles:
   src/models/operations/getmcpserverdetails.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
+  src/models/operations/getmetamcpserverusage.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -2435,6 +2441,8 @@ trackedFiles:
   src/react-query/getMcpServerActivity.ts: {}
   src/react-query/getMetaMcpServer.core.ts: {}
   src/react-query/getMetaMcpServer.ts: {}
+  src/react-query/getMetaMcpServerUsage.core.ts: {}
+  src/react-query/getMetaMcpServerUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
@@ -5627,6 +5635,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getMetaMcpServerUsage:
+    speakeasy-default-get-meta-mcp-server-usage:
+      requestBody:
+        application/json: {"from": "2026-06-16T21:32:13.467Z", "meta_mcp_server_id": "c3d6a51c-c4ca-46c0-b018-7c92b1817afd", "to": "2025-05-22T02:21:17.518Z"}
+      responses:
+        "200":
+          application/json: {"funnel": {"describe_server": 284078, "describe_tools": 906068, "execute_tool": 625714, "list_servers": 910919}, "members": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:

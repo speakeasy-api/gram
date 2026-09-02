@@ -52,6 +52,11 @@ func GetObservabilityOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getObservabilityOverview"
 }
 
+// GetMetaMcpServerUsageTelemetryPath returns the URL path to the telemetry service getMetaMcpServerUsage HTTP endpoint.
+func GetMetaMcpServerUsageTelemetryPath() string {
+	return "/rpc/telemetry.getMetaMcpServerUsage"
+}
+
 // GetProjectOverviewTelemetryPath returns the URL path to the telemetry service getProjectOverview HTTP endpoint.
 func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"

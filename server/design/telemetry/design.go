@@ -278,6 +278,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
 
+	Method("getMetaMcpServerUsage", func() {
+		Description("Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMetaMcpServerUsagePayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMetaMcpServerUsageResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMetaMcpServerUsage")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMetaMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMetaMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
+	})
+
 	Method("getProjectOverview", func() {
 		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1972,6 +2001,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
 		Format(FormatUUID)
 	})
+	Attribute("meta_mcp_server_id", String, "Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched through that gateway", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
@@ -2758,24 +2790,74 @@ var GetMcpServerActivityPayload = Type("GetMcpServerActivityPayload", func() {
 var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Description("Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).")
 
-	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window")
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted, tunneled, or gateway) that has received at least one tool call within the lookback window")
 	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
 	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
 
 	Required("activity", "recent_window_days", "lookback_days")
 })
 
+var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
+	Attribute("meta_mcp_server_id", String, "The gateway (meta MCP server) ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Required("meta_mcp_server_id", "from", "to")
+})
+
+var MetaMcpDiscoveryFunnel = Type("MetaMcpDiscoveryFunnel", func() {
+	Description("Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.")
+
+	Attribute("list_servers", Int64, "list_servers calls")
+	Attribute("describe_server", Int64, "describe_server calls")
+	Attribute("describe_tools", Int64, "describe_tools calls")
+	Attribute("execute_tool", Int64, "Tool executions dispatched through the gateway")
+
+	Required("list_servers", "describe_server", "describe_tools", "execute_tool")
+})
+
+var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
+	Description("Gateway-dispatched execution activity for one member server.")
+
+	Attribute("mcp_server_id", String, "The member's mcp_servers row id", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_calls", Int64, "Tool calls dispatched to this member through the gateway")
+	Attribute("error_count", Int64, "Calls that returned an HTTP error status")
+	Attribute("last_called_at", String, "ISO 8601 timestamp of the most recent call", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("mcp_server_id", "tool_calls", "error_count")
+})
+
+var GetMetaMcpServerUsageResult = Type("GetMetaMcpServerUsageResult", func() {
+	Description("Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.")
+
+	Attribute("funnel", MetaMcpDiscoveryFunnel)
+	Attribute("members", ArrayOf(MetaMcpMemberUsage), "Per-member execution breakdown, most active first")
+
+	Required("funnel", "members")
+})
+
 var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {
-	Description("MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
-	Enum("hosted_mcp_server", "tunneled_mcp_server")
+	Description("MCP server activity target type. Only the server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server")
 })
 
 var McpServerActivity = Type("McpServerActivity", func() {
-	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)")
+	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways)")
 
-	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
-	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers")
-	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target")
+	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways")
+	Attribute("target_label", String, "User-facing label for the target. Gateway rows carry the gateway name, falling back to the meta MCP server id when the gateway no longer exists")
 	Attribute("total_tool_calls", Int64, "Number of tool calls observed across the whole lookback window")
 	Attribute("recent_tool_calls", Int64, "Number of tool calls observed inside the recent-activity window")
 	Attribute("last_tool_call_at", String, "ISO 8601 timestamp of the most recent tool call", func() {
