@@ -12,6 +12,178 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireNetworkIngressOrganizationLock = `-- name: AcquireNetworkIngressOrganizationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('network-ingress:' || $1::text, 0))
+`
+
+// Serializes lifecycle decisions even when the organization has no ingress row
+// yet, closing concurrent create and create-vs-cleanup gaps.
+func (q *Queries) AcquireNetworkIngressOrganizationLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireNetworkIngressOrganizationLock, organizationID)
+	return err
+}
+
+const clearDeletedNetworkIngressResources = `-- name: ClearDeletedNetworkIngressResources :execrows
+UPDATE network_ingresses
+SET
+    credentials_encrypted = NULL,
+    provider_resources = '{}'::jsonb,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS TRUE
+`
+
+// AIS-611 calls this only after every persisted provider resource is confirmed
+// absent. Clearing both fields is the replacement-create release boundary.
+func (q *Queries) ClearDeletedNetworkIngressResources(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearDeletedNetworkIngressResources, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countNetworkIngressDeleteImpact = `-- name: CountNetworkIngressDeleteImpact :one
+SELECT
+  (
+    SELECT COUNT(*)
+    FROM mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
+    WHERE p.organization_id = $1
+      AND s.deleted IS FALSE
+      AND s.network_access_mode = 'dual'
+  )::bigint AS mcp_servers_dual,
+  (
+    SELECT COUNT(*)
+    FROM mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
+    WHERE p.organization_id = $1
+      AND s.deleted IS FALSE
+      AND s.network_access_mode = 'private_only'
+  )::bigint AS mcp_servers_private_only,
+  (
+    SELECT COUNT(*)
+    FROM meta_mcp_servers AS s
+    WHERE s.organization_id = $1
+      AND s.deleted IS FALSE
+      AND s.network_access_mode = 'dual'
+  )::bigint AS meta_mcp_servers_dual,
+  (
+    SELECT COUNT(*)
+    FROM meta_mcp_servers AS s
+    WHERE s.organization_id = $1
+      AND s.deleted IS FALSE
+      AND s.network_access_mode = 'private_only'
+  )::bigint AS meta_mcp_servers_private_only
+`
+
+type CountNetworkIngressDeleteImpactRow struct {
+	McpServersDual            int64
+	McpServersPrivateOnly     int64
+	MetaMcpServersDual        int64
+	MetaMcpServersPrivateOnly int64
+}
+
+func (q *Queries) CountNetworkIngressDeleteImpact(ctx context.Context, organizationID string) (CountNetworkIngressDeleteImpactRow, error) {
+	row := q.db.QueryRow(ctx, countNetworkIngressDeleteImpact, organizationID)
+	var i CountNetworkIngressDeleteImpactRow
+	err := row.Scan(
+		&i.McpServersDual,
+		&i.McpServersPrivateOnly,
+		&i.MetaMcpServersDual,
+		&i.MetaMcpServersPrivateOnly,
+	)
+	return i, err
+}
+
+const createNetworkIngress = `-- name: CreateNetworkIngress :one
+INSERT INTO network_ingresses (
+    id,
+    organization_id,
+    provider,
+    hostname,
+    endpoint_namespace_kind,
+    custom_domain_id,
+    enabled,
+    identity_required,
+    credentials_encrypted,
+    attestor_namespace,
+    attestor_service_account,
+    provider_resources
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12
+)
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateNetworkIngressParams struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	Provider               string
+	Hostname               string
+	EndpointNamespaceKind  string
+	CustomDomainID         uuid.NullUUID
+	Enabled                bool
+	IdentityRequired       bool
+	CredentialsEncrypted   pgtype.Text
+	AttestorNamespace      string
+	AttestorServiceAccount string
+	ProviderResources      []byte
+}
+
+func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIngressParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, createNetworkIngress,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.Hostname,
+		arg.EndpointNamespaceKind,
+		arg.CustomDomainID,
+		arg.Enabled,
+		arg.IdentityRequired,
+		arg.CredentialsEncrypted,
+		arg.AttestorNamespace,
+		arg.AttestorServiceAccount,
+		arg.ProviderResources,
+	)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getLiveNetworkIngressAuthority = `-- name: GetLiveNetworkIngressAuthority :one
 SELECT
     id,
@@ -48,6 +220,406 @@ func (q *Queries) GetLiveNetworkIngressAuthority(ctx context.Context, arg GetLiv
 		&i.EndpointNamespaceKind,
 		&i.CustomDomainID,
 		&i.DnsName,
+	)
+	return i, err
+}
+
+const getNetworkIngressByID = `-- name: GetNetworkIngressByID :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE id = $1
+`
+
+func (q *Queries) GetNetworkIngressByID(ctx context.Context, id uuid.UUID) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressByID, id)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getNetworkIngressByOrganization = `-- name: GetNetworkIngressByOrganization :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE organization_id = $1
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizationID string) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressByOrganization, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPendingDeletedNetworkIngressByOrganization = `-- name: GetPendingDeletedNetworkIngressByOrganization :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE organization_id = $1
+  AND deleted IS TRUE
+  AND (
+    credentials_encrypted IS NOT NULL
+    OR provider_resources <> '{}'::jsonb
+  )
+ORDER BY deleted_at DESC, id DESC
+LIMIT 1
+`
+
+// Cleanup-critical identities and credentials intentionally survive soft delete.
+// A replacement ingress is blocked until AIS-611 confirms provider deletion and
+// clears both fields.
+func (q *Queries) GetPendingDeletedNetworkIngressByOrganization(ctx context.Context, organizationID string) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getPendingDeletedNetworkIngressByOrganization, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const hasActiveNetworkIngressForCustomDomain = `-- name: HasActiveNetworkIngressForCustomDomain :one
+SELECT EXISTS (
+  SELECT 1
+  FROM network_ingresses
+  WHERE organization_id = $1
+    AND custom_domain_id = $2
+    AND deleted IS FALSE
+)
+`
+
+type HasActiveNetworkIngressForCustomDomainParams struct {
+	OrganizationID string
+	CustomDomainID uuid.NullUUID
+}
+
+func (q *Queries) HasActiveNetworkIngressForCustomDomain(ctx context.Context, arg HasActiveNetworkIngressForCustomDomainParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveNetworkIngressForCustomDomain, arg.OrganizationID, arg.CustomDomainID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasEnabledNetworkIngress = `-- name: HasEnabledNetworkIngress :one
+SELECT EXISTS (
+  SELECT 1
+  FROM network_ingresses
+  WHERE organization_id = $1
+    AND enabled IS TRUE
+    AND deleted IS FALSE
+)
+`
+
+func (q *Queries) HasEnabledNetworkIngress(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasEnabledNetworkIngress, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const lockNetworkIngressByOrganization = `-- name: LockNetworkIngressByOrganization :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE organization_id = $1
+  AND deleted IS FALSE
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) LockNetworkIngressByOrganization(ctx context.Context, organizationID string) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, lockNetworkIngressByOrganization, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockNetworkIngressRowsByOrganization = `-- name: LockNetworkIngressRowsByOrganization :many
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE organization_id = $1
+ORDER BY created_at, id
+FOR UPDATE
+`
+
+// Serializes active/tombstone lifecycle decisions when rows already exist.
+func (q *Queries) LockNetworkIngressRowsByOrganization(ctx context.Context, organizationID string) ([]NetworkIngress, error) {
+	rows, err := q.db.Query(ctx, lockNetworkIngressRowsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NetworkIngress
+	for rows.Next() {
+		var i NetworkIngress
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.Hostname,
+			&i.EndpointNamespaceKind,
+			&i.CustomDomainID,
+			&i.Enabled,
+			&i.IdentityRequired,
+			&i.CredentialsEncrypted,
+			&i.AttestorNamespace,
+			&i.AttestorServiceAccount,
+			&i.ProviderResources,
+			&i.Status,
+			&i.DnsName,
+			&i.LastError,
+			&i.HealthCheckedAt,
+			&i.ConnectedSince,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rotateNetworkIngressCredentials = `-- name: RotateNetworkIngressCredentials :one
+UPDATE network_ingresses
+SET
+    credentials_encrypted = $1,
+    status = 'pending',
+    last_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+`
+
+type RotateNetworkIngressCredentialsParams struct {
+	CredentialsEncrypted pgtype.Text
+	OrganizationID       string
+}
+
+func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg RotateNetworkIngressCredentialsParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, rotateNetworkIngressCredentials, arg.CredentialsEncrypted, arg.OrganizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const softDeleteNetworkIngress = `-- name: SoftDeleteNetworkIngress :one
+UPDATE network_ingresses
+SET
+    enabled = FALSE,
+    status = 'deleting',
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+`
+
+func (q *Queries) SoftDeleteNetworkIngress(ctx context.Context, organizationID string) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, softDeleteNetworkIngress, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateNetworkIngressSettings = `-- name: UpdateNetworkIngressSettings :one
+UPDATE network_ingresses
+SET
+    hostname = CASE WHEN $1::boolean THEN $2 ELSE hostname END,
+    enabled = CASE WHEN $3::boolean THEN $4 ELSE enabled END,
+    identity_required = CASE WHEN $5::boolean THEN $6 ELSE identity_required END,
+    status = CASE
+      WHEN ($1::boolean OR ($3::boolean AND $4)) THEN 'pending'
+      WHEN ($3::boolean AND NOT $4) THEN 'disabled'
+      ELSE status
+    END,
+    last_error = CASE
+      WHEN ($1::boolean OR $3::boolean) THEN NULL
+      ELSE last_error
+    END,
+    updated_at = clock_timestamp()
+WHERE organization_id = $7
+  AND deleted IS FALSE
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateNetworkIngressSettingsParams struct {
+	UpdateHostname         bool
+	Hostname               string
+	UpdateEnabled          bool
+	Enabled                bool
+	UpdateIdentityRequired bool
+	IdentityRequired       bool
+	OrganizationID         string
+}
+
+func (q *Queries) UpdateNetworkIngressSettings(ctx context.Context, arg UpdateNetworkIngressSettingsParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, updateNetworkIngressSettings,
+		arg.UpdateHostname,
+		arg.Hostname,
+		arg.UpdateEnabled,
+		arg.Enabled,
+		arg.UpdateIdentityRequired,
+		arg.IdentityRequired,
+		arg.OrganizationID,
+	)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

@@ -3282,6 +3282,9 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
+        network_ingress_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed private network ingress entitlement
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Gram Platform MCP capability
@@ -3331,6 +3334,7 @@ components:
         - remote_session_auto_refresh_enforced_enabled
         - consent_tool_filtering_enabled
         - session_portability_enabled
+        - network_ingress_enabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -3422,6 +3426,7 @@ components:
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
             - session_portability
+            - network_ingress
           maxLength: 60
         organization_id:
           type: string

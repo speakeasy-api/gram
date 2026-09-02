@@ -109,6 +109,9 @@ type ProductFeatures struct {
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
 	SessionPortabilityEnabled bool
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -258,6 +261,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.SessionPortabilityEnabled != nil {
 		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
 	}
+	if vres.NetworkIngressEnabled != nil {
+		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -286,6 +292,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
 		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

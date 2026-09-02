@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
@@ -17,6 +18,8 @@ import (
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -27,6 +30,44 @@ type deleteTestProvisionerFactory struct {
 
 func (f *deleteTestProvisionerFactory) Provisioner(_ k8s.ProvisionerKind) k8s.CustomDomainProvisioner {
 	return f.provisioner
+}
+
+func TestDeleteDomain_ActiveNetworkIngressPinConflicts(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "pinned.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+	ingressID := uuid.New()
+	resources, err := networkingress.NewResourceNames(ingressID)
+	require.NoError(t, err)
+	encoded, err := resources.Marshal()
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(ti.conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+		ID:                     ingressID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		Provider:               networkingress.ProviderTailscale,
+		Hostname:               "pinned",
+		EndpointNamespaceKind:  "custom_domain",
+		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
+		Enabled:                true,
+		IdentityRequired:       false,
+		CredentialsEncrypted:   pgtype.Text{String: "ciphertext", Valid: true},
+		AttestorNamespace:      resources.Namespace,
+		AttestorServiceAccount: resources.AttestorServiceAccount,
+		ProviderResources:      encoded,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
 }
 
 func TestDeleteDomain_NoCustomDomain_NotFound(t *testing.T) {

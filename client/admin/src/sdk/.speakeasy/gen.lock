@@ -305,7 +305,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": true, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": true, "device_agent": true, "hooks_browser_login_enabled": true, "hooks_fail_open_enabled": true, "logs_enabled": true, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": false, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": true, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": true, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": true, "device_agent": true, "hooks_browser_login_enabled": true, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": false, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": true, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -477,7 +477,7 @@ examples:
         application/json: {"enabled": false, "feature_name": "consent_tool_filtering", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": true, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": true, "logs_enabled": true, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": true, "scim_enabled": true, "session_capture_enabled": true, "session_portability_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": true, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": true, "scim_enabled": true, "session_capture_enabled": true, "session_portability_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
