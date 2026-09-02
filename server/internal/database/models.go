@@ -1322,6 +1322,7 @@ type McpServer struct {
 	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
+	NetworkAccessMode     pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
@@ -1371,6 +1372,7 @@ type MetaMcpServer struct {
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
 	Visibility          string
+	NetworkAccessMode   pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -1401,6 +1403,30 @@ type ModelProviderKey struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
+}
+
+type NetworkIngress struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	Provider               string
+	Hostname               string
+	EndpointNamespaceKind  string
+	CustomDomainID         uuid.NullUUID
+	Enabled                bool
+	IdentityRequired       bool
+	CredentialsEncrypted   pgtype.Text
+	AttestorNamespace      string
+	AttestorServiceAccount string
+	ProviderResources      []byte
+	Status                 string
+	DnsName                pgtype.Text
+	LastError              pgtype.Text
+	HealthCheckedAt        pgtype.Timestamptz
+	ConnectedSince         pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type OauthProxyClientInfo struct {
