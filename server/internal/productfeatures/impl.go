@@ -117,22 +117,23 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	if err != nil {
 		return err
 	}
+	featureName := string(payload.FeatureName)
 
 	// Disabling skills is a silent no-op (skills are always on), so it stays
 	// available to org admins and resolves before the staff-only gate below.
-	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
+	if featureName == string(FeatureSkills) && !payload.Enabled {
 		return nil
 	}
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
-	if Feature(payload.FeatureName).RequiresPlatformAdmin() {
+	if Feature(featureName).RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
 			return err
 		}
 	}
 
-	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(payload.FeatureName)})
+	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(featureName)})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock feature cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
@@ -150,7 +151,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// commit, immune to read-then-write races.
 	q := repo.New(dbtx)
 	changed := false
-	if payload.Enabled && payload.FeatureName == string(FeatureSkills) {
+	if payload.Enabled && featureName == string(FeatureSkills) {
 		// Skills enablement also provisions the built-in RBAC grants, so it
 		// goes through its dedicated transactional path.
 		inserted, err := EnableSkillsTx(ctx, dbtx, orgID)
@@ -161,7 +162,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	} else if payload.Enabled {
 		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
-			FeatureName:    payload.FeatureName,
+			FeatureName:    featureName,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enable organization feature flag %q", payload.FeatureName).LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
@@ -170,7 +171,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	} else {
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
 			OrganizationID: orgID,
-			FeatureName:    payload.FeatureName,
+			FeatureName:    featureName,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -198,7 +199,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			ActorSlug:        nil,
 			OrganizationName: org.Name,
 			OrganizationSlug: org.Slug,
-			FeatureName:      payload.FeatureName,
+			FeatureName:      featureName,
 			FeatureEnabled:   payload.Enabled,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
@@ -209,7 +210,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
-	_ = s.featureClient.storeFeatureCache(ctx, orgID, Feature(payload.FeatureName), payload.Enabled, "failed to cache feature flag state")
+	_ = s.featureClient.storeFeatureCache(ctx, orgID, Feature(featureName), payload.Enabled, "failed to cache feature flag state")
 
 	return nil
 }
@@ -293,58 +294,33 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 	return nil
 }
 
-func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
+func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.ProductFeatures, error) {
 	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
 	if err != nil {
 		return nil, err
 	}
 
-	isEnabled := func(feature Feature) bool {
-		enabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, feature)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to check feature flag",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogProductFeatureName(string(feature)),
-			)
-			return false
-		}
-
-		return enabled
-	}
-
-	// device_agent is derived from device-agent sync activity, not an
-	// organization_features row, so it bypasses isEnabled. A read failure degrades
-	// to false rather than failing the whole call.
-	deviceAgent, err := s.repo.HasDeviceAgentSync(ctx, orgID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to check device agent syncs",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
-		)
-		deviceAgent = false
-	}
-
-	return &gen.GetProductFeaturesResult{
-		LogsEnabled:                             isEnabled(FeatureLogs),
-		ToolIoLogsEnabled:                       isEnabled(FeatureToolIOLogs),
-		SessionCaptureEnabled:                   isEnabled(FeatureSessionCapture),
-		AuthzChallengeLoggingEnabled:            isEnabled(FeatureAuthzChallengeLogging),
-		SsoEnabled:                              isEnabled(FeatureSSO),
-		ScimEnabled:                             isEnabled(FeatureSCIM),
-		HooksBrowserLoginEnabled:                isEnabled(FeatureHooksBrowserLogin),
-		HooksFailOpenEnabled:                    isEnabled(FeatureHooksFailOpen),
-		CustomModelKeysEnabled:                  isEnabled(FeatureCustomModelKeys),
-		SkillsEnabled:                           true,
-		SkillCaptureMetadataOnly:                isEnabled(FeatureSkillCaptureMetadataOnly),
-		AiPlatformPushIntegrationsEnabled:       isEnabled(FeatureAIPlatformPushIntegrations),
-		PlatformMcpEnabled:                      isEnabled(FeaturePlatformMCP),
-		CustomerManagedEncryptionKeysEnabled:    isEnabled(FeatureCustomerManagedEncryptionKeys),
-		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
-		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
-		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
-		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
-		DeviceAgent:                             deviceAgent,
+	snapshot := s.featureClient.Snapshot(ctx, orgID)
+	return &gen.ProductFeatures{
+		LogsEnabled:                             snapshot.LogsEnabled,
+		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   snapshot.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            snapshot.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              snapshot.SsoEnabled,
+		ScimEnabled:                             snapshot.ScimEnabled,
+		HooksBrowserLoginEnabled:                snapshot.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    snapshot.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  snapshot.CustomModelKeysEnabled,
+		SkillsEnabled:                           snapshot.SkillsEnabled,
+		SkillCaptureMetadataOnly:                snapshot.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       snapshot.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      snapshot.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    snapshot.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         snapshot.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             snapshot.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
+		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }
 

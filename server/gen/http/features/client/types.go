@@ -9,6 +9,7 @@ package client
 
 import (
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -655,7 +656,7 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetProductFeatureRequestBody {
 	body := &SetProductFeatureRequestBody{
 		OrganizationID: p.OrganizationID,
-		FeatureName:    p.FeatureName,
+		FeatureName:    string(p.FeatureName),
 		Enabled:        p.Enabled,
 	}
 	return body
@@ -672,29 +673,29 @@ func NewSetRemoteSessionAutoRefreshPolicyRequestBody(p *features.SetRemoteSessio
 	return body
 }
 
-// NewGetProductFeaturesResultOK builds a "features" service
+// NewGetProductFeaturesProductFeaturesOK builds a "features" service
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
-func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
-	v := &features.GetProductFeaturesResult{
-		LogsEnabled:                             *body.LogsEnabled,
-		ToolIoLogsEnabled:                       *body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:                   *body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled:            *body.AuthzChallengeLoggingEnabled,
-		SsoEnabled:                              *body.SsoEnabled,
-		ScimEnabled:                             *body.ScimEnabled,
-		HooksBrowserLoginEnabled:                *body.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:                    *body.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:                  *body.CustomModelKeysEnabled,
-		SkillsEnabled:                           *body.SkillsEnabled,
-		SkillCaptureMetadataOnly:                *body.SkillCaptureMetadataOnly,
-		AiPlatformPushIntegrationsEnabled:       *body.AiPlatformPushIntegrationsEnabled,
-		PlatformMcpEnabled:                      *body.PlatformMcpEnabled,
-		CustomerManagedEncryptionKeysEnabled:    *body.CustomerManagedEncryptionKeysEnabled,
-		RemoteSessionAutoRefreshEnabled:         *body.RemoteSessionAutoRefreshEnabled,
-		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             *body.ConsentToolFilteringEnabled,
-		SessionPortabilityEnabled:               *body.SessionPortabilityEnabled,
-		DeviceAgent:                             *body.DeviceAgent,
+func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.ProductFeaturesView {
+	v := &featuresviews.ProductFeaturesView{
+		LogsEnabled:                             body.LogsEnabled,
+		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            body.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              body.SsoEnabled,
+		ScimEnabled:                             body.ScimEnabled,
+		HooksBrowserLoginEnabled:                body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  body.CustomModelKeysEnabled,
+		SkillsEnabled:                           body.SkillsEnabled,
+		SkillCaptureMetadataOnly:                body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      body.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
+		DeviceAgent:                             body.DeviceAgent,
 	}
 
 	return v
@@ -1148,69 +1149,6 @@ func NewSetRemoteSessionAutoRefreshPolicyGatewayError(body *SetRemoteSessionAuto
 	}
 
 	return v
-}
-
-// ValidateGetProductFeaturesResponseBody runs the validations defined on
-// GetProductFeaturesResponseBody
-func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody) (err error) {
-	if body.LogsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logs_enabled", "body"))
-	}
-	if body.ToolIoLogsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_io_logs_enabled", "body"))
-	}
-	if body.SessionCaptureEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "body"))
-	}
-	if body.AuthzChallengeLoggingEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
-	}
-	if body.SsoEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
-	}
-	if body.ScimEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
-	}
-	if body.HooksBrowserLoginEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
-	}
-	if body.HooksFailOpenEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_fail_open_enabled", "body"))
-	}
-	if body.CustomModelKeysEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("custom_model_keys_enabled", "body"))
-	}
-	if body.SkillsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
-	}
-	if body.SkillCaptureMetadataOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skill_capture_metadata_only", "body"))
-	}
-	if body.AiPlatformPushIntegrationsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
-	}
-	if body.PlatformMcpEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("platform_mcp_enabled", "body"))
-	}
-	if body.CustomerManagedEncryptionKeysEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
-	}
-	if body.RemoteSessionAutoRefreshEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enabled", "body"))
-	}
-	if body.RemoteSessionAutoRefreshEnforcedEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "body"))
-	}
-	if body.ConsentToolFilteringEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "body"))
-	}
-	if body.SessionPortabilityEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "body"))
-	}
-	if body.DeviceAgent == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))
-	}
-	return
 }
 
 // ValidateGetProductFeaturesUnauthorizedResponseBody runs the validations

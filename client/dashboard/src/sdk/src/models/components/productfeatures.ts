@@ -8,7 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type GetProductFeaturesResponseBody = {
+export type ProductFeatures = {
   /**
    * Whether the organization can provision push integrations for AI platforms
    */
@@ -88,8 +88,8 @@ export type GetProductFeaturesResponseBody = {
 };
 
 /** @internal */
-export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
-  GetProductFeaturesResponseBody,
+export const ProductFeatures$inboundSchema: z.ZodMiniType<
+  ProductFeatures,
   unknown
 > = z.pipe(
   z.object({
@@ -141,12 +141,12 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function getProductFeaturesResponseBodyFromJSON(
+export function productFeaturesFromJSON(
   jsonString: string,
-): SafeParseResult<GetProductFeaturesResponseBody, SDKValidationError> {
+): SafeParseResult<ProductFeatures, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => GetProductFeaturesResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetProductFeaturesResponseBody' from JSON`,
+    (x) => ProductFeatures$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProductFeatures' from JSON`,
   );
 }

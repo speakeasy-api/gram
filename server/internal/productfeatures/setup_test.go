@@ -71,6 +71,7 @@ func requestedOrganizationID(ctx context.Context) string {
 
 type testInstance struct {
 	service        *productfeatures.Service
+	client         *productfeatures.Client
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 }
@@ -129,6 +130,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	return ctx, &testInstance{
 		service:        svc,
+		client:         productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 		conn:           conn,
 		sessionManager: sessionManager,
 	}

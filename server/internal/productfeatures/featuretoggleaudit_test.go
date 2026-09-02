@@ -116,7 +116,7 @@ func TestSetProductFeatureHooksFailOpenSkipsGenericAudit(t *testing.T) {
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureHooksFailOpen),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestSetProductFeatureSkillsEnableRecordsGenericAudit(t *testing.T) {
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestSetProductFeatureSkillsEnableRecordsGenericAudit(t *testing.T) {
 	// A replayed enable is a no-op and must not duplicate the event.
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
