@@ -64,7 +64,7 @@ type spanProvenanceGroup struct {
 func NewSpanRelayHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
 ) *SpanRelayHandler {
@@ -90,7 +90,7 @@ func NewSpanRelayHandler(
 		spansDropped: spansDropped,
 		spansFailed:  spansFailed,
 		relay: newSignalRelay(
-			readReplica,
+			db,
 			encryptionClient,
 			policy,
 			"/v1/traces",

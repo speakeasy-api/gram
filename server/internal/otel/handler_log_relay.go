@@ -60,7 +60,7 @@ type logProvenanceGroup struct {
 func NewLogRelayHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
 ) *LogRelayHandler {
@@ -86,7 +86,7 @@ func NewLogRelayHandler(
 		recordsDropped: recordsDropped,
 		recordsFailed:  recordsFailed,
 		relay: newSignalRelay(
-			readReplica,
+			db,
 			encryptionClient,
 			policy,
 			"/v1/logs",

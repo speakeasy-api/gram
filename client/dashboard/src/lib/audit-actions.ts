@@ -119,8 +119,6 @@ export const AUDIT_ACTIONS = [
   "otel_destination:create",
   "otel_destination:delete",
   "otel_destination:update",
-  "otel_forwarding:delete",
-  "otel_forwarding:upsert",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -491,11 +489,6 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated OpenTelemetry destination";
     case "otel_destination:delete":
       return "deleted OpenTelemetry destination";
-
-    case "otel_forwarding:upsert":
-      return "updated OpenTelemetry forwarding configuration";
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
 
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";

@@ -795,7 +795,7 @@ func collectSample(ctx context.Context, client *redis.Client, inbox *enforcerepl
 	}
 	if clients, err := client.ClientList(ctx).Result(); err == nil {
 		count := int64(0)
-		for _, line := range strings.Split(strings.TrimSpace(clients), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(clients), "\n") {
 			if line != "" {
 				count++
 			}
@@ -814,7 +814,7 @@ func redisUsedMemory(ctx context.Context, client *redis.Client) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read Redis memory info: %w", err)
 	}
-	for _, line := range strings.Split(info, "\n") {
+	for line := range strings.SplitSeq(info, "\n") {
 		value, found := strings.CutPrefix(strings.TrimSpace(line), "used_memory:")
 		if !found {
 			continue

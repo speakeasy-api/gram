@@ -4,6 +4,8 @@ This document provides an overview of the key directories in the Gram project to
 
 <tip>
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
+
+In a fresh git worktree the stack is booted for you and then paused — containers exist with migrations and seed data applied, but no application daemons are running (a placeholder holds the dashboard port and serves a resume page). You rarely need to wake it by hand: opening the worktree's dashboard URL serves a "Resuming stack" page that wakes it and reloads, and `mise run seed` / `mise run playwright` wake it first. `mise run wake` and `mise run pause` (alias `sleep`) are there when you want to be explicit, and `mise run idle-pause --all` pauses stacks nobody is using.
 </tip>
 
 ## Customer Data Is Confidential
@@ -69,6 +71,9 @@ Contains the main application code for the Gram server:
 - `mise lint:server`: Run linters on the server code
 - `mise run test:server`: Run server tests; accepts the same extra arguments as `go test` and runs from `server/`, so package paths are relative to `server/` (for example, `mise run test:server ./internal/thirdparty/openrouter/`)
 - `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
+- `mise run wake`: Start this worktree's stack (containers, then daemons). A new worktree is booted and then left paused, so run this before you need the dashboard or API.
+- `mise run pause` (alias `mise run sleep`): Stop the daemons and containers again, keeping their data. It also parks a placeholder server on the site port, so opening the dashboard URL wakes the stack.
+- `mise run idle-pause [--all] [--minutes 60]`: Pause stacks with no established connections for that long. pitchfork runs it every 5 minutes for the current worktree (the `idle-pause` cron daemon in `pitchfork.toml`), so a stack you stop looking at pauses itself.
 - `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>
