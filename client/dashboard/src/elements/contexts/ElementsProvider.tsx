@@ -26,8 +26,9 @@ import {
 import { compactForModel } from "@/elements/lib/contextCompaction";
 import { dictationAdapter } from "@/elements/lib/dictation";
 import {
-  describeStreamError,
+  describeStreamErrorForUI,
   sanitizeStreamErrorForTelemetry,
+  toElementsUIMessageStream,
 } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
@@ -56,7 +57,6 @@ import {
   isStepCount,
   streamText,
   ToolSet,
-  toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
@@ -514,16 +514,17 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
           //
-          // onError: AI SDK masks errors by default; surface the friendly
-          // credits prompt for 402, otherwise keep the masking intact.
+          // AI SDK masks model error chunks at the conversion boundary by
+          // default. The wrapper surfaces only selected safe messages, while
+          // this outer handler covers errors thrown during stream execution.
           return createUIMessageStream({
             execute: ({ writer }) => {
-              writer.merge(toUIMessageStream({ stream: result.stream, tools }));
+              writer.merge(
+                toElementsUIMessageStream({ stream: result.stream, tools }),
+              );
             },
             originalMessages: messages,
-            onError: (error) =>
-              describeStreamError(error) ??
-              "An error occurred while generating a response.",
+            onError: describeStreamErrorForUI,
           });
         } catch (error) {
           reportStreamError(error, "stream-creation", "Error creating stream:");

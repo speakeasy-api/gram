@@ -1,3 +1,5 @@
+import { toUIMessageStream, type TextStreamPart, type ToolSet } from "ai";
+
 // Shown verbatim in the chat thread when the gateway rejects a request for
 // lack of chat credits. The "Get Support" wording matches the dashboard's
 // top-header button label so the prompt is directly actionable.
@@ -142,3 +144,25 @@ export const describeStreamError = (error: unknown): string | undefined => {
   if (hasCreditsError(error)) return CREDITS_EXHAUSTED_MESSAGE;
   return undefined;
 };
+
+export const describeStreamErrorForUI = (error: unknown): string =>
+  describeStreamError(error) ??
+  "An error occurred while generating a response.";
+
+// `toUIMessageStream` masks model errors unless its own onError callback is
+// provided. createUIMessageStream's onError only handles errors thrown while
+// executing/merging streams, so configuring it alone cannot replace an error
+// chunk already emitted by this converter. Keep this wrapper on the actual
+// conversion boundary so selected safe messages survive into the rendered UI.
+export const toElementsUIMessageStream = <TOOLS extends ToolSet>({
+  stream,
+  tools,
+}: {
+  stream: ReadableStream<TextStreamPart<TOOLS>>;
+  tools?: TOOLS;
+}) =>
+  toUIMessageStream({
+    stream,
+    tools,
+    onError: describeStreamErrorForUI,
+  });
