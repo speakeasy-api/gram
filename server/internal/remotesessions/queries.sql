@@ -485,7 +485,7 @@ SELECT EXISTS (
   JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
   WHERE link.remote_session_client_id = @remote_session_client_id
     AND link.user_session_issuer_id = @user_session_issuer_id
-    AND usi.project_id = @project_id::uuid
+    AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
@@ -503,7 +503,7 @@ FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
 ORDER BY c.id
@@ -531,7 +531,7 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND NOT EXISTS (
@@ -551,7 +551,7 @@ DELETE FROM remote_session_client_user_session_issuers AS link
 USING user_session_issuers AS usi
 WHERE link.user_session_issuer_id = usi.id
   AND usi.id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid;
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text));
 
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
@@ -591,7 +591,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = @project_id::uuid
+          AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE c.id = @id
@@ -601,7 +601,9 @@ WHERE c.id = @id
 -- name: GetUserSessionIssuerForProject :one
 SELECT id
 FROM user_session_issuers
-WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+WHERE id = @id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
+  AND deleted IS FALSE;
 
 -- name: ListRemoteSessionClientsByProjectID :many
 SELECT
@@ -611,7 +613,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = @project_id::uuid
+          AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
@@ -634,13 +636,13 @@ SELECT
         FROM remote_session_client_user_session_issuers AS all_link
         JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
-          AND all_usi.project_id = @project_id::uuid
+          AND (all_usi.project_id = @project_id::uuid OR (all_usi.project_id IS NULL AND all_usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND usi.deleted IS FALSE
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
@@ -879,7 +881,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE s.subject_urn = @subject_urn
   AND link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -991,7 +993,7 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
-  AND usi.project_id = @project_id
+  AND (usi.project_id = @project_id OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -1010,7 +1012,7 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE usi.project_id = @project_id::uuid
+WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
@@ -1027,7 +1029,7 @@ SELECT s.*
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
-WHERE s.id = @id AND usi.project_id = @project_id::uuid AND s.deleted IS FALSE AND c.deleted IS FALSE;
+WHERE s.id = @id AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text)) AND s.deleted IS FALSE AND c.deleted IS FALSE;
 
 -- name: RevokeRemoteSession :one
 -- Scoped by the session's user_session_issuer project (see
@@ -1040,7 +1042,7 @@ FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
@@ -1066,7 +1068,7 @@ WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -1098,7 +1100,7 @@ WHERE s.subject_urn = @subject_urn
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND (
@@ -1138,7 +1140,7 @@ WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id::uuid
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -1185,25 +1187,33 @@ WITH due AS (
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   CROSS JOIN LATERAL (
-    SELECT p.organization_id
+    -- A project-tier issuer takes its organization from its project; an
+    -- organization-tier issuer has no project and carries it on the row.
+    SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
     FROM remote_session_client_user_session_issuers AS link
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
-    JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
+      -- A project-tier issuer still requires a live project. The inner join
+      -- used to enforce that on its own; the LEFT JOIN no longer does.
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
       -- The bound issuer must be entitled to the client under the same
       -- tenancy rule the interactive surfaces apply (its project's own
-      -- clients, org-level clients of its project's org, or clients from the
+      -- clients, org-level clients of its organization, or clients from the
       -- tenantless global catalog), so a binding row that ever crossed
       -- tenants cannot put this credential under a foreign organization's
-      -- refresh policy.
+      -- refresh policy. An organization-tier issuer owns no project, so only
+      -- the org-level and global arms can match for one.
       AND (
         c.project_id = usi.project_id
-        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND EXISTS (
         SELECT 1 FROM user_sessions AS gs
-        WHERE gs.project_id = usi.project_id
-          AND gs.user_session_issuer_id = usi.id
+        -- Keyed on the issuer alone. The issuer id already fixes the
+        -- session's tenancy, and comparing gs.project_id to usi.project_id
+        -- matches nothing when an organization-tier issuer makes both NULL.
+        WHERE gs.user_session_issuer_id = usi.id
           AND gs.subject_urn = s.subject_urn
           AND gs.deleted IS FALSE
           AND gs.refresh_expires_at > @now_ts::timestamptz
@@ -1211,7 +1221,7 @@ WITH due AS (
       AND (
         EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
             AND orgf.deleted IS FALSE
         )
@@ -1219,7 +1229,7 @@ WITH due AS (
           s.auto_refresh IS TRUE
           AND EXISTS (
             SELECT 1 FROM organization_features AS orgf
-            WHERE orgf.organization_id = p.organization_id
+            WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
               AND orgf.feature_name = 'remote_session_auto_refresh'
               AND orgf.deleted IS FALSE
           )
@@ -1278,17 +1288,22 @@ WHERE s.id = @id
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
-    JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND p.organization_id = @organization_id
+      -- A project-tier issuer still requires a live project. The inner join
+      -- used to enforce that on its own; the LEFT JOIN no longer does.
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND COALESCE(p.organization_id, usi.organization_id) = @organization_id
       AND (
         c.project_id = usi.project_id
-        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND EXISTS (
         SELECT 1 FROM user_sessions AS gs
-        WHERE gs.project_id = usi.project_id
-          AND gs.user_session_issuer_id = usi.id
+        -- Keyed on the issuer alone. The issuer id already fixes the
+        -- session's tenancy, and comparing gs.project_id to usi.project_id
+        -- matches nothing when an organization-tier issuer makes both NULL.
+        WHERE gs.user_session_issuer_id = usi.id
           AND gs.subject_urn = s.subject_urn
           AND gs.deleted IS FALSE
           AND gs.refresh_expires_at > @now_ts::timestamptz
@@ -1296,7 +1311,7 @@ WHERE s.id = @id
       AND (
         EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
             AND orgf.deleted IS FALSE
         )
@@ -1304,7 +1319,7 @@ WHERE s.id = @id
           s.auto_refresh IS TRUE
           AND EXISTS (
             SELECT 1 FROM organization_features AS orgf
-            WHERE orgf.organization_id = p.organization_id
+            WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
               AND orgf.feature_name = 'remote_session_auto_refresh'
               AND orgf.deleted IS FALSE
           )

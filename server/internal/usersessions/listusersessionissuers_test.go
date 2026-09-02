@@ -75,3 +75,22 @@ func TestListUserSessionIssuers_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestListUserSessionIssuers_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "list-iss-sibling")
+
+	listed, err := ti.service.ListUserSessionIssuers(ctx, &gen.ListUserSessionIssuersPayload{
+		Cursor:           nil,
+		Limit:            nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	for _, item := range listed.Items {
+		require.NotEqual(t, sp.issuerID.String(), item.ID)
+	}
+}
