@@ -30,6 +30,10 @@ func NewMutator(client *Client, auditLogger *audit.Logger) *Mutator {
 	return &Mutator{client: client, audit: auditLogger}
 }
 
+func rollbackTransaction(ctx context.Context, rollback func(context.Context) error) error {
+	return rollback(context.WithoutCancel(ctx))
+}
+
 func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature Feature, enabled bool, actor MutationActor) error {
 	// Skills is always on, so disabling it remains a silent no-op.
 	if feature == FeatureSkills && !enabled {
@@ -46,7 +50,7 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin feature flag transaction").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return rollbackTransaction(ctx, dbtx.Rollback) })
 
 	// Derive changed from the write itself so audit records exactly the
 	// transition that commits, without a read-then-write race.
@@ -109,7 +113,7 @@ func (m *Mutator) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organi
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh transaction").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer o11y.NoLogDefer(func() error { return rollbackTransaction(ctx, dbtx.Rollback) })
 
 	q := repo.New(dbtx)
 	setFeatureState := func(feature Feature, state bool) (bool, error) {
