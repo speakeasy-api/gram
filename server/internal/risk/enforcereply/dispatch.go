@@ -70,6 +70,7 @@ type DispatchRequest struct {
 // Dispatcher fans enforcement work out over independent request brokers.
 type Dispatcher struct {
 	gitleaks    EnforcementLane
+	presidio    EnforcementLane
 	close       func(context.Context) error
 	waitTimeout time.Duration
 }
@@ -82,14 +83,46 @@ func NewDispatcher(ctx context.Context, broker gcp.PublisherBroker, inbox *Inbox
 	if cfg.WaitTimeout <= 0 {
 		cfg.WaitTimeout = DefaultWaitTimeout
 	}
-	publisher, err := gcp.PubSubPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{})
+	gitleaksPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{})
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks enforcement publisher: %w", err)
 	}
-	requester := redisinbox.NewRequestBroker(inbox, publisher)
+	presidioPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &riskv1.PresidioEnforcement{})
+	if err != nil {
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = gitleaksPub.Stop(stopCtx)
+		return nil, fmt.Errorf("create presidio enforcement publisher: %w", err)
+	}
+	gitleaksReq := redisinbox.NewRequestBroker(inbox, gitleaksPub)
+	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
 	return &Dispatcher{
-		gitleaks:    &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: requester},
-		close:       requester.Close,
+		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
+		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
+		close: func(ctx context.Context) error {
+			// Stop the lanes concurrently so each flush gets the full shutdown
+			// budget instead of whatever the previous lane left of it.
+			var gitleaksErr, presidioErr error
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				gitleaksErr = gitleaksReq.Close(ctx)
+			}()
+			go func() {
+				defer wg.Done()
+				presidioErr = presidioReq.Close(ctx)
+			}()
+			wg.Wait()
+			var closeErrs []error
+			if gitleaksErr != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("close gitleaks enforcement lane: %w", gitleaksErr))
+			}
+			if presidioErr != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("close presidio enforcement lane: %w", presidioErr))
+			}
+			return errors.Join(closeErrs...)
+		},
 		waitTimeout: cfg.WaitTimeout,
 	}, nil
 }
@@ -114,7 +147,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			return Outcome{}, fmt.Errorf("duplicate enforcement lane %s", lane.String())
 		}
 		seen[lane] = struct{}{}
-		if lane.Scanner != riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS || lane.PolicyID != "" {
+		supported := lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS ||
+			lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO
+		if !supported || lane.PolicyID != "" {
 			return Outcome{}, fmt.Errorf("unsupported enforcement lane %s", lane.String())
 		}
 	}
@@ -132,14 +167,29 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		group.Go(func() error {
 			laneCtx, cancel := context.WithTimeout(groupCtx, d.waitTimeout)
 			defer cancel()
-			enforcement := riskv1.GitleaksEnforcement_builder{
-				RequestId:      new(requestID.String()),
-				ProjectId:      new(request.ProjectID),
-				OrganizationId: new(request.OrganizationID),
-				CreatedAt:      new(createdAt),
-				Content:        new(request.Content),
-			}.Build()
-			reply, requestErr := d.gitleaks.Request(laneCtx, enforcement)
+			var laneBroker EnforcementLane
+			var enforcement proto.Message
+			switch lane.Scanner {
+			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO:
+				laneBroker = d.presidio
+				enforcement = riskv1.PresidioEnforcement_builder{
+					RequestId:      new(requestID.String()),
+					ProjectId:      new(request.ProjectID),
+					OrganizationId: new(request.OrganizationID),
+					CreatedAt:      new(createdAt),
+					Content:        new(request.Content),
+				}.Build()
+			default:
+				laneBroker = d.gitleaks
+				enforcement = riskv1.GitleaksEnforcement_builder{
+					RequestId:      new(requestID.String()),
+					ProjectId:      new(request.ProjectID),
+					OrganizationId: new(request.OrganizationID),
+					CreatedAt:      new(createdAt),
+					Content:        new(request.Content),
+				}.Build()
+			}
+			reply, requestErr := laneBroker.Request(laneCtx, enforcement)
 			if requestErr != nil {
 				if errors.Is(requestErr, context.DeadlineExceeded) {
 					mu.Lock()
