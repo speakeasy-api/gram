@@ -181,11 +181,14 @@ type sessionDurationOption struct {
 // against the non-consuming consent action endpoint, so no upstream
 // authorize URL is prebuilt here.
 //
-// Connected and Expired are mutually exclusive and reflect the stored
-// remote_session's usability: Connected means the runtime gate will accept
-// it; Expired means a stale link exists that must be re-established; both
-// false means never connected. Only Connected enables consent — an expired
-// link is no better than none until the user reconnects.
+// Connected, Expired and Unroutable are mutually exclusive and reflect the
+// stored remote_session's usability: Connected means the runtime gate will
+// accept it and forward it to this endpoint's backend; Expired means a stale
+// link exists that must be re-established; Unroutable means a live link
+// exists but was minted for another upstream (or before resources were
+// recorded), so this endpoint's routing would never forward it; all false
+// means never connected. Only Connected enables consent — the other two are
+// no better than none until the user reconnects.
 type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
@@ -203,6 +206,7 @@ type remoteSessionCard struct {
 
 	Connected  bool
 	Expired    bool
+	Unroutable bool
 	CanRefresh bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
@@ -410,7 +414,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if c.Connected {
 			connectedCardCount++
 		}
-		if c.Connected || c.Expired {
+		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
 		}
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
@@ -1032,10 +1036,24 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
+	var routability grantRoutability = alwaysRoutable
+	if len(statuses) > 0 {
+		routability, err = s.grantRoutabilityForEndpoint(ctx, endpoint, challengeState, statuses)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
+		unroutable := false
+		if hasSession && state.Status == remotesessions.RemoteSessionActive {
+			if unroutable, err = routability(c, state.Resource); err != nil {
+				return nil, fmt.Errorf("evaluate grant routability: %w", err)
+			}
+		}
 		var checked bool
 		switch policy {
 		case autoRefreshEnforced:
@@ -1074,8 +1092,9 @@ func (s *Service) buildRemoteSessionCards(
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
-			Connected:              state.Status == remotesessions.RemoteSessionActive,
+			Connected:              state.Status == remotesessions.RemoteSessionActive && !unroutable,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
+			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
 			AccessExpiresAt:        accessExpiresAt,
 			AccessExpiresIn:        accessExpiresIn,

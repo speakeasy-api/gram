@@ -36,26 +36,8 @@ func (s *Service) resolveMetaMemberResource(
 	endpoint *ResolvedMcpEndpoint,
 	remoteSessionIssuerID uuid.UUID,
 ) (string, bool, error) {
-	if remoteSessionIssuerID == uuid.Nil {
-		return "", false, nil
-	}
-
-	rows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
-		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
-		ProjectID:             endpoint.ProjectID,
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
-	})
-	if err != nil {
-		return "", false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
-	}
-	// Claimed is decided before RBAC: an invisible member still claimed this
-	// credential, and a fallback would hand it to a member that never did.
-	if len(rows) == 0 {
-		return "", false, nil
-	}
-
-	candidates, err := s.authorizedMetaMembers(ctx, endpoint, rows)
-	if err != nil {
+	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
+	if err != nil || !claimed {
 		return "", false, err
 	}
 
@@ -82,6 +64,37 @@ func (s *Service) resolveMetaMemberResource(
 	return resource, true, nil
 }
 
+// claimingMetaMembers lists the proxied members authenticating against
+// remoteSessionIssuerID, filtered to those the subject may reach. Claimed is
+// decided before RBAC: an invisible member still claimed the credential.
+func (s *Service) claimingMetaMembers(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	remoteSessionIssuerID uuid.UUID,
+) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, bool, error) {
+	if remoteSessionIssuerID == uuid.Nil {
+		return nil, false, nil
+	}
+
+	rows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
+		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
+		ProjectID:             endpoint.ProjectID,
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, false, nil
+	}
+
+	candidates, err := s.authorizedMetaMembers(ctx, endpoint, rows)
+	if err != nil {
+		return nil, false, err
+	}
+	return candidates, true, nil
+}
+
 // authorizedMetaMembers drops members the subject holds no mcp:connect on,
 // mirroring authorizeProxyBackendAccess.
 func (s *Service) authorizedMetaMembers(
@@ -105,10 +118,12 @@ func (s *Service) authorizedMetaMembers(
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
-			// Only a denial drops a member; dropping on a fault narrows the
-			// candidate set and turns ambiguous into a confident wrong answer.
+			// Only a denial drops a member (Unauthorized is an anonymous
+			// caller, as the runtime snapshot treats it); dropping on a fault
+			// narrows the candidate set and turns ambiguous into a confident
+			// wrong answer.
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), endpoint.ProjectID.String())); err != nil {
-				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 					continue
 				}
 				return nil, fmt.Errorf("authorize meta MCP member access: %w", err)

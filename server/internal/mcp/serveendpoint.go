@@ -307,7 +307,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		if entry.Resource == "" {
 			nullResources++
 		}
-		if strings.TrimRight(entry.Resource, "/") == want {
+		if grantRoutesToUpstream(entry.Resource, want, false) {
 			found++
 			match = entry.Token
 		}
@@ -341,16 +341,22 @@ func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issu
 		return ""
 	}
 	entry, ok := tokens[issuerID.UUID]
-	switch {
-	case !ok:
-		return ""
-	case entry.Resource == "":
-		return entry.Token
-	case want != "" && strings.TrimRight(entry.Resource, "/") == want:
-		return entry.Token
-	default:
+	if !ok || !grantRoutesToUpstream(entry.Resource, want, true) {
 		return ""
 	}
+	return entry.Token
+}
+
+// grantRoutesToUpstream is the per-grant half of credential routing, shared
+// by the runtime selectors above and the consent page so the two cannot
+// drift: a remote backend needs the grant to name its URL; a tunneled
+// backend also accepts an unqualified grant.
+func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
+	if tunneled && resource == "" {
+		return true
+	}
+	want := strings.TrimRight(upstream, "/")
+	return want != "" && strings.TrimRight(resource, "/") == want
 }
 
 // tunneledBackendIssuer yields the identity routeUpstreamToken routes a

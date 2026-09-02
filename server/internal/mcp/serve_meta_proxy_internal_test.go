@@ -178,10 +178,10 @@ func TestMemberSessionClose_DetachedContext(t *testing.T) {
 	sess := &memberSession{
 		svc:    nil,
 		logger: nil,
-		build: func(ctx context.Context) (*proxy.Proxy, error) {
+		dial: memberDial{anonymous: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			buildCtxErr = ctx.Err()
 			return nil, errors.New("stop before any network work")
-		},
+		}},
 		member:    metaMember{slug: "m", remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}},
 		sessionID: "sess-1",
 	}
