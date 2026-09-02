@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -57,9 +58,10 @@ type preparedStripeCheckoutIntent struct {
 	customerID string
 }
 
-// stripeOrganizationIdentity is the organization view stamped onto Stripe customers,
-// Checkout sessions and subscriptions so downstream consumers (revenue notifications,
-// CRM sync) can attribute them without a Gram DB lookup.
+// stripeOrganizationIdentity is the mutable organization view stamped onto the Stripe
+// Customer so downstream consumers can attribute it without a Gram DB lookup. It is
+// never part of a Checkout request, which must replay byte-for-byte under its
+// idempotency key.
 type stripeOrganizationIdentity struct {
 	name        string
 	accountType string
@@ -68,7 +70,8 @@ type stripeOrganizationIdentity struct {
 
 // stripeOrganizationIdentity resolves the identity from organization metadata. The
 // customer email prefers the billing alert email and falls back to the first
-// organization admin; it stays empty when neither exists.
+// organization admin; it stays empty when neither exists. Account types outside
+// constants.AccountTypes are dropped rather than leaked into the contract.
 func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID string, billingMetadata repo.BillingMetadatum) (stripeOrganizationIdentity, error) {
 	organization, err := s.orgRepo.GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
@@ -88,9 +91,15 @@ func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID
 		}
 	}
 
+	accountType := organization.GramAccountType
+	if !constants.IsAccountType(accountType) {
+		s.logger.WarnContext(ctx, "organization account type is outside the Stripe metadata contract; omitting it", attr.SlogOrganizationID(organizationID))
+		accountType = ""
+	}
+
 	return stripeOrganizationIdentity{
 		name:        organization.Name,
-		accountType: organization.GramAccountType,
+		accountType: accountType,
 		email:       email,
 	}, nil
 }
@@ -199,7 +208,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		customerID = customer.ID
 	}
 	billingURL := s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String()
-	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingURL, identity, proposedIntent, now)
+	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingURL, proposedIntent, now)
 	if err != nil {
 		return "", err
 	}
@@ -217,7 +226,6 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		CustomerID:         preparedIntent.customerID,
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		OrganizationSlug:   authCtx.OrganizationSlug,
-		OrganizationName:   identity.name,
 		SuccessURL:         billingURL,
 		CancelURL:          billingURL,
 		TrialEnd:           preparedIntent.trialEnd,
@@ -380,7 +388,6 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 	ctx context.Context,
 	metadata repo.BillingMetadatum,
 	customerID, organizationID, organizationSlug, billingURL string,
-	identity stripeOrganizationIdentity,
 	proposed stripeCheckoutIntent,
 	now time.Time,
 ) (pgtype.Text, error) {
@@ -401,8 +408,7 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 		// Same idempotency key as the original request, so the input must match it exactly.
 		stale, createErr := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 			CustomerID: customerID, OrganizationID: organizationID, OrganizationSlug: organizationSlug,
-			OrganizationName: identity.name,
-			SuccessURL:       billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
+			SuccessURL: billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
 			BillingCycleAnchor: staleIntent.billingCycleAnchor, ExpiresAt: staleIntent.expiresAt, IdempotencyKey: staleIntent.idempotencyKey,
 		})
 		if createErr != nil || stale == nil || stale.ID == "" {

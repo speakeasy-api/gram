@@ -1251,7 +1251,6 @@ func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
 		CustomerID:         "cus_test",
 		OrganizationID:     "<ORG_ID>",
 		OrganizationSlug:   "the-customer",
-		OrganizationName:   "The Customer, Inc.",
 		SuccessURL:         "https://app.example.test/the-customer/billing",
 		CancelURL:          "https://app.example.test/the-customer/billing",
 		BillingCycleAnchor: anchor,
@@ -1260,13 +1259,15 @@ func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Only values that cannot change within a session's lifetime: Checkout requests are
+	// replayed under their original idempotency key, and Stripe rejects a replay whose
+	// parameters differ. Name and account type live on the Customer instead.
 	want := map[string]string{
 		"speakeasy_product": "aicp",
 		"organization_id":   "<ORG_ID>",
 		"organization_slug": "the-customer",
-		"organization_name": "The Customer, Inc.",
 	}
-	require.Equal(t, want, api.checkoutSessionParams.Metadata, "account_type is customer-only so idempotent Checkout replays stay identical")
+	require.Equal(t, want, api.checkoutSessionParams.Metadata)
 	require.Equal(t, want, api.checkoutSessionParams.SubscriptionData.Metadata)
 }
 
@@ -1304,4 +1305,38 @@ func TestUpdateCustomerRequiresCustomerID(t *testing.T) {
 	err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{})
 	require.ErrorIs(t, err, errMissingCustomerID)
 	require.Zero(t, api.calls)
+}
+
+func TestCreateCustomerOmitsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		AccountType:      "",
+		IdempotencyKey:   "customer:<ORG_ID>",
+	})
+	require.NoError(t, err)
+	require.NotContains(t, api.customerParams.Metadata, "account_type", "an empty account type must not be stamped")
+}
+
+func TestUpdateCustomerLeavesEmailUnchangedWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{
+		CustomerID:       "cus_test",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		AccountType:      "payg",
+	})
+	require.NoError(t, err)
+	require.Nil(t, api.customerUpdateParams.Email, "an empty email must not clear the address Stripe already has")
 }

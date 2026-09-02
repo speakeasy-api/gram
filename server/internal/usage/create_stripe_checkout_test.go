@@ -806,7 +806,7 @@ func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testi
 
 	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
 		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
-		stripeOrganizationIdentity{}, stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
+		stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 	)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Text{String: staleIntent.idempotencyKey, Valid: true}, replaceKey)
@@ -850,7 +850,7 @@ func TestExpireLifecycleStaleCheckoutSessionRejectsUnconfirmedConcurrentExpirati
 
 			_, err := ti.service.expireLifecycleStaleCheckoutSession(
 				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
-				stripeOrganizationIdentity{}, stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
+				stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 			)
 			require.Error(t, err)
 			requireOopsCode(t, err, oops.CodeUnavailable)
@@ -1645,7 +1645,7 @@ func TestCreateStripeCheckoutStampsOrganizationIdentity(t *testing.T) {
 	require.Empty(t, customers[0].Email, "no alert email and no org admins: customer email stays unset")
 
 	require.Len(t, checkouts, 1)
-	require.Equal(t, "Billing Test Organization", checkouts[0].OrganizationName)
+	require.Equal(t, ti.orgID, checkouts[0].OrganizationID)
 	require.Empty(t, ti.stripe.updates(), "a freshly created customer must not also be updated")
 }
 
@@ -1732,4 +1732,21 @@ func TestCreateStripeCheckoutRefreshesExistingCustomerIdentity(t *testing.T) {
 	require.Equal(t, ti.orgSlug, updates[0].OrganizationSlug)
 	require.Equal(t, "Billing Test Organization", updates[0].OrganizationName)
 	require.Equal(t, "free", updates[0].AccountType)
+}
+
+func TestCreateStripeCheckoutOmitsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	require.NoError(t, orgrepo.New(ti.db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		GramAccountType: "legacy-unknown",
+		ID:              ti.orgID,
+	}))
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, customers, _ := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Empty(t, customers[0].AccountType, "values outside constants.AccountTypes must not reach Stripe")
 }

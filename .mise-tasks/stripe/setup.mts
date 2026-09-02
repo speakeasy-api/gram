@@ -458,14 +458,24 @@ async function main() {
   ]);
 
   // Products created before the metadata contract existed need the tag added.
+  // Only the PAYG product may be tagged: a lookup-key match on a different
+  // product, or a product already classified as something else, is a
+  // misconfiguration to fix by hand rather than overwrite.
   const product = await stripe<StripeProduct>(
     key,
     "GET",
     `/products/${price.product}`,
   );
-  if (
-    product.metadata?.speakeasy_product !== PRODUCT_METADATA_SPEAKEASY_PRODUCT
-  ) {
+  assertConfiguration(`Product ${product.id}`, [
+    ["name", product.name, PRODUCT_NAME],
+  ]);
+  const productTag = product.metadata?.speakeasy_product;
+  if (productTag && productTag !== PRODUCT_METADATA_SPEAKEASY_PRODUCT) {
+    throw new Error(
+      `Product ${product.id} has unexpected metadata.speakeasy_product=${productTag}; fix the product association before re-running.`,
+    );
+  }
+  if (!productTag) {
     await stripe<StripeProduct>(key, "POST", `/products/${product.id}`, {
       "metadata[speakeasy_product]": PRODUCT_METADATA_SPEAKEASY_PRODUCT,
     });

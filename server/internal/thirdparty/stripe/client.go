@@ -17,13 +17,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-// Stripe metadata contract shared with speakeasy-registry (SDK product). Every
-// Customer, Checkout Session and Subscription carries these keys so downstream
-// consumers (revenue notifications, CRM sync) can classify and attribute Stripe
-// objects without heuristics. Keep key names in sync with
-// speakeasy-registry/internal/stripe/metadata.go. Organization IDs are shared
-// across both products, so registry-owned attributes (e.g. internal) are
-// resolved there rather than duplicated here.
+// Stripe metadata contract shared across Speakeasy billing systems so downstream
+// consumers can classify and attribute Stripe objects without heuristics.
+//
+//   - Customer, Checkout Session and Subscription: speakeasy_product,
+//     organization_id, organization_slug.
+//   - Customer only: organization_name and account_type (one of
+//     constants.AccountTypes). Checkout requests are replayed under their original
+//     idempotency key and Stripe rejects a replay whose parameters differ, so
+//     values that can change within a session's lifetime never go on the session.
+//
+// Organization IDs are shared with the other Speakeasy products, so attributes
+// they own are resolved there rather than duplicated here.
 const (
 	organizationIDMetadataKey   = "organization_id"
 	organizationSlugMetadataKey = "organization_slug"
@@ -118,7 +123,8 @@ type CreateCustomerInput struct {
 	// Email is the billing contact shown on Stripe receipts and Checkout. Empty leaves it unset.
 	Email string
 
-	// AccountType is the organization's gram_account_type at creation time.
+	// AccountType is the organization's gram_account_type at creation time. Empty
+	// leaves the key unset.
 	AccountType string
 
 	IdempotencyKey string
@@ -130,8 +136,13 @@ type UpdateCustomerInput struct {
 	OrganizationID   string
 	OrganizationSlug string
 	OrganizationName string
-	Email            string
-	AccountType      string
+
+	// Email replaces the customer's billing email. Empty leaves the existing value
+	// unchanged: callers resolve it best-effort and must not clear a working address.
+	Email string
+
+	// AccountType is the organization's current gram_account_type. Empty leaves the key unset.
+	AccountType string
 }
 
 // Customer is the Stripe customer data needed by billing callers.
@@ -143,7 +154,6 @@ type Customer struct {
 type organizationIdentity struct {
 	id   string
 	slug string
-	name string
 }
 
 func contractMetadata(org organizationIdentity) map[string]string {
@@ -151,17 +161,17 @@ func contractMetadata(org organizationIdentity) map[string]string {
 		speakeasyProductMetadataKey: speakeasyProductAICP,
 		organizationIDMetadataKey:   org.id,
 		organizationSlugMetadataKey: org.slug,
-		organizationNameMetadataKey: org.name,
 	}
 }
 
-// customerMetadata adds account_type, which only belongs on the customer: Checkout
-// sessions are replayed under their original idempotency key and the account type
-// changes during that window (trial conversion, PAYG activation), so stamping it
-// there would make the replay diverge from the original request.
-func customerMetadata(org organizationIdentity, accountType string) map[string]string {
+// customerMetadata adds the mutable identity (name, account type) that only belongs
+// on the Customer, which is updated in place rather than replayed.
+func customerMetadata(org organizationIdentity, name, accountType string) map[string]string {
 	metadata := contractMetadata(org)
-	metadata[accountTypeMetadataKey] = accountType
+	metadata[organizationNameMetadataKey] = name
+	if accountType != "" {
+		metadata[accountTypeMetadataKey] = accountType
+	}
 	return metadata
 }
 
@@ -175,9 +185,6 @@ type CreateCheckoutSessionInput struct {
 
 	// OrganizationSlug is the organization slug included in Stripe metadata.
 	OrganizationSlug string
-
-	// OrganizationName is the display name included in Stripe metadata.
-	OrganizationName string
 
 	// SuccessURL is the browser destination after successful Checkout.
 	SuccessURL string
@@ -579,8 +586,7 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 	params.Metadata = customerMetadata(organizationIdentity{
 		id:   input.OrganizationID,
 		slug: input.OrganizationSlug,
-		name: input.OrganizationName,
-	}, input.AccountType)
+	}, input.OrganizationName, input.AccountType)
 	params.SetIdempotencyKey(input.IdempotencyKey)
 
 	customer, err := c.api.createCustomer(ctx, params)
@@ -603,8 +609,7 @@ func (c *client) UpdateCustomer(ctx context.Context, input UpdateCustomerInput) 
 	params.Metadata = customerMetadata(organizationIdentity{
 		id:   input.OrganizationID,
 		slug: input.OrganizationSlug,
-		name: input.OrganizationName,
-	}, input.AccountType)
+	}, input.OrganizationName, input.AccountType)
 
 	if _, err := c.api.updateCustomer(ctx, input.CustomerID, params); err != nil {
 		return fmt.Errorf("update Stripe customer: %w", err)
@@ -638,7 +643,6 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	identity := organizationIdentity{
 		id:   input.OrganizationID,
 		slug: input.OrganizationSlug,
-		name: input.OrganizationName,
 	}
 	params.Metadata = contractMetadata(identity)
 	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
