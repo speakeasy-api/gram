@@ -193,3 +193,66 @@ func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_ServesEveryModelledMe
 	// it would break a public client that authenticates with `none`.
 	require.Equal(t, []string{"none"}, result.Static.TokenEndpointAuthMethodsSupported)
 }
+
+// An issuer with neither a snapshot nor endpoints has nothing to advertise.
+// Serving 200 with empty required members would hand a client a document it
+// cannot start a flow from and no signal that the server knows it.
+func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_RefusesIncompleteReconstruction(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name          string
+		authorization string
+		token         string
+	}{
+		{name: "no endpoints at all", authorization: "", token: ""},
+		{name: "no token endpoint", authorization: "https://idp.example.com/authorize", token: ""},
+		{name: "no authorization endpoint", authorization: "", token: "https://idp.example.com/token"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := ResolveOAuthServerMetadataFromRemoteSessionIssuer(RemoteSessionIssuerMetadata{
+				AuthorizationEndpoint: tt.authorization,
+				TokenEndpoint:         tt.token,
+				Snapshot:              nil,
+			}, upstreamResourceURL)
+			require.ErrorIs(t, err, ErrIncompleteIssuerMetadata)
+		})
+	}
+}
+
+// The documentation and CIMD members the first reconstruction dropped despite
+// remote_session_issuers modelling them.
+func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_ServesDocumentationAndCIMD(t *testing.T) {
+	t.Parallel()
+
+	result, _, err := ResolveOAuthServerMetadataFromRemoteSessionIssuer(RemoteSessionIssuerMetadata{
+		AuthorizationEndpoint:             "https://idp.example.com/authorize",
+		TokenEndpoint:                     "https://idp.example.com/token",
+		ServiceDocumentation:              "https://idp.example.com/docs",
+		OpPolicyURI:                       "https://idp.example.com/policy",
+		OpTosURI:                          "https://idp.example.com/tos",
+		ClientIDMetadataDocumentSupported: true,
+		Snapshot:                          nil,
+	}, upstreamResourceURL)
+	require.NoError(t, err)
+
+	require.Equal(t, "https://idp.example.com/docs", result.Static.ServiceDocumentation)
+	require.Equal(t, "https://idp.example.com/policy", result.Static.OpPolicyURI)
+	require.Equal(t, "https://idp.example.com/tos", result.Static.OpTosURI)
+	require.NotNil(t, result.Static.ClientIDMetadataDocumentSupported)
+	require.True(t, *result.Static.ClientIDMetadataDocumentSupported)
+
+	// An issuer that does not support CIMD omits the member rather than
+	// advertising false, which means the same thing and is noise.
+	plain, _, err := ResolveOAuthServerMetadataFromRemoteSessionIssuer(RemoteSessionIssuerMetadata{
+		AuthorizationEndpoint: "https://idp.example.com/authorize",
+		TokenEndpoint:         "https://idp.example.com/token",
+		Snapshot:              nil,
+	}, upstreamResourceURL)
+	require.NoError(t, err)
+	encoded, err := json.Marshal(plain.Static)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "client_id_metadata_document_supported")
+}
