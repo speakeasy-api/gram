@@ -34,6 +34,14 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetMCPServerByToolsetID :one
+-- Deterministic pick until a partial unique index enforces one wrapper per toolset.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
+ORDER BY created_at, id
+LIMIT 1;
+
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers

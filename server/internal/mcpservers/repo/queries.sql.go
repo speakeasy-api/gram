@@ -401,6 +401,45 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
+ORDER BY created_at, id
+LIMIT 1
+`
+
+type GetMCPServerByToolsetIDParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Deterministic pick until a partial unique index enforces one wrapper per toolset.
+func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerByToolsetIDParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getMCPServerByToolsetID, arg.ToolsetID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
 SELECT EXISTS(
   SELECT 1

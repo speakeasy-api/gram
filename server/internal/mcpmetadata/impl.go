@@ -923,16 +923,15 @@ type installContext struct {
 }
 
 // isPublic returns true when the install page is accessible without auth.
-// For toolset-backed installs the existing toolset.McpIsPublic flag wins,
-// even when reached via an mcp_server bridge — visibility on the
-// mcp_server is irrelevant to a toolset-backed install during the
-// dual-source phase. For Remote-MCP-backed installs the mcp_server's own
-// visibility flag is authoritative.
+// When resolution went through an mcp_servers row — any backend, hosted
+// (toolset-backed) included — that row's visibility is authoritative; the
+// toolset's McpIsPublic flag only decides for pure legacy toolset routing
+// where no wrapper exists.
 func (ic *installContext) isPublic() bool {
-	if ic.toolset != nil {
-		return ic.toolset.McpIsPublic
+	if ic.mcpServer != nil {
+		return ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 	}
-	return ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityPublic
+	return ic.toolset != nil && ic.toolset.McpIsPublic
 }
 
 // organizationID returns the organization that owns the install. Toolsets
@@ -1272,7 +1271,16 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	mcpURL, err := s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	// The endpoint the request resolved through is authoritative for the
+	// advertised URL — its slug and custom domain need not match the toolset's
+	// own columns. The toolset-derived URL only applies to legacy routing
+	// where no mcp_endpoints row exists.
+	var mcpURL string
+	if ic.mcpEndpoint != nil {
+		mcpURL, err = s.resolveMcpEndpointURL(ctx, ic.mcpEndpoint)
+	} else {
+		mcpURL, err = s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve toolset mcp url").LogError(ctx, s.logger)
 	}
@@ -1529,26 +1537,19 @@ func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_rep
 	return mcpURL, nil
 }
 
-// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed
-// install — custom-domain endpoints render on their own host, platform-domain
-// endpoints render under the serverURL.
+// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed install.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := s.serverURL.String() + "/mcp"
+	domain := ""
 	if endpoint.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		row, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
 		if err != nil {
 			return "", fmt.Errorf("load custom domain: %w", err)
 		}
-		// A domain-root endpoint serves MCP at the bare domain, so install
-		// snippets use that instead of the also-valid /mcp/<slug> path.
-		if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
-			return fmt.Sprintf("https://%s", customDomain.Domain), nil
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
+		domain = row.Domain
 	}
-	mcpURL, err := url.JoinPath(baseURL, endpoint.Slug)
+	mcpURL, err := mcpendpoints.EndpointURL(endpoint, domain, s.serverURL.String())
 	if err != nil {
-		return "", fmt.Errorf("join url path: %w", err)
+		return "", fmt.Errorf("build endpoint URL: %w", err)
 	}
 	return mcpURL, nil
 }
@@ -1701,19 +1702,32 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 }
 
 // resolveSecurityMode determines the security mode based on toolset and
-// mcp_server configuration. OAuth wins regardless of public/private: when an
-// OAuth proxy, external OAuth server, or user_session_issuer is attached,
-// identity auth is delegated to the OAuth flow and the install instructions
-// must not ask the user for an Authorization/GRAM_KEY header. The
-// user_session_issuer can sit on the toolset (legacy toolset routing) or on
-// the bridging mcp_server (Remote-MCP path), mirroring the public serve path
-// which gates OAuth on UserSessionIssuerID.Valid from both sources. server is
-// nil when the install is not mcp_server-backed.
+// mcp_server configuration. OAuth wins regardless of public/private: when
+// OAuth applies, identity auth is delegated to the OAuth flow and the install
+// instructions must not ask the user for an Authorization/GRAM_KEY header.
+//
+// When an mcp_servers row is present (server non-nil) it governs: OAuth is
+// decided by the wrapper's user_session_issuer with the toolset's external
+// OAuth reference as the only toolset input, and publicness comes from the
+// wrapper's visibility. The legacy toolset flags decide only for pure toolset
+// routing where no wrapper exists.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+	if server != nil {
+		sessionGated := server.UserSessionIssuerID.Valid ||
+			(toolset != nil && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
+		switch {
+		case sessionGated:
+			return securityModeOAuth
+		case server.Visibility == mcpservers.VisibilityPublic:
+			return securityModePublic
+		default:
+			return securityModeGram
+		}
+	}
+
 	oauthRequired := toolset.OauthProxyServerID.Valid ||
 		toolset.ExternalOauthServerID.Valid ||
-		toolset.UserSessionIssuerID.Valid ||
-		(server != nil && server.UserSessionIssuerID.Valid)
+		toolset.UserSessionIssuerID.Valid
 	if oauthRequired {
 		return securityModeOAuth
 	}
