@@ -1719,10 +1719,10 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // routing where no wrapper exists.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
 	if server != nil {
-		oauthRequired := server.UserSessionIssuerID.Valid ||
+		sessionGated := server.UserSessionIssuerID.Valid ||
 			(toolset != nil && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
 		switch {
-		case oauthRequired:
+		case sessionGated:
 			return securityModeOAuth
 		case server.Visibility == mcpservers.VisibilityPublic:
 			return securityModePublic
