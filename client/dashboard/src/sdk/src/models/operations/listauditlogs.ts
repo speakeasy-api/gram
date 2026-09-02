@@ -51,6 +51,14 @@ export type ListAuditLogsRequest = {
    */
   actingSurface?: string | undefined;
   /**
+   * Inclusive start of the window to list changes from. Omit for the whole history.
+   */
+  from?: Date | undefined;
+  /**
+   * Exclusive end of the window to list changes from. Omit for the whole history.
+   */
+  to?: Date | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -105,6 +113,8 @@ export type ListAuditLogsRequest$Outbound = {
   subject_id?: string | undefined;
   subject_ids?: Array<string> | undefined;
   acting_surface?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -123,6 +133,8 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     subjectId: z.optional(z.string()),
     subjectIds: z.optional(z.array(z.string())),
     actingSurface: z.optional(z.string()),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

@@ -114,6 +114,16 @@ SELECT
     ',"user.roles":', rolesjson,
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
+    -- The account the call was made through, matching the chat rows below so
+    -- an account-scoped read of someone's usage keeps its tool calls; without
+    -- it every tool count drops to zero the moment a filter is applied. Only
+    -- the Claude half can be personal: the two seeded personal accounts are
+    -- Anthropic ones, so labelling a Cursor call personal would attribute it
+    -- to an account that does not exist.
+    ',"gram.account_type":"', if(hook = 'claude-code'
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', hook, '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -157,6 +167,106 @@ FROM (
   FROM numbers(180)
 );
 
+-- An agent that reports only an id for itself, and no address at all. The
+-- Identities roster classifies a subject by what it can be keyed on, so
+-- without this the demo org has no Agent row to show. Surfaced from the raw
+-- logs rather than the agent-metrics view, which is keyed by email. Cleaned up
+-- by the same project-scoped telemetry_logs delete as every other row here.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-unattributed-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.toolset.slug":"acme-support-tools"',
+    ',"http.response.status_code":200',
+    ',"http.server.request.duration":0.42',
+    ',"gram.project.id":"', toString(proj), '"',
+    concat(',"user.id":"', actor, '"'),
+    -- Also the external user id: that is the key every identity read path
+    -- filters a non-directory actor by (external:<id> resolves to exactly
+    -- this), so reporting only user.id leaves the agent's own page empty
+    -- while the roster still lists it.
+    concat(',"gram.external_user.id":"', actor, '"'),
+    ',"gram.hook.source":"codex"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('tools:http:acme:', tool_name),
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    'svc-nightly-triage' AS actor,
+    arrayElement(['search_logs', 'get_metrics', 'fetch_traces', 'check_health'],
+                 1 + (cityHash64('unattr', number) % 4)) AS tool_name,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 6)) + toIntervalHour(9 + (number % 8)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
+-- A person the directory has never heard of: an address that matches no
+-- member, so the roster can show an Unattributed row beside the members and
+-- the agent. It has to be an api_request row rather than a tool call because
+-- the agent-metrics view only admits the agent surfaces, and that view is what
+-- the roster reads for email-keyed identities.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name,
+   gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'claude_code.api_request',
+  lower(hex(MD5(concat('gram-demo-unattributed-api-', toString(i))))),
+  concat(
+    '{"prompt.id":"demo-unattributed-prompt-', toString(i), '"',
+    ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"', resp_id, '"',
+    ',"input_tokens":', toString(2200 + (i * 37) % 900),
+    ',"output_tokens":', toString(180 + (i * 11) % 220),
+    ',"cache_read_tokens":', toString(9000 + (i * 53) % 4000),
+    ',"cache_creation_tokens":600',
+    ',"cost_usd":0.1841',
+    ',"model":"claude-sonnet-4-6"',
+    ',"query_source":"user"',
+    ',"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', actor, '"',
+    ',"gram.external_user.id":"', actor, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'claude-code:otel:logs',
+  'claude-code',
+  chat_id
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    -- In the demo domain so the tenant rewrite reaches it, but deliberately
+    -- not one of the seeded members: that mismatch is the whole point.
+    'ana.vidal@demo.getgram.ai' AS actor,
+    concat('msg_', substring(lower(hex(MD5(concat('gram-demo-unattributed-resp-', toString(number + 1))))), 1, 24)) AS resp_id,
+    lower(hex(MD5(concat('gram-demo-unattributed-chat-', toString(number + 1))))) AS ch,
+    concat(substring(ch, 1, 8), '-', substring(ch, 9, 4), '-5', substring(ch, 14, 3), '-8',
+           substring(ch, 18, 3), '-', substring(ch, 21, 12)) AS chat_id,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 5)) + toIntervalHour(10 + (number % 6)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
 -- Claude provenance (odd chats): one claude_code.api_request row per turn.
 -- prompt.id demo-prompt-<i>-<turn> joins the Postgres user messages; the
 -- skill/agent/mcp attribution keys light up the Costs Skills/Subagents/MCP
@@ -173,6 +283,7 @@ SELECT
   concat(
     '{"prompt.id":"demo-prompt-', toString(i), '-', toString(turn), '"',
     ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-respid-', toString(i), '-', toString(turn))))), 1, 24), '"',
     ',"input_tokens":', toString(in_tok),
     ',"output_tokens":', toString(out_tok),
     ',"cache_read_tokens":', toString(in_tok * 6),
@@ -198,8 +309,17 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.provider":"anthropic"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
-    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai', 'flat_rate', 'metered'), '"}'
+    -- The contractor works entirely on his own subscription; the manager
+    -- splits, roughly a third of his chats going through the personal Claude
+    -- login user_accounts already lists for him. A person who is wholly one or
+    -- wholly the other never exercises the account filter on the identity
+    -- Usage tab, which exists precisely for the split case.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
+    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'flat_rate', 'metered'), '"}'
   ),
   '{"service.name":"claude-code","gram.deployment.id":"demo-seed"}',
   proj,
@@ -389,6 +509,7 @@ SELECT
   lower(hex(MD5(concat('gram-demo-usagetrace-', toString(i))))),
   concat(
     '{"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-cursor-respid-', toString(i))))), 1, 24), '"',
     ',"gen_ai.usage.input_tokens":', toString(in_tok),
     ',"gen_ai.usage.output_tokens":', toString(out_tok),
     ',"gen_ai.usage.cache_read.input_tokens":', toString(in_tok * 4),
@@ -555,7 +676,13 @@ SELECT
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    -- Same split as the chat rows above, keyed the same way so a chat's
+    -- score lands on the account that ran it. Odd rows only: those are the
+    -- Anthropic ones, and both seeded personal accounts are Anthropic.
+    ',"gram.account_type":"', if(i % 2 = 1
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -673,10 +800,19 @@ FROM (
   FROM numbers(180)
 );
 
--- Authz challenges (org home "Recent challenges" panel + /access/challenges).
+-- Authz challenges (org home "Recent challenges" panel, /access/challenges, and
+-- the per-identity Access and Security tabs).
+--
 -- user_id values are demo members (organization_user_relationships rows exist,
 -- so the member-suppression filter keeps them visible); one api_key bucket
 -- stays visible regardless of membership.
+--
+-- The subject and the scope are drawn from DIFFERENT hashes on purpose. Keying
+-- both off `number % 3` locked each person to a single scope forever, so every
+-- identity's Access tab listed one action repeated N times and the whole panel
+-- read as a stuck query. Outcomes are mixed for the same reason: a log that is
+-- 100% denials says nothing about which denials matter, and the donut on the
+-- Access tab has only one segment to draw.
 INSERT INTO authz_challenges
   (timestamp, organization_id, project_id, trace_id, span_id, request_id,
    principal_urn, principal_type, user_id, user_email, api_key_id,
@@ -694,34 +830,56 @@ SELECT
   lower(hex(MD5(concat('gram-demo-chal-', toString(number))))),
   substring(lower(hex(MD5(concat('gram-demo-chalspan-', toString(number))))), 1, 16),
   concat('req_', substring(lower(hex(MD5(concat('gram-demo-chalreq-', toString(number))))), 1, 16)),
-  if(number % 5 = 4, 'api_key:akey_demo0000000001',
-     concat('user:', arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3)))),
-  if(number % 5 = 4, 'api_key', 'user'),
-  if(number % 5 = 4, NULL,
-     arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3))),
-  if(number % 5 = 4, NULL,
-     arrayElement(['jonas@demo.getgram.ai', 'priya@demo.getgram.ai', 'hana@demo.getgram.ai'], 1 + (number % 3))),
-  if(number % 5 = 4, 'akey_demo0000000001', NULL),
+  if(number % 7 = 6, 'api_key:akey_demo0000000001',
+     concat('user:', arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                                  1 + toUInt32(cityHash64('chal-user', number) % 6)))),
+  if(number % 7 = 6, 'api_key', 'user'),
+  if(number % 7 = 6, NULL,
+     arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, NULL,
+     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, 'akey_demo0000000001', NULL),
   [],
   'require',
-  'deny',
-  if(number % 2 = 0, 'scope_unsatisfied', 'no_grants'),
-  arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3)),
-  arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3)),
+  -- Roughly one in three is refused: enough denials to be worth reading,
+  -- not so many that the org looks locked out of its own tools.
+  if(cityHash64('chal-outcome', number) % 3 = 0, 'deny', 'allow'),
+  -- reason is a closed enum on the wire: an allow that carries an empty
+  -- reason fails response validation and the client discards the whole page,
+  -- which reads in the UI as "no authorization checks recorded".
+  if(cityHash64('chal-outcome', number) % 3 <> 0, 'grant_matched',
+     if(number % 2 = 0, 'scope_unsatisfied', 'no_grants')),
+  arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
+  arrayElement(['toolset', 'project', 'environment',
+                'environment', 'mcp', 'skill', 'chat'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
   arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                 'dec0de00-0000-4000-a000-000000000001',
                 'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3)),
   '{"project":"dec0de00-0000-4000-a000-000000000001"}',
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset', 'project', 'environment',
+                 'environment', 'mcp', 'skill', 'chat'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
   [arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                  'dec0de00-0000-4000-a000-000000000001',
                  'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3))],
   ['{"project":"dec0de00-0000-4000-a000-000000000001"}'],
   [], [], [], [],
   toUInt32(3 + number % 5)
-FROM numbers(13);
+FROM numbers(64);
 
 -- Risk findings mirror (the ClickHouse read path behind the risk overview,
 -- the Risk Events listing and the Watchdog): one row per Postgres finding,
@@ -1022,6 +1180,33 @@ SELECT throwIf(
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 180,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
+
+-- Every request-shaped row carries gen_ai.response.id, the field the per-user
+-- summary counts chat requests by. Without it "Chat requests" reads 0 on every
+-- identity while the chat count beside it reads correctly, which looks like a
+-- broken panel rather than absent data.
+--
+-- Request-shaped means the row reports token usage: that is what separates an
+-- LLM request from the tool-call and hook rows seeded alongside it, and it
+-- stays true of request rows added later regardless of their body text. A
+-- global floor would not catch a new insert that forgot the field, so the
+-- assert is that no such row is missing it, with a floor beside it so an
+-- empty table cannot satisfy the first check vacuously.
+SELECT throwIf(
+  (SELECT countIf(toString(attributes.gen_ai.response.id) = '') FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) > 0,
+  'demo seed postflight: request rows missing gen_ai.response.id');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) < 180,
+  'demo seed postflight: too few request rows');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN

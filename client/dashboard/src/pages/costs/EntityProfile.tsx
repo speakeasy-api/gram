@@ -1,4 +1,5 @@
 import { formatCost } from "@/lib/money";
+import { ViewUserProfileLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -596,6 +597,11 @@ export function EntityProfile({
                   >
                     <Badge.Text>{typeLabel}</Badge.Text>
                   </Badge>
+                  {/* Spend is one subsystem's view of a person; the profile is
+                      where it sits beside their access, risk and devices. */}
+                  {emailSuffix && (
+                    <ViewUserProfileLink identifier={{ email: emailSuffix }} />
+                  )}
                 </div>
               </div>
             </div>
