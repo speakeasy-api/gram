@@ -1064,12 +1064,6 @@ export const useRoutes = (overrides?: {
       ...subPages,
     };
 
-    if (route.url.startsWith("/")) {
-      newRoute.goTo = () => {
-        void route.url;
-      };
-    }
-
     return newRoute;
   };
 
