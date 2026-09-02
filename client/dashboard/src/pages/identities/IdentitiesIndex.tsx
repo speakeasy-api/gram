@@ -74,6 +74,15 @@ export function IdentityDetailIndexRedirect(): JSX.Element {
   );
 }
 
+/** Reads `?sort=<column>:<asc|desc>`, ignoring anything it does not name. */
+function parseSortParam(search: string): SortDescriptor | null {
+  const raw = new URLSearchParams(search).get("sort");
+  if (!raw) return null;
+  const [id, direction] = raw.split(":");
+  if (!id || !IDENTITY_COLUMNS.some((column) => column.key === id)) return null;
+  return { id, direction: direction === "asc" ? "asc" : "desc" };
+}
+
 // The roster is one merged list held in memory, so it pages here rather than
 // at either source.
 const PAGE_SIZE = 50;
@@ -221,16 +230,23 @@ export default function IdentitiesIndex(): JSX.Element {
 }
 
 function IdentitiesIndexContent(): JSX.Element {
+  const location = useLocation();
   const routes = useRoutes();
   const organization = useOrganization();
   const projectSlug = useProjectSlugForRequests();
   const navigate = useNavigate();
   const client = useGramContext();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortDescriptor | null>({
-    id: "lastActivity",
-    direction: "desc",
-  });
+  // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
+  // order it was talking about — the dashboard's Top Users "View all" means
+  // "these people, by tokens", and landing on last-activity order shows a
+  // different set entirely.
+  const [sort, setSort] = useState<SortDescriptor | null>(
+    parseSortParam(location.search) ?? {
+      id: "lastActivity",
+      direction: "desc",
+    },
+  );
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(IDENTITY_FILTERS);

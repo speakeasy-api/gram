@@ -24,6 +24,17 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 ];
 
 /**
+ * Groupings worth offering for the scope a caller is showing.
+ *
+ * A grouping the caller has already fixed sorts a list of one: the MCP server
+ * detail lists that server's own sessions, so filing them by MCP server draws
+ * a single group and an option that appears to do nothing.
+ */
+function groupingOptions(hide: ConnectionGrouping[]) {
+  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
+}
+
+/**
  * Connections plus their grouping control and the loading / error / empty
  * branches, for surfaces that embed the list inside a larger page rather than
  * owning a toolbar of their own (the MCP server detail tab, the employee page).
@@ -39,6 +50,7 @@ export function ConnectionsListSection({
   onRevoked,
   defaultGrouping = "subject",
   showGroupingControl = true,
+  hideGroupings,
   bordered = true,
   emptyHeading = "No connections yet",
   emptyDescription = "Connections agents establish will appear here.",
@@ -60,6 +72,11 @@ export function ConnectionsListSection({
    * group that by person would sort a list of one.
    */
   showGroupingControl?: boolean;
+  /**
+   * Groupings to leave out because this surface has already fixed them — see
+   * `groupingOptions`.
+   */
+  hideGroupings?: ConnectionGrouping[];
   /** Passed through to the list; see `ConnectionsList`. */
   bordered?: boolean;
   emptyHeading?: string;
@@ -124,7 +141,7 @@ export function ConnectionsListSection({
             onChange={(value: string) =>
               setGrouping(value as ConnectionGrouping)
             }
-            options={GROUPING_OPTIONS}
+            options={groupingOptions(hideGroupings ?? [])}
           />
         </Stack>
       )}

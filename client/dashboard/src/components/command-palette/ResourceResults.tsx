@@ -411,7 +411,13 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
  * — far too heavy for a surface that has to answer on every keystroke.
  */
 function PeopleGroup({ onNavigate }: GroupProps) {
-  const routes = useRoutes();
+  // The identity page lives under a project, and the palette opens from the
+  // org shell too, where the path carries no slug. Fall back to the slug those
+  // pages already send on their requests, the same way IdentityLink does —
+  // without it the palette built `/org/projects//identities/...`, which
+  // matches no route.
+  const projectSlug = useProjectSlugForRequests();
+  const routes = useRoutes({ projectSlug });
   const { data } = useMembersSuspense();
   const members = data?.members ?? [];
   if (!members.length) return null;

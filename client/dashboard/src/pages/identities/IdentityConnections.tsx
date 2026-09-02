@@ -1,6 +1,9 @@
 import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
 import { IdentityDataFlowGraphCard } from "@/components/observe/employee-data-flow";
-import { fetchIdentityDataFlowGraph } from "@/components/observe/identity-data-flow-query";
+import {
+  fetchIdentityDataFlowGraph,
+  type IdentityDataFlowSubject,
+} from "@/components/observe/identity-data-flow-query";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -43,19 +46,26 @@ export default function IdentityConnections(): JSX.Element {
 
   // Telemetry keys the graph on the Gram user id or on the id an agent
   // reported, the same way the metric panels do, so an identity with no
-  // directory row still resolves.
-  const userId = identity.userIds[0] ?? identity.externalUserIds[0];
+  // directory row still resolves — but it has to be sent under the field that
+  // names which one it is.
+  const userId = identity.userIds[0];
+  const externalUserId = identity.externalUserIds[0];
+  const subject: IdentityDataFlowSubject | null = userId
+    ? { userId }
+    : externalUserId
+      ? { externalUserId }
+      : null;
   const graphQuery = useQuery({
     queryKey: [
       "identities",
       "data-flow",
       project.slug,
-      userId,
+      userId ?? externalUserId,
       from.getTime(),
       to.getTime(),
     ],
-    queryFn: () => fetchIdentityDataFlowGraph(client, from, to, userId!, ""),
-    enabled: userId != null,
+    queryFn: () => fetchIdentityDataFlowGraph(client, from, to, subject!, ""),
+    enabled: subject != null,
     throwOnError: false,
   });
 

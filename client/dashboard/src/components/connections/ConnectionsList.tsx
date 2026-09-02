@@ -670,7 +670,9 @@ export function ConnectionsList({
           {/* No column header of its own — the labels above still apply, and
               repeating them would make this read as a second table rather than
               the tail of the first. */}
-          <div className="border-border border">{rows(inactive)}</div>
+          <div className={cn(bordered && "border-border border")}>
+            {rows(inactive)}
+          </div>
         </div>
       ) : null}
     </div>

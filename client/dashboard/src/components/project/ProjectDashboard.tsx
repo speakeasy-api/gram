@@ -600,7 +600,10 @@ export function ProjectDashboard(): JSX.Element {
                       />
                       <ViewAllLink
                         to={withRange(routes.identities.href(), {
-                          sort: "tokenCount:desc",
+                          // Column key on the identities table, which reads
+                          // this param; "tokenCount" was the old employees
+                          // list's key and matched nothing here.
+                          sort: "tokens:desc",
                         })}
                       />
                     </CardActions>
