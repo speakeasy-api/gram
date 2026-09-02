@@ -98,10 +98,12 @@ func TestNetworkModeAdmissionLockSerializesIngressDisable(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
 	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true)
+	finalizeNetworkAccess, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.NoError(t, err)
 
 	disabled := false
-	err := pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
-		require.NoError(t, admission.CheckNetworkAccess(ctx, tx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual}))
+	err = pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
+		require.NoError(t, finalizeNetworkAccess.Finalize(ctx, tx))
 
 		lockCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()

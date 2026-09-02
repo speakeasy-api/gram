@@ -1,11 +1,19 @@
 package networkaccess
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAdmissionFinalizerZeroValueFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	var finalize AdmissionFinalizer
+	require.ErrorContains(t, finalize.Finalize(context.Background(), nil), "finalizer is unavailable")
+}
 
 func TestMode(t *testing.T) {
 	t.Parallel()

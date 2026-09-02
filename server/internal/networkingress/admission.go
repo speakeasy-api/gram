@@ -67,23 +67,22 @@ func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID 
 	return nil
 }
 
-func (a *ExpansionAdmission) PreflightNetworkAccess(ctx context.Context, input networkaccess.EligibilityInput) error {
+func (a *ExpansionAdmission) PrepareNetworkAccess(ctx context.Context, input networkaccess.EligibilityInput) (networkaccess.AdmissionFinalizer, error) {
 	if input.Mode.IsPublicOnly() {
-		return nil
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
 	}
 	if err := a.CheckExpansion(ctx, input.OrganizationID); err != nil {
-		return err
+		return networkaccess.AdmissionFinalizer{}, err
 	}
 	if !a.ready {
-		return fmt.Errorf("network ingress reconciliation is unavailable")
+		return networkaccess.AdmissionFinalizer{}, fmt.Errorf("network ingress reconciliation is unavailable")
 	}
-	return nil
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		return a.checkPreparedNetworkAccess(ctx, tx, input)
+	}), nil
 }
 
-func (a *ExpansionAdmission) CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input networkaccess.EligibilityInput) error {
-	if input.Mode.IsPublicOnly() {
-		return nil
-	}
+func (a *ExpansionAdmission) checkPreparedNetworkAccess(ctx context.Context, tx pgx.Tx, input networkaccess.EligibilityInput) error {
 	if tx == nil {
 		return fmt.Errorf("network ingress admission transaction is unavailable")
 	}

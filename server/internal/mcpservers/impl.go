@@ -164,7 +164,8 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
 		return nil, err
 	}
 	dbtx, err := s.db.Begin(ctx)
@@ -173,8 +174,8 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
-		return nil, err
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
 	}
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
@@ -634,7 +635,8 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.preflightNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid); err != nil {
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
 		return nil, err
 	}
 
@@ -644,8 +646,8 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := s.admitNetworkAccessMode(ctx, dbtx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid); err != nil {
-		return nil, err
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
 	}
 	txRepo := repo.New(dbtx)
 
@@ -867,36 +869,26 @@ func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkacc
 	return &mode
 }
 
-func (s *Service) preflightNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) error {
+func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) (networkaccess.AdmissionFinalizer, error) {
 	if mode.IsPublicOnly() {
-		return nil
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
 	}
 	if unproxied {
-		return oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
 	}
 	if s.networkAccessEligibility == nil {
-		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
-	if err := s.networkAccessEligibility.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
-		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
+	if err != nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
 	}
-	return nil
-}
-
-func (s *Service) admitNetworkAccessMode(ctx context.Context, tx pgx.Tx, organizationID string, mode networkaccess.Mode, unproxied bool) error {
-	if mode.IsPublicOnly() {
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+		}
 		return nil
-	}
-	if unproxied {
-		return oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
-	}
-	if s.networkAccessEligibility == nil {
-		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
-	}
-	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, tx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
-		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
-	}
-	return nil
+	}), nil
 }
 
 // ServerDisplayName derives a default plugin-server display name from an
