@@ -1,3 +1,5 @@
+import { formatCompact } from "@/lib/format";
+
 export type SplitRankedBarItem = {
   key: string;
   label: string;
@@ -65,11 +67,22 @@ export function SplitRankedBarList({
               />
               <div className="bg-muted flex-1" />
             </div>
-            <span className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4">
-              {item.value.toLocaleString()}
+            {/* Compact, because these tracks are fixed: a call count in the
+                millions overflows its column onto the bar beside it. The exact
+                figures stay on hover. */}
+            <span
+              className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4"
+              title={item.value.toLocaleString()}
+            >
+              {formatCompact(item.value)}
             </span>
-            <span className="text-default-destructive col-start-4 text-right font-mono text-xs tabular-nums sm:col-start-5">
-              {failed > 0 ? `${failed.toLocaleString()} fail` : ""}
+            <span
+              className="text-default-destructive col-start-4 text-right font-mono text-xs tabular-nums sm:col-start-5"
+              title={
+                failed > 0 ? `${failed.toLocaleString()} failed` : undefined
+              }
+            >
+              {failed > 0 ? `${formatCompact(failed)} fail` : ""}
             </span>
           </li>
         );

@@ -14,6 +14,10 @@ export function identityPeersQueryKey(
   projectSlug: string,
   from: Date,
   to: Date,
+  // The AI-account class the roster was read through, or "" for every account.
+  // Part of the key because the same window returns different figures under a
+  // scope, and an unscoped read must not answer a scoped one from cache.
+  accountType = "",
 ): (string | number)[] {
   return [
     "identities",
@@ -22,6 +26,7 @@ export function identityPeersQueryKey(
     projectSlug,
     from.getTime(),
     to.getTime(),
+    accountType,
   ];
 }
 
@@ -30,6 +35,7 @@ export async function fetchIdentityPeers(
   gramProject: string,
   from: Date,
   to: Date,
+  accountType = "",
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -40,7 +46,7 @@ export async function fetchIdentityPeers(
         gramProject,
         searchUsersPayload: {
           cursor,
-          filter: { from, to },
+          filter: { from, to, ...(accountType ? { accountType } : {}) },
           limit: 1000,
           sort: "desc",
           userType: "internal",

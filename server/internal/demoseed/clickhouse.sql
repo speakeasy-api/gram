@@ -114,6 +114,12 @@ SELECT
     ',"user.roles":', rolesjson,
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
+    -- The account the call was made through, matching the chat rows below so
+    -- an account-scoped read of someone's usage keeps its tool calls; without
+    -- it every tool count drops to zero the moment a filter is applied.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', hook, '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -299,8 +305,17 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.provider":"anthropic"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
-    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai', 'flat_rate', 'metered'), '"}'
+    -- The contractor works entirely on his own subscription; the manager
+    -- splits, roughly a third of his chats going through the personal Claude
+    -- login user_accounts already lists for him. A person who is wholly one or
+    -- wholly the other never exercises the account filter on the identity
+    -- Usage tab, which exists precisely for the split case.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
+    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'flat_rate', 'metered'), '"}'
   ),
   '{"service.name":"claude-code","gram.deployment.id":"demo-seed"}',
   proj,
@@ -657,7 +672,11 @@ SELECT
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    -- Same split as the chat rows above, keyed the same way so a chat's
+    -- score lands on the account that ran it.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',

@@ -1,4 +1,5 @@
 import { AccountRow } from "@/components/observe/account-display";
+import { cn } from "@/lib/utils";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useLocation } from "react-router";
@@ -19,6 +20,35 @@ import {
   useIdentityPeers,
   useIdentityWindow,
 } from "./useIdentityQueries";
+
+/**
+ * The platform mark a device row carries, keyed on the OS the MDM reports.
+ *
+ * The Apple mark is monochrome black and disappears on a dark background, so
+ * it is the only one flipped; the Windows and Tux marks are coloured and must
+ * not be. An OS with no mark of ours renders nothing rather than a stand-in.
+ */
+const OS_LOGOS: Record<string, { src: string; invertInDark: boolean }> = {
+  macos: { src: "/icons/platforms/macos.svg", invertInDark: true },
+  windows: { src: "/icons/platforms/windows.svg", invertInDark: false },
+  linux: { src: "/icons/platforms/linux.svg", invertInDark: false },
+};
+
+function osLogo(osName: string | undefined): JSX.Element | undefined {
+  const logo = OS_LOGOS[(osName ?? "").trim().toLowerCase()];
+  if (!logo) return undefined;
+  return (
+    <img
+      src={logo.src}
+      alt=""
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 object-contain",
+        logo.invertInDark && "dark:invert",
+      )}
+    />
+  );
+}
 
 /** How each coverage bucket reads, and whether it is worth flagging. */
 const COVERAGE: Record<string, { label: string; flag: boolean }> = {
@@ -253,6 +283,7 @@ export default function IdentityDevices(): JSX.Element {
                 <IdentityPanelRow
                   key={device.id}
                   accent={coverage?.flag ? "warning" : undefined}
+                  leading={osLogo(device.osName)}
                   title={
                     device.hostname ?? device.serialNumber ?? device.externalId
                   }

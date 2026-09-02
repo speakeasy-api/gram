@@ -3,7 +3,8 @@ import {
   StatTileGroup,
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
-import { useLocation } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
@@ -23,6 +24,25 @@ import {
 // Enough to show the shape of someone's usage; the handoff owns the long tail.
 const TOP_TOOLS = 5;
 
+/**
+ * Which class of AI account this tab is reading through.
+ *
+ * Someone signed into both a company account and their own subscription is two
+ * usage stories under one name, and the interesting question — how much of
+ * this work went through a subscription we do not govern — is unanswerable
+ * while the two are summed. Every read on this tab takes the scope, so the
+ * tiles, the agent split and the tool ranking all move together.
+ *
+ * Kept in the URL so a link to a scoped view arrives scoped. "" is every
+ * account, and is the only value that shares its reads with the other tabs.
+ */
+const ACCOUNT_SCOPE_PARAM = "account";
+type AccountScope = "" | "team" | "personal";
+
+function toAccountScope(value: string | null): AccountScope {
+  return value === "team" || value === "personal" ? value : "";
+}
+
 export default function IdentityUsage(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
@@ -39,7 +59,20 @@ export default function IdentityUsage(): JSX.Element {
     new URLSearchParams(location.search),
   );
 
-  const metricsQuery = useIdentityMetrics(identity, from, to);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope = toAccountScope(searchParams.get(ACCOUNT_SCOPE_PARAM));
+  const setScope = (next: AccountScope) => {
+    setSearchParams(
+      (params) => {
+        if (next) params.set(ACCOUNT_SCOPE_PARAM, next);
+        else params.delete(ACCOUNT_SCOPE_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
+  const metricsQuery = useIdentityMetrics(identity, from, to, scope);
   const metrics = metricsQuery.data?.metrics;
   const tools = [...(metrics?.tools ?? [])].sort((a, b) => b.count - a.count);
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
@@ -61,11 +94,20 @@ export default function IdentityUsage(): JSX.Element {
     isPending: peersPending,
     isError: peersFailed,
     refetch: refetchPeers,
-  } = useIdentityPeers(identity, from, to);
+  } = useIdentityPeers(identity, from, to, scope);
   const retryPeers = retryFailed({
     isError: peersFailed,
     refetch: refetchPeers,
   });
+  // Which scopes exist has to be read unscoped, or picking "personal" would
+  // narrow the roster row the filter itself is built from and the control
+  // would take away its own options. Unscoped, this is the same read every
+  // other tab makes, so it costs nothing while the filter is off.
+  const { self: unscopedSelf } = useIdentityPeers(identity, from, to);
+  // Only offered to someone who actually works through more than one class of
+  // account: with a single class the filter can only ever return everything
+  // or nothing.
+  const showScope = (unscopedSelf?.accountTypes ?? []).length > 1;
   const agents = [...(self?.hookSources ?? [])]
     .filter((source) => source.source && source.eventCount > 0)
     .sort((a, b) => b.eventCount - a.eventCount);
@@ -78,6 +120,28 @@ export default function IdentityUsage(): JSX.Element {
         { count: models.length, singular: "model" },
         { count: agents.length, singular: "agent" },
       ])}
+      action={
+        showScope ? (
+          <SegmentedControl<AccountScope>
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: "", label: "All" },
+              {
+                value: "team",
+                label: "Team",
+                tooltip: "Usage through company AI accounts.",
+              },
+              {
+                value: "personal",
+                label: "Personal",
+                tooltip:
+                  "Usage through personal AI subscriptions this organization does not govern.",
+              },
+            ]}
+          />
+        ) : undefined
+      }
     >
       <div className="flex flex-col gap-6">
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
@@ -183,7 +247,9 @@ export default function IdentityUsage(): JSX.Element {
             <IdentityPanelEmpty>
               {unsupported
                 ? "Tool calls are not recorded for this kind of identity."
-                : "No tool calls in this window."}
+                : scope
+                  ? `No tool calls through ${scope} accounts in this window.`
+                  : "No tool calls in this window."}
             </IdentityPanelEmpty>
           ) : (
             <div className="px-4 py-4">

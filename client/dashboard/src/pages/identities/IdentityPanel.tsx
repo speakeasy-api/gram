@@ -231,12 +231,15 @@ export function IdentityPanelRow({
   detail,
   trailing,
   accent,
+  leading,
 }: {
   title: React.ReactNode;
   detail?: React.ReactNode;
   trailing?: React.ReactNode;
   /** Draws the leading marker that flags a row as needing attention. */
   accent?: "destructive" | "warning";
+  /** A mark identifying what the row is about, e.g. a platform logo. */
+  leading?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <div className="border-border flex items-center gap-3 border-b px-4 py-3">
@@ -249,6 +252,7 @@ export function IdentityPanelRow({
           )}
         />
       )}
+      {leading && <div className="flex shrink-0 items-center">{leading}</div>}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">{title}</div>
         {detail && (

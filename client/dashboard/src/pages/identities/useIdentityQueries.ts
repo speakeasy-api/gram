@@ -93,6 +93,9 @@ export function useIdentityMetrics(
   identity: IdentityModel,
   from: Date,
   to: Date,
+  // Restricts the read to one class of AI account ("team" | "personal"); ""
+  // reads every account, which is what every panel but Usage wants.
+  accountType = "",
 ): ReturnType<typeof useGetUserMetricsSummary> {
   const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
@@ -104,6 +107,7 @@ export function useIdentityMetrics(
       from,
       to,
       ...(userId ? { userId } : externalUserId ? { externalUserId } : {}),
+      ...(accountType ? { accountType } : {}),
     },
   };
 
@@ -124,6 +128,7 @@ export function useIdentityMetrics(
         externalUserId: externalUserId ?? null,
         from: from.toISOString(),
         to: to.toISOString(),
+        accountType,
       },
     ],
     throwOnError: false,
@@ -435,6 +440,9 @@ export function useIdentityPeers(
   identity: IdentityModel,
   from: Date,
   to: Date,
+  // As above: "" is the whole roster, which is what the cached read every
+  // other panel shares.
+  accountType = "",
 ): {
   peers: UserSummary[];
   self: UserSummary | undefined;
@@ -446,8 +454,15 @@ export function useIdentityPeers(
   const organization = useOrganization();
   const { slug: projectSlug } = useIdentityProject();
   const query = useQuery({
-    queryKey: identityPeersQueryKey(organization.id, projectSlug, from, to),
-    queryFn: () => fetchIdentityPeers(client, projectSlug, from, to),
+    queryKey: identityPeersQueryKey(
+      organization.id,
+      projectSlug,
+      from,
+      to,
+      accountType,
+    ),
+    queryFn: () =>
+      fetchIdentityPeers(client, projectSlug, from, to, accountType),
     throwOnError: false,
   });
 

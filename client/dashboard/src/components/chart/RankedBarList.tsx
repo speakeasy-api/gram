@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { formatCompact } from "@/lib/format";
 import type { IdentityRef } from "@/lib/identity-urn";
 
 export type RankedBarListItem = {
@@ -64,8 +65,14 @@ export function RankedBarList({
             />
             <div className="bg-muted flex-1" />
           </div>
-          <span className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4">
-            {item.valueLabel ?? item.value.toLocaleString()}
+          {/* Compact, because the track holding it is fixed: a token count
+              runs to ten digits and a spelled-out figure overflows its column
+              onto the bar beside it. The exact number stays on hover. */}
+          <span
+            className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4"
+            title={item.valueLabel ?? item.value.toLocaleString()}
+          >
+            {item.valueLabel ?? formatCompact(item.value)}
           </span>
         </li>
       ))}
