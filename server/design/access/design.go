@@ -440,6 +440,35 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
 	})
 
+	Method("listAIDetections", func() {
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("category", String, "Filter to detection targets of one category.", func() {
+				Enum("harness", "local_model")
+			})
+			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetections")
+			Param("category")
+			Param("directory_group_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
 	Method("requestAccess", func() {
 		Description("Request access to a scope by sending an email notification to organization administrators.")
 		Security(security.ByKey, func() {
@@ -883,6 +912,37 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Required("users")
 	Attribute("users", ArrayOf(ShadowMCPInventoryUserModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var AIDetectionModel = Type("AIDetection", func() {
+	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "first_seen", "last_seen")
+
+	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
+	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "local_model")
+	})
+	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected anywhere in the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
+	Required("detections")
+	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
