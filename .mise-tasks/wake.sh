@@ -14,24 +14,31 @@ set -e
 gitdir="$(git rev-parse --absolute-git-dir)"
 
 # `mise run pause` parks a placeholder server on the site port (see
-# `mise run park`). It has to let go before vite can bind, and a wake started
-# from the CLI never goes through the parker's own hand-over path — so kill it
-# here. A parker that already exited (it woke us) leaves a stale pid file.
+# `mise run park`), which serves the "Resuming stack" page for as long as it
+# holds it. Killing it is deferred until the containers are up, just before
+# vite binds: a wake takes tens of seconds, and every reload or extra tab in
+# that window should get the page rather than a connection error.
 parked="$gitdir/gram-stack-parked.pid"
-if [ -f "$parked" ]; then
-    kill "$(cat "$parked")" 2> /dev/null || true
-    rm -f "$parked"
-fi
+release_port() {
+    if [ -f "$parked" ]; then
+        kill "$(cat "$parked")" 2> /dev/null || true
+        rm -f "$parked"
+        # The listener closes on signal delivery, not on return from kill.
+        sleep 1
+    fi
+}
 
 # No containers at all means this worktree was never booted (or was nuked), so
 # there is nothing to wake: migrations have never run and the databases are
 # empty. Do the full boot instead of starting daemons against an empty DB.
 if [ -z "$(docker compose ps -aq 2>/dev/null)" ]; then
     echo "No containers for this worktree yet — running a full boot instead."
+    release_port
     exec ./zero --agent
 fi
 
 mise run infra:start
+release_port
 mise run start
 
 rm -f "$gitdir/gram-stack-paused"

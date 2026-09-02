@@ -73,7 +73,7 @@ Contains the main application code for the Gram server:
 - `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
 - `mise run wake`: Start this worktree's stack (containers, then daemons). A new worktree is booted and then left paused, so run this before you need the dashboard or API.
 - `mise run pause` (alias `mise run sleep`): Stop the daemons and containers again, keeping their data. It also parks a placeholder server on the site port, so opening the dashboard URL wakes the stack.
-- `mise run idle-pause [--all] [--minutes 60]`: Pause stacks with no established connections for that long. Meant for cron/launchd.
+- `mise run idle-pause [--all] [--minutes 60]`: Pause stacks with no established connections for that long. `--install` schedules it every 5 minutes (launchd agent on macOS, systemd user timer on Linux); `--uninstall` removes it. An interactive `./zero` offers this once, and only when the repo has more than one worktree.
 - `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>

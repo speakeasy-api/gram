@@ -244,4 +244,35 @@ else
     wait "$server_cache_pid" 2>/dev/null || true
 fi
 
+# Offer the idle-pause schedule, once, and only where it earns its keep: a
+# developer with several worktrees accumulates paused-able stacks, a developer
+# with one checkout has nothing to reclaim. Interactive runs only -- installing
+# a launchd agent or systemd timer behind `--agent` or `-y` would be a machine
+# level change nobody asked for. The answer is remembered in the shared git dir
+# so every worktree sees it and the question is asked at most once.
+if ! $agent_mode && ! $auto_yes && [ -t 0 ]; then
+    idle_pause_marker="$(git rev-parse --git-common-dir 2>/dev/null)/gram-idle-pause-asked"
+    worktree_count=$(git worktree list 2>/dev/null | wc -l | tr -d ' ')
+    if [ ! -f "$idle_pause_marker" ] && [ "${worktree_count:-1}" -gt 1 ]; then
+        # Name the mechanism being installed: this writes a file into the
+        # developer's login session, not just into the repo.
+        if [ "$(uname)" = "Darwin" ]; then
+            sched_kind="launchd agent"
+        else
+            sched_kind="systemd user timer"
+        fi
+        echo
+        echo "You can choose to automatically pause idle worktrees. Visiting the"
+        echo "worktree in your browser will automatically wake the worktree stack."
+        echo "Install ${sched_kind}?"
+        echo -n "[y/N] "
+        read -r idle_pause_answer
+        touch "$idle_pause_marker"
+        case "$(echo "$idle_pause_answer" | tr '[:upper:]' '[:lower:]')" in
+            y) mise run idle-pause --install ;;
+            *) echo "Skipped — run \`mise run idle-pause --install\` any time." ;;
+        esac
+    fi
+fi
+
 mise run zero:summary
