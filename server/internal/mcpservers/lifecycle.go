@@ -148,7 +148,7 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		}
 		name = conv.ToPGText(trimmed)
 	}
-	slug, err := computeServerSlug(conv.FromPGTextOrEmpty[string](name), existing.ID)
+	slug, err := ComputeServerSlug(conv.FromPGTextOrEmpty[string](name), existing.ID)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}

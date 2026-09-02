@@ -44,7 +44,7 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
 	}
-	slug, err := computeServerSlug(input.Name, serverID)
+	slug, err := ComputeServerSlug(input.Name, serverID)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}

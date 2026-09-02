@@ -669,7 +669,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	// Always recompute slug from the post-update name so it tracks the name
 	// even when the name didn't change (idempotent).
-	slug, err := computeServerSlug(conv.FromPGTextOrEmpty[string](name), serverID)
+	slug, err := ComputeServerSlug(conv.FromPGTextOrEmpty[string](name), serverID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
