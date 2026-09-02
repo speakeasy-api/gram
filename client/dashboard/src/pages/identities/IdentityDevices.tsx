@@ -46,6 +46,12 @@ export default function IdentityDevices(): JSX.Element {
   );
   const devicesQuery = useIdentityDevices(identity);
   const devices = devicesQuery.data?.result.devices ?? [];
+  // One capped page: a cursor means MDM holds more machines than are listed
+  // below, so every count drawn from this list is a floor.
+  const devicesTruncated = !!devicesQuery.data?.result.nextCursor;
+  const deviceCount = devicesTruncated
+    ? `${devices.length.toLocaleString()} or more`
+    : devices.length.toLocaleString();
 
   // Linked accounts ride on the roster row, not the per-user summary, so this
   // is the same read the Usage tab already makes for its agent surfaces.
@@ -114,7 +120,7 @@ export default function IdentityDevices(): JSX.Element {
       title: "On a managed device",
       detail:
         devices.length > 0
-          ? `${devices.length} device${devices.length === 1 ? "" : "s"} assigned in MDM.`
+          ? `${deviceCount} device${devices.length === 1 && !devicesTruncated ? "" : "s"} assigned in MDM.`
           : "No managed device assigned in MDM.",
       met: devices.length > 0,
     },
@@ -216,17 +222,23 @@ export default function IdentityDevices(): JSX.Element {
           loading={devicesQuery.isLoading}
           error={devicesQuery.isError}
           onRetry={() => void devicesQuery.refetch()}
-          footer={
+          footer={[
+            coverageNote,
             // Devices match on the id OR on the MDM-reported email, because a
             // device only carries a user id when that email resolved.
             identity.emails.length > 0
-              ? `${coverageNote} Matched on ${identity.userIds.length} user id${
+              ? `Matched on ${identity.userIds.length} user id${
                   identity.userIds.length === 1 ? "" : "s"
                 } and ${identity.emails.length} address${
                   identity.emails.length === 1 ? "" : "es"
                 }.`
-              : coverageNote
-          }
+              : "",
+            devicesTruncated
+              ? `Showing the first ${devices.length.toLocaleString()}; this identity has more assigned.`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           {devices.length === 0 ? (
             <IdentityPanelEmpty>

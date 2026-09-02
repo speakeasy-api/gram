@@ -84,7 +84,9 @@ export function PluginAssignmentRow({
         <IdentityLink
           identifier={kind === "user" || kind === "email" ? { urn } : null}
         >
-          <Text as="div" className="truncate font-medium">
+          {/* Block-level span, not a div: IdentityLink falls back to a
+              <span> wrapper for principals that name no one person. */}
+          <Text as="span" className="block truncate font-medium">
             {label}
           </Text>
         </IdentityLink>

@@ -17,16 +17,26 @@ import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
+import { shadowMCPAccessSummaryOf } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import {
   useCanReadRisk,
   useIdentityChallenges,
-  useIdentityMember,
+  useIdentityPrincipalUrn,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
 } from "./useIdentityQueries";
 
 const TOP_RULES = 5;
+const DENIED_ROWS = 8;
+
+/**
+ * Risk and the shadow inventory are org:admin surfaces and their queries are
+ * held back without it. Said outright, because the alternative rendering — the
+ * panel's own empty state — reads as "we looked and there is nothing".
+ */
+const RISK_UNAVAILABLE =
+  "Risk and shadow MCP findings need the org:admin permission.";
 
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
@@ -35,34 +45,43 @@ export default function IdentitySecurity(): JSX.Element {
   const location = useLocation();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
-  const { member } = useIdentityMember(identity);
+  // The same principal the challenge query uses, so the link filters to the
+  // principal the panel counted rather than opening the whole log.
+  const principalUrn = useIdentityPrincipalUrn(identity);
   const handoffs = identityHandoffs(
     identity,
     routes,
     orgRoutes,
-    // The same fallback the challenge query uses, so the link filters to the
-    // principal the panel counted rather than opening the whole log.
-    member?.principalUrn ??
-      (identity.workosUserId || identity.userIds[0]
-        ? `user:${identity.workosUserId ?? identity.userIds[0]}`
-        : undefined),
+    principalUrn,
     new URLSearchParams(location.search),
   );
 
   const riskQuery = useIdentityRisk(identity, from, to);
-  const challengesQuery = useIdentityChallenges(identity, from, to);
+  // Asked for as a denied-only slice so the count below is the API's total for
+  // exactly what the panel claims, rather than however many denials happened
+  // to fall inside one capped page of mixed outcomes.
+  const deniedQuery = useIdentityChallenges(identity, from, to, {
+    outcome: "deny",
+  });
+  const unresolvedQuery = useIdentityChallenges(identity, from, to, {
+    outcome: "deny",
+    resolved: false,
+    limit: 1,
+  });
   const shadowQuery = useIdentityShadowServers(identity, from, to);
 
   const categories = riskQuery.data?.categories ?? [];
   const rules = riskQuery.data?.rules ?? [];
   const findings = categories.reduce((sum, c) => sum + Number(c.findings), 0);
-  const challenges = challengesQuery.data?.challenges ?? [];
-  const denied = challenges.filter((c) => c.outcome === "deny");
+  const denied = deniedQuery.data?.challenges ?? [];
+  const deniedTotal = deniedQuery.data?.total ?? 0;
+  const unresolvedTotal = unresolvedQuery.data?.total;
   const shadowServers = shadowQuery.data?.servers ?? [];
 
-  // The identifier count is the honest caveat on every count here: risk keys on
-  // the ids agents report, and a person can be known by more than one.
-  const matchedOn = identity.externalUserIds.length;
+  // Risk keys on the ids agents report and the endpoint takes one of them, so
+  // this names the identifier the panel actually asked about.
+  const riskIdentifier = identity.externalUserIds[0];
+  const unqueriedIdentifiers = Math.max(identity.externalUserIds.length - 1, 0);
 
   return (
     <IdentitySection
@@ -71,10 +90,10 @@ export default function IdentitySecurity(): JSX.Element {
         canReadRisk
           ? [
               { count: findings, singular: "finding" },
-              { count: denied.length, singular: "denied", plural: "denied" },
+              { count: deniedTotal, singular: "denied", plural: "denied" },
               { count: shadowServers.length, singular: "shadow server" },
             ]
-          : [{ count: denied.length, singular: "denied challenge" }],
+          : [{ count: deniedTotal, singular: "denied challenge" }],
       )}
     >
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -87,12 +106,20 @@ export default function IdentitySecurity(): JSX.Element {
           error={riskQuery.isError}
           onRetry={() => void riskQuery.refetch()}
           footer={
-            matchedOn > 0
-              ? `Matched on ${matchedOn} identifier${matchedOn === 1 ? "" : "s"}`
-              : "This identity reports no agent identifier, so risk cannot key on it."
+            !canReadRisk
+              ? undefined
+              : !riskIdentifier
+                ? "This identity reports no agent identifier, so risk cannot key on it."
+                : unqueriedIdentifiers > 0
+                  ? `Matched on ${riskIdentifier}. This identity reports ${unqueriedIdentifiers} further identifier${
+                      unqueriedIdentifiers === 1 ? "" : "s"
+                    }, which are not counted here.`
+                  : `Matched on ${riskIdentifier}`
           }
         >
-          {categories.length === 0 ? (
+          {!canReadRisk ? (
+            <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
+          ) : categories.length === 0 ? (
             <IdentityPanelEmpty>No findings in this window.</IdentityPanelEmpty>
           ) : (
             <div className="px-4 py-4">
@@ -120,12 +147,14 @@ export default function IdentitySecurity(): JSX.Element {
           error={riskQuery.isError}
           onRetry={() => void riskQuery.refetch()}
           footer={
-            rules.length > TOP_RULES
+            canReadRisk && rules.length > TOP_RULES
               ? `Top ${TOP_RULES} of ${rules.length} rules`
               : undefined
           }
         >
-          {rules.length === 0 ? (
+          {!canReadRisk ? (
+            <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
+          ) : rules.length === 0 ? (
             <IdentityPanelEmpty>
               No rule matched this identity in this window.
             </IdentityPanelEmpty>
@@ -151,9 +180,15 @@ export default function IdentitySecurity(): JSX.Element {
           loading={shadowQuery.isLoading}
           error={shadowQuery.isError}
           onRetry={() => void shadowQuery.refetch()}
-          footer="Servers this person reached in this window, not the project-wide inventory."
+          footer={
+            canReadRisk
+              ? "Servers this person reached in this window, not the project-wide inventory."
+              : undefined
+          }
         >
-          {shadowServers.length === 0 ? (
+          {!canReadRisk ? (
+            <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
+          ) : shadowServers.length === 0 ? (
             <IdentityPanelEmpty>
               This identity reached no unsanctioned server.
             </IdentityPanelEmpty>
@@ -161,7 +196,13 @@ export default function IdentitySecurity(): JSX.Element {
             shadowServers.map((server) => (
               <IdentityPanelRow
                 key={server.serverSlug}
-                accent={server.access === "blocked" ? "destructive" : undefined}
+                // The canonical verdict, not the deprecated `access` string it
+                // can disagree with.
+                accent={
+                  shadowMCPAccessSummaryOf(server).state === "blocked"
+                    ? "destructive"
+                    : undefined
+                }
                 title={server.serverName || server.urlHost}
                 detail={
                   server.lastCalled ? (
@@ -178,12 +219,12 @@ export default function IdentitySecurity(): JSX.Element {
           title="Denied authorization challenges"
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
-          loading={challengesQuery.isLoading}
-          error={challengesQuery.isError}
-          onRetry={() => void challengesQuery.refetch()}
+          loading={deniedQuery.isLoading}
+          error={deniedQuery.isError}
+          onRetry={() => void deniedQuery.refetch()}
           footer={
-            denied.length > 0
-              ? `${denied.filter((c) => !c.resolvedAt).length} still unresolved`
+            deniedTotal > 0 && unresolvedTotal !== undefined
+              ? `${unresolvedTotal.toLocaleString()} of ${deniedTotal.toLocaleString()} still unresolved`
               : undefined
           }
         >
@@ -193,7 +234,7 @@ export default function IdentitySecurity(): JSX.Element {
             </IdentityPanelEmpty>
           ) : (
             denied
-              .slice(0, 8)
+              .slice(0, DENIED_ROWS)
               .map((challenge) => (
                 <IdentityPanelRow
                   key={challenge.id}

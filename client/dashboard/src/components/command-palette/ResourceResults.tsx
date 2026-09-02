@@ -4,7 +4,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
-import { encodeIdentityUrn } from "@/lib/identity-urn";
+import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
@@ -19,7 +19,7 @@ import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { Suspense, useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
 
 /**
@@ -418,6 +418,10 @@ function PeopleGroup({ onNavigate }: GroupProps) {
   // matches no route.
   const projectSlug = useProjectSlugForRequests();
   const routes = useRoutes({ projectSlug });
+  const navigate = useNavigate();
+  // The palette opens over whatever page the reader had narrowed, so the
+  // person's page opens on that same window rather than the default one.
+  const { search } = useLocation();
   const { data } = useMembersSuspense();
   const members = data?.members ?? [];
   if (!members.length) return null;
@@ -431,8 +435,13 @@ function PeopleGroup({ onNavigate }: GroupProps) {
           sublabel={member.email}
           icon="user"
           onSelect={() => {
-            routes.identities.detail.overview.goTo(
-              encodeIdentityUrn(`user:${member.id}`),
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(`user:${member.id}`),
+                ),
+                search,
+              ),
             );
             onNavigate();
           }}

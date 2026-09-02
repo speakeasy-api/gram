@@ -83,6 +83,11 @@ export function IdentityPanel({
       <div
         className={cn(
           "flex-1",
+          // The panel's own edge already closes the list, so the last row's
+          // separator goes. Trimmed here rather than on the row so it still
+          // works when each row is wrapped in its own link, where every row is
+          // its wrapper's last child.
+          "[&>:last-child]:border-b-0 [&>:last-child>:last-child]:border-b-0",
           loading || error ? undefined : contentClassName,
         )}
       >
@@ -176,7 +181,14 @@ function IdentityPanelFailed({
   );
 }
 
-/** A row inside a panel: what happened, its detail, and a trailing value. */
+/**
+ * A row inside a panel: what happened, its detail, and a trailing value.
+ *
+ * The trailing separator is trimmed by the panel body rather than by the row
+ * itself: a row wrapped in its own link — the attention list does this — is
+ * the only child of that wrapper, so a `last:` rule on the row would match
+ * every row and take away all the separators.
+ */
 export function IdentityPanelRow({
   title,
   detail,
@@ -190,7 +202,7 @@ export function IdentityPanelRow({
   accent?: "destructive" | "warning";
 }): React.JSX.Element {
   return (
-    <div className="border-border flex items-center gap-3 border-b px-4 py-3 last:border-b-0">
+    <div className="border-border flex items-center gap-3 border-b px-4 py-3">
       {accent && (
         <span
           aria-hidden="true"

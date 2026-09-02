@@ -78,11 +78,18 @@ export default function IdentityCost(): JSX.Element {
       value: metrics?.cacheCreationInputTokens ?? 0,
     },
   ].filter((segment) => segment.value > 0);
-  const tokenTotal = tokenSegments.reduce((sum, s) => sum + s.value, 0);
   const cacheRead = metrics?.cacheReadInputTokens ?? 0;
+  // Against the prompt side only. "Served from cache" is a claim about what
+  // went INTO the model, and output tokens are never served from a cache, so
+  // counting them in the denominator understates the share by however much
+  // the model wrote back.
+  const promptTokens =
+    (metrics?.totalInputTokens ?? 0) +
+    cacheRead +
+    (metrics?.cacheCreationInputTokens ?? 0);
   const cacheShareLabel =
-    tokenTotal > 0 && cacheRead > 0
-      ? `${Math.round((cacheRead / tokenTotal) * 100)}% served from cache`
+    promptTokens > 0 && cacheRead > 0
+      ? `${Math.round((cacheRead / promptTokens) * 100)}% of prompt tokens served from cache`
       : undefined;
 
   return (

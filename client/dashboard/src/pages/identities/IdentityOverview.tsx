@@ -19,6 +19,7 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import {
+  hasMetricsSubject,
   useCanReadOthersChats,
   useCanReadRisk,
   useIdentityAuditLogs,
@@ -32,6 +33,12 @@ import {
   useIdentityWindow,
   useIsSelf,
 } from "./useIdentityQueries";
+
+/** "12", or "12 or more" when the list it was counted from was truncated. */
+function atLeast(count: number, truncated: boolean): string {
+  const formatted = count.toLocaleString();
+  return truncated ? `${formatted} or more` : formatted;
+}
 
 export default function IdentityOverview(): JSX.Element {
   const { identity, urn } = useIdentityOutlet();
@@ -58,22 +65,40 @@ export default function IdentityOverview(): JSX.Element {
   const canReadRisk = useCanReadRisk();
   const auditQuery = useIdentityAuditLogs(identity, from, to);
   const riskQuery = useIdentityRisk(identity, from, to);
-  const challengesQuery = useIdentityChallenges(identity, from, to);
+  // Only unresolved denials are worth surfacing: a resolved one already had an
+  // admin look at it. Asked for as that slice rather than filtered out of a
+  // capped page of everything, so the count below is the API's own total.
+  const challengesQuery = useIdentityChallenges(identity, from, to, {
+    outcome: "deny",
+    resolved: false,
+  });
   const shadowQuery = useIdentityShadowServers(identity, from, to);
   const devicesQuery = useIdentityDevices(identity);
 
   const metrics = metricsQuery.data?.metrics;
+  // Zero is a finding, and a tile that was never asked or never answered has
+  // not earned it — the same reading Usage and Cost give these figures.
+  const unsupported = !hasMetricsSubject(identity);
+  const metricsUnavailable = unsupported || metricsQuery.isError;
+  const metricsTileValue = metricsUnavailable ? "—" : undefined;
+  const metricsTileTooltip = unsupported
+    ? "This identity carries no identifier the usage endpoint can key on."
+    : metricsQuery.isError
+      ? "Usage could not be loaded."
+      : undefined;
   const findings = (riskQuery.data?.categories ?? []).reduce(
     (sum, c) => sum + Number(c.findings),
     0,
   );
-  // Only unresolved denials are worth surfacing: a resolved one already had an
-  // admin look at it.
-  const deniedChallenges = (challengesQuery.data?.challenges ?? []).filter(
-    (c) => c.outcome === "deny" && !c.resolvedAt,
-  );
+  const deniedChallenges = challengesQuery.data?.challenges ?? [];
+  const deniedTotal = challengesQuery.data?.total ?? 0;
   const shadowServers = shadowQuery.data?.servers ?? [];
+  // Both lists are one capped page, and the cursor is what says another page
+  // exists. A count drawn from a truncated list is a floor, not a total, and
+  // the wording below has to say so.
+  const shadowTruncated = !!shadowQuery.data?.nextCursor;
   const devices = devicesQuery.data?.result.devices ?? [];
+  const devicesTruncated = !!devicesQuery.data?.result.nextCursor;
   const staleDevices = devices.filter(
     (d) =>
       d.coverageBucket === "agent_stale" || d.coverageBucket === "no_agent",
@@ -107,12 +132,15 @@ export default function IdentityOverview(): JSX.Element {
     shadowQuery.isError ||
     devicesQuery.isError ||
     peersFailed;
+  // Only what actually failed. refetch() runs even on a query held back by
+  // `enabled`, so retrying blindly would issue the unscoped reads — risk and
+  // shadow MCP without org:admin — that those guards exist to prevent.
   const retryAttention = () => {
-    void riskQuery.refetch();
-    void challengesQuery.refetch();
-    void shadowQuery.refetch();
-    void devicesQuery.refetch();
-    refetchPeers();
+    if (riskQuery.isError) void riskQuery.refetch();
+    if (challengesQuery.isError) void challengesQuery.refetch();
+    if (shadowQuery.isError) void shadowQuery.refetch();
+    if (devicesQuery.isError) void devicesQuery.refetch();
+    if (peersFailed) refetchPeers();
   };
 
   // Which surfaces the work came through. Rides on the roster row, like the
@@ -162,17 +190,17 @@ export default function IdentityOverview(): JSX.Element {
     },
     shadowServers.length > 0 && {
       key: "shadow",
-      title: `Reached ${shadowServers.length} shadow MCP server${
-        shadowServers.length === 1 ? "" : "s"
+      title: `Reached ${atLeast(shadowServers.length, shadowTruncated)} shadow MCP server${
+        shadowServers.length === 1 && !shadowTruncated ? "" : "s"
       }`,
       detail: shadowServers[0]?.urlHost,
       trailing: "Security",
       href: routes.identities.detail.security.href(encodedUrn),
     },
-    deniedChallenges.length > 0 && {
+    deniedTotal > 0 && {
       key: "challenges",
-      title: `${deniedChallenges.length} denied authorization challenge${
-        deniedChallenges.length === 1 ? "" : "s"
+      title: `${deniedTotal.toLocaleString()} denied authorization challenge${
+        deniedTotal === 1 ? "" : "s"
       }`,
       detail: deniedChallenges
         .slice(0, 3)
@@ -183,8 +211,8 @@ export default function IdentityOverview(): JSX.Element {
     },
     staleDevices.length > 0 && {
       key: "devices",
-      title: `${staleDevices.length} device${
-        staleDevices.length === 1 ? "" : "s"
+      title: `${atLeast(staleDevices.length, devicesTruncated)} device${
+        staleDevices.length === 1 && !devicesTruncated ? "" : "s"
       } without an active agent`,
       detail: staleDevices[0]?.hostname ?? staleDevices[0]?.serialNumber,
       trailing: "Devices",
@@ -204,6 +232,7 @@ export default function IdentityOverview(): JSX.Element {
   const standingFor = (
     field: "totalCost" | "totalToolCalls" | "totalChats",
   ): string | undefined => {
+    if (metricsUnavailable) return undefined;
     const value = metrics?.[field] ?? 0;
     const standing = peerStanding(
       peers.map((peer) => peer[field] ?? 0),
@@ -233,7 +262,14 @@ export default function IdentityOverview(): JSX.Element {
             </IdentityPanelEmpty>
           ) : (
             attention.map((item) => (
-              <Link key={item.key} to={item.href} className="block">
+              // The window rides along: these tabs read the same range params,
+              // and landing on the default period shows a different set of
+              // findings than the one the row counted.
+              <Link
+                key={item.key}
+                to={`${item.href}${location.search}`}
+                className="block"
+              >
                 <IdentityPanelRow
                   accent="destructive"
                   title={item.title}
@@ -261,6 +297,8 @@ export default function IdentityOverview(): JSX.Element {
                 title="Spend"
                 subtext={standingFor("totalCost")}
                 value={metrics?.totalCost ?? 0}
+                displayValue={metricsTileValue}
+                tooltip={metricsTileTooltip}
                 format="currency"
                 tone="neutral"
                 icon="credit-card"
@@ -269,6 +307,8 @@ export default function IdentityOverview(): JSX.Element {
                 title="Tool calls"
                 subtext={standingFor("totalToolCalls")}
                 value={metrics?.totalToolCalls ?? 0}
+                displayValue={metricsTileValue}
+                tooltip={metricsTileTooltip}
                 format="compact"
                 tone="information"
                 icon="wrench"
@@ -277,6 +317,8 @@ export default function IdentityOverview(): JSX.Element {
                 title="Chats"
                 subtext={standingFor("totalChats")}
                 value={metrics?.totalChats ?? 0}
+                displayValue={metricsTileValue}
+                tooltip={metricsTileTooltip}
                 format="compact"
                 tone="information"
                 icon="message-square"
@@ -290,8 +332,16 @@ export default function IdentityOverview(): JSX.Element {
               <StatTile
                 title="Findings"
                 value={findings}
+                displayValue={riskQuery.isError ? "—" : undefined}
+                tooltip={
+                  riskQuery.isError
+                    ? "Risk findings could not be loaded."
+                    : undefined
+                }
                 format="compact"
-                tone={findings > 0 ? "destructive" : "neutral"}
+                tone={
+                  findings > 0 && !riskQuery.isError ? "destructive" : "neutral"
+                }
                 icon="flag"
               />
             ))}
@@ -301,10 +351,21 @@ export default function IdentityOverview(): JSX.Element {
             <StatTile
               title="Devices"
               value={devices.length}
+              displayValue={
+                devicesQuery.isError
+                  ? "—"
+                  : devicesTruncated
+                    ? `${devices.length.toLocaleString()}+`
+                    : undefined
+              }
               format="compact"
               tone="neutral"
               icon="laptop"
-              tooltip="Current MDM inventory. Unlike the figures beside it, this is not filtered by the selected time range — a device is assigned or it is not."
+              tooltip={
+                devicesQuery.isError
+                  ? "The managed-device inventory could not be loaded."
+                  : "Current MDM inventory. Unlike the figures beside it, this is not filtered by the selected time range — a device is assigned or it is not."
+              }
             />
           )}
         </StatTileGroup>
@@ -317,7 +378,7 @@ export default function IdentityOverview(): JSX.Element {
           <IdentityPanel
             title="Platforms"
             handoffLabel="Usage"
-            handoffHref={routes.identities.detail.usage.href(encodedUrn)}
+            handoffHref={`${routes.identities.detail.usage.href(encodedUrn)}${location.search}`}
             contentClassName="px-4 py-4"
             loading={peersPending}
             loadingVariant="block"

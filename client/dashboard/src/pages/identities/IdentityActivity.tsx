@@ -23,6 +23,26 @@ import {
 // history and a 20-row list only made this tab a longer Overview.
 const RECENT_ROWS = 6;
 
+/**
+ * What a panel says when a refresh failed over rows it already has: the rows
+ * stay, because they were true when they landed, and the line says they may
+ * now be stale rather than replacing them with an error.
+ */
+function RefreshFailed({ onRetry }: { onRetry: () => void }): JSX.Element {
+  return (
+    <span>
+      Could not refresh — showing the last rows loaded.{" "}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="hover:text-foreground focus-visible:ring-ring rounded-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+      >
+        Try again
+      </button>
+    </span>
+  );
+}
+
 export default function IdentityActivity(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
@@ -51,11 +71,19 @@ export default function IdentityActivity(): JSX.Element {
   // for a viewer without chat:read, and that is a refusal to fetch, not a wait.
   const activityLoading = auditQuery.isLoading || chatsQuery.isLoading;
   // The chart draws both series as one shape, so a failed half would read as
-  // a quiet fortnight rather than as data that never arrived.
-  const activityFailed = auditQuery.isError || chatsQuery.isError;
+  // a quiet fortnight rather than as data that never arrived. A failure with
+  // rows already cached is a failed REFRESH, though: blanking the panel throws
+  // away readable data to report a background hiccup.
+  const auditFailed = auditQuery.isError && !auditQuery.data;
+  const chatsFailed = chatsQuery.isError && !chatsQuery.data;
+  const activityFailed = auditFailed || chatsFailed;
+  // Only what failed. refetch() runs even on a query held back by `enabled`,
+  // so retrying blindly would list unscoped audit logs for an identity with no
+  // Gram user id, or the viewer's own chats without chat:read, under the
+  // subject's name.
   const retryActivity = () => {
-    void auditQuery.refetch();
-    void chatsQuery.refetch();
+    if (auditQuery.isError) void auditQuery.refetch();
+    if (chatsQuery.isError) void chatsQuery.refetch();
   };
 
   const logDates = logs.map((log) => new Date(log.createdAt));
@@ -107,14 +135,18 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.auditLogs}
           loading={auditQuery.isLoading}
           loadingRows={RECENT_ROWS}
-          error={auditQuery.isError}
+          error={auditFailed}
           onRetry={() => void auditQuery.refetch()}
           footer={
-            // Audit logs key on the Gram user id, so a subject with no
+            auditQuery.isError ? (
+              <RefreshFailed onRetry={() => void auditQuery.refetch()} />
+            ) : // Audit logs key on the Gram user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
-            identity.userIds.length === 0
-              ? "This identity resolves to no Gram user, so no change is recorded under it."
-              : `Actor filtered to ${identity.displayName}`
+            identity.userIds.length === 0 ? (
+              "This identity resolves to no Gram user, so no change is recorded under it."
+            ) : (
+              `Actor filtered to ${identity.displayName}`
+            )
           }
         >
           {logs.length === 0 ? (
@@ -147,14 +179,16 @@ export default function IdentityActivity(): JSX.Element {
           handoffHref={handoffs.agentSessions}
           loading={chatsQuery.isLoading}
           loadingRows={RECENT_ROWS}
-          error={chatsQuery.isError}
+          error={chatsFailed}
           onRetry={() => void chatsQuery.refetch()}
           footer={
-            chatsQuery.data
-              ? `${chatsQuery.data.total ?? chats.length} session${
-                  (chatsQuery.data.total ?? chats.length) === 1 ? "" : "s"
-                } this period`
-              : undefined
+            chatsQuery.isError ? (
+              <RefreshFailed onRetry={() => void chatsQuery.refetch()} />
+            ) : chatsQuery.data ? (
+              `${chatsQuery.data.total ?? chats.length} session${
+                (chatsQuery.data.total ?? chats.length) === 1 ? "" : "s"
+              } this period`
+            ) : undefined
           }
         >
           {!canReadOthersChats ? (

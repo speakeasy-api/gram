@@ -16,10 +16,27 @@ import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityChallenges,
   useIdentityMember,
+  useIdentityPrincipalUrn,
   useIdentityWindow,
 } from "./useIdentityQueries";
 
 const RECENT_CHALLENGES = 5;
+
+/**
+ * Whether a scope slug is an exception rather than a permission.
+ *
+ * A `*:blocked_*` grant subtracts an action from whatever a role otherwise
+ * confers, and the risk-policy bypass and block grants target a policy's
+ * enforcement rather than something this person may do. Listed among the
+ * permissions they read as extra reach, which is the opposite of what they are.
+ */
+function isExclusionScope(slug: string): boolean {
+  return (
+    slug.includes(":blocked_") ||
+    slug === "risk_policy:bypass" ||
+    slug === "risk_policy:block"
+  );
+}
 
 export default function IdentityAccess(): JSX.Element {
   const location = useLocation();
@@ -28,20 +45,24 @@ export default function IdentityAccess(): JSX.Element {
   const { from, to } = useIdentityWindow();
   const orgRoutes = useOrgRoutes();
   const { member, query: membersQuery } = useIdentityMember(identity);
+  // The same principal the challenge query uses, so the link filters to the
+  // principal the panel counted rather than opening the whole log.
+  const principalUrn = useIdentityPrincipalUrn(identity);
   const handoffs = identityHandoffs(
     identity,
     routes,
     orgRoutes,
-    // The same fallback the challenge query uses, so the link filters to the
-    // principal the panel counted rather than opening the whole log.
-    member?.principalUrn ??
-      (identity.workosUserId || identity.userIds[0]
-        ? `user:${identity.workosUserId ?? identity.userIds[0]}`
-        : undefined),
+    principalUrn,
     new URLSearchParams(location.search),
   );
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   const challengesQuery = useIdentityChallenges(identity, from, to);
+  // The rows above are one capped page, so the outcome split is asked for as
+  // its own denied-only slice and read off the API's total.
+  const deniedQuery = useIdentityChallenges(identity, from, to, {
+    outcome: "deny",
+    limit: 1,
+  });
   // Roles are the join of the member row and the role catalogue, so both have
   // to land before the panels can say anything true about them — and if either
   // read fails, "no roles assigned in this organization" is a claim about
@@ -62,25 +83,47 @@ export default function IdentityAccess(): JSX.Element {
   // A scope slug is "<family>:<action>" (org:read, chat:read). Grouping by
   // family turns a flat list of twenty slugs into the handful of areas this
   // person has any reach over, which is the shape the question is asked in.
-  const scopeFamilies = new Map<string, Set<string>>();
+  //
+  // A scope's actions are held with whether every grant of it was
+  // unrestricted: a grant carrying selectors reaches only the resources those
+  // name, and printing it beside an unrestricted one claims a reach this
+  // person does not have.
+  const scopeFamilies = new Map<string, Map<string, boolean>>();
+  const exclusions = new Set<string>();
   for (const role of roles) {
     for (const grant of ("grants" in role ? role.grants : []) ?? []) {
       const slug = String(grant.scope);
+      if (isExclusionScope(slug)) {
+        exclusions.add(slug);
+        continue;
+      }
       const [family = slug, action = ""] = slug.split(":");
-      if (!scopeFamilies.has(family)) scopeFamilies.set(family, new Set());
-      scopeFamilies.get(family)?.add(action || slug);
+      const actions = scopeFamilies.get(family) ?? new Map<string, boolean>();
+      scopeFamilies.set(family, actions);
+      const key = action || slug;
+      const restricted = (grant.selectors?.length ?? 0) > 0;
+      actions.set(key, (actions.get(key) ?? true) && restricted);
     }
   }
   const permissions = [...scopeFamilies.entries()]
-    .map(([family, actions]) => ({ family, actions: [...actions].sort() }))
+    .map(([family, actions]) => ({
+      family,
+      actions: [...actions.entries()]
+        .map(([action, restricted]) => ({ action, restricted }))
+        .sort((a, b) => a.action.localeCompare(b.action)),
+    }))
     .sort((a, b) => a.family.localeCompare(b.family));
   const scopeCount = permissions.reduce(
     (sum, group) => sum + group.actions.length,
     0,
   );
+  const anyRestricted = permissions.some((group) =>
+    group.actions.some((action) => action.restricted),
+  );
 
   const challenges = challengesQuery.data?.challenges ?? [];
-  const denied = challenges.filter((c) => c.outcome === "deny");
+  const challengeTotal = challengesQuery.data?.total ?? 0;
+  const deniedTotal = deniedQuery.data?.total ?? 0;
 
   return (
     <IdentitySection
@@ -88,7 +131,7 @@ export default function IdentityAccess(): JSX.Element {
       meta={sectionMeta([
         { count: roles.length, singular: "role" },
         { count: scopeCount, singular: "permission" },
-        { count: denied.length, singular: "denied", plural: "denied" },
+        { count: deniedTotal, singular: "denied", plural: "denied" },
       ])}
     >
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -140,29 +183,57 @@ export default function IdentityAccess(): JSX.Element {
           error={rolesFailed}
           onRetry={retryRoles}
           footer={
-            permissions.length > 0
-              ? "Granted by the roles above, across every project."
+            permissions.length > 0 || exclusions.size > 0
+              ? [
+                  anyRestricted
+                    ? "Granted by the roles above; an action marked * reaches only the resources its grant names."
+                    : "Granted by the roles above, across every project.",
+                  exclusions.size > 0
+                    ? `${exclusions.size} exception grant${
+                        exclusions.size === 1 ? "" : "s"
+                      } listed below remove access rather than confer it.`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               : undefined
           }
         >
-          {permissions.length === 0 ? (
+          {permissions.length === 0 && exclusions.size === 0 ? (
             <IdentityPanelEmpty>
               These roles carry no permissions.
             </IdentityPanelEmpty>
           ) : (
-            permissions.map((group) => (
-              <div
-                key={group.family}
-                className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0"
-              >
-                <span className="w-28 shrink-0 truncate font-mono text-xs">
-                  {group.family}
-                </span>
-                <span className="text-muted-foreground min-w-0 flex-1 font-mono text-xs">
-                  {group.actions.join("  ")}
-                </span>
-              </div>
-            ))
+            <>
+              {permissions.map((group) => (
+                <div
+                  key={group.family}
+                  className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0"
+                >
+                  <span className="w-28 shrink-0 truncate font-mono text-xs">
+                    {group.family}
+                  </span>
+                  <span className="text-muted-foreground min-w-0 flex-1 font-mono text-xs">
+                    {group.actions
+                      .map(
+                        ({ action, restricted }) =>
+                          `${action}${restricted ? "*" : ""}`,
+                      )
+                      .join("  ")}
+                  </span>
+                </div>
+              ))}
+              {exclusions.size > 0 && (
+                <div className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0">
+                  <span className="w-28 shrink-0 truncate font-mono text-xs">
+                    excluded
+                  </span>
+                  <span className="text-muted-foreground min-w-0 flex-1 font-mono text-xs">
+                    {[...exclusions].sort().join("  ")}
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </IdentityPanel>
 
@@ -175,8 +246,8 @@ export default function IdentityAccess(): JSX.Element {
           error={challengesQuery.isError}
           onRetry={() => void challengesQuery.refetch()}
           footer={
-            challenges.length > 0
-              ? `${denied.length} denied of ${challenges.length} recorded`
+            challengeTotal > 0
+              ? `${deniedTotal.toLocaleString()} denied of ${challengeTotal.toLocaleString()} recorded`
               : undefined
           }
         >
@@ -192,9 +263,9 @@ export default function IdentityAccess(): JSX.Element {
                     {
                       key: "allowed",
                       label: "Allowed",
-                      value: challenges.length - denied.length,
+                      value: challengeTotal - deniedTotal,
                     },
-                    { key: "denied", label: "Denied", value: denied.length },
+                    { key: "denied", label: "Denied", value: deniedTotal },
                   ].filter((segment) => segment.value > 0)}
                   ariaLabel="Authorization outcomes"
                 />

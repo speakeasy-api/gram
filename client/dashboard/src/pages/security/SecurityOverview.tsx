@@ -266,9 +266,16 @@ function SecurityOverviewContent() {
     return (overview?.topUsers ?? []).map((user) => {
       // Bars lead to the person's identity page, where these findings sit
       // beside their access, spend and devices.
-      const href = user.externalUserId
+      // Findings resolved through the directory carry an address and no
+      // external id; the resolver keys on either, so both reach the person.
+      const identityUrn = user.externalUserId
+        ? `external:${user.externalUserId}`
+        : user.email
+          ? `email:${user.email}`
+          : null;
+      const href = identityUrn
         ? `${routes.identities.detail.overview.href(
-            encodeIdentityUrn(`external:${user.externalUserId}`),
+            encodeIdentityUrn(identityUrn),
           )}${location.search}`
         : undefined;
       return {

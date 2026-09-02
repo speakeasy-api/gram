@@ -1,15 +1,21 @@
 import type { IdentityRef } from "@/lib/identity-urn";
+import { withIdentityWindow } from "@/lib/identity-urn";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
-/** The single-reference form of `useIdentityHrefBuilder`. */
+/**
+ * The single-reference form of `useIdentityHrefBuilder`, carrying the window
+ * the reader has open onto the destination.
+ */
 function useIdentityHref(
   identifier: IdentityRef | null | undefined,
 ): string | null {
-  return useIdentityHrefBuilder()(identifier);
+  const href = useIdentityHrefBuilder()(identifier);
+  const { search } = useLocation();
+  return href ? withIdentityWindow(href, search) : null;
 }
 
 /**

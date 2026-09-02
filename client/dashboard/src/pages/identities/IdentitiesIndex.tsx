@@ -14,7 +14,11 @@ import {
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
 import { useOrganization } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -268,6 +272,24 @@ function IdentitiesIndexContent(): JSX.Element {
     throwOnError: false,
   });
 
+  // The list is the join of all three reads, so until they land there is no
+  // roster to report on — and "0 identities" or "No identities match these
+  // filters" is a statement about the organization, not about a request still
+  // in flight or one that never came back.
+  const rosterLoading =
+    membersQuery.isLoading || rolesQuery.isLoading || usageQuery.isLoading;
+  const rosterFailed =
+    membersQuery.isError || rolesQuery.isError || usageQuery.isError;
+  const rosterUnavailable = rosterFailed ? "—" : undefined;
+  const rosterTooltip = rosterFailed
+    ? "The identity roster could not be loaded."
+    : undefined;
+  const retryRoster = () => {
+    if (membersQuery.isError) void membersQuery.refetch();
+    if (rolesQuery.isError) void rolesQuery.refetch();
+    if (usageQuery.isError) void usageQuery.refetch();
+  };
+
   const identities = useMemo(
     () =>
       buildEmployees(
@@ -337,39 +359,61 @@ function IdentitiesIndexContent(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
-        {rows.length} of {identities.length} — every person and agent the
-        platform knows about, account here or not.
+        {rosterLoading || rosterFailed
+          ? "Every person and agent the platform knows about, account here or not."
+          : `${rows.length} of ${identities.length} — every person and agent the platform knows about, account here or not.`}
       </Page.Section.Description>
       <Page.Section.Body>
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          <StatTile
-            title="Identities"
-            value={identities.length}
-            format="compact"
-            tone="neutral"
-            icon="users"
-          />
-          <StatTile
-            title="Enrolled"
-            value={counts.enrolled}
-            format="compact"
-            tone="success"
-            icon="circle-check"
-          />
-          <StatTile
-            title="No linked account"
-            value={counts.noAccount}
-            format="compact"
-            tone={counts.noAccount > 0 ? "warning" : "neutral"}
-            icon="circle-help"
-          />
-          <StatTile
-            title="Agents"
-            value={counts.agent}
-            format="compact"
-            tone="information"
-            icon="bot"
-          />
+          {rosterLoading ? (
+            <>
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+            </>
+          ) : (
+            <>
+              <StatTile
+                title="Identities"
+                value={identities.length}
+                displayValue={rosterUnavailable}
+                tooltip={rosterTooltip}
+                format="compact"
+                tone="neutral"
+                icon="users"
+              />
+              <StatTile
+                title="Enrolled"
+                value={counts.enrolled}
+                displayValue={rosterUnavailable}
+                tooltip={rosterTooltip}
+                format="compact"
+                tone="success"
+                icon="circle-check"
+              />
+              <StatTile
+                title="No linked account"
+                value={counts.noAccount}
+                displayValue={rosterUnavailable}
+                tooltip={rosterTooltip}
+                format="compact"
+                tone={
+                  counts.noAccount > 0 && !rosterFailed ? "warning" : "neutral"
+                }
+                icon="circle-help"
+              />
+              <StatTile
+                title="Agents"
+                value={counts.agent}
+                displayValue={rosterUnavailable}
+                tooltip={rosterTooltip}
+                format="compact"
+                tone="information"
+                icon="bot"
+              />
+            </>
+          )}
         </StatTileGroup>
         <Page.Toolbar>
           <Page.Toolbar.Search
@@ -407,7 +451,24 @@ function IdentitiesIndexContent(): JSX.Element {
               ),
             )
           }
-          noResultsMessage="No identities match these filters"
+          noResultsMessage={
+            rosterLoading ? (
+              "Loading identities…"
+            ) : rosterFailed ? (
+              <span>
+                The identity roster could not be loaded.{" "}
+                <button
+                  type="button"
+                  onClick={retryRoster}
+                  className="underline underline-offset-2"
+                >
+                  Try again
+                </button>
+              </span>
+            ) : (
+              "No identities match these filters"
+            )
+          }
         />
       </Page.Section.Body>
     </Page.Section>

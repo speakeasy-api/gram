@@ -239,7 +239,15 @@ function TopUsersTable({
       header: "User",
       render: (user) => (
         <Text variant="small">
-          <IdentityLink identifier={identityRefForUserKey(user.userKey)}>
+          {/* The row carries the address whenever the inventory resolved one;
+              the key is only guessed at when it does not. */}
+          <IdentityLink
+            identifier={
+              user.email
+                ? { email: user.email }
+                : identityRefForUserKey(user.userKey)
+            }
+          >
             {user.userKey}
           </IdentityLink>
         </Text>

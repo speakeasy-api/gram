@@ -39,16 +39,21 @@ export function SplitRankedBarList({
         return (
           <li
             key={item.key}
-            className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[1.25rem_minmax(0,1fr)_9rem_3.5rem_4.5rem]"
+            className="grid grid-cols-[1.25rem_minmax(0,1fr)_3.5rem_4.5rem] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[1.25rem_minmax(0,1fr)_9rem_3.5rem_4.5rem]"
           >
             <span className="text-muted-foreground text-right font-mono text-xs tabular-nums">
               {i + 1}
             </span>
-            <span className="truncate text-sm" title={item.label}>
+            <span
+              className="col-span-3 truncate text-sm sm:col-span-1"
+              title={item.label}
+            >
               {item.label}
             </span>
-            {/* On a narrow panel the bar and its figures drop to a second
-                line under the label rather than crushing every column. */}
+            {/* On a narrow panel the label takes the whole line and the bar
+                drops beneath it rather than crushing every column; both
+                figures keep their own tracks so they stay beside the bar
+                instead of being pushed onto further lines. */}
             <div className="col-start-2 flex h-1.5 sm:col-start-3">
               <div
                 className="bg-foreground"
@@ -60,10 +65,10 @@ export function SplitRankedBarList({
               />
               <div className="bg-muted flex-1" />
             </div>
-            <span className="text-muted-foreground col-start-2 text-right font-mono text-xs tabular-nums sm:col-start-4">
+            <span className="text-muted-foreground col-start-3 text-right font-mono text-xs tabular-nums sm:col-start-4">
               {item.value.toLocaleString()}
             </span>
-            <span className="text-default-destructive text-right font-mono text-xs tabular-nums">
+            <span className="text-default-destructive col-start-4 text-right font-mono text-xs tabular-nums sm:col-start-5">
               {failed > 0 ? `${failed.toLocaleString()} fail` : ""}
             </span>
           </li>

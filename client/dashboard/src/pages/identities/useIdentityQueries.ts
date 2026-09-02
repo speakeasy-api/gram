@@ -4,7 +4,11 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
-import { fetchIdentityPeers, identityPeersQueryKey } from "./identityPeers";
+import {
+  fetchIdentityPeers,
+  identityPeersQueryKey,
+  mergeUserSummaries,
+} from "./identityPeers";
 
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -107,15 +111,6 @@ export function useIdentityMetrics(
 }
 
 /**
- * Whether this viewer can be shown someone else's sessions at all.
- *
- * chat.list honours an explicit user filter only for a caller holding an
- * unrestricted chat:read grant;;without it the filter is discarded and the
- * caller's OWN sessions come back instead. Rendering those under the subject's
- * name would be a silent misattribution, so the panel asks for nothing rather
- * than asking for something it cannot trust.
- */
-/**
  * Whether anything in the org has actually been seen under this identity.
  *
  * The resolver answers structurally: hand it any well-formed URN and it returns
@@ -158,9 +153,18 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
     return { known: true, isPending: false };
   if (identifiers.size === 0) return { known: false, isPending: false };
   if (query.isPending) return { known: false, isPending: true };
+  // The roster is the only evidence for "unknown", so a failed read is not
+  // evidence of anything. Failing closed here puts "Identity not found" over a
+  // real person whose page merely could not confirm itself.
+  if (query.isError) return { known: true, isPending: false };
   return {
-    known: (query.data ?? []).some((summary) =>
-      identifiers.has((summary.userEmail || summary.userId).toLowerCase()),
+    known: (query.data ?? []).some(
+      (summary) =>
+        // Independently: a summary can carry both an address and an agent-side
+        // id, and reading only the address misses the identity a row was
+        // recorded under whenever the two disagree.
+        identifiers.has(summary.userEmail.toLowerCase()) ||
+        identifiers.has(summary.userId.toLowerCase()),
     ),
     isPending: false,
   };
@@ -193,9 +197,21 @@ export function useIsSelf(identity: IdentityModel): boolean {
   );
 }
 
+/**
+ * Whether this viewer can be shown someone else's sessions at all.
+ *
+ * chat.list honours an explicit user filter only for a caller who passes its
+ * chat:read check for the project being listed; without it the filter is
+ * discarded and the caller's OWN sessions come back instead. Rendering those
+ * under the subject's name would be a silent misattribution, so the panel asks
+ * for nothing rather than asking for something it cannot trust — and the check
+ * is made against the project on screen, since a grant scoped to a different
+ * project buys nothing here.
+ */
 export function useCanReadOthersChats(): boolean {
-  const { hasScope } = useRBAC();
-  return hasScope("chat:read");
+  const { hasAnyScopeInProject } = useRBAC();
+  const { id: projectId } = useIdentityProject();
+  return hasAnyScopeInProject(["chat:read"], projectId);
 }
 
 export function useIdentityChats(
@@ -290,23 +306,52 @@ export function useIdentityMember(identity: IdentityModel): {
 }
 
 /**
- * Challenges key on the principal URN the authz engine recorded, which the
- * member row states outright; the WorkOS user id is the fallback for a subject
- * with no member row, since RBAC assignments are held against that user.
+ * The principal challenges and grants are recorded against, which the member
+ * row states outright. The Gram user id is the fallback for a subject with no
+ * member row: the authz engine mints `user:<gram user id>` principals, so the
+ * WorkOS id — which only role ASSIGNMENTS key on — would match no challenge.
+ */
+export function useIdentityPrincipalUrn(
+  identity: IdentityModel,
+): string | undefined {
+  const { member } = useIdentityMember(identity);
+  const fallback = identity.userIds[0];
+  return member?.principalUrn ?? (fallback ? `user:${fallback}` : undefined);
+}
+
+/**
+ * Challenges key on the principal URN the authz engine recorded.
+ *
+ * The returned rows are one capped page, but `total` counts every challenge
+ * matching the filter, so a caller that needs an exact count asks for the
+ * slice it wants to count rather than counting the page.
  */
 export function useIdentityChallenges(
   identity: IdentityModel,
   from: Date,
   to: Date,
+  filter: {
+    outcome?: "allow" | "deny";
+    resolved?: boolean;
+    limit?: number;
+  } = {},
 ): ReturnType<typeof useChallenges> {
-  const { member } = useIdentityMember(identity);
-  const fallback = identity.workosUserId ?? identity.userIds[0];
-  const principalUrn =
-    member?.principalUrn ?? (fallback ? `user:${fallback}` : "");
-  return useChallenges({ principalUrn, limit: 25, from, to }, undefined, {
-    ...OFF,
-    enabled: !!principalUrn,
-  });
+  const principalUrn = useIdentityPrincipalUrn(identity);
+  return useChallenges(
+    {
+      principalUrn: principalUrn ?? "",
+      limit: filter.limit ?? 25,
+      outcome: filter.outcome,
+      resolved: filter.resolved,
+      from,
+      to,
+    },
+    undefined,
+    {
+      ...OFF,
+      enabled: !!principalUrn,
+    },
+  );
 }
 
 export function useIdentityShadowServers(
@@ -379,15 +424,22 @@ export function useIdentityPeers(
       (value) => value.toLowerCase(),
     ),
   );
-  const peers = query.data ?? [];
+  const rows = query.data ?? [];
+  const isSelf = (summary: UserSummary): boolean =>
+    identifiers.has((summary.userEmail || "").toLowerCase()) ||
+    identifiers.has((summary.userId || "").toLowerCase());
+
+  // The roster keys a row per address, so this identity's addresses arrive as
+  // separate rows. Folded into one before anything reads them: apart, they
+  // rank as several people, each holding only its own share of the figure the
+  // rank qualifies.
+  const selfRows = rows.filter(isSelf);
+  const self = selfRows.length > 0 ? mergeUserSummaries(selfRows) : undefined;
+  const peers = self ? [self, ...rows.filter((row) => !isSelf(row))] : rows;
 
   return {
     peers,
-    self: peers.find(
-      (summary) =>
-        identifiers.has((summary.userEmail || "").toLowerCase()) ||
-        identifiers.has((summary.userId || "").toLowerCase()),
-    ),
+    self,
     isPending: query.isPending,
     isError: query.isError,
     refetch: () => void query.refetch(),

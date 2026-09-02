@@ -1160,12 +1160,28 @@ SELECT throwIf(
 -- summary counts chat requests by. Without it "Chat requests" reads 0 on every
 -- identity while the chat count beside it reads correctly, which looks like a
 -- broken panel rather than absent data.
+--
+-- Request-shaped means the row reports token usage: that is what separates an
+-- LLM request from the tool-call and hook rows seeded alongside it, and it
+-- stays true of request rows added later regardless of their body text. A
+-- global floor would not catch a new insert that forgot the field, so the
+-- assert is that no such row is missing it, with a floor beside it so an
+-- empty table cannot satisfy the first check vacuously.
 SELECT throwIf(
-  (SELECT uniqExact(toString(attributes.gen_ai.response.id)) FROM telemetry_logs
+  (SELECT countIf(toString(attributes.gen_ai.response.id) = '') FROM telemetry_logs
    WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
-     AND toString(attributes.gen_ai.response.id) != ''
-   ) < 180,
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) > 0,
   'demo seed postflight: request rows missing gen_ai.response.id');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) < 180,
+  'demo seed postflight: too few request rows');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN

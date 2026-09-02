@@ -104,9 +104,17 @@ function RiskOverviewUsersIndexContent() {
               // Rows lead to the identity page rather than to the risk-only
               // user view: one person's findings, spend and access now hang
               // off a single page.
-              const href = u.externalUserId
+              // Findings resolved through the directory carry an address and
+              // no external id; the resolver keys on either, so both reach the
+              // person's page.
+              const identityUrn = u.externalUserId
+                ? `external:${u.externalUserId}`
+                : u.email
+                  ? `email:${u.email}`
+                  : null;
+              const href = identityUrn
                 ? `${routes.identities.detail.overview.href(
-                    encodeIdentityUrn(`external:${u.externalUserId}`),
+                    encodeIdentityUrn(identityUrn),
                   )}${location.search}`
                 : null;
               const pct =

@@ -422,24 +422,37 @@ function ConnectionGroupRow({
       )}
     >
       <div className={cn(CONNECTION_ROW_FRAME, "hover:bg-muted/30 py-2.5")}>
+        {/* The toggle is the chevron, not the whole row. A row that is itself
+            a button flattens the identity link inside it: assistive technology
+            cannot reach the link, and Enter on it expands the row instead of
+            opening the profile. The row still expands on a click anywhere that
+            is not a control, so the mouse affordance is unchanged. */}
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpanded((open) => !open)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("a,button")
+            ) {
+              return;
+            }
             setExpanded((open) => !open);
           }}
           className={cn(CONNECTION_ROW_GRID, "cursor-pointer text-left")}
-          aria-expanded={expanded}
         >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground size-3.5 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
+            onClick={() => setExpanded((open) => !open)}
+            className="focus-visible:ring-ring flex size-3.5 shrink-0 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground size-3.5 shrink-0 transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+          </button>
 
           <GroupIcon group={group} grouping={grouping} />
 
