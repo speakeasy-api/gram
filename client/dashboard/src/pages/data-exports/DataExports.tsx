@@ -17,11 +17,10 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportRoutesResult } from "@gram/client/models/components/listdataexportroutesresult.js";
-import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useCreateDataExportRouteMutation } from "@gram/client/react-query/createDataExportRoute.js";
-import { useCreateOtelDestinationMutation } from "@gram/client/react-query/createOtelDestination.js";
+import { useCreateDataExportDestinationMutation } from "@gram/client/react-query/createDataExportDestination.js";
 import {
   buildDataExportRoutesQuery,
   invalidateDataExportRoutes,
@@ -30,24 +29,25 @@ import {
 import { useDeleteDataExportRouteMutation } from "@gram/client/react-query/deleteDataExportRoute.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import {
-  buildOtelDestinationsQuery,
-  invalidateOtelDestinations,
-} from "@gram/client/react-query/otelDestinations.js";
+  buildDataExportDestinationsQuery,
+  invalidateDataExportDestinations,
+} from "@gram/client/react-query/dataExportDestinations.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import {
   ConfigureExportSheet,
   type ConfigureExportValues,
+  type OtelDataExportDestination,
 } from "./ConfigureExportSheet";
 
 const EMPTY_PROJECTS: ProjectEntry[] = [];
-const EMPTY_DESTINATIONS: OtelDestination[] = [];
+const EMPTY_DESTINATIONS: OtelDataExportDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
 type ExportRow = {
   route: DataExportRoute;
-  destination?: OtelDestination;
+  destination?: OtelDataExportDestination;
 };
 
 type ProjectExportRow = ExportRow & {
@@ -93,7 +93,8 @@ function visualDestinations({
       key: route.otelDestinationId ?? `${route.id}-otel`,
       type: "OTEL",
       name: destination?.name ?? "Not configured",
-      detail: destination?.endpointUrl ?? "Configure this export to continue",
+      detail:
+        destination?.otel.endpointUrl ?? "Configure this export to continue",
       sensitive: destination?.sensitiveData === "include",
       preview: false,
     },
@@ -163,7 +164,7 @@ function visualConnections(
 
 type ProjectExports = {
   project: ProjectEntry;
-  destinations: OtelDestination[];
+  destinations: OtelDataExportDestination[];
   routes: DataExportRoute[];
   exports: ExportRow[];
   pending: boolean;
@@ -202,15 +203,22 @@ function DataExportsInner(): JSX.Element {
   });
   const destinationQueries = useQueries({
     queries: projects.map((project) => ({
-      ...buildOtelDestinationsQuery(client, { gramProject: project.slug }),
+      ...buildDataExportDestinationsQuery(client, {
+        gramProject: project.slug,
+      }),
       throwOnError: false,
     })),
   });
   const projectExports: ProjectExports[] = projects.map((project, index) => {
     const routeQuery = routeQueries[index];
     const destinationQuery = destinationQueries[index];
-    const destinations =
-      destinationQuery?.data?.destinations ?? EMPTY_DESTINATIONS;
+    const destinations = (
+      destinationQuery?.data?.destinations ?? EMPTY_DESTINATIONS
+    ).filter(
+      (destination): destination is OtelDataExportDestination =>
+        destination.destinationType === "otel" &&
+        destination.otel !== undefined,
+    );
     const routes = routeQuery?.data?.routes ?? EMPTY_ROUTES;
     const destinationByID = new Map(
       destinations.map((destination) => [destination.id, destination]),
@@ -250,7 +258,7 @@ function DataExportsInner(): JSX.Element {
   const projectQueriesPending = projectExports.some((state) => state.pending);
   const projectQueryError = projectExports.find((state) => state.error)?.error;
 
-  const createDestination = useCreateOtelDestinationMutation();
+  const createDestination = useCreateDataExportDestinationMutation();
   const createRoute = useCreateDataExportRouteMutation();
   const updateRoute = useUpdateDataExportRouteMutation();
   const deleteRoute = useDeleteDataExportRouteMutation();
@@ -274,7 +282,9 @@ function DataExportsInner(): JSX.Element {
 
   const invalidateProjectExports = async (projectSlug: string) =>
     Promise.all([
-      invalidateOtelDestinations(queryClient, [{ gramProject: projectSlug }]),
+      invalidateDataExportDestinations(queryClient, [
+        { gramProject: projectSlug },
+      ]),
       invalidateDataExportRoutes(queryClient, [{ gramProject: projectSlug }]),
     ]);
 
@@ -293,16 +303,19 @@ function DataExportsInner(): JSX.Element {
         const destination = await createDestination.mutateAsync({
           request: {
             gramProject: state.project.slug,
-            createOtelDestinationForm: {
+            createDestinationForm: {
+              destinationType: "otel",
               name: values.destinationName.trim(),
-              endpointUrl: values.endpointUrl.trim(),
               sensitiveData: values.includeSensitiveData
                 ? "include"
                 : "exclude",
-              headers: values.headers.map((header) => ({
-                name: header.name.trim(),
-                value: header.value,
-              })),
+              otel: {
+                endpointUrl: values.endpointUrl.trim(),
+                headers: values.headers.map((header) => ({
+                  name: header.name.trim(),
+                  value: header.value,
+                })),
+              },
             },
           },
         });
@@ -409,11 +422,7 @@ function DataExportsInner(): JSX.Element {
 
   const newExportProject = availableProjectExports[0]?.project;
   const newExportAction = newExportProject ? (
-    <RequireScope
-      scope="project:write"
-      resourceId={newExportProject.id}
-      level="component"
-    >
+    <RequireScope scope="org:admin" level="component">
       <Button
         variant="primary"
         size="sm"
@@ -423,6 +432,45 @@ function DataExportsInner(): JSX.Element {
       </Button>
     </RequireScope>
   ) : null;
+
+  let pageContent: JSX.Element | null;
+  if (projectsQuery.isPending || projectQueriesPending) {
+    pageContent = <SkeletonTable />;
+  } else if (projects.length === 0) {
+    pageContent = (
+      <InlineEmptyState
+        icon="folder"
+        heading="No projects yet"
+        description="Create a project before configuring an export."
+      />
+    );
+  } else if (configuredExports.length > 0) {
+    pageContent = (
+      <>
+        <ExportAnimationStyles />
+        <ExportMap
+          exports={configuredExports}
+          mutating={mutating}
+          onConfigure={(project) => setConfigureProjectSlug(project.slug)}
+          onToggle={(project, route, enabled) =>
+            void handleToggleExport(project, route, enabled)
+          }
+          onDelete={(project, route) => setDeleteCandidate({ project, route })}
+        />
+      </>
+    );
+  } else if (projectQueryError) {
+    pageContent = null;
+  } else {
+    pageContent = (
+      <InlineEmptyState
+        icon="send"
+        heading="No exports configured"
+        description="Create an export to choose what project data should be sent and where it should go."
+        action={newExportAction}
+      />
+    );
+  }
 
   return (
     <SettingsPage
@@ -443,41 +491,11 @@ function DataExportsInner(): JSX.Element {
         </Alert>
       ) : null}
 
-      {projectsQuery.isPending || projectQueriesPending ? (
-        <SkeletonTable />
-      ) : projects.length === 0 ? (
-        <InlineEmptyState
-          icon="folder"
-          heading="No projects yet"
-          description="Create a project before configuring an export."
-        />
-      ) : configuredExports.length === 0 ? (
-        <InlineEmptyState
-          icon="send"
-          heading="No exports configured"
-          description="Create an export to choose what project data should be sent and where it should go."
-          action={newExportAction}
-        />
-      ) : (
-        <>
-          <ExportAnimationStyles />
-          <ExportMap
-            exports={configuredExports}
-            mutating={mutating}
-            onConfigure={(project) => setConfigureProjectSlug(project.slug)}
-            onToggle={(project, route, enabled) =>
-              void handleToggleExport(project, route, enabled)
-            }
-            onDelete={(project, route) =>
-              setDeleteCandidate({ project, route })
-            }
-          />
-        </>
-      )}
+      {pageContent}
 
       {configureState ? (
         <ConfigureExportSheet
-          key={configureState.project.slug}
+          key={`${configureState.project.slug}:${configureState.pending ? "pending" : "ready"}`}
           projects={configureProjects}
           project={configureState.project}
           destinations={configureState.destinations}
@@ -613,11 +631,7 @@ function ExportMap({
                             ) : null}
                             {route.enabled ? "Enabled" : "Paused"}
                           </span>
-                          <RequireScope
-                            scope="project:write"
-                            resourceId={project.id}
-                            level="component"
-                          >
+                          <RequireScope scope="org:admin" level="component">
                             <Switch
                               checked={route.enabled}
                               onCheckedChange={(enabled) =>
@@ -627,11 +641,7 @@ function ExportMap({
                               aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
                             />
                           </RequireScope>
-                          <RequireScope
-                            scope="project:write"
-                            resourceId={project.id}
-                            level="component"
-                          >
+                          <RequireScope scope="org:admin" level="component">
                             <MoreActions
                               actions={[
                                 {

@@ -35,6 +35,7 @@ import {
   type DataSource as DataSourceValue,
 } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
+import type { Destination } from "@gram/client/models/components/destination.js";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Plus } from "lucide-react";
@@ -42,9 +43,14 @@ import { useId, useMemo } from "react";
 
 const NEW_DESTINATION = "__new_destination__";
 
+export type OtelDataExportDestination = Destination & {
+  destinationType: "otel";
+  otel: OtelDestination;
+};
+
 type ProjectOption = DropdownItem & { project: ProjectEntry };
 type DestinationOption = DropdownItem & {
-  destination?: OtelDestination;
+  destination?: OtelDataExportDestination;
   createNew?: boolean;
 };
 
@@ -59,9 +65,10 @@ export type ConfigureExportValues = {
   headers: EditableWriteOnlyHeader[];
 };
 
-function isValidHttpsURL(value: string): boolean {
+function isValidEndpointURL(value: string): boolean {
   try {
-    return new URL(value).protocol === "https:";
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
   } catch {
     return false;
   }
@@ -69,7 +76,7 @@ function isValidHttpsURL(value: string): boolean {
 
 function initialDestinationID(
   route: DataExportRoute | undefined,
-  destinations: OtelDestination[],
+  destinations: OtelDataExportDestination[],
 ): string {
   if (
     route?.otelDestinationId &&
@@ -84,7 +91,7 @@ function initialDestinationID(
 
 function destinationSelectionIsValid(
   values: ConfigureExportValues,
-  destinations: OtelDestination[],
+  destinations: OtelDataExportDestination[],
 ): boolean {
   if (values.destinationId !== NEW_DESTINATION) {
     return destinations.some(
@@ -93,7 +100,7 @@ function destinationSelectionIsValid(
   }
   return (
     values.destinationName.trim() !== "" &&
-    isValidHttpsURL(values.endpointUrl.trim()) &&
+    isValidEndpointURL(values.endpointUrl.trim()) &&
     hasValidWriteOnlyHeaders(values.headers)
   );
 }
@@ -121,7 +128,7 @@ export function ConfigureExportSheet({
 }: {
   projects: ProjectEntry[];
   project: ProjectEntry;
-  destinations: OtelDestination[];
+  destinations: OtelDataExportDestination[];
   route?: DataExportRoute;
   saving: boolean;
   loading: boolean;
@@ -155,8 +162,8 @@ export function ConfigureExportSheet({
       ...destinations.map((destination) => ({
         value: destination.id,
         label: destination.name,
-        description: destination.endpointUrl,
-        keywords: [destination.endpointUrl],
+        description: destination.otel.endpointUrl,
+        keywords: [destination.otel.endpointUrl],
         destination,
       })),
       {
@@ -289,7 +296,7 @@ export function ConfigureExportSheet({
                           {selected.destination.name}
                         </Text>
                         <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                          {selected.destination.endpointUrl}
+                          {selected.destination.otel.endpointUrl}
                         </span>
                       </div>
                     ) : null}
@@ -343,7 +350,7 @@ export function ConfigureExportSheet({
                         )}
                       </form.Field>
                       <Text muted className="text-xs leading-relaxed">
-                        HTTPS only. Signal-specific paths are appended during
+                        HTTP or HTTPS. Signal-specific paths are appended during
                         delivery.
                       </Text>
                     </div>
@@ -483,11 +490,7 @@ export function ConfigureExportSheet({
                   >
                     Cancel
                   </Button>
-                  <RequireScope
-                    scope="project:write"
-                    resourceId={project.id}
-                    level="component"
-                  >
+                  <RequireScope scope="org:admin" level="component">
                     <Button
                       type="submit"
                       variant="primary"
