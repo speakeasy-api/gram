@@ -755,6 +755,8 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 		SubjectID:              pgtype.Text{String: "", Valid: false},
 		SubjectIds:             nil,
 		ActingSurface:          pgtype.Text{String: "", Valid: false},
+		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := audit.DecodeCursor(*payload.Cursor)

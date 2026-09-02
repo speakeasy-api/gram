@@ -56,7 +56,10 @@ vi.mock("@/routes", () => ({
       href: () => "/acme/killswitch",
       detail: { href: (id: string) => `/acme/killswitch/${id}` },
     },
-    // The member and actor names link to their identity pages.
+  }),
+  // The member and actor names link to their identity pages, which live under
+  // the project.
+  useRoutes: () => ({
     identities: {
       detail: {
         overview: { href: (urn: string) => `/acme/identities/${urn}/overview` },

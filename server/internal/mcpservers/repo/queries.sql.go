@@ -997,13 +997,14 @@ WITH resolved AS (
     FROM unnest($3::uuid[]) AS input(user_session_issuer_id)
     JOIN user_session_issuers AS usi
       ON usi.id = input.user_session_issuer_id
-     AND usi.project_id = $1::uuid
+     AND (usi.project_id = $1::uuid
+          OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     LEFT JOIN remote_session_client_user_session_issuers AS link
            ON link.user_session_issuer_id = input.user_session_issuer_id
     LEFT JOIN remote_session_clients AS c
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
-          AND (c.project_id = usi.project_id
+          AND (c.project_id = $1::uuid
                OR (c.project_id IS NULL AND c.organization_id = $2::text))
     LEFT JOIN remote_session_issuers AS i
            ON i.id = c.remote_session_issuer_id

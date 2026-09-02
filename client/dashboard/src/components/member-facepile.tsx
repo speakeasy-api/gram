@@ -215,7 +215,11 @@ export function MemberFacepile({
             // itself is a single trigger, and a row is big enough to aim at.
             <IdentityLink
               key={m.id}
-              identifier={{ userId: m.id }}
+              // A facepile entry falls back to the principal URN when the
+              // directory holds no member for it, and that URN already names
+              // its own namespace — wrapping it again would address
+              // `user:user:<id>`, which resolves to nobody.
+              identifier={m.id.includes(":") ? { urn: m.id } : { userId: m.id }}
               className="hover:bg-accent/40 flex items-center gap-2.5 px-3 py-1.5 no-underline hover:no-underline"
             >
               <MemberAvatar member={m} className="size-6" />

@@ -1,5 +1,8 @@
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
+import { Operator } from "@gram/client/models/components/logfilter";
 import type { useOrgRoutes, useRoutes } from "@/routes";
+import { USER_EMAIL_FILTER_PATH } from "@/components/observe/observeTargetFilters";
+import { serializeFilters } from "@/pages/logs/log-filter-url";
 
 /**
  * The "Open in …" targets, pre-filtered to the person.
@@ -30,6 +33,7 @@ export function identityHandoffs(
   roles: string;
   shadowMcp: string;
   deviceAgent: string;
+  mcpSessions: string;
 } {
   const userId = identity.userIds[0];
   const email = identity.emails[0];
@@ -48,6 +52,12 @@ export function identityHandoffs(
   };
 
   return {
+    // Sessions filter on the subject URN the session store recorded, which
+    // only exists for a subject with a directory row.
+    mcpSessions: query(orgRoutes.mcpSessions.href(), {
+      subjectUrn: userId ? `user:${userId}` : undefined,
+      status: "active",
+    }),
     // Audit logs key on the Gram user id, which is what its actor facet holds.
     auditLogs: query(orgRoutes.auditLogs.href(), { actor: userId }),
     // Agent sessions has no user dimension of its own; its search covers the
@@ -55,7 +65,21 @@ export function identityHandoffs(
     agentSessions: query(routes.agentSessions.href(), {
       search: email ?? externalUserId,
     }),
-    toolLogs: query(routes.logs.href(), { user: email }),
+    // Tool Logs has no user param of its own: it reads its filters out of the
+    // `af` chip list, so the person is expressed as an equality chip on the
+    // same attribute path its own user filter writes.
+    toolLogs: query(routes.logs.href(), {
+      af: email
+        ? (serializeFilters([
+            {
+              id: "identity-user-email",
+              path: USER_EMAIL_FILTER_PATH,
+              op: Operator.Eq,
+              value: email,
+            },
+          ]) ?? undefined)
+        : undefined,
+    }),
     // Costs filters by drilling rather than by query param: the email
     // dimension is a path segment on the explorer.
     costs: query(

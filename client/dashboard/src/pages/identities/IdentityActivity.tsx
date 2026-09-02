@@ -12,10 +12,10 @@ import { DailyActivityChart } from "@/components/chart/DailyActivityChart";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  retryFailed,
   useCanReadOthersChats,
   useIdentityAuditLogs,
   useIdentityChats,
-  useIdentityProject,
   useIdentityWindow,
   useIsSelf,
 } from "./useIdentityQueries";
@@ -24,15 +24,31 @@ import {
 // history and a 20-row list only made this tab a longer Overview.
 const RECENT_ROWS = 6;
 
+/**
+ * What a panel says when a refresh failed over rows it already has: the rows
+ * stay, because they were true when they landed, and the line says they may
+ * now be stale rather than replacing them with an error.
+ */
+function RefreshFailed({ onRetry }: { onRetry: () => void }): JSX.Element {
+  return (
+    <span>
+      Could not refresh — showing the last rows loaded.{" "}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="hover:text-foreground focus-visible:ring-ring rounded-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+      >
+        Try again
+      </button>
+    </span>
+  );
+}
+
 export default function IdentityActivity(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const location = useLocation();
-  const project = useIdentityProject();
-  // Project routes resolve against the project this page is filtered to: the
-  // page is org-level, so the router has no :projectSlug of its own to fill in
-  // and every handoff would otherwise resolve to a path with the slug missing.
-  const routes = useRoutes({ projectSlug: project.slug });
+  const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
@@ -44,7 +60,7 @@ export default function IdentityActivity(): JSX.Element {
     new URLSearchParams(location.search),
   );
 
-  const auditQuery = useIdentityAuditLogs(identity);
+  const auditQuery = useIdentityAuditLogs(identity, from, to);
   const chatsQuery = useIdentityChats(identity, from, to, 20);
   const hasChatRead = useCanReadOthersChats();
   const isSelf = useIsSelf(identity);
@@ -52,12 +68,26 @@ export default function IdentityActivity(): JSX.Element {
 
   const logs = auditQuery.data?.result.logs ?? [];
   const chats = chatsQuery.data?.chats ?? [];
+  // isLoading rather than isPending: the chat query is held behind `enabled`
+  // for a viewer without chat:read, and that is a refusal to fetch, not a wait.
+  const activityLoading = auditQuery.isLoading || chatsQuery.isLoading;
+  // The chart draws both series as one shape, so a failed half would read as
+  // a quiet fortnight rather than as data that never arrived.
+  const activityFailed = auditQuery.isError || chatsQuery.isError;
+  const retryActivity = retryFailed(auditQuery, chatsQuery);
 
   const logDates = logs.map((log) => new Date(log.createdAt));
   const chatDates = chats
     .map((chat) => chat.lastMessageTimestamp)
     .filter((ts): ts is Date => Boolean(ts))
     .map((ts) => new Date(ts));
+
+  // A failed refresh keeps the rows it already has: those were really
+  // returned, and blanking them throws away the only true thing the panel
+  // holds. Only a failure with nothing behind it blocks the body.
+  const auditBlocked = auditQuery.isError && logs.length === 0;
+  const chatsBlocked = chatsQuery.isError && chats.length === 0;
+  const chartEmpty = logDates.length === 0 && chatDates.length === 0;
 
   return (
     <IdentitySection
@@ -71,8 +101,18 @@ export default function IdentityActivity(): JSX.Element {
           this tab can add is the shape of the window: two people with
           identical row lists can work in daily drips or in two long bursts,
           and only the columns tell them apart. */}
-      {(logDates.length > 0 || chatDates.length > 0) && (
-        <IdentityPanel title="Activity by day">
+      {(activityLoading ||
+        activityFailed ||
+        logDates.length > 0 ||
+        chatDates.length > 0) && (
+        <IdentityPanel
+          title="Activity by day"
+          loading={activityLoading}
+          loadingVariant="block"
+          error={activityFailed && chartEmpty}
+          refreshFailed={activityFailed && !chartEmpty}
+          onRetry={retryActivity}
+        >
           <div className="px-4 py-4">
             <DailyActivityChart
               from={from}
@@ -91,12 +131,21 @@ export default function IdentityActivity(): JSX.Element {
           title="Audit trail"
           handoffLabel="Audit Logs"
           handoffHref={handoffs.auditLogs}
+          loading={auditQuery.isLoading}
+          loadingRows={RECENT_ROWS}
+          error={auditBlocked}
+          refreshFailed={auditQuery.isError && !auditBlocked}
+          onRetry={retryFailed(auditQuery)}
           footer={
-            // Audit logs key on the Gram user id, so a subject with no
+            auditQuery.isError ? (
+              <RefreshFailed onRetry={() => void auditQuery.refetch()} />
+            ) : // Audit logs key on the Gram user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
-            identity.userIds.length === 0
-              ? "This identity resolves to no Gram user, so no change is recorded under it."
-              : `Actor filtered to ${identity.displayName}`
+            identity.userIds.length === 0 ? (
+              "This identity resolves to no Gram user, so no change is recorded under it."
+            ) : (
+              `Actor filtered to ${identity.displayName}`
+            )
           }
         >
           {logs.length === 0 ? (
@@ -127,12 +176,19 @@ export default function IdentityActivity(): JSX.Element {
           title="Chat sessions"
           handoffLabel="Agent Sessions"
           handoffHref={handoffs.agentSessions}
+          loading={chatsQuery.isLoading}
+          loadingRows={RECENT_ROWS}
+          error={chatsBlocked}
+          refreshFailed={chatsQuery.isError && !chatsBlocked}
+          onRetry={retryFailed(chatsQuery)}
           footer={
-            chatsQuery.data
-              ? `${chatsQuery.data.total ?? chats.length} session${
-                  (chatsQuery.data.total ?? chats.length) === 1 ? "" : "s"
-                } this period`
-              : undefined
+            chatsQuery.isError ? (
+              <RefreshFailed onRetry={() => void chatsQuery.refetch()} />
+            ) : chatsQuery.data ? (
+              `${chatsQuery.data.total ?? chats.length} session${
+                (chatsQuery.data.total ?? chats.length) === 1 ? "" : "s"
+              } this period`
+            ) : undefined
           }
         >
           {!canReadOthersChats ? (

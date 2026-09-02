@@ -137,6 +137,11 @@ type ListPayload struct {
 	// Acting surface to filter audit logs to changes made through one surface,
 	// e.g. 'platform_mcp' to review agent-driven activity alone.
 	ActingSurface *string
+	// Inclusive start of the window to list changes from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to list changes from. Omit for the whole history.
+	To *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -1,6 +1,5 @@
 import type { JSX } from "react";
 
-import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { badgeTone } from "@/lib/badgeTone";
@@ -33,9 +32,6 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
           <Badge variant="outline" className={badgeTone.neutral}>
             {org.account_type}
           </Badge>
-          {/* Keyed on `none`, never on "would `Trial` draw a dash". An
-              unrecognised state draws the same dash and has to keep it. */}
-          {org.trial_state && org.trial_state !== "none" && <Trial org={org} />}
         </div>
         {/* Two facts and no more. The line grows when the events slice lands;
             it is not padded to fill now. */}

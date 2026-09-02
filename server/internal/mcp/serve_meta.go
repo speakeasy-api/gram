@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -70,9 +69,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	metaServer *metamcprepo.MetaMcpServer,
 ) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return r.Body.Close()
-	})
 
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
@@ -118,7 +114,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var req rawRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, logger)
+		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
+		// JSON of the wrong shape/type stays an invalid request (-32600).
+		code := oops.CodeBadRequest
+		if !json.Valid(bodyBytes) {
+			code = oops.CodeParseError
+		}
+		return oops.E(code, err, "failed to decode request body").LogError(ctx, logger)
 	}
 	if req.JSONRPC != "2.0" {
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, logger)

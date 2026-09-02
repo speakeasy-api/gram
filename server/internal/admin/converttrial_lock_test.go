@@ -394,7 +394,8 @@ func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCache
 	featureWriter, err := conn.Acquire(ctx)
 	require.NoError(t, err)
 	defer featureWriter.Release()
-	feature := productfeatures.FeatureLogs
+	require.NotEmpty(t, productfeatures.TrialRuntimeFeatures)
+	feature := productfeatures.TrialRuntimeFeatures[0]
 	written := make(chan error, 1)
 	go func() {
 		q := featurerepo.New(featureWriter)

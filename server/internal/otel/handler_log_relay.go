@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/metric"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
@@ -20,7 +20,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -36,17 +35,16 @@ const (
 )
 
 type LogRelayHandler struct {
-	logger           *slog.Logger
-	recordsDropped   metric.Int64Counter
-	recordsFailed    metric.Int64Counter
-	relay            *signalRelay
-	organizationGate logRelayOrganizationGate
+	logger         *slog.Logger
+	recordsDropped metric.Int64Counter
+	recordsFailed  metric.Int64Counter
+	relay          *signalRelay
 }
 
 type logProvenanceKey struct {
 	source         string
 	organizationID string
-	projectID      string
+	projectID      uuid.UUID
 }
 
 type logRelayMessage struct {
@@ -62,10 +60,9 @@ type logProvenanceGroup struct {
 func NewLogRelayHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
-	features feature.Provider,
 ) *LogRelayHandler {
 	logger = logger.With(attr.SlogComponent("log-relay-handler"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel")
@@ -89,16 +86,11 @@ func NewLogRelayHandler(
 		recordsDropped: recordsDropped,
 		recordsFailed:  recordsFailed,
 		relay: newSignalRelay(
-			readReplica,
+			db,
 			encryptionClient,
 			policy,
 			"/v1/logs",
 			"log",
-		),
-		organizationGate: newLogRelayOrganizationGate(
-			logger,
-			readReplica,
-			features,
 		),
 	}
 }
@@ -130,7 +122,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 		destination *relayDestination
 		err         error
 	}
-	destinations := make(map[string]destinationResult)
+	destinations := make(map[relayRouteKey]destinationResult)
 	type destinationDelivery struct {
 		destination *relayDestination
 		batch       rightSizedProtoBatch[logRelayMessage, *collectorlogsv1.ExportLogsServiceRequest]
@@ -138,15 +130,14 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 	deliveries := make([]destinationDelivery, 0, len(groups))
 
 	for _, provenanceGroup := range groups {
-		organizationID := provenanceGroup.key.organizationID
-		if !h.organizationGate.Enabled(ctx, organizationID) {
-			continue
+		routeKey := relayRouteKey{
+			organizationID: provenanceGroup.key.organizationID,
+			projectID:      provenanceGroup.key.projectID,
 		}
-
-		result, ok := destinations[provenanceGroup.key.organizationID]
+		result, ok := destinations[routeKey]
 		if !ok {
-			result.destination, result.err = h.relay.destinationForOrganization(ctx, provenanceGroup.key.organizationID)
-			destinations[provenanceGroup.key.organizationID] = result
+			result.destination, result.err = h.relay.destinationForRoute(ctx, routeKey)
+			destinations[routeKey] = result
 		}
 		if result.err != nil {
 			err := fmt.Errorf("load log relay destination: %w", result.err)
@@ -159,6 +150,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 				"load log relay destination",
 				attr.SlogError(result.err),
 				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+				attr.SlogProjectID(provenanceGroup.key.projectID.String()),
 			)
 			continue
 		}
@@ -167,7 +159,9 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 			continue
 		}
 
-		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxLogRelayExportBytes, buildLogRelayExport)
+		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxLogRelayExportBytes, func(messages []logRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+			return buildLogRelayExport(messages, result.destination.includeSensitiveData)
+		})
 		if err != nil {
 			h.recordDroppedLogs(ctx, len(provenanceGroup.messages), relayReasonInvalid)
 			logger.ErrorContext(
@@ -175,6 +169,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 				"build log relay exports",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+				attr.SlogProjectID(provenanceGroup.key.projectID.String()),
 			)
 			continue
 		}
@@ -212,6 +207,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 					"relay otel logs",
 					attr.SlogError(err),
 					attr.SlogOrganizationID(item.destination.organizationID),
+					attr.SlogProjectID(item.destination.projectID.String()),
 					attr.SlogURLFull(item.destination.endpoint),
 				)
 			}
@@ -256,11 +252,16 @@ func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, in
 			invalid++
 			continue
 		}
+		projectID, err := uuid.Parse(provenance.GetProjectId())
+		if err != nil {
+			invalid++
+			continue
+		}
 
 		key := logProvenanceKey{
 			source:         provenance.GetSource(),
 			organizationID: provenance.GetOrganizationId(),
-			projectID:      provenance.GetProjectId(),
+			projectID:      projectID,
 		}
 		index, ok := indexes[key]
 		if !ok {
@@ -277,12 +278,12 @@ func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, in
 	return groups, invalid
 }
 
-func buildLogRelayExport(messages []logRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+func buildLogRelayExport(messages []logRelayMessage, includeSensitiveData bool) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 	records := make([]*otelv1.LogRecord, len(messages))
 	for i, message := range messages {
 		records[i] = message.record
 	}
-	return newLogRelayExportRequest(records)
+	return newLogRelayExportRequest(records, includeSensitiveData)
 }
 
 func removeGramLogFields(record *logsv1.LogRecord) error {
@@ -302,7 +303,7 @@ func removeGramLogFields(record *logsv1.LogRecord) error {
 	return nil
 }
 
-func newLogRelayExportRequest(records []*otelv1.LogRecord) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+func newLogRelayExportRequest(records []*otelv1.LogRecord, includeSensitiveData bool) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 	type scopeGroupKey struct {
 		scope     string
 		schemaURL string
@@ -402,6 +403,9 @@ func newLogRelayExportRequest(records []*otelv1.LogRecord) (*collectorlogsv1.Exp
 	}
 	for i, group := range resourceGroups {
 		request.ResourceLogs[i] = group.resourceLogs
+	}
+	if !includeSensitiveData {
+		redactSensitiveOTLP(request)
 	}
 	return request, nil
 }

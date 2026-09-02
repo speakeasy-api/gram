@@ -40,6 +40,9 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "data_export_route:create",
+  "data_export_route:delete",
+  "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
@@ -113,8 +116,9 @@ export const AUDIT_ACTIONS = [
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
-  "otel_forwarding:delete",
-  "otel_forwarding:upsert",
+  "otel_destination:create",
+  "otel_destination:delete",
+  "otel_destination:update",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -340,6 +344,13 @@ export function staticActionPhrase(action: AuditAction): string {
     case "custom_domains:delete":
       return "removed custom domain";
 
+    case "data_export_route:create":
+      return "created data export route";
+    case "data_export_route:update":
+      return "updated data export route";
+    case "data_export_route:delete":
+      return "deleted data export route";
+
     case "deployments:create":
       return "created deployment";
     case "deployments:evolve":
@@ -472,10 +483,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization_invitation:update_role":
       return "changed invite role for";
 
-    case "otel_forwarding:upsert":
-      return "updated OpenTelemetry forwarding configuration";
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
+    case "otel_destination:create":
+      return "created OpenTelemetry destination";
+    case "otel_destination:update":
+      return "updated OpenTelemetry destination";
+    case "otel_destination:delete":
+      return "deleted OpenTelemetry destination";
 
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";

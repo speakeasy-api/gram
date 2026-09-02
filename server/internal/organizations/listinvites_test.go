@@ -3,6 +3,8 @@ package organizations_test
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -80,9 +82,9 @@ func TestService_ListInvites_ExcludesAccepted(t *testing.T) {
 		ExpiresInDays:  7,
 	})
 	require.NoError(t, err)
-	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	accepted, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), affected)
+	require.Equal(t, "accepted", accepted.State)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)
@@ -136,10 +138,9 @@ func TestAcceptInvitation_RevokedReturnsZeroRows(t *testing.T) {
 	err = orgrepo.New(ti.conn).RevokeInvitation(ctx, row.ID)
 	require.NoError(t, err)
 
-	// Accept should affect 0 rows.
-	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
-	require.NoError(t, err)
-	require.Equal(t, int64(0), affected, "accepting a revoked invite should affect 0 rows")
+	// Accept should return no row.
+	_, err = orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestAcceptInvitation_ExpiredReturnsZeroRows(t *testing.T) {
@@ -162,10 +163,9 @@ func TestAcceptInvitation_ExpiredReturnsZeroRows(t *testing.T) {
 	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
 	require.NoError(t, err)
 
-	// Accept should affect 0 rows because expired.
-	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
-	require.NoError(t, err)
-	require.Equal(t, int64(0), affected, "accepting an expired invite should affect 0 rows")
+	// Accept should return no row because it expired.
+	_, err = orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {

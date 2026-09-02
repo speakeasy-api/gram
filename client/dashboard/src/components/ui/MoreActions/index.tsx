@@ -132,7 +132,14 @@ export function MoreActions({
                 "text-destructive hover:bg-destructive! hover:text-background! trans",
             )}
           >
-            {action.label}
+            <div className="min-w-0">
+              <div>{action.label}</div>
+              {action.description ? (
+                <div className="text-muted-foreground mt-0.5 text-xs font-normal">
+                  {action.description}
+                </div>
+              ) : null}
+            </div>
             {action.icon && (
               <Icon
                 name={action.icon}

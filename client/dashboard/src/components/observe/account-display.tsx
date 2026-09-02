@@ -1,4 +1,5 @@
 import { AccountTypeBadge } from "@/components/account-type-badge";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import {
   type DisplayAccount,
   providerLabel,
@@ -36,8 +37,15 @@ export function AccountRow({
   className?: string;
 }): JSX.Element {
   return (
-    <div className={cn("flex items-center justify-between gap-2", className)}>
-      <div className="min-w-0">
+    <div className={cn("flex items-center gap-2", className)}>
+      {/* The provider's own mark, so a row is recognisable before it is read:
+          the email is the part that differs between two accounts, and the
+          provider is the part that says which product they are on. */}
+      <AgentProviderIcon
+        source={account.provider}
+        className="text-muted-foreground size-4 shrink-0"
+      />
+      <div className="mr-auto min-w-0">
         <p className="truncate text-sm">{account.email || "(no email)"}</p>
         <p className="text-muted-foreground text-xs">
           {providerLabel(account.provider)}

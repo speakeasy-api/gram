@@ -582,7 +582,13 @@ type ListShadowMCPInventoryUsageParams struct {
 	// inverse question the inventory table cannot: which shadow MCP servers
 	// one person reached.
 	UserKeys []string
-	Limit    int
+	// From and To bound the window on the span start, half-open ([From, To)),
+	// so consecutive ranges neither double-count a call nor drop one that lands
+	// exactly on a boundary. A nil bound is no bound, which is what a caller
+	// listing the whole history sends.
+	From  *time.Time
+	To    *time.Time
+	Limit int
 }
 
 type ShadowMCPInventoryUsageRow struct {
@@ -1298,7 +1304,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.From, arg.To, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1398,7 +1404,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		}
 	}
 
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, nil, nil, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1459,7 +1465,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, from *time.Time, to *time.Time, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -1474,6 +1480,17 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID st
 		GroupBy("trace_id").
 		Having("server_url != ''").
 		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	// Bound the spans, not the grouped traces: a session that ran across the
+	// edge of the window would otherwise drag its whole history in. Bound as
+	// nanos rather than as a time.Time, because clickhouse-go's positional
+	// binding truncates a time.Time to whole seconds.
+	if from != nil {
+		sb = sb.Where("start_time_unix_nano >= ?", from.UTC().UnixNano())
+	}
+	if to != nil {
+		sb = sb.Where("start_time_unix_nano < ?", to.UTC().UnixNano())
+	}
 
 	if len(userKeys) > 0 {
 		lowered := make([]string, 0, len(userKeys))

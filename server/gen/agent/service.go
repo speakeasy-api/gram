@@ -297,10 +297,10 @@ type SyncedAgentUser struct {
 type UpdateConfigurationPayload struct {
 	SessionToken *string
 	// Shareable device-agent settings. Supported keys include platforms,
-	// update_channel, auto_update, pinned_target, blocked_versions, and
-	// sync_interval_seconds. update_channel and blocked_versions can only be set
-	// by Speakeasy platform administrators; per-device identity and secret keys
-	// are forbidden.
+	// update_channel, auto_update, pinned_target, blocked_versions,
+	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
+	// blocked_versions can only be set by Speakeasy platform administrators;
+	// per-device identity and secret keys are forbidden.
 	Config map[string]any
 }
 

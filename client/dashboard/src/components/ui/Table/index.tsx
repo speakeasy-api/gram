@@ -552,7 +552,7 @@ const Body = React.forwardRef(function Body<T extends object>(
   return (
     <BodyContainer ref={ref} className={cn(hasMore && "pb-16", className)}>
       {data.length === 0 ? (
-        <NoResultsMessage>{noResultsMessage}</NoResultsMessage>
+        <NoResultsRow>{noResultsMessage}</NoResultsRow>
       ) : (
         data.map(renderBodyRow)
       )}
@@ -617,7 +617,16 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
     const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
       if (!onClick) return;
       if (event.target instanceof Element) {
-        const control = event.target.closest("a,button,input,select,textarea");
+        // A row action rendered through a portal — a dropdown menu, a dialog —
+        // sits outside the <tr> in the DOM but still bubbles here through
+        // React's tree. Nothing outside the row is the row's own click.
+        if (!event.currentTarget.contains(event.target)) return;
+        const control = event.target.closest(
+          // Portalled menu items and other composite widgets are divs carrying
+          // an interactive role rather than native elements, so match on role
+          // as well as on tag.
+          'a,button,input,select,textarea,[role="button"],[role="link"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="checkbox"],[role="option"]',
+        );
         // Bounded to this row: an unbounded closest() would also match a
         // clickable ancestor wrapping the whole table.
         if (control && event.currentTarget.contains(control)) return;
@@ -847,35 +856,37 @@ function Cell<T extends object>(
   return <CellContainer className={className}>{content}</CellContainer>;
 }
 
-function NoResultsMessage({
-  className,
-  children,
-}: PropsWithChildrenAndClassName) {
-  // A row, not a bare div: this renders inside <tbody>, and anything else is
-  // invalid markup that React reports as a hydration error.
-  const Wrapper = ({ children, className }: PropsWithChildrenAndClassName) => (
+// The row itself, for the one caller that already sits inside a <tbody>: the
+// automatic empty state Table.Body renders in place of its rows.
+function NoResultsRow({ className, children }: PropsWithChildrenAndClassName) {
+  return (
     <tr
       className={cn(
         "[grid-column:1/-1] grid [grid-template-columns:subgrid]",
         className,
       )}
     >
-      {children}
+      {/* Padded to the same inset as a data cell: the message sits in the grid
+          where a row would, so flush-left text reads as a broken row. */}
+      <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
+        {children}
+      </td>
     </tr>
   );
+}
 
-  // Padded to the same inset as a data cell: the message sits in the grid
-  // where a row would, so flush-left text reads as a broken row.
-  const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
-      {children}
-    </td>
-  );
-
+// Carries its own <tbody>, because callers place it as a direct child of
+// <Table> in place of a Table.Body. A bare <tr> there is invalid markup: the
+// browser hoists it into a section of its own and the hydrated tree stops
+// matching the rendered one.
+function NoResultsMessage({
+  className,
+  children,
+}: PropsWithChildrenAndClassName) {
   return (
-    <Wrapper className={className}>
-      <ContentWrapper>{children}</ContentWrapper>
-    </Wrapper>
+    <BodyContainer>
+      <NoResultsRow className={className}>{children}</NoResultsRow>
+    </BodyContainer>
   );
 }
 
