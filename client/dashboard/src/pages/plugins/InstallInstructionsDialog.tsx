@@ -26,9 +26,11 @@ import {
   Info,
 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
+import { useOrgRoutes } from "@/routes";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -788,6 +790,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
 export function CopilotInstallContent(): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("copilot", "observability-copilot.zip");
+  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
 
   return (
     <div className="min-w-0 space-y-6">
@@ -796,24 +799,19 @@ export function CopilotInstallContent(): JSX.Element {
           GitHub Copilot in VS Code
         </h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP for managed
-          deployment. It includes a hooks-scoped API key and registration
-          metadata that tells your managed installer to create the VS Code hook
-          file.
+          Install the Speakeasy Device Agent to sync your assigned Copilot
+          plugin and create the VS Code hook registration automatically.
         </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={isDownloading}
-          onClick={() => void handleDownloadPlugin()}
-          className="inline-flex items-center gap-2"
-        >
-          <Download className="size-4" />
-          {isDownloading ? "Downloading…" : "Download Plugin"}
+        <Button variant="secondary" size="sm" asChild>
+          <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
-          Deploy the package through your managed installer, then reload VS
-          Code.
+          Launch Copilot once so its configuration directory exists. The agent
+          reconciles within 60 seconds; reload VS Code after{" "}
+          <code className="bg-muted px-1 py-0.5">
+            ~/.copilot/hooks/agenthooks-vscode.json
+          </code>{" "}
+          appears.
         </p>
       </div>
 
@@ -858,6 +856,11 @@ export function CopilotInstallContent(): JSX.Element {
           each runtime receives the correct wire and response format. Do not add
           separate, overlapping hook registrations for both runtimes in the same
           workspace; each event may fire twice.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Local hooks do not cover WSL, Remote SSH, Dev Containers, or
+          Codespaces. Deploy the hook separately inside those remote
+          environments.
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If
