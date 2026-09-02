@@ -513,7 +513,7 @@ func newStreamsCommand() *cli.Command {
 			logRelayHandler := otelsvc.NewLogRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -521,7 +521,7 @@ func newStreamsCommand() *cli.Command {
 			metricRelayHandler := otelsvc.NewMetricRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -529,7 +529,7 @@ func newStreamsCommand() *cli.Command {
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
