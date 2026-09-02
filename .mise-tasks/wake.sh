@@ -18,17 +18,33 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 # race a pause. Duplicated rather than sourced from a helper because every file
 # under .mise-tasks/ is itself a task.
 lock="$gitdir/gram-stack-lock"
+release_lock() {
+    rm -f "$lock/pid" 2> /dev/null; rmdir "$lock" 2> /dev/null || true
+}
+locked=false
 for _ in $(seq 1 60); do
     if mkdir "$lock" 2> /dev/null; then
-        trap 'rmdir "$lock" 2> /dev/null || true' EXIT
+        echo $$ > "$lock/pid"
+        trap release_lock EXIT
+        locked=true
         break
     fi
-    if [ -n "$(find "$lock" -maxdepth 0 -mmin +10 2> /dev/null)" ]; then
-        echo "Clearing a stale stack lock." >&2
-        rmdir "$lock" 2> /dev/null || true
+
+    # Only a lock whose owner is gone -- a killed pause or wake, a reboot -- is
+    # safe to clear. An age-based break would eventually steal the lock from a
+    # slow but healthy wake, which is the very thing this guards against.
+    owner="$(cat "$lock/pid" 2> /dev/null || true)"
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2> /dev/null; then
+        echo "Clearing a stack lock left behind by a dead process." >&2
+        release_lock
     fi
     sleep 1
 done
+
+if [ "$locked" != true ]; then
+    echo "Another pause or wake has held this worktree's stack lock for a minute; giving up." >&2
+    exit 1
+fi
 
 # A boot builds the stack from nothing and ends by pausing it. Waking underneath
 # one races its migrations and its seed.
@@ -72,12 +88,13 @@ fi
 if [ -z "$containers" ]; then
     echo "No containers for this worktree yet — running a full boot instead."
     release_port
-    # Same markers and the same cold-volume timeout `git:workboot` uses: `exec`
-    # replaces this shell, so nothing here runs afterwards to clean up.
     rm -f "$gitdir/gram-stack-paused" "$gitdir/gram-stack-lastseen"
-    rmdir "$lock" 2> /dev/null || true
-    trap - EXIT
-    exec env INFRA_READINESS_TIMEOUT=300 ./zero --agent
+    # Not `exec`: a bare `zero --agent` publishes no boot marker of its own, so
+    # this lock is the only thing keeping a pause or another wake off the
+    # containers while it migrates and seeds. Running it as a child keeps the
+    # EXIT trap, and with it the lock, until the boot is done.
+    INFRA_READINESS_TIMEOUT=300 ./zero --agent
+    exit $?
 fi
 
 # `pause` stops every profile, so start every container that exists before

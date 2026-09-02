@@ -17,22 +17,36 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 # start without the developer: the idle sweep pauses, the parker's Resume
 # button wakes. Interleaved, they leave the worktree half-up -- daemons running
 # against stopped databases, or a paused marker over a running stack. mkdir is
-# the portable atomic test-and-set (macOS has no flock binary).
+# the portable atomic test-and-set (macOS has no flock binary), and the pid
+# inside it tells a stale lock from a live one.
 lock="$gitdir/gram-stack-lock"
+release_lock() {
+    rm -f "$lock/pid" 2> /dev/null; rmdir "$lock" 2> /dev/null || true
+}
+locked=false
 for _ in $(seq 1 60); do
     if mkdir "$lock" 2> /dev/null; then
-        trap 'rmdir "$lock" 2> /dev/null || true' EXIT
+        echo $$ > "$lock/pid"
+        trap release_lock EXIT
+        locked=true
         break
     fi
-    # A lock left behind by a killed pause or wake would otherwise block this
-    # worktree forever, and the operation it guards is bounded by the wake's
-    # own runtime.
-    if [ -n "$(find "$lock" -maxdepth 0 -mmin +10 2> /dev/null)" ]; then
-        echo "Clearing a stale stack lock." >&2
-        rmdir "$lock" 2> /dev/null || true
+
+    # Only a lock whose owner is gone -- a killed pause or wake, a reboot -- is
+    # safe to clear. An age-based break would eventually steal the lock from a
+    # slow but healthy wake, which is the very thing this guards against.
+    owner="$(cat "$lock/pid" 2> /dev/null || true)"
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2> /dev/null; then
+        echo "Clearing a stack lock left behind by a dead process." >&2
+        release_lock
     fi
     sleep 1
 done
+
+if [ "$locked" != true ]; then
+    echo "Another pause or wake has held this worktree's stack lock for a minute; giving up." >&2
+    exit 1
+fi
 
 # Best-effort, as in infra:stop: a supervisor that is not running is not an
 # error here, and neither is a daemon that has already exited.
@@ -60,7 +74,17 @@ rm -f "$gitdir/gram-stack-lastseen"
 # often run from a shell that goes away, and from `git:workboot`, whose whole
 # process GROUP wt signals when the hook finishes.
 if [ -z "${GRAM_NO_PARK:-}" ]; then
-    rm -f "$gitdir/gram-stack-parked.pid"
+    # Pausing an already-paused worktree finds a parker still holding the port.
+    # Dropping its pid file would orphan it: the replacement dies on
+    # EADDRINUSE, and the next wake has no pid left to kill, so vite cannot
+    # bind either. The parker that is up is as good as a new one.
+    parked="$gitdir/gram-stack-parked.pid"
+    park_pid="$(cat "$parked" 2> /dev/null || true)"
+    if [ -n "$park_pid" ] && ps -o command= -p "$park_pid" 2> /dev/null | grep -q "park"; then
+        echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
+        exit 0
+    fi
+    rm -f "$parked"
 
     # A new session is what actually detaches it -- `nohup` only ignores
     # SIGHUP and leaves the process in this group, so wt's reap would still

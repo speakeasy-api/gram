@@ -41,9 +41,15 @@ if [ "$check_all" = "true" ]; then
     while read -r wt; do
         [ -d "$wt" ] || continue
         # Worktrees on a branch that predates this task would just print "no
-        # task idle-pause found" on every run -- skip those quietly, but keep
-        # reporting a sweep that actually failed.
-        (cd "$wt" && mise tasks info idle-pause &> /dev/null) || continue
+        # task idle-pause found" on every run -- skip those quietly. Any other
+        # discovery failure (a broken mise config, a missing toolchain) is worth
+        # hearing about.
+        if ! probe="$(cd "$wt" && mise tasks info idle-pause 2>&1)"; then
+            case "$probe" in
+                *"Task not found"* | *"no task"*) continue ;;
+                *) echo "⚠️  cannot run idle-pause in $wt: $probe" >&2; continue ;;
+            esac
+        fi
         (cd "$wt" && mise run idle-pause "${forward[@]}") \
             || echo "⚠️  idle-pause failed in $wt" >&2
     done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
@@ -71,16 +77,22 @@ if command -v lsof > /dev/null 2>&1; then
         lsof -nP -iTCP:"$1" -sTCP:LISTEN -t > /dev/null 2>&1
     }
     established() {
-        lsof -nP -iTCP:"$1" -iTCP:"$2" -sTCP:ESTABLISHED -t 2> /dev/null \
-            | grep -c . | tr -d ' '
+        # `grep -c` last in a pipeline would mask a failing probe as zero
+        # connections, which is exactly the answer that pauses a stack.
+        local out
+        out="$(lsof -nP -iTCP:"$1" -iTCP:"$2" -sTCP:ESTABLISHED -t 2> /dev/null)" \
+            || [ -z "$out" ] || return 1
+        printf '%s' "$out" | grep -c . | tr -d ' '
     }
 elif command -v ss > /dev/null 2>&1; then
     listening() {
         ss -Hltn "sport = :$1" 2> /dev/null | grep -q .
     }
     established() {
-        ss -Htn "state established ( sport = :$1 or sport = :$2 )" 2> /dev/null \
-            | grep -c . | tr -d ' '
+        local out
+        out="$(ss -Htn "state established ( sport = :$1 or sport = :$2 )" 2> /dev/null)" \
+            || return 1
+        printf '%s' "$out" | grep -c . | tr -d ' '
     }
 else
     echo "Neither lsof nor ss is available; cannot tell whether this stack is in use." >&2
@@ -93,7 +105,10 @@ if ! listening "${GRAM_SITE_PORT}"; then
     exit 0
 fi
 
-conns=$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}")
+if ! conns=$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}"); then
+    echo "Could not inspect connections for ${GRAM_SITE_PORT}/${GRAM_SERVER_PORT}; leaving the stack alone." >&2
+    exit 0
+fi
 
 stamp="$gitdir/gram-stack-lastseen"
 now=$(date +%s)
@@ -121,8 +136,12 @@ if [ "$dry_run" = "true" ]; then
 fi
 
 # The sample that decided this is up to five minutes old. Cheap insurance
-# against pausing a stack somebody started using in between.
-if [ "$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}")" -gt 0 ]; then
+# against pausing a stack somebody started using in between -- and a probe that
+# fails here counts as "in use" for the same reason as above.
+if ! recheck=$(established "${GRAM_SITE_PORT}" "${GRAM_SERVER_PORT}"); then
+    exit 0
+fi
+if [ "$recheck" -gt 0 ]; then
     echo "$now" > "$stamp"
     exit 0
 fi
