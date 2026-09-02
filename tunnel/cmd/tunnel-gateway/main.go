@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -78,12 +79,28 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var shutdownOnce sync.Once
+	shutdownDone := make(chan struct{})
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			defer close(shutdownDone)
+			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			drainCtx, cancelDrain := context.WithTimeout(shutCtx, 10*time.Second)
+			gw.Drain(drainCtx)
+			cancelDrain()
+			forwardCtx, cancelForward := context.WithTimeout(shutCtx, 10*time.Second)
+			_ = forwardSrv.Shutdown(forwardCtx)
+			cancelForward()
+			closeSessionsCtx, cancelCloseSessions := context.WithTimeout(shutCtx, 4*time.Second)
+			gw.CloseSessions(closeSessionsCtx)
+			cancelCloseSessions()
+			_ = publicSrv.Shutdown(shutCtx)
+		})
+	}
 	go func() {
 		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		_ = publicSrv.Shutdown(shutCtx)
-		_ = forwardSrv.Shutdown(shutCtx)
+		shutdown()
 	}()
 
 	errCh := make(chan error, 2)
@@ -94,16 +111,17 @@ func main() {
 		slog.String("public_addr", publicListenAddr),
 		slog.String("forward_addr", forwardListenAddr),
 		slog.String("advertise", advertiseAddr))
+	var serverErr error
 	for range 2 {
-		if err := <-errCh; err != nil {
+		if err := <-errCh; err != nil && serverErr == nil {
+			serverErr = err
 			stop()
-			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-			_ = publicSrv.Shutdown(shutCtx)
-			_ = forwardSrv.Shutdown(shutCtx)
-			cancel()
-			logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", err))
-			os.Exit(1)
 		}
+	}
+	<-shutdownDone
+	if serverErr != nil {
+		logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", serverErr))
+		os.Exit(1)
 	}
 }
 
