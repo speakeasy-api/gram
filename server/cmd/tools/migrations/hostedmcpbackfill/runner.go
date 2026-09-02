@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -302,7 +303,7 @@ func (r *Runner) ensureWrapper(ctx context.Context, tx pgx.Tx, q *Queries, tools
 	}
 
 	wrote := false
-	wantVisibility := projectVisibility(toolset.McpEnabled, toolset.McpIsPublic)
+	wantVisibility := hostedmcp.VisibilityForToolset(toolset.McpEnabled, toolset.McpIsPublic)
 	wrapperID := uuid.NewSHA1(idNamespace, []byte("mcp_server:"+toolset.ID.String()))
 	existing, err := mcpserversrepo.New(tx).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
 		ToolsetID: toolset.ID,
@@ -593,19 +594,6 @@ func blocked(row *RowReport, outcome Outcome, reason string) error {
 	row.Endpoints = nil
 	row.ClearedRootDomain = nil
 	return nil
-}
-
-// Same signature as hostedmcp.VisibilityForToolset; swap the import when
-// stacking on AIS-635.
-func projectVisibility(mcpEnabled, mcpIsPublic bool) string {
-	switch {
-	case !mcpEnabled:
-		return visibility.Disabled
-	case mcpIsPublic:
-		return visibility.Public
-	default:
-		return visibility.Private
-	}
 }
 
 func isUniqueViolation(err error) bool {
