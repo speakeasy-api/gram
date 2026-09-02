@@ -88,6 +88,29 @@ describe("generated admin boundary", () => {
     expect(request.headers.has("Cookie")).toBe(false);
   });
 
+  it("redirects a generated read before parsing a malformed 401 body", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("not json", {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+    const query = freshBoundary.adminSessionQuery();
+
+    await expect(
+      query.queryFn?.({ signal: new AbortController().signal } as never),
+    ).rejects.toBeInstanceOf(SyntaxError);
+
+    expect(freshBoundary.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  });
+
   it("redirects one time for redirecting operations and shares the latch", async () => {
     vi.stubGlobal(
       "fetch",

@@ -17,7 +17,13 @@ fi
 paths=(.speakeasy client/admin/src/sdk client/dashboard/src/sdk server/gen)
 
 echo "==> Checking out $base for: ${paths[*]}"
-git checkout "$base" -- "${paths[@]}"
+for path in "${paths[@]}"; do
+  if git cat-file -e "$base:$path" 2>/dev/null; then
+    git checkout "$base" -- "$path"
+  else
+    echo "==> $path is absent from $base; keeping it for regeneration"
+  fi
+done
 
 echo "==> Regenerating Goa server"
 mise run gen:goa-server

@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
+import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminAdminGetSessionQuery } from "@gram/admin-client/react-query/adminAdminGetSession.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
@@ -17,7 +18,14 @@ import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/mod
 // callers cannot replace this origin or supply raw SDK/request options. Browser
 // fetch defaults preserve the ambient first-party gram_admin cookie; do not set
 // credentials, mode, Authorization, or Cookie here.
-const client = new GramCore({ serverURL: window.location.origin });
+const mutationClient = new GramCore({ serverURL: window.location.origin });
+const redirectingHTTPClient = new HTTPClient().addHook("response", (response) =>
+  startLoginRedirect(response),
+);
+const redirectingClient = new GramCore({
+  serverURL: window.location.origin,
+  httpClient: redirectingHTTPClient,
+});
 
 let redirectingToLogin = false;
 
@@ -36,10 +44,7 @@ function statusCode(error: unknown): number | undefined {
   return undefined;
 }
 
-// Shared by generated operations and the handwritten predecessor during the
-// consumer migration. Assignment starts navigation but does not unwind callers,
-// so the original error remains the operation result.
-export function redirectOnUnauthorized(error: unknown): never {
+function startLoginRedirect(error: unknown): void {
   if (statusCode(error) === 401 && !redirectingToLogin) {
     const returnTo = encodeURIComponent(
       window.location.pathname + window.location.search,
@@ -47,6 +52,13 @@ export function redirectOnUnauthorized(error: unknown): never {
     redirectingToLogin = true;
     window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
   }
+}
+
+// Shared by generated operations and the handwritten predecessor during the
+// consumer migration. Assignment starts navigation but does not unwind callers,
+// so the original error remains the operation result.
+export function redirectOnUnauthorized(error: unknown): never {
+  startLoginRedirect(error);
   throw error;
 }
 
@@ -59,7 +71,7 @@ async function redirecting<T>(operation: Promise<T>): Promise<T> {
 }
 
 function createAdminSessionQuery() {
-  const generated = buildAdminAdminGetSessionQuery(client);
+  const generated = buildAdminAdminGetSessionQuery(redirectingClient);
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),
@@ -75,7 +87,10 @@ export function adminSessionQuery(): ReturnType<
 
 function createOrganizationFeaturesQuery(organizationId: string) {
   const request: AdminGetOrganizationFeaturesRequest = { organizationId };
-  const generated = buildAdminOrganizationFeaturesQuery(client, request);
+  const generated = buildAdminOrganizationFeaturesQuery(
+    redirectingClient,
+    request,
+  );
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),
@@ -91,7 +106,7 @@ export function organizationFeaturesQuery(
 // Feature writes preserve their predecessor's in-place 401 behavior. No raw
 // generated RequestOptions are accepted or forwarded.
 const generatedFeatureMutation =
-  buildSetAdminOrganizationFeatureMutation(client);
+  buildSetAdminOrganizationFeatureMutation(mutationClient);
 
 export function setAdminOrganizationFeature(
   request: SetOrganizationFeatureRequestBody,
