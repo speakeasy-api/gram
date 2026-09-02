@@ -694,8 +694,8 @@ github.com/speakeasy-api/agenthooks v0.7.3 h1:NjSq1NOhSTiVMw2mrVqXe+A5ILt0m47ZNO
 github.com/speakeasy-api/agenthooks v0.7.3/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
 github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.0 h1:y6/KsyZErJegJJR4P9l1PFXU+jyBWKKhnLmzl96ikgc=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.0/go.mod h1:epqh0bWWTc4FNmoRXGGv1pkuB9AetNJUzZHAsKuytW4=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.4 h1:wDESKp+gLbD/WyaqhL5pJpM/Oax8JqiKzAaVep3Tb2o=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.4/go.mod h1:TFQ9rXbPg2F0pzVNvRZUT8+arCi78ZA3K1f5mrIhZcE=
 github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
 github.com/speakeasy-api/openapi v1.24.0/go.mod h1:g3+dIMe0AYgbbGvnlQZqesmjAVWSm9BmsjLevnefQrg=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
