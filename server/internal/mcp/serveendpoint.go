@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -356,20 +355,12 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	if tunneled && resource == "" {
 		return true
 	}
-	want := normalizeResource(upstream)
-	return want != "" && normalizeResource(resource) == want
-}
-
-// normalizeResource drops a trailing slash from the path only, so query
-// data is compared verbatim; a non-URL identifier is trimmed as a whole.
-func normalizeResource(s string) string {
-	u, err := url.Parse(s)
-	if err != nil || u.Scheme == "" || u.Opaque != "" {
-		return strings.TrimRight(s, "/")
-	}
-	u.Path = strings.TrimRight(u.Path, "/")
-	u.RawPath = strings.TrimRight(u.RawPath, "/")
-	return u.String()
+	// Whole-string trim, the same normalization the grant's resource was
+	// recorded with (resolveUpstreamResource, resolveMetaMemberResource), so
+	// stored grants and live upstreams compare under one rule. An encoded
+	// slash is untouched and stays a distinct audience.
+	want := strings.TrimRight(upstream, "/")
+	return want != "" && strings.TrimRight(resource, "/") == want
 }
 
 // tunneledBackendIssuer yields the identity routeUpstreamToken routes a
