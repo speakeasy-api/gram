@@ -1034,17 +1034,14 @@ const PUBLIC_RATE_LIMIT_FIELDS: ReadonlyArray<{
   {
     key: "publicRequestRatePerSecond",
     label: "Requests per second",
-    hint: "Sustained anonymous MCP requests admitted per second, across every method.",
+    hint: "Sustained rate. Blank uses the default of 50/s.",
   },
   {
     key: "publicRequestBurst",
     label: "Burst",
-    hint: "Requests admitted back-to-back from idle before the per-second rate applies. Blank: twice the rate you set.",
+    hint: "Requests admitted back-to-back from idle before the sustained rate applies. Blank means twice the rate (100 by default).",
   },
 ];
-
-// The deployment default the API reports for a row with no stored limit.
-const DEFAULT_PUBLIC_RATE_TEXT = "50 requests/s with a burst of 100";
 
 function formatPublicRate(server: TunneledMcpServer) {
   const stored = server.publicRequestRatePerSecond !== undefined;
@@ -1062,10 +1059,10 @@ function toPublicRateDraft(
   ) as Record<PublicRateLimitField, string>;
 }
 
-// Anonymous public admission limits for this source. One bucket per tunnel is
-// shared by every anonymous caller, so these bound the load reaching the
-// upstream server rather than fairness between callers. Unset fields keep the
-// deployment-wide defaults.
+// Anonymous admission limit for this source. One bucket per tunnel is shared
+// by every anonymous caller, so it bounds the load reaching the upstream
+// server rather than fairness between callers. Unset fields keep the
+// deployment-wide defaults, which the API reports as the effective values.
 function PublicRateLimitsSection({
   tunneledMcpServer,
 }: {
@@ -1143,7 +1140,7 @@ function PublicRateLimitsSection({
         },
       });
       await invalidateTunneledMcpServerViews(queryClient);
-      toast.success("Public rate limits updated");
+      toast.success("Anonymous rate limit updated");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to update rate limits";
@@ -1159,17 +1156,17 @@ function PublicRateLimitsSection({
         id="tunneled-mcp-public-rate-limits-label"
         className="mb-1"
       >
-        Public Rate Limits
+        Anonymous Rate Limit
       </Text>
       <Text muted small className="mb-4 max-w-3xl">
-        Admission limit for anonymous callers of MCP servers fronting this
-        source, applied to every MCP request. One bucket is shared by every
-        caller, so it bounds the total load reaching your server rather than
-        fairness between callers. Leave a field blank to use the default of{" "}
-        {DEFAULT_PUBLIC_RATE_TEXT}.
+        Caps how many requests anonymous callers can send to MCP servers
+        fronting this source, across every MCP method. One token bucket is
+        shared by all callers, so it bounds the total load on your server rather
+        than fairness between callers. Requests over the limit get HTTP 429 with
+        a Retry-After header.
         {tunneledMcpServer.allowPublic
           ? null
-          : " Takes effect once public access is enabled."}
+          : " Applies once Public Access is enabled."}
       </Text>
 
       <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
@@ -1233,7 +1230,7 @@ function PublicRateLimitsSection({
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {update.isPending ? "Saving" : "Save limits"}
+                {update.isPending ? "Saving" : "Save limit"}
               </Button.Text>
             </Button>
           </Stack>
