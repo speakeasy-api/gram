@@ -167,7 +167,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 
 	var workosURL string
 	if opts.EnableWorkOS {
-		mwH := mockworkos.NewHandler(logger, tp, db)
+		mwH := mockworkos.NewHandler(mockworkos.Config{ExternalURL: pubURL}, logger, tp, db)
 		outer.Handle(workosmode.Prefix+"/", http.StripPrefix(workosmode.Prefix, mwH.Handler()))
 		workosURL = pubURL + workosmode.Prefix
 	}

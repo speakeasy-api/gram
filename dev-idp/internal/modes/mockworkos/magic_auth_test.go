@@ -24,7 +24,7 @@ func TestMagicAuthWorksThroughWorkOSSDK(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	emulator := mockworkos.NewHandler(plog.NewLogger(io.Discard), tracenoop.NewTracerProvider(), db)
+	emulator := mockworkos.NewHandler(mockworkos.Config{}, plog.NewLogger(io.Discard), tracenoop.NewTracerProvider(), db)
 	surface, err := workosmode.NewHandler(workosmode.Config{
 		Backend:      workosmode.BackendLocal,
 		ClientSecret: "local-test-key",

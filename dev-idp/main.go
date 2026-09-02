@@ -205,7 +205,7 @@ func run() error {
 			UpstreamURL:  *workosUpstream,
 			APIKey:       *workosKey,
 		},
-		mockworkos.NewHandler(logger, tp, db).Handler(),
+		mockworkos.NewHandler(mockworkos.Config{ExternalURL: pubURL}, logger, tp, db).Handler(),
 		wsClient, logger, tp, db,
 	)
 	if err != nil {
