@@ -416,9 +416,31 @@ type embeddingBatch struct {
 	endIdx   int
 }
 
+func selectEmbeddingCandidateContents(model string, candidates []embeddingCandidate) error {
+	inputs := make([]string, len(candidates))
+	inputFallbacks := make([][]string, len(candidates))
+	for i, candidate := range candidates {
+		inputs[i] = candidate.content
+		inputFallbacks[i] = candidate.fallbacks
+	}
+
+	selected, err := openrouter.SelectEmbeddingInputFallbacks(model, inputs, inputFallbacks)
+	if err != nil {
+		return fmt.Errorf("select embedding input fallbacks: %w", err)
+	}
+	for i, content := range selected {
+		candidates[i].content = content
+	}
+	return nil
+}
+
 func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
 	if len(candidates) == 0 {
 		return nil, nil
+	}
+
+	if err := selectEmbeddingCandidateContents(s.embeddingModel, candidates); err != nil {
+		return nil, err
 	}
 
 	total := len(candidates)
@@ -461,19 +483,11 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 				}
 
 				inputs := make([]string, 0, batch.endIdx-batch.startIdx)
-				inputFallbacks := make([][]string, 0, batch.endIdx-batch.startIdx)
 				for i := batch.startIdx; i < batch.endIdx; i++ {
 					inputs = append(inputs, candidates[i].content)
-					inputFallbacks = append(inputFallbacks, candidates[i].fallbacks)
 				}
 
-				vectors, err := s.chatClient.CreateEmbeddings(
-					ctx,
-					orgID,
-					s.embeddingModel,
-					inputs,
-					openrouter.WithEmbeddingInputFallbacks(inputFallbacks),
-				)
+				vectors, err := s.chatClient.CreateEmbeddings(ctx, orgID, s.embeddingModel, inputs)
 				if err != nil {
 					setErr(fmt.Errorf("create embeddings batch: %w", err))
 					return
@@ -509,6 +523,10 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 }
 
 func (s *ToolsetVectorStore) createBatchesBySize(candidates []embeddingCandidate) []embeddingBatch {
+	return createBatchesWithinSize(candidates, embeddingMaxBatchBytes)
+}
+
+func createBatchesWithinSize(candidates []embeddingCandidate, maxBatchBytes int) []embeddingBatch {
 	var batches []embeddingBatch
 	currentBatchStart := 0
 	currentBatchBytes := 0
@@ -517,7 +535,7 @@ func (s *ToolsetVectorStore) createBatchesBySize(candidates []embeddingCandidate
 		contentBytes := len(candidate.content)
 
 		// If adding this candidate would exceed the limit, finalize current batch
-		if currentBatchBytes > 0 && currentBatchBytes+contentBytes > embeddingMaxBatchBytes {
+		if currentBatchBytes > 0 && currentBatchBytes+contentBytes > maxBatchBytes {
 			batches = append(batches, embeddingBatch{
 				startIdx: currentBatchStart,
 				endIdx:   i,

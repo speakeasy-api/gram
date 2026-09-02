@@ -873,9 +873,9 @@ func completionTelemetryIdentity(source string) (resourceURN, normalizedSource s
 	}
 }
 
-func limitEmbeddingInputs(model string, inputs []string, inputFallbacks [][]string) ([]string, int, error) {
+func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) {
 	if model == openAITextEmbedding3Small {
-		return limitOpenAIEmbeddingInputs(inputs, inputFallbacks)
+		return limitOpenAIEmbeddingInputs(inputs)
 	}
 
 	var limited []string
@@ -896,18 +896,23 @@ func limitEmbeddingInputs(model string, inputs []string, inputFallbacks [][]stri
 	return limited, truncatedCount, nil
 }
 
-func limitOpenAIEmbeddingInputs(inputs []string, inputFallbacks [][]string) ([]string, int, error) {
-	var (
-		codec          tokenizer.Codec
-		limited        []string
-		truncatedCount int
-	)
+// SelectEmbeddingInputFallbacks selects the first representation for each
+// input that fits the model's per-input token limit. If every representation
+// is oversized, it returns the final fallback for the client to truncate.
+func SelectEmbeddingInputFallbacks(model string, inputs []string, inputFallbacks [][]string) ([]string, error) {
+	if model != openAITextEmbedding3Small || len(inputFallbacks) == 0 {
+		return inputs, nil
+	}
 
+	var (
+		codec    tokenizer.Codec
+		selected []string
+	)
 	for i, input := range inputs {
-		selected := input
-		tokenIDs, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, selected, i)
+		candidate := input
+		_, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, candidate, i)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		if !exceedsLimit {
 			continue
@@ -915,13 +920,13 @@ func limitOpenAIEmbeddingInputs(inputs []string, inputFallbacks [][]string) ([]s
 
 		if i < len(inputFallbacks) {
 			for _, fallback := range inputFallbacks[i] {
-				if fallback == "" || fallback == selected {
+				if fallback == "" || fallback == candidate {
 					continue
 				}
-				selected = fallback
-				tokenIDs, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, selected, i)
+				candidate = fallback
+				_, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, candidate, i)
 				if err != nil {
-					return nil, 0, err
+					return nil, err
 				}
 				if !exceedsLimit {
 					break
@@ -929,18 +934,46 @@ func limitOpenAIEmbeddingInputs(inputs []string, inputFallbacks [][]string) ([]s
 			}
 		}
 
-		if exceedsLimit {
-			selected, err = codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
-			if err != nil {
-				return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
-			}
-			truncatedCount++
+		if candidate == input {
+			continue
+		}
+		if selected == nil {
+			selected = slices.Clone(inputs)
+		}
+		selected[i] = candidate
+	}
+
+	if selected == nil {
+		return inputs, nil
+	}
+	return selected, nil
+}
+
+func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
+	var (
+		codec          tokenizer.Codec
+		limited        []string
+		truncatedCount int
+	)
+
+	for i, input := range inputs {
+		tokenIDs, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, input, i)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !exceedsLimit {
+			continue
 		}
 
+		truncated, err := codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
+		}
 		if limited == nil {
 			limited = slices.Clone(inputs)
 		}
-		limited[i] = selected
+		limited[i] = truncated
+		truncatedCount++
 	}
 
 	if limited == nil {
@@ -975,10 +1008,10 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	for _, opt := range opts {
 		opt(&resolved)
 	}
-	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.InputFallbacks, resolved.Dimensions, resolved.KeyType.OrDefault())
+	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
-func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, inputFallbacks [][]string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
 	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
 		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
@@ -993,7 +1026,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs, inputFallbacks)
+	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs)
 	if err != nil {
 		return nil, err
 	}

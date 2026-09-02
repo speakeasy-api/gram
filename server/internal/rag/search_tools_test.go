@@ -107,3 +107,22 @@ func TestCreateBatchesBySize_RespectsAggregateInputLimit(t *testing.T) {
 		require.LessOrEqual(t, totalBytes, embeddingMaxBatchBytes)
 	}
 }
+
+func TestSelectEmbeddingCandidateContents_UsesSelectedSizeForBatching(t *testing.T) {
+	t.Parallel()
+
+	denseContent := strings.Repeat("{}", 9_000)
+	candidates := []embeddingCandidate{
+		{content: denseContent, fallbacks: []string{"compact-one"}},
+		{content: denseContent, fallbacks: []string{"compact-two"}},
+		{content: denseContent, fallbacks: []string{"compact-three"}},
+	}
+	batchLimit := len(denseContent) * 2
+	require.Len(t, createBatchesWithinSize(candidates, batchLimit), 2)
+
+	require.NoError(t, selectEmbeddingCandidateContents(defaultEmbeddingModel, candidates))
+	require.Equal(t, "compact-one", candidates[0].content)
+	require.Equal(t, "compact-two", candidates[1].content)
+	require.Equal(t, "compact-three", candidates[2].content)
+	require.Len(t, createBatchesWithinSize(candidates, batchLimit), 1)
+}
