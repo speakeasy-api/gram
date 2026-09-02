@@ -60,7 +60,7 @@ var _ = Service("projects", func() {
 	})
 
 	Method("updateProject", func() {
-		Description("Update the display name and URL slug of the current project.")
+		Description("Update the display name of the current project.")
 
 		Security(security.Session, security.ProjectSlug)
 
@@ -263,13 +263,12 @@ var CreateProjectResult = Type("CreateProjectResult", func() {
 })
 
 var UpdateProjectForm = Type("UpdateProjectForm", func() {
-	Required("name", "slug")
+	Required("name")
 
 	Attribute("name", String, "The display name of the project", func() {
 		MinLength(1)
 		MaxLength(40)
 	})
-	Attribute("slug", shared.Slug, "The URL-friendly identifier of the project")
 })
 
 var UpdateProjectResult = Type("UpdateProjectResult", func() {

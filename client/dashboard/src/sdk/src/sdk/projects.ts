@@ -195,7 +195,7 @@ export class Projects extends ClientSDK {
    * updateProject projects
    *
    * @remarks
-   * Update the display name and URL slug of the current project.
+   * Update the display name of the current project.
    */
   async update(
     request: UpdateProjectRequest,

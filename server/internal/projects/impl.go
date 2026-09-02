@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -278,11 +277,6 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	if name == "" {
 		return nil, oops.C(oops.CodeInvalid)
 	}
-	slug := strings.TrimSpace(string(payload.Slug))
-	if !constants.SlugPatternRE.MatchString(slug) {
-		return nil, oops.E(oops.CodeInvalid, nil, constants.SlugMessage)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
@@ -297,20 +291,10 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
-	if (existingRow.Slug == "default" && slug != "default") ||
-		(existingRow.Slug != "default" && slug == "default") {
-		return nil, oops.E(oops.CodeInvalid, nil, "the default project slug cannot be changed")
-	}
-
 	updatedRow, err := pr.UpdateProject(ctx, repo.UpdateProjectParams{
 		ProjectID: *authCtx.ProjectID,
 		Name:      name,
-		Slug:      slug,
 	})
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
-	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}

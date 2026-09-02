@@ -13,7 +13,6 @@ RETURNING *;
 -- name: UpdateProject :one
 UPDATE projects
 SET name = @name,
-    slug = @slug,
     updated_at = clock_timestamp()
 WHERE id = @project_id
   AND deleted IS FALSE

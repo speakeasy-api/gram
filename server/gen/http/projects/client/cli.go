@@ -99,17 +99,13 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 	{
 		err = json.Unmarshal([]byte(projectsUpdateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 		}
 		if err != nil {
 			return nil, err
@@ -129,7 +125,6 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 	}
 	v := &projects.UpdateProjectPayload{
 		Name: body.Name,
-		Slug: types.Slug(body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

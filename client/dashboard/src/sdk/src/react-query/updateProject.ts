@@ -54,7 +54,7 @@ export type UpdateProjectMutationError =
  * updateProject projects
  *
  * @remarks
- * Update the display name and URL slug of the current project.
+ * Update the display name of the current project.
  */
 export function useUpdateProjectMutation(
   options?: MutationHookOptions<

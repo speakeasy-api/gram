@@ -28,8 +28,6 @@ type CreateProjectRequestBody struct {
 type UpdateProjectRequestBody struct {
 	// The display name of the project
 	Name string `form:"name" json:"name" xml:"name"`
-	// The URL-friendly identifier of the project
-	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
@@ -1818,7 +1816,6 @@ func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjec
 func NewUpdateProjectRequestBody(p *projects.UpdateProjectPayload) *UpdateProjectRequestBody {
 	body := &UpdateProjectRequestBody{
 		Name: p.Name,
-		Slug: string(p.Slug),
 	}
 	return body
 }

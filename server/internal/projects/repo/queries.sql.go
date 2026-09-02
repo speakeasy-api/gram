@@ -417,21 +417,19 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
 SET name = $1,
-    slug = $2,
     updated_at = clock_timestamp()
-WHERE id = $3
+WHERE id = $2
   AND deleted IS FALSE
 RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateProjectParams struct {
 	Name      string
-	Slug      string
 	ProjectID uuid.UUID
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
-	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.Slug, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.ProjectID)
 	var i Project
 	err := row.Scan(
 		&i.ID,
