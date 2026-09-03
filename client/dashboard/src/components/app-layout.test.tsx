@@ -95,7 +95,7 @@ describe("trusted support banner", () => {
       organizationOverride: true,
     });
     originalLocation = window.location;
-    const hrefSetter = vi.fn();
+    const replace = vi.fn();
     // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
     delete window.location;
     Object.defineProperty(window, "location", {
@@ -103,9 +103,7 @@ describe("trusted support banner", () => {
       value: {
         // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
         ...originalLocation,
-        set href(value: string) {
-          hrefSetter(value);
-        },
+        replace,
       },
     });
 
@@ -116,7 +114,7 @@ describe("trusted support banner", () => {
 
     await waitFor(() => {
       expect(mocks.logout).toHaveBeenCalledOnce();
-      expect(hrefSetter).toHaveBeenCalledWith("/login");
+      expect(replace).toHaveBeenCalledWith("/login");
     });
   });
 
