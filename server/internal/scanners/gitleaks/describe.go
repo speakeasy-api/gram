@@ -5,6 +5,10 @@ import "sync"
 // ruleDescriptions maps canonical rule ids to the detector's human-readable
 // descriptions, built once from the same effective config the scanner uses.
 var ruleDescriptions = sync.OnceValue(func() map[string]string {
+	// effectiveConfig touches gitleaks' global viper state; serialize with
+	// detector creation like every other caller.
+	detectorInitMu.Lock()
+	defer detectorInitMu.Unlock()
 	cfg, err := effectiveConfig()
 	if err != nil {
 		return map[string]string{}
