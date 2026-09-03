@@ -62,6 +62,8 @@ func TestGeneratedAdminBillingRoutes_MapUnavailable(t *testing.T) {
 		"resume subscription": httptest.NewRequest(http.MethodPost, "/admin/organization.resumeStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, request)

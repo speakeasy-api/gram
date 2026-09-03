@@ -31827,6 +31827,95 @@ paths:
       x-speakeasy-name-override: listInvites
       x-speakeasy-react-hook:
         name: ListInvites
+  /rpc/organizations.listSetupTasks:
+    get:
+      description: List the fixed setup task catalog projected with organization state and completion evidence.
+      operationId: listSetupTasks
+      parameters:
+        - allowEmptyValue: true
+          description: Include hidden tasks for platform administrators.
+          in: query
+          name: include_hidden
+          schema:
+            description: Include hidden tasks for platform administrators.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSetupTasksResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSetupTasks organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: listSetupTasks
+      x-speakeasy-react-hook:
+        name: ListSetupTasks
   /rpc/organizations.listUsers:
     get:
       description: List users in the active organization from Gram organization_user_relationships.
@@ -32345,6 +32434,94 @@ paths:
       x-speakeasy-name-override: updateInviteRole
       x-speakeasy-react-hook:
         name: UpdateInviteRole
+  /rpc/organizations.updateSetupTask:
+    post:
+      description: 'Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.'
+      operationId: updateSetupTask
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSetupTaskRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupTask'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateSetupTask organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: updateSetupTask
+      x-speakeasy-react-hook:
+        name: UpdateSetupTask
   /rpc/organizations.verifyOnboardingHooksSetup:
     get:
       description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
@@ -65670,6 +65847,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -67279,6 +67457,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -73127,6 +73306,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -73164,6 +73347,10 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - agent:read
+              - agent:write
+              - agent:authorize
+              - agent:transfer
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -73294,6 +73481,16 @@ components:
       description: Result of listing org-scoped chat sessions
       required:
         - sessions
+    ListSetupTasksResult:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetupTask'
+          description: Setup tasks in catalog order.
+      required:
+        - tasks
     ListShadowMCPInventoryResult:
       type: object
       properties:
@@ -78029,6 +78226,10 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -79644,6 +79845,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -79811,6 +80016,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
         slug:
           type: string
           description: Unique scope identifier.
@@ -79842,6 +80048,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -80326,6 +80536,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
             - '*'
         server_url:
           type: string
@@ -80953,6 +81164,75 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
+    SetupTask:
+      type: object
+      properties:
+        assignee:
+          $ref: '#/components/schemas/SetupTaskAssignee'
+        blocked_by:
+          type: array
+          items:
+            type: string
+          description: Incomplete prerequisite task keys.
+        completed_by_fact:
+          type: boolean
+          description: Whether current organization facts force the effective status to done. This field is read-only.
+        description:
+          type: string
+          description: Task description.
+        hidden:
+          type: boolean
+          description: Whether a platform administrator hid the task.
+        key:
+          type: string
+          description: Stable code-owned task key.
+        status:
+          type: string
+          description: Effective task status.
+          enum:
+            - todo
+            - in_progress
+            - awaiting_support
+            - done
+        title:
+          type: string
+          description: Task title.
+      required:
+        - key
+        - title
+        - description
+        - status
+        - completed_by_fact
+        - blocked_by
+        - hidden
+    SetupTaskAssignee:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Assignee email address.
+        name:
+          type: string
+          description: Resolved member display name.
+        photo_url:
+          type: string
+          description: Resolved member photo URL.
+        user_id:
+          type: string
+          description: Resolved active organization member ID.
+      required:
+        - email
+    SetupTaskAssigneeInput:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address to assign before membership exists. Mutually exclusive with user_id.
+          format: email
+        user_id:
+          type: string
+          description: Active organization member to assign. Mutually exclusive with email.
+      description: Assignee selector. Exactly one of user_id or email must be present and non-empty.
     ShadowMCPAccessSummary:
       type: object
       properties:
@@ -86161,6 +86441,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -86219,6 +86500,30 @@ components:
       required:
         - id
         - name
+    UpdateSetupTaskRequestBody:
+      type: object
+      properties:
+        assignee:
+          $ref: '#/components/schemas/SetupTaskAssigneeInput'
+        clear_assignee:
+          type: boolean
+          description: Clear the current task assignee. Must not be true when assignee is set.
+        hidden:
+          type: boolean
+          description: Hide or restore the task.
+        status:
+          type: string
+          description: Setup task status.
+          enum:
+            - todo
+            - in_progress
+            - awaiting_support
+            - done
+        task_key:
+          type: string
+          description: Stable setup task key.
+      required:
+        - task_key
     UpdateShadowMCPInventoryServerNameForm:
       type: object
       properties:
