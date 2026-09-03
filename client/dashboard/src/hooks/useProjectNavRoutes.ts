@@ -96,7 +96,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : [{ route: routes.riskOverview, scope: read }]),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowMCP, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [

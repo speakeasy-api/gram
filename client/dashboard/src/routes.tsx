@@ -821,7 +821,7 @@ const ROUTE_STRUCTURE = {
     component: RiskEventsPage,
   },
   shadowMCP: {
-    title: "Shadow MCP",
+    title: "Shadow MCP Inventory",
     url: "shadow-mcp",
     icon: "shield",
     component: ShadowMCPRoot,
