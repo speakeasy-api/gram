@@ -48,6 +48,7 @@ import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TalkToUs from "./pages/demo/TalkToUs";
+import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
@@ -368,6 +369,9 @@ const RouteProvider = () => {
             visitor has no trial to talk about. */}
         <Route path="/talk-to-us" element={<LoginCheck />}>
           <Route index element={<TalkToUs />} />
+        </Route>
+        <Route path="/trial-ended" element={<LoginCheck />}>
+          <Route index element={<TrialEnded />} />
         </Route>
         <Route
           path="/shadow-mcp/request"
