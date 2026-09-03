@@ -1,5 +1,7 @@
 import { InputDialog } from "@/components/input-dialog";
+import confetti from "canvas-confetti";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
+import { Card } from "@/components/ui/Card";
 import { Grid } from "@/components/ui/Grid";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
@@ -8,15 +10,23 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { createDefaultGatewayEndpoint } from "@/lib/mcpEndpoints";
-import { cn } from "@/lib/utils";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Code, FileCode, Layers, Network, Server, Store } from "lucide-react";
+import {
+  ArrowRight,
+  Blocks,
+  Cable,
+  Cloud,
+  Code,
+  FileCode,
+  Layers,
+  Server,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Outlet } from "react-router";
 import { toast } from "sonner";
 
@@ -34,6 +44,92 @@ type AddOption = {
   onSelect?: () => void;
 };
 
+// Brand language palette. canvas-confetti parses hex only, so the tokens are
+// resolved from CSS at first use (they are hsl()) and cached.
+const CONFETTI_TOKENS = [
+  "brand-ruby",
+  "brand-go",
+  "brand-python",
+  "brand-swift",
+  "brand-java",
+  "brand-terraform",
+  "brand-unity",
+  "brand-php",
+  "brand-c",
+];
+
+let confettiColorCache: string[] | null = null;
+
+function brandConfettiColors(): string[] {
+  if (confettiColorCache) return confettiColorCache;
+  const probe = document.createElement("span");
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const colors = CONFETTI_TOKENS.map((token) => {
+    probe.style.color = `var(--color-${token})`;
+    const rgb = getComputedStyle(probe).color.match(/\d+/g);
+    if (!rgb) return "#888888";
+    return `#${rgb
+      .slice(0, 3)
+      .map((n) => Number(n).toString(16).padStart(2, "0"))
+      .join("")}`;
+  });
+  probe.remove();
+  confettiColorCache = colors;
+  return colors;
+}
+
+/**
+ * Hover burst on the card's icon rail, fired through canvas-confetti so the
+ * pieces get real physics — per-particle velocity, drift, gravity and tumble,
+ * different on every fire. Sits behind the icon tile: the rail is given
+ * `isolate` so `-z-10` lands between the rail's own background and the tile,
+ * the same layering the assistants card uses for its brand mesh.
+ *
+ * The canvas is per-card and only ~160px wide, so the defaults (tuned for a
+ * full-screen cannon) are scaled down: slower launch, smaller pieces, and a
+ * short life so nothing lingers after the pointer leaves.
+ */
+function useIconConfetti(): {
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  fire: () => void;
+} {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fireRef = useRef<confetti.CreateTypes | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    fireRef.current = confetti.create(canvas, { resize: true });
+    return () => {
+      fireRef.current?.reset();
+      fireRef.current = null;
+    };
+  }, []);
+
+  const fire = useCallback(() => {
+    void fireRef.current?.({
+      particleCount: 110,
+      spread: 360,
+      // Tuned for a ~160px canvas: a slow launch with heavy drag keeps the
+      // pieces inside the rail long enough to read, where the full-screen
+      // defaults would shoot them off-canvas within a few frames.
+      startVelocity: 11,
+      gravity: 0.55,
+      decay: 0.93,
+      scalar: 0.6,
+      ticks: 160,
+      origin: { x: 0.5, y: 0.5 },
+      colors: brandConfettiColors(),
+      // The library honours the OS setting itself, so there is no separate
+      // guard to keep in sync.
+      disableForReducedMotion: true,
+    });
+  }, []);
+
+  return { canvasRef, fire };
+}
+
 function AddOptionCard({
   href,
   onSelect,
@@ -41,38 +137,57 @@ function AddOptionCard({
   title,
   description,
 }: AddOption): JSX.Element {
-  // h-full so cards in a row match height regardless of description length.
-  const className =
-    "border-foreground/10 hover:bg-muted/30 flex h-full items-start gap-3 border p-4 text-left no-underline transition-colors hover:no-underline";
+  const { canvasRef, fire } = useIconConfetti();
   const body = (
-    <>
-      <div className="bg-muted flex size-10 shrink-0 items-center justify-center">
-        {icon}
+    <Card.Entity
+      icon={icon}
+      iconRailClassName="isolate"
+      overlay={
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 size-full"
+        />
+      }
+      // The gateway is created in place, so it takes the card's own click
+      // handling; everything else is wrapped in a real link below.
+      onClick={onSelect}
+      className={onSelect ? "cursor-pointer text-left" : undefined}
+    >
+      <Text
+        variant="subheading"
+        as="div"
+        className="text-md group-hover:text-primary transition-colors"
+      >
+        {title}
+      </Text>
+      <Text small muted className="mt-1">
+        {description}
+      </Text>
+      <div className="mt-auto flex items-center justify-end pt-3">
+        <span className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+          Continue
+          <ArrowRight className="size-3.5" />
+        </span>
       </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="font-medium">{title}</span>
-        <Text muted small>
-          {description}
-        </Text>
-      </div>
-    </>
+    </Card.Entity>
   );
 
-  if (href) {
+  if (!href) {
     return (
-      <Link to={href} className={className}>
+      <div className="h-full" onMouseEnter={fire}>
         {body}
-      </Link>
+      </div>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(className, "w-full")}
+    <Link
+      to={href}
+      onMouseEnter={fire}
+      className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {body}
-    </button>
+    </Link>
   );
 }
 
@@ -142,14 +257,14 @@ export default function AddMcpServer(): JSX.Element {
   const connectOptions: AddOption[] = [
     {
       href: routes.mcp.add.catalog.href(),
-      icon: <Store className="text-foreground size-5" />,
+      icon: <Blocks className="text-foreground size-10" strokeWidth={1.25} />,
       title: "From the catalog",
       description:
         "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
     },
     {
       href: routes.mcp.add.remote.href(),
-      icon: <Network className="text-foreground size-5" />,
+      icon: <Cloud className="text-foreground size-10" strokeWidth={1.25} />,
       title: "Hosted remotely",
       description:
         "Add an existing remote server by URL. We proxy requests to it.",
@@ -158,7 +273,9 @@ export default function AddMcpServer(): JSX.Element {
       ? [
           {
             href: routes.mcp.add.tunneled.href(),
-            icon: <Network className="text-foreground size-5" />,
+            icon: (
+              <Cable className="text-foreground size-10" strokeWidth={1.25} />
+            ),
             title: "Reachable through a tunnel",
             description:
               "Connect a server running inside your own network through a tunnel.",
@@ -169,7 +286,9 @@ export default function AddMcpServer(): JSX.Element {
       ? [
           {
             href: routes.mcp.add.unproxied.href(),
-            icon: <Server className="text-foreground size-5" />,
+            icon: (
+              <Server className="text-foreground size-10" strokeWidth={1.25} />
+            ),
             title: "Already reachable by clients",
             description:
               "Track a server your people connect to directly, without proxying it.",
@@ -181,7 +300,7 @@ export default function AddMcpServer(): JSX.Element {
   const gatewayOptions: AddOption[] = [
     {
       onSelect: () => setGatewayDialogOpen(true),
-      icon: <Layers className="text-foreground size-5" />,
+      icon: <Layers className="text-foreground size-10" strokeWidth={1.25} />,
       title: "New gateway",
       description:
         "One address fronting a set of servers. Pick its members after creating it.",
@@ -191,7 +310,7 @@ export default function AddMcpServer(): JSX.Element {
   const advancedOptions: AddOption[] = [
     {
       href: routes.mcp.add.openapi.href(),
-      icon: <FileCode className="text-foreground size-5" />,
+      icon: <FileCode className="text-foreground size-10" strokeWidth={1.25} />,
       title: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
     },
@@ -199,7 +318,9 @@ export default function AddMcpServer(): JSX.Element {
       ? [
           {
             href: routes.mcp.add.function.href(),
-            icon: <Code className="text-foreground size-5" />,
+            icon: (
+              <Code className="text-foreground size-10" strokeWidth={1.25} />
+            ),
             title: "Write custom code",
             description: "Create tools with TypeScript functions.",
           },

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -138,10 +138,31 @@ export function AppSidebar({
       />
     );
   } else if (routes.mcp.add.active) {
-    // Adding a server is a focused flow: leave the rail empty so nothing
-    // competes with picking an option. It keeps the standard width, so
-    // arriving from the MCP index doesn't shift the page.
-    sidebarContent = null;
+    // Adding a server is a focused flow: no nav competing with the choice,
+    // just the way back — in the same spot the detail sidebars put theirs.
+    // Standard width, so arriving from the MCP index doesn't shift the page.
+    sidebarContent = (
+      <SidebarMenu className="gap-1 group-data-[collapsible=icon]:px-0">
+        <SidebarMenuItem>
+          {/* Rule matches the breadcrumb bar's on the other side of the pane
+              boundary: same vertical padding and text size, so the two read as
+              one line across the sidebar edge. */}
+          <Link
+            to={routes.mcp.href()}
+            // -mt-2 cancels SidebarContent's 8px top padding so the row starts
+            // flush against the sidebar header rule; py-3.5 then centres the
+            // label in the band, landing its bottom border level with the
+            // breadcrumb bar's across the pane boundary.
+            className="text-foreground hover:bg-accent trans border-foreground/10 -mt-2 flex items-center gap-2 border-b px-4 py-3.5 text-sm hover:no-underline group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <ArrowLeft className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="truncate group-data-[collapsible=icon]:hidden">
+              Back to all MCPs
+            </span>
+          </Link>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {

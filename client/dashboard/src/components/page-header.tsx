@@ -5,7 +5,7 @@ import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Link, useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
@@ -334,28 +334,12 @@ function PageHeaderBreadcrumbsTrail({
   // 3. Page segments
   visibleElements.push(...pageElements);
 
-  // The crumb one level up from the current page, if there is one. Drives the
-  // back arrow, so going up is one click on a known target rather than aiming
-  // at the right word in the trail.
-  const parentCrumb = visibleElements
-    .filter((elem) => !elem.isCurrentPage && !elem.disableLink && !elem.pending)
-    .at(-1);
-
   return (
     <div className="flex w-full items-center justify-between gap-2">
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
       >
         <div className="flex items-center gap-2 normal-case">
-          {parentCrumb && (
-            <Link
-              to={parentCrumb.url}
-              aria-label={`Back to ${parentCrumb.display}`}
-              className="text-muted-foreground hover:text-foreground trans mr-0.5 flex items-center"
-            >
-              <ArrowLeft className="size-4" />
-            </Link>
-          )}
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
               <BreadcrumbCrumb elem={elem} />
