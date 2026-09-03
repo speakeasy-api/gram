@@ -11,10 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -22,9 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -407,7 +411,11 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
+	tokens := hostedMemberTokens(gate.tokens, member)
+	if len(tokens) > 0 && !s.hostedProviderCurrent(ctx, logger, projectID, toolset.OrganizationID, member) {
+		tokens = nil
+	}
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, tokens)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -478,6 +486,37 @@ func (s *Service) buildMemberDispatch(
 // forward a sibling's bearer once partial resolution leaves gaps in the map,
 // and a resource-qualified token is audience-bound to the remote upstream it
 // was consented for; both cases yield no token.
+// hostedProviderCurrent reports whether the provider recorded on a hosted
+// member when it joined still matches the OAuth upstream of the tools deployed
+// now, by token endpoint. The record is written at add time only, so a toolset
+// that moved to another provider must not receive the old provider's bearer.
+func (s *Service) hostedProviderCurrent(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, organizationID string, member metaMember) bool {
+	if !member.toolsetID.Valid || !member.remoteSessionIssuerID.Valid {
+		return false
+	}
+	provider, err := mcpservers.ResolveHostedOAuthProvider(ctx, s.db, projectID, member.toolsetID.UUID)
+	if err != nil || provider == nil {
+		logger.WarnContext(ctx, "hosted member credential withheld: current tools have no single OAuth upstream", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return false
+	}
+	issuer, err := remotesessions_repo.New(s.db).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    member.remoteSessionIssuerID.UUID,
+		ProjectID:             conv.ToNullUUID(projectID),
+		IncludeOrganizational: true,
+		OrganizationID:        conv.ToPGText(organizationID),
+		IncludeGlobal:         true,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "hosted member credential withheld: provider issuer not found", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return false
+	}
+	if strings.TrimRight(issuer.TokenEndpoint.String, "/") != provider.TokenEndpoint {
+		logger.WarnContext(ctx, "hosted member credential withheld: tools moved to another OAuth provider since the member joined", attr.SlogMcpServerID(member.serverID.String()))
+		return false
+	}
+	return true
+}
+
 func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
 	if !member.remoteSessionIssuerID.Valid {
 		return nil

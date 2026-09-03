@@ -51,6 +51,10 @@ type AutoAttachMemberProviderClientParams struct {
 // holds a client for that upstream (one client per upstream per issuer), or
 // when the member has no derivable client. Tenancy mirrors the resync
 // derivation: the member's own project client, or an org-level client.
+//
+// A hosted member carries no issuer; on a gateway issuer change the caller
+// passes the previous gateway issuer instead, which holds the client the
+// gateway bound when the member joined.
 func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAttachMemberProviderClientParams) (int64, error) {
 	result, err := q.db.Exec(ctx, autoAttachMemberProviderClient,
 		arg.GatewayIssuerID,
@@ -117,6 +121,36 @@ func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDe
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const countHostedMetaMCPMembersOnProvider = `-- name: CountHostedMetaMCPMembersOnProvider :one
+SELECT count(*)
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND s.toolset_id IS NOT NULL
+  AND s.remote_session_issuer_id = $3
+`
+
+type CountHostedMetaMCPMembersOnProviderParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+	RemoteIssuerID  uuid.NullUUID
+}
+
+// Live hosted members of @meta_mcp_server_id whose tools authenticate with
+// @remote_issuer_id. A proxied member joining on the same provider would
+// qualify every new grant to its own URL, which hosted routing cannot accept.
+func (q *Queries) CountHostedMetaMCPMembersOnProvider(ctx context.Context, arg CountHostedMetaMCPMembersOnProviderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countHostedMetaMCPMembersOnProvider, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
@@ -605,7 +639,7 @@ WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
   AND s.remote_session_issuer_id IS NOT NULL
-  AND s.user_session_issuer_id IS NOT NULL
+  AND (s.user_session_issuer_id IS NOT NULL OR s.toolset_id IS NOT NULL)
 ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id
 `
 
@@ -621,7 +655,8 @@ type ListMemberProviderIdentitiesRow struct {
 
 // Distinct provider identity pairs across a meta server's live members, for
 // re-running consent wiring when the gateway's issuer changes. Ordered so
-// callers take the per-remote-issuer binding locks deterministically.
+// callers take the per-remote-issuer binding locks deterministically. A hosted
+// member contributes its stamped provider with a NULL issuer.
 func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemberProviderIdentitiesParams) ([]ListMemberProviderIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listMemberProviderIdentities, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {

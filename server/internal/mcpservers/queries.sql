@@ -193,6 +193,20 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: StampHostedMCPServerProviderIssuer :execrows
+-- A hosted server has no client bindings to derive remote_session_issuer_id
+-- from, so the gateway records the provider its OAuth tools authenticate with
+-- as the member token-routing key. Rows carrying an issuer keep the
+-- binding-derived value (ResyncMCPServerRemoteSessionIssuers).
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND toolset_id = @toolset_id
+  AND user_session_issuer_id IS NULL;
+
 -- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()

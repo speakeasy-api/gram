@@ -1204,6 +1204,41 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const stampHostedMCPServerProviderIssuer = `-- name: StampHostedMCPServerProviderIssuer :execrows
+UPDATE mcp_servers
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+  AND toolset_id = $4
+  AND user_session_issuer_id IS NULL
+`
+
+type StampHostedMCPServerProviderIssuerParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	ToolsetID             uuid.NullUUID
+}
+
+// A hosted server has no client bindings to derive remote_session_issuer_id
+// from, so the gateway records the provider its OAuth tools authenticate with
+// as the member token-routing key. Rows carrying an issuer keep the
+// binding-derived value (ResyncMCPServerRemoteSessionIssuers).
+func (q *Queries) StampHostedMCPServerProviderIssuer(ctx context.Context, arg StampHostedMCPServerProviderIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampHostedMCPServerProviderIssuer,
+		arg.RemoteSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET

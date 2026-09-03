@@ -329,6 +329,10 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- holds a client for that upstream (one client per upstream per issuer), or
 -- when the member has no derivable client. Tenancy mirrors the resync
 -- derivation: the member's own project client, or an org-level client.
+--
+-- A hosted member carries no issuer; on a gateway issuer change the caller
+-- passes the previous gateway issuer instead, which holds the client the
+-- gateway bound when the member joined.
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT c.id, @gateway_issuer_id
 FROM remote_session_clients AS c
@@ -394,10 +398,27 @@ WHERE l.remote_session_client_id = c.id
       )
   );
 
+-- name: CountHostedMetaMCPMembersOnProvider :one
+-- Live hosted members of @meta_mcp_server_id whose tools authenticate with
+-- @remote_issuer_id. A proxied member joining on the same provider would
+-- qualify every new grant to its own URL, which hosted routing cannot accept.
+SELECT count(*)
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.toolset_id IS NOT NULL
+  AND s.remote_session_issuer_id = @remote_issuer_id;
+
 -- name: ListMemberProviderIdentities :many
 -- Distinct provider identity pairs across a meta server's live members, for
 -- re-running consent wiring when the gateway's issuer changes. Ordered so
--- callers take the per-remote-issuer binding locks deterministically.
+-- callers take the per-remote-issuer binding locks deterministically. A hosted
+-- member contributes its stamped provider with a NULL issuer.
 SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -408,5 +429,5 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND s.remote_session_issuer_id IS NOT NULL
-  AND s.user_session_issuer_id IS NOT NULL
+  AND (s.user_session_issuer_id IS NOT NULL OR s.toolset_id IS NOT NULL)
 ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;

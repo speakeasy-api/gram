@@ -887,6 +887,12 @@ func externalMCPErrorSummary(content []json.RawMessage) string {
 	return rendered
 }
 
+// externalMCPAuthRejected names the missing or refused upstream credential
+// instead of a generic failure, as the proxied-backend relay does.
+func externalMCPAuthRejected(ctx context.Context, logger *slog.Logger, toolName string, rejected *externalmcp.AuthRejectedError) error {
+	return oops.E(oops.CodeFailedPrecondition, rejected, "the external MCP server behind tool %q rejected the request credentials (status %d); connect or reconnect its OAuth provider", toolName, rejected.StatusCode).LogWarn(ctx, logger)
+}
+
 func (tp *ToolProxy) doExternalMCP(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -954,6 +960,9 @@ func (tp *ToolProxy) doExternalMCP(
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
+		if rejected, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			return externalMCPAuthRejected(ctx, logger, toolName, rejected)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
@@ -961,6 +970,9 @@ func (tp *ToolProxy) doExternalMCP(
 	// Call the tool on the external MCP server
 	callResult, err := client.CallTool(ctx, toolName, arguments)
 	if err != nil {
+		if rejected, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			return externalMCPAuthRejected(ctx, logger, toolName, rejected)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
 

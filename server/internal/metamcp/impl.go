@@ -50,6 +50,7 @@ type Service struct {
 	authz       *authz.Engine
 	audit       *audit.Logger
 	temporalEnv *tenv.Environment
+	providers   HostedMemberProviderAttacher
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,6 +64,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
+	providers HostedMemberProviderAttacher,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
@@ -74,6 +76,7 @@ func NewService(
 		authz:       authzEngine,
 		audit:       auditLogger,
 		temporalEnv: temporalEnv,
+		providers:   providers,
 	}
 }
 
@@ -297,13 +300,21 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
 		}
 		for _, identity := range identities {
+			// A hosted member's client lives on the previous gateway issuer.
+			memberIssuerID := identity.UserSessionIssuerID
+			if !memberIssuerID.Valid {
+				memberIssuerID = existing.UserSessionIssuerID
+			}
+			if !memberIssuerID.Valid {
+				continue
+			}
 			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
 			}
 			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
 				GatewayIssuerID: issuerID.UUID,
 				ProjectID:       *authCtx.ProjectID,
-				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
+				MemberIssuerID:  memberIssuerID.UUID,
 				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
 			}); aerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
@@ -566,6 +577,19 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
+	// Registering with the member's upstream provider is a network call, so
+	// it runs before the locked transaction below reads the stamped identity.
+	wiring, err := s.wireHostedMemberProvider(ctx, logger, authCtx, metaID, mcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			wiring.unbind()
+		}
+	}()
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -597,6 +621,12 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	if !server.UserSessionIssuerID.Valid && meta.UserSessionIssuerID.Valid {
+		if err := rebindHostedProvider(ctx, dbtx, wiring, meta.UserSessionIssuerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "rebind hosted member provider").LogError(ctx, logger)
+		}
+	}
+
 	// The gateway addresses members by qualified serverslug--toolname, so a
 	// slugless server (legacy pre-2026-05 rows never updated since) can never
 	// be reached; updating the server generates a slug. Unproxied backends
@@ -624,6 +654,23 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	}
 	if sharing > 0 {
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
+	}
+
+	// A hosted member routes an unqualified grant; a proxied member on the
+	// same provider would qualify new grants to its URL (see
+	// requireUnqualifiedHostedGrant for the reverse direction).
+	if !server.ToolsetID.Valid && server.RemoteSessionIssuerID.Valid {
+		hosted, err := txRepo.CountHostedMetaMCPMembersOnProvider(ctx, repo.CountHostedMetaMCPMembersOnProviderParams{
+			MetaMcpServerID: metaID,
+			ProjectID:       *authCtx.ProjectID,
+			RemoteIssuerID:  server.RemoteSessionIssuerID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count hosted meta mcp members on provider").LogError(ctx, logger)
+		}
+		if hosted > 0 {
+			return nil, oops.E(oops.CodeConflict, nil, "a hosted member of this meta mcp server already authenticates with this server's OAuth provider; a gateway routes one credential per provider").LogError(ctx, logger)
+		}
 	}
 
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{
@@ -693,6 +740,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	committed = true
 
 	// Every client-binding writer follows its commit with this resync so the
 	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
@@ -835,7 +883,9 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "lock meta mcp membership").LogError(ctx, logger)
 	}
 
-	meta, err := txRepo.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+	// Locked, not read: UpdateMetaMcpServer rewires member providers under
+	// the same lock, so a removal cannot slip between its listing and attach.
+	meta, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
 		ID:             existing.MetaMcpServerID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
@@ -844,7 +894,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteMetaMCPMember(ctx, repo.DeleteMetaMCPMemberParams{
