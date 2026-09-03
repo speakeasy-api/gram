@@ -114,6 +114,8 @@ When you add a feature or change an existing one, update the demo seed in the sa
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.
 
+Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-temporal/SKILL.md`). Activate it any time you touch `server/internal/background/`, add a Temporal schedule, signal, or workflow start, or make anything react to chat messages, tool calls, MCP requests, or other per-row events.
+
 ## Mise CLI
 
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
