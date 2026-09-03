@@ -9,6 +9,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 var (
@@ -42,6 +44,7 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, instance, projects := newProjectAccessTest(t, "bound-project")
+	ctx = wide.Start(ctx)
 	key := createTestAPIKey(t, ctx, instance, &projects[0].ID)
 
 	ctx, err := instance.authorizer.Authorize(ctx, key, apiKeyScheme)
@@ -53,6 +56,20 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, projects[0].ID, *authCtx.ProjectID)
 	require.Equal(t, projects[0].Slug, *authCtx.ProjectSlug)
+
+	var apiKeySchemeFound, projectSchemeFound bool
+	for _, eventAttr := range wide.Emit(ctx) {
+		switch eventAttr.Key {
+		case string(attr.RequestAuthSchemeAPIKeyKey):
+			apiKeySchemeFound = true
+			require.True(t, eventAttr.Value.Bool())
+		case string(attr.RequestAuthSchemeProjectKey):
+			projectSchemeFound = true
+			require.True(t, eventAttr.Value.Bool())
+		}
+	}
+	require.True(t, apiKeySchemeFound)
+	require.True(t, projectSchemeFound)
 }
 
 func TestAuthorizeProjectBoundKeyRejectsSiblingProjectSlugWithoutRepointing(t *testing.T) {

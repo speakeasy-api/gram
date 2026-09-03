@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 type Auth struct {
@@ -73,7 +73,8 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	// that project. When RBAC is off (or the caller is an API key), Require is
 	// a no-op and org/project-bound key scoping above remains authoritative.
 	if scheme.Name == constants.ProjectSlugSecuritySchema {
-		if err := s.requireResolvedProjectAccess(ctx); err != nil {
+		err = s.requireResolvedProjectAccess(ctx)
+		if err != nil {
 			return ctx, err
 		}
 	}
@@ -189,40 +190,58 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		return
 	}
 
-	attrs := []any{
-		attr.SlogAuthScheme(scheme),
-		attr.SlogAuthOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogAuthOrganizationSlug(authCtx.OrganizationSlug),
-		attr.SlogAuthAccountType(authCtx.AccountType),
-	}
-	if err != nil {
-		attrs = append(attrs, attr.SlogError(err))
-	}
-	if authCtx.UserID != "" {
-		attrs = append(attrs, attr.SlogAuthUserID(authCtx.UserID))
-	}
-	if authCtx.ExternalUserID != "" {
-		attrs = append(attrs, attr.SlogAuthUserExternalID(authCtx.ExternalUserID))
-	}
-	if authCtx.Email != nil {
-		attrs = append(attrs, attr.SlogAuthUserEmail(*authCtx.Email))
-	}
-	if authCtx.APIKeyID != "" {
-		attrs = append(attrs, attr.SlogAuthAPIKeyID(authCtx.APIKeyID))
-	}
-	if authCtx.SessionID != nil {
-		attrs = append(attrs, attr.SlogAuthSessionID(*authCtx.SessionID))
-	}
-	if authCtx.ProjectID != nil {
-		attrs = append(attrs, attr.SlogAuthProjectID(authCtx.ProjectID.String()))
-	}
-	if authCtx.ProjectSlug != nil {
-		attrs = append(attrs, attr.SlogAuthProjectSlug(*authCtx.ProjectSlug))
+	var schemeAttr slog.Attr
+	var errAttr slog.Attr
+	switch scheme {
+	case constants.KeySecurityScheme:
+		schemeAttr = attr.SlogRequestAuthAPIKeyScheme(err == nil)
+		if err != nil {
+			errAttr = attr.SlogRequestAuthSchemeAPIKeyError(err.Error())
+		}
+	case constants.SessionSecurityScheme:
+		schemeAttr = attr.SlogRequestAuthSessionScheme(err == nil)
+		if err != nil {
+			errAttr = attr.SlogRequestAuthSchemeSessionError(err.Error())
+		}
+	case constants.ProjectSlugSecuritySchema:
+		schemeAttr = attr.SlogRequestAuthProjectScheme(err == nil)
+		if err != nil {
+			errAttr = attr.SlogRequestAuthSchemeProjectSlugError(err.Error())
+		}
+	default:
+		return
 	}
 
-	if err != nil {
-		s.logger.WarnContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
-	} else {
-		s.logger.InfoContext(ctx, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
+	attrs := []slog.Attr{
+		schemeAttr,
+		attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogRequestAuthAccountType(authCtx.AccountType),
 	}
+	if err != nil {
+		attrs = append(attrs, errAttr)
+	}
+	if authCtx.UserID != "" {
+		attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
+	}
+	if authCtx.ExternalUserID != "" {
+		attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
+	}
+	if authCtx.Email != nil {
+		attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
+	}
+	if authCtx.APIKeyID != "" {
+		attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
+	}
+	if authCtx.SessionID != nil {
+		attrs = append(attrs, attr.SlogRequestAuthSessionID(*authCtx.SessionID))
+	}
+	if authCtx.ProjectID != nil {
+		attrs = append(attrs, attr.SlogRequestAuthProjectID(authCtx.ProjectID.String()))
+	}
+	if authCtx.ProjectSlug != nil {
+		attrs = append(attrs, attr.SlogRequestAuthProjectSlug(*authCtx.ProjectSlug))
+	}
+
+	wide.Push(ctx, attrs...)
 }

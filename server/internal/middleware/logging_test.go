@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -224,6 +225,54 @@ func TestHTTPLoggingMiddlewareKeepsPersonalDataOutOfLogs(t *testing.T) {
 	}
 	require.NotContains(t, logs, "supersecret", "token reached the logs")
 	require.Contains(t, logs, "REDACTED")
+}
+
+func TestHTTPLoggingMiddlewarePropagatesPanics(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHTTPLoggingMiddleware(testenv.NewLogger(t))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	require.PanicsWithValue(t, "boom", func() {
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	})
+}
+
+func TestHTTPLoggingMiddlewarePreservesAbortHandlerPanic(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	handler := NewHTTPLoggingMiddleware(logger)(NewRecovery(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	})))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	require.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	})
+}
+
+func TestHTTPLoggingMiddlewareOmitsEmptyOptionalAttributes(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := NewHTTPLoggingMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	logs := buf.String()
+	require.NotEmpty(t, logs)
+	require.NotContains(t, logs, string(attr.HTTPRouteKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestIDKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestHeaderRefererKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestHeaderUserAgentKey))
+	require.NotContains(t, logs, string(attr.HTTPRefererHostKey))
 }
 
 // The request context is the second sink: every downstream handler that logs

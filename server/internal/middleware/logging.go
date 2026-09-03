@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -242,6 +243,12 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
+			ctx = wide.Start(ctx, attr.SlogWideEvent())
+
+			defer func() {
+				logger.LogAttrs(ctx, slog.LevelInfo, "response", wide.Emit(ctx)...)
+			}()
+
 			requestID := conv.TruncateString(r.Header.Get("X-Request-ID"), 64)
 
 			spanCtx := trace.SpanContextFromContext(ctx)
@@ -281,10 +288,14 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 
 			rw := newResponseWriter(w)
 			r = r.WithContext(ctx)
-			attrs := []any{
+
+			attrs := []slog.Attr{
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
+			}
+			if r.Pattern != "" {
+				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
@@ -298,8 +309,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			if requestContext.RefererHost != "" {
 				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
-
-			logger.InfoContext(ctx, "request", attrs...)
+			wide.Push(ctx, attrs...)
 
 			next.ServeHTTP(rw, r)
 
@@ -308,23 +318,26 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				code = 499
 			}
 
-			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(code), attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()))
+			responseAttrs := []slog.Attr{
+				attr.SlogHTTPResponseStatusCode(code),
+				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
+			}
 
 			if code != rw.statusCode {
-				attrs = append(attrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
 			}
 
 			proxied := conv.Default(rw.Header().Get(constants.HeaderProxiedResponse), "0")
 			if ok, err := strconv.ParseBool(proxied); err == nil && ok {
-				attrs = append(attrs, attr.SlogHTTPResponseExternal(true))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseExternal(true))
 			}
 
 			filtered := conv.Default(rw.Header().Get(constants.HeaderFilteredResponse), "0")
 			if ok, err := strconv.ParseBool(filtered); err == nil && ok {
-				attrs = append(attrs, attr.SlogHTTPResponseFiltered(true))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseFiltered(true))
 			}
 
-			logger.InfoContext(ctx, "response", attrs...)
+			wide.Push(ctx, responseAttrs...)
 		})
 	}
 }
