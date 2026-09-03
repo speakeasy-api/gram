@@ -245,18 +245,17 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 
 	registryIDStr := registryID.String()
 	return &types.ExternalMCPServer{
-		RegistrySpecifier:                   details.Name,
-		Version:                             details.Version,
-		Description:                         details.Description,
-		ToolsetID:                           nil,
-		McpServerID:                         nil,
-		RegistryID:                          &registryIDStr,
-		OrganizationMcpCollectionRegistryID: nil,
-		Title:                               nil,
-		IconURL:                             nil,
-		Meta:                                nil,
-		Tools:                               details.Tools,
-		Remotes:                             details.Remotes,
+		RegistrySpecifier: details.Name,
+		Version:           details.Version,
+		Description:       details.Description,
+		ToolsetID:         nil,
+		McpServerID:       nil,
+		RegistryID:        &registryIDStr,
+		Title:             nil,
+		IconURL:           nil,
+		Meta:              nil,
+		Tools:             details.Tools,
+		Remotes:           details.Remotes,
 	}, nil
 }
 
