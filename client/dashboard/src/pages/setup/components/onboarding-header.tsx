@@ -24,7 +24,6 @@ export function OnboardingHeader({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {children}
           <Button
             asChild
             variant="tertiary"
@@ -58,6 +57,7 @@ export function OnboardingHeader({
             Go to dashboard
             <ArrowRight className="h-4 w-4" />
           </Button>
+          {children}
         </div>
       </div>
     </header>
