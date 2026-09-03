@@ -1,7 +1,6 @@
 package organizations_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -211,7 +210,7 @@ func TestService_UpdateSetupTaskAuditFailureRollsBackTaskAndAudit(t *testing.T) 
 		OrganizationID: authCtx.ActiveOrganizationID,
 		TaskKey:        "instrument-agents",
 	})
-	require.True(t, errors.Is(err, pgx.ErrNoRows))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
