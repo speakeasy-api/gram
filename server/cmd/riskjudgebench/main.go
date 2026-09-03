@@ -199,7 +199,7 @@ func main() {
 	wg.Wait()
 	fmt.Fprintf(os.Stderr, "\r  %d/%d calls done (%.1fs)\n\n", len(jobs), len(jobs), time.Since(start).Seconds())
 
-	report(models, results)
+	report(models, results, *reasoningEffort)
 
 	if *outFile != "" {
 		if err := writeJSON(*outFile, results); err != nil {
@@ -321,7 +321,7 @@ type modelStats struct {
 	tokens, tokenN         int
 }
 
-func report(models []string, results []result) {
+func report(models []string, results []result, reasoningEffort string) {
 	byModel := map[string]*modelStats{}
 	for _, m := range models {
 		byModel[m] = &modelStats{model: m}
@@ -376,7 +376,7 @@ func report(models []string, results []result) {
 	}
 
 	fmt.Println("\nlegend: acc=accuracy prec=precision rec=recall (on matched=true); ranked by F1, tie-broken by p50.")
-	fmt.Println("        reasoning is disabled by the object-completion path, so latency reflects the prod judge call.")
+	fmt.Printf("        reasoning effort %q, matching the prod judge call, so latency is comparable.\n", reasoningEffort)
 
 	confidenceSweep(models, results)
 
