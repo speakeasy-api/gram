@@ -477,9 +477,9 @@ function IdentitiesIndexContent(): JSX.Element {
   }, [identities, deviceCoverage]);
 
   // A dimension with nothing to offer would render an empty control; leave it
-  // out of the schema rather than show a filter that cannot filter. One the URL
-  // still holds a value for stays, whatever its options say: the rows are being
-  // filtered by it, and taking the control away would leave no way to undo that.
+  // out of the schema rather than show a filter that cannot filter. A dimension
+  // whose value is still set in the URL is kept regardless of its options: it is
+  // narrowing the list, and dropping its control would leave no way to clear it.
   const filterSchema = useMemo(
     () =>
       IDENTITY_FILTERS.filter((dimension) => {
