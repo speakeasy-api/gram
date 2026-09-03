@@ -34,12 +34,11 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyBypass)].ResourceType)
 	require.Equal(t, "chat", bySlug[string(authz.ScopeChatRead)].ResourceType)
-	require.Equal(t, "agent", bySlug[string(authz.ScopeAgentRead)].ResourceType)
-	require.Equal(t, "agent", bySlug[string(authz.ScopeAgentWrite)].ResourceType)
-	require.Equal(t, "agent", bySlug[string(authz.ScopeAgentAuthorize)].ResourceType)
-	require.Equal(t, "agent", bySlug[string(authz.ScopeAgentTransfer)].ResourceType)
-	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeAgentAuthorize)].Visibility)
-	require.Nil(t, bySlug[string(authz.ScopeAgentAuthorize)].ExclusionScope)
+	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
+		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope)
+	}
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)
