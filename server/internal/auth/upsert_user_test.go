@@ -226,6 +226,22 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 	require.True(t, reactivated.WorkosID.Valid)
 	require.Equal(t, newWorkosID, reactivated.WorkosID.String)
 
+	staleAssignments, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, staleAssignments, "role assignments must move off the deleted WorkOS identity")
+
+	reassigned, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, reassigned, 1)
+	require.Equal(t, gramUserID, reassigned[0].UserID.String)
+	require.False(t, reassigned[0].DeletedAt.Valid)
+
 	isMember, err = orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
 		UserID:         gramUserID,
 		OrganizationID: organizationID,
