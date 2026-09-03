@@ -181,7 +181,7 @@ describe("generated admin boundary", () => {
     );
 
     expect(main).toMatch(
-      /defaultOptions:\s*\{ queries:\s*\{ retry: false \} \}/,
+      /defaultOptions\s*:\s*\{\s*queries\s*:\s*\{\s*retry\s*:\s*false,?\s*\},?\s*\}/,
     );
     expect(recordHeader).toMatch(
       /<form[\s\S]*method="post"[\s\S]*organizationDashboardUrl/,

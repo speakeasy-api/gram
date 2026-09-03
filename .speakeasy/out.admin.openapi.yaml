@@ -438,6 +438,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/organization.chatAnalysisSettings:
     get:
       tags:
@@ -1347,6 +1353,7 @@ paths:
         - name: organization_id
           in: query
           allowEmptyValue: true
+          required: true
           schema:
             type: string
       responses:
@@ -1485,6 +1492,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         "502":
           description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
           content:
             application/json:
               schema:
@@ -1640,6 +1653,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -1785,6 +1804,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         "502":
           description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
           content:
             application/json:
               schema:
