@@ -140,6 +140,12 @@ func TestLoadChat_ChatSessionTokenStillOwnerMatched(t *testing.T) {
 	dashboardChatID := seedChat(t, seedCtx, ti, "different-dashboard-user", "", "dashboard chat")
 	_, err = ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(dashboardChatID.String()))
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	// Ownerless legacy records must not become project-wide readable through a
+	// delegated chat-session token either.
+	ownerlessChatID := seedChat(t, seedCtx, ti, "", "", "ownerless chat")
+	_, err = ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(ownerlessChatID.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 // createProjectInSameOrg adds a second project to ti's organization so a single
