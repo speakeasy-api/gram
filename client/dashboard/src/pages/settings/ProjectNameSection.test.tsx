@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +33,7 @@ const testState = vi.hoisted(() => ({
 }));
 
 const invalidateAllListProjects = vi.hoisted(() => vi.fn());
+const invalidateAllProject = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => testState.organization,
@@ -55,6 +57,10 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@gram/client/react-query/listProjects", () => ({
   invalidateAllListProjects,
+}));
+
+vi.mock("@gram/client/react-query/project", () => ({
+  invalidateAllProject,
 }));
 
 vi.mock("@gram/client/react-query/updateProject", () => ({
@@ -92,6 +98,7 @@ beforeEach(() => {
     slug: "current-project",
   };
   invalidateAllListProjects.mockReset();
+  invalidateAllProject.mockReset();
 });
 
 afterEach(cleanup);
@@ -109,6 +116,7 @@ describe("ProjectNameSection", () => {
 
     fireEvent.change(nameInput, { target: { value: "  Renamed project  " } });
 
+    expect(screen.getByRole("status").textContent).toBe("Unsaved changes");
     expect((save as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(save);
 
@@ -135,6 +143,8 @@ describe("ProjectNameSection", () => {
     expect((save as HTMLButtonElement).disabled).toBe(true);
     expect(testState.organization.refetch).toHaveBeenCalledTimes(1);
     expect(invalidateAllListProjects).toHaveBeenCalledTimes(1);
+    expect(invalidateAllProject).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toBe("");
     expect(testState.setQueriesData).toHaveBeenCalledWith(
       { queryKey: ["@gram/client", "auth", "info"] },
       expect.any(Function),
@@ -244,6 +254,56 @@ describe("ProjectNameSection", () => {
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+
+  it("accepts a padded 40-character display name after trimming", async () => {
+    const user = userEvent.setup();
+    const name = "a".repeat(40);
+    render(<ProjectNameSection />);
+
+    const nameInput = screen.getByLabelText("Display Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, `  ${name}  `);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: { updateProjectForm: { name } },
+      security: {
+        projectSlugHeaderGramProject: "current-project",
+        sessionHeaderGramSession: "session-token",
+      },
+    });
+  });
+
+  it("accepts 40 astral Unicode characters", async () => {
+    const user = userEvent.setup();
+    render(<ProjectNameSection />);
+
+    const nameInput = screen.getByLabelText("Display Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "😀".repeat(40));
+
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("rejects an overlong trimmed display name", async () => {
+    const user = userEvent.setup();
+    render(<ProjectNameSection />);
+
+    const nameInput = screen.getByLabelText("Display Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, `  ${"😀".repeat(41)}  `);
+
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Project name must be 40 characters or fewer."),
+    ).toBeTruthy();
   });
 
   it("does not enable save for a blank display name", () => {

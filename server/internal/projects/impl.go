@@ -277,7 +277,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	}
 
 	name := strings.TrimSpace(payload.Name)
-	if name == "" || utf8.RuneCountInString(name) > projectNameMaxLength {
+	if name == "" || strings.ContainsRune(name, '\x00') || utf8.RuneCountInString(name) > projectNameMaxLength {
 		return nil, oops.C(oops.CodeInvalid)
 	}
 	dbtx, err := s.db.Begin(ctx)

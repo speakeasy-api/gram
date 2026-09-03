@@ -116,6 +116,48 @@ func TestUpdateProjectRejectsBlankName(t *testing.T) {
 	require.Equal(t, beforeAuditCount, afterAuditCount)
 }
 
+func TestUpdateProjectRejectsNullName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	before, err := repo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+
+	result, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{Name: "invalid\x00name"})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	after, err := repo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Equal(t, before.Name, after.Name)
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount, afterAuditCount)
+}
+
+func TestUpdateProjectRequiresAuthenticationBeforeEmptyNameValidation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	ctx = contextvalues.SetAuthContext(ctx, nil)
+
+	result, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{Name: ""})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
 func TestUpdateProjectAcceptsMaxLengthNameAfterTrimming(t *testing.T) {
 	t.Parallel()
 

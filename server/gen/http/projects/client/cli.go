@@ -99,13 +99,7 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 	{
 		err = json.Unmarshal([]byte(projectsUpdateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string

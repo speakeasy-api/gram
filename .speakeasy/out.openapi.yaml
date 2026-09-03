@@ -87476,7 +87476,6 @@ components:
         name:
           type: string
           description: The display name of the project
-          minLength: 1
       required:
         - name
     UpdateProjectResult:
