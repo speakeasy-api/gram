@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -273,6 +274,24 @@ func TestHTTPLoggingMiddlewareOmitsEmptyOptionalAttributes(t *testing.T) {
 	require.NotContains(t, logs, string(attr.HTTPRequestHeaderRefererKey))
 	require.NotContains(t, logs, string(attr.HTTPRequestHeaderUserAgentKey))
 	require.NotContains(t, logs, string(attr.HTTPRefererHostKey))
+}
+
+func TestHTTPLoggingMiddlewareNormalizesRoutePattern(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := NewHTTPLoggingMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/rpc/widgets.list", nil)
+	req.Pattern = "POST /rpc/widgets.list"
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &event))
+	require.Equal(t, "/rpc/widgets.list", event[string(attr.HTTPRouteKey)])
 }
 
 // The request context is the second sink: every downstream handler that logs

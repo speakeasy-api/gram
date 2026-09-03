@@ -61,11 +61,15 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				return
 			}
 
+			domainAttrs := make([]slog.Attr, 0, 2)
 			if domain.ID != uuid.Nil {
-				wide.Push(ctx, attr.SlogRequestCustomDomainID(domain.ID.String()))
+				domainAttrs = append(domainAttrs, attr.SlogRequestCustomDomainID(domain.ID.String()))
 			}
 			if domain.Domain != "" {
-				wide.Push(ctx, attr.SlogRequestCustomDomainName(domain.Domain))
+				domainAttrs = append(domainAttrs, attr.SlogRequestCustomDomainName(domain.Domain))
+			}
+			if len(domainAttrs) > 0 {
+				wide.Push(ctx, domainAttrs...)
 			}
 
 			if !domain.Activated || !domain.Verified {

@@ -66,6 +66,18 @@ func TestEmitEmpty(t *testing.T) {
 	require.Empty(t, got)
 }
 
+func TestContains(t *testing.T) {
+	t.Parallel()
+
+	ctx := wide.Start(t.Context(), slog.String(testAKey, "1"))
+	wide.Push(ctx, slog.String(testBKey, "2"))
+
+	require.True(t, wide.Contains(ctx, testAKey))
+	require.True(t, wide.Contains(ctx, testBKey))
+	require.False(t, wide.Contains(ctx, testCKey))
+	require.False(t, wide.Contains(t.Context(), testAKey))
+}
+
 func TestPushNoStart(t *testing.T) {
 	t.Parallel()
 	// No panic, no observable error. Push on a ctx without Start is a no-op.

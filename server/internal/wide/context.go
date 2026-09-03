@@ -46,6 +46,24 @@ func Push(ctx context.Context, attrs ...slog.Attr) {
 	}
 }
 
+// Contains reports whether the event already has an attribute with key.
+func Contains(ctx context.Context, key string) bool {
+	ev, ok := ctx.Value(eventCtxKey).(*ctxState)
+	if !ok {
+		return false
+	}
+
+	for n := ev.head.Load(); n != nil; n = n.next.Load() {
+		for _, eventAttr := range n.attrs {
+			if eventAttr.Key == key {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func Emit(ctx context.Context) []slog.Attr {
 	ev, ok := ctx.Value(eventCtxKey).(*ctxState)
 	if !ok {

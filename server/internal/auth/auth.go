@@ -212,34 +212,38 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		return
 	}
 
-	attrs := []slog.Attr{
-		schemeAttr,
-		attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug),
-		attr.SlogRequestAuthAccountType(authCtx.AccountType),
-	}
+	attrs := []slog.Attr{schemeAttr}
 	if err != nil {
 		attrs = append(attrs, errAttr)
 	}
-	if authCtx.UserID != "" {
-		attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
+
+	if !wide.Contains(ctx, string(attr.RequestAuthOrganizationIDKey)) {
+		attrs = append(
+			attrs,
+			attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug),
+			attr.SlogRequestAuthAccountType(authCtx.AccountType),
+		)
+		if authCtx.UserID != "" {
+			attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
+		}
+		if authCtx.ExternalUserID != "" {
+			attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
+		}
+		if authCtx.Email != nil {
+			attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
+		}
+		if authCtx.APIKeyID != "" {
+			attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
+		}
+		if authCtx.SessionID != nil {
+			attrs = append(attrs, attr.SlogRequestAuthSessionID(*authCtx.SessionID))
+		}
 	}
-	if authCtx.ExternalUserID != "" {
-		attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
-	}
-	if authCtx.Email != nil {
-		attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
-	}
-	if authCtx.APIKeyID != "" {
-		attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
-	}
-	if authCtx.SessionID != nil {
-		attrs = append(attrs, attr.SlogRequestAuthSessionID(*authCtx.SessionID))
-	}
-	if authCtx.ProjectID != nil {
+	if authCtx.ProjectID != nil && !wide.Contains(ctx, string(attr.RequestAuthProjectIDKey)) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectID(authCtx.ProjectID.String()))
 	}
-	if authCtx.ProjectSlug != nil {
+	if authCtx.ProjectSlug != nil && !wide.Contains(ctx, string(attr.RequestAuthProjectSlugKey)) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectSlug(*authCtx.ProjectSlug))
 	}
 

@@ -57,8 +57,10 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	require.Equal(t, projects[0].ID, *authCtx.ProjectID)
 	require.Equal(t, projects[0].Slug, *authCtx.ProjectSlug)
 
+	attrCounts := make(map[string]int)
 	var apiKeySchemeFound, projectSchemeFound bool
 	for _, eventAttr := range wide.Emit(ctx) {
+		attrCounts[eventAttr.Key]++
 		switch eventAttr.Key {
 		case string(attr.RequestAuthSchemeAPIKeyKey):
 			apiKeySchemeFound = true
@@ -70,6 +72,16 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	}
 	require.True(t, apiKeySchemeFound)
 	require.True(t, projectSchemeFound)
+	for _, key := range []string{
+		string(attr.RequestAuthOrganizationIDKey),
+		string(attr.RequestAuthOrganizationSlugKey),
+		string(attr.RequestAuthAccountTypeKey),
+		string(attr.RequestAuthAPIKeyIDKey),
+		string(attr.RequestAuthProjectIDKey),
+		string(attr.RequestAuthProjectSlugKey),
+	} {
+		require.Equal(t, 1, attrCounts[key], "attribute %q must be emitted once", key)
+	}
 }
 
 func TestAuthorizeProjectBoundKeyRejectsSiblingProjectSlugWithoutRepointing(t *testing.T) {

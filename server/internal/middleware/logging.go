@@ -294,8 +294,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
 			}
-			if r.Pattern != "" {
-				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern))
+			if idx := strings.IndexByte(r.Pattern, '/'); idx >= 0 {
+				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern[idx:]))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
