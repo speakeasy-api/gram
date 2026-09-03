@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -988,6 +991,34 @@ func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testi
 	require.Contains(t, scriptText, `OTEL_ENDPOINT_BASE = "https://app.getgram.ai/otel/v1"`)
 	require.Contains(t, scriptText, fmt.Sprintf("OTEL_PROJECT = %q", *authCtx.ProjectSlug))
 	require.Contains(t, scriptText, `OTEL_API_KEY = "gram_local_`)
+
+	home := t.TempDir()
+	binDir := filepath.Join(home, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	cmd := exec.CommandContext(t.Context(), "bash")
+	cmd.Stdin = bytes.NewReader(script)
+	cmd.Env = append(os.Environ(),
+		"HOME="+home,
+		"CODEX_HOME="+filepath.Join(home, ".codex"),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "run downloaded install script: %s", output)
+
+	config, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	require.NoError(t, err)
+	configText := string(config)
+	require.Contains(t, configText, "[otel]\nenvironment = \"prod\"")
+	for table, signal := range map[string]string{
+		"[otel.exporter.otlp-http]":         "logs",
+		"[otel.trace_exporter.otlp-http]":   "traces",
+		"[otel.metrics_exporter.otlp-http]": "metrics",
+	} {
+		require.Contains(t, configText, table)
+		require.Contains(t, configText, `endpoint = "https://app.getgram.ai/otel/v1/`+signal+`"`)
+	}
 }
 
 func TestPluginsService_AgentPluginCompatibilityIsConsistent(t *testing.T) {

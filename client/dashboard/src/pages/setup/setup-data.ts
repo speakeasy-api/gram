@@ -59,7 +59,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/rpc/hooks.otel",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
     "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
     "OTEL_LOGS_EXPORTER": "otlp",

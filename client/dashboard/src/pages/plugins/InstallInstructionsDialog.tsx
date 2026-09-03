@@ -555,14 +555,15 @@ function CodexInstallContent({
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
-          enables hooks, configures Codex OpenTelemetry logs, traces, and
-          metrics in{" "}
+          enables hooks, and configures compatible Codex OpenTelemetry logs,
+          traces, and metrics in{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
-          , and pre-approves all hook events — no manual Settings → Hooks step
-          required. Suitable for MDM deployment. This script sets up Speakeasy's
-          observability plugin specifically.
+          . Existing exporters are preserved and may require manual Gram setup.
+          The script also pre-approves all hook events, so no manual Settings →
+          Hooks step is required. Suitable for MDM deployment. This script sets
+          up Speakeasy's observability plugin specifically.
         </p>
         <Button
           variant="secondary"

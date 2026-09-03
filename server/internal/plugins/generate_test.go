@@ -2015,6 +2015,13 @@ type codexOTLPHTTPExporter struct {
 	Headers  map[string]string `toml:"headers"`
 }
 
+type codexOTELConfig struct {
+	Environment     string                           `toml:"environment"`
+	Exporter        map[string]codexOTLPHTTPExporter `toml:"exporter"`
+	TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+	MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+}
+
 func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	t.Parallel()
 
@@ -2031,14 +2038,11 @@ func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
 
 	var decoded struct {
-		OTel struct {
-			Exporter        map[string]codexOTLPHTTPExporter `toml:"exporter"`
-			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
-			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
-		} `toml:"otel"`
+		OTel codexOTELConfig `toml:"otel"`
 	}
 	_, err = toml.Decode(patched, &decoded)
 	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
 
 	exporters := map[string]map[string]codexOTLPHTTPExporter{
 		"logs":    decoded.OTel.Exporter,
@@ -2057,6 +2061,185 @@ func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	}
 }
 
+func TestGenerateCodexInstallScriptAcceptsSecureOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for serverURL, endpoint := range map[string]string{
+		"https://app.getgram.ai/": "https://app.getgram.ai/otel/v1",
+		"http://localhost:8080":   "http://localhost:8080/otel/v1",
+	} {
+		script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.NoError(t, err, serverURL)
+		require.Contains(t, string(script), fmt.Sprintf("OTEL_ENDPOINT_BASE = %q", endpoint), serverURL)
+	}
+}
+
+func TestGenerateCodexInstallScriptRejectsUnsafeOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{
+		"http://app.getgram.ai",
+		"https://user:password@app.getgram.ai",
+		"https://app.getgram.ai/#fragment",
+		"://malformed",
+		"https://%zz",
+		"https://app.getgram.ai?tenant=example",
+		"https://app.getgram.ai?",
+	} {
+		_, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.Error(t, err, serverURL)
+		require.Contains(t, err.Error(), "invalid Codex OTLP server URL", serverURL)
+		require.NotContains(t, err.Error(), "password")
+	}
+}
+
+func TestGenerateCodexInstallScriptPreservesMultilineOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel . exporter . "otlp-http"]
+endpoint = "https://collector.example.com/v1/logs"
+protocol = "json"
+headers = {
+  "Authorization" = "Bearer existing",
+}
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "otel . \"exporter\" = \"none\"\n")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.NotContains(t, patched, "\n[otel]\n")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresOTELTextInMultilineString(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `hint = 'Use """ for Python strings'
+instructions = """
+otel = example
+[otel]
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Hint         string          `toml:"hint"`
+		Instructions string          `toml:"instructions"`
+		OTel         codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, `Use """ for Python strings`, decoded.Hint)
+	require.Contains(t, decoded.Instructions, "otel = example")
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresExporterTextInMultilineValue(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+environment = """
+exporter = "none"
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Contains(t, decoded.OTel.Environment, `exporter = "none"`)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
 func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
 	t.Parallel()
 
@@ -2069,19 +2252,25 @@ func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	home, _ := runCodexInstallScript(t, script, "[otel]\nexporter = \"none\"\n")
+	existing := `["otel"]
+exporter . "otlp-http" . endpoint = "https://collector.example.com/v1/logs"
+exporter . "otlp-http" . protocol = "json"
+exporter . "otlp-http" . headers = { Authorization = "Bearer existing" }
+`
+	home, _ := runCodexInstallScript(t, script, existing)
 	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
 
 	var decoded struct {
-		OTel struct {
-			Exporter        string                           `toml:"exporter"`
-			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
-			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
-		} `toml:"otel"`
+		OTel codexOTELConfig `toml:"otel"`
 	}
 	_, err = toml.Decode(patched, &decoded)
 	require.NoError(t, err)
-	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
 	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
 	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
 	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
