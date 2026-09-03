@@ -161,6 +161,7 @@ const Killswitches = React.lazy(() =>
 const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
+const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 
 type AppRouteBasic = {
   title: string;
@@ -1428,6 +1429,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  setupBoard: {
+    title: "Setup board",
+    url: "setup/board",
+    icon: "columns-3",
+    stage: "preview",
+    component: SetupBoard,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

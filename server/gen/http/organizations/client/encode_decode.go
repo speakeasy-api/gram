@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -3222,6 +3223,475 @@ func DecodeGenerateWorkOSAdminPortalLinkResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildListSetupTasksRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "listSetupTasks" endpoint
+func (c *Client) BuildListSetupTasksRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSetupTasksOrganizationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "listSetupTasks", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSetupTasksRequest returns an encoder for requests sent to the
+// organizations listSetupTasks server.
+func EncodeListSetupTasksRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.ListSetupTasksPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "listSetupTasks", "*organizations.ListSetupTasksPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.IncludeHidden != nil {
+			values.Add("include_hidden", fmt.Sprintf("%v", *p.IncludeHidden))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListSetupTasksResponse returns a decoder for responses returned by the
+// organizations listSetupTasks endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListSetupTasksResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSetupTasksResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSetupTasksResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			res := NewListSetupTasksResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSetupTasksUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSetupTasksForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSetupTasksBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSetupTasksNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSetupTasksConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSetupTasksUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSetupTasksInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSetupTasksInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+				}
+				err = ValidateListSetupTasksInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+				}
+				return nil, NewListSetupTasksInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSetupTasksUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+				}
+				err = ValidateListSetupTasksUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+				}
+				return nil, NewListSetupTasksUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "listSetupTasks", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSetupTasksGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "listSetupTasks", err)
+			}
+			err = ValidateListSetupTasksGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "listSetupTasks", err)
+			}
+			return nil, NewListSetupTasksGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "listSetupTasks", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateSetupTaskRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "updateSetupTask" endpoint
+func (c *Client) BuildUpdateSetupTaskRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSetupTaskOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "updateSetupTask", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSetupTaskRequest returns an encoder for requests sent to the
+// organizations updateSetupTask server.
+func EncodeUpdateSetupTaskRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.UpdateSetupTaskPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "updateSetupTask", "*organizations.UpdateSetupTaskPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateSetupTaskRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "updateSetupTask", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSetupTaskResponse returns a decoder for responses returned by
+// the organizations updateSetupTask endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateSetupTaskResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSetupTaskResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSetupTaskResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			res := NewUpdateSetupTaskSetupTaskOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSetupTaskUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSetupTaskForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSetupTaskBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSetupTaskNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSetupTaskConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSetupTaskUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSetupTaskInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSetupTaskInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+				}
+				err = ValidateUpdateSetupTaskInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+				}
+				return nil, NewUpdateSetupTaskInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSetupTaskUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+				}
+				err = ValidateUpdateSetupTaskUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+				}
+				return nil, NewUpdateSetupTaskUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "updateSetupTask", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSetupTaskGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateSetupTask", err)
+			}
+			err = ValidateUpdateSetupTaskGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateSetupTask", err)
+			}
+			return nil, NewUpdateSetupTaskGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "updateSetupTask", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation
 // builds a value of type *organizations.OrganizationInvitation from a value of
 // type *OrganizationInvitationResponseBody.
@@ -3369,6 +3839,74 @@ func marshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkO
 	}
 	res := &organizations.WorkOSDomainVerificationIntentOptions{
 		DomainName: v.DomainName,
+	}
+
+	return res
+}
+
+// unmarshalSetupTaskResponseBodyToOrganizationsSetupTask builds a value of
+// type *organizations.SetupTask from a value of type *SetupTaskResponseBody.
+func unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(v *SetupTaskResponseBody) *organizations.SetupTask {
+	res := &organizations.SetupTask{
+		Key:         *v.Key,
+		Title:       *v.Title,
+		Description: *v.Description,
+		Status:      *v.Status,
+		Hidden:      *v.Hidden,
+	}
+	if v.Assignee != nil {
+		res.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(v.Assignee)
+	}
+	res.BlockedBy = make([]string, len(v.BlockedBy))
+	for i, val := range v.BlockedBy {
+		res.BlockedBy[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee
+// builds a value of type *organizations.SetupTaskAssignee from a value of type
+// *SetupTaskAssigneeResponseBody.
+func unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(v *SetupTaskAssigneeResponseBody) *organizations.SetupTaskAssignee {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.SetupTaskAssignee{
+		UserID:   v.UserID,
+		Email:    *v.Email,
+		Name:     v.Name,
+		PhotoURL: v.PhotoURL,
+	}
+
+	return res
+}
+
+// marshalOrganizationsSetupTaskAssigneeInputToSetupTaskAssigneeInputRequestBody
+// builds a value of type *SetupTaskAssigneeInputRequestBody from a value of
+// type *organizations.SetupTaskAssigneeInput.
+func marshalOrganizationsSetupTaskAssigneeInputToSetupTaskAssigneeInputRequestBody(v *organizations.SetupTaskAssigneeInput) *SetupTaskAssigneeInputRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SetupTaskAssigneeInputRequestBody{
+		UserID: v.UserID,
+		Email:  v.Email,
+	}
+
+	return res
+}
+
+// marshalSetupTaskAssigneeInputRequestBodyToOrganizationsSetupTaskAssigneeInput
+// builds a value of type *organizations.SetupTaskAssigneeInput from a value of
+// type *SetupTaskAssigneeInputRequestBody.
+func marshalSetupTaskAssigneeInputRequestBodyToOrganizationsSetupTaskAssigneeInput(v *SetupTaskAssigneeInputRequestBody) *organizations.SetupTaskAssigneeInput {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.SetupTaskAssigneeInput{
+		UserID: v.UserID,
+		Email:  v.Email,
 	}
 
 	return res

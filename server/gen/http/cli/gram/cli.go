@@ -142,7 +142,7 @@ func UsageCommands() []string {
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
-		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -1819,6 +1819,14 @@ func ParseEndpoint(
 		organizationsGenerateWorkOSAdminPortalLinkFlags            = flag.NewFlagSet("generate-work-os-admin-portal-link", flag.ExitOnError)
 		organizationsGenerateWorkOSAdminPortalLinkBodyFlag         = organizationsGenerateWorkOSAdminPortalLinkFlags.String("body", "REQUIRED", "")
 		organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag = organizationsGenerateWorkOSAdminPortalLinkFlags.String("session-token", "", "")
+
+		organizationsListSetupTasksFlags             = flag.NewFlagSet("list-setup-tasks", flag.ExitOnError)
+		organizationsListSetupTasksIncludeHiddenFlag = organizationsListSetupTasksFlags.String("include-hidden", "", "")
+		organizationsListSetupTasksSessionTokenFlag  = organizationsListSetupTasksFlags.String("session-token", "", "")
+
+		organizationsUpdateSetupTaskFlags            = flag.NewFlagSet("update-setup-task", flag.ExitOnError)
+		organizationsUpdateSetupTaskBodyFlag         = organizationsUpdateSetupTaskFlags.String("body", "REQUIRED", "")
+		organizationsUpdateSetupTaskSessionTokenFlag = organizationsUpdateSetupTaskFlags.String("session-token", "", "")
 
 		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
 
@@ -4228,6 +4236,8 @@ func ParseEndpoint(
 	organizationsVerifyOnboardingHooksSetupFlags.Usage = organizationsVerifyOnboardingHooksSetupUsage
 	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
+	organizationsListSetupTasksFlags.Usage = organizationsListSetupTasksUsage
+	organizationsUpdateSetupTaskFlags.Usage = organizationsUpdateSetupTaskUsage
 
 	otelFlags.Usage = otelUsage
 	otelLogsFlags.Usage = otelLogsUsage
@@ -5898,6 +5908,12 @@ func ParseEndpoint(
 
 			case "generate-work-os-admin-portal-link":
 				epf = organizationsGenerateWorkOSAdminPortalLinkFlags
+
+			case "list-setup-tasks":
+				epf = organizationsListSetupTasksFlags
+
+			case "update-setup-task":
+				epf = organizationsUpdateSetupTaskFlags
 
 			}
 
@@ -8201,6 +8217,12 @@ func ParseEndpoint(
 			case "generate-work-os-admin-portal-link":
 				endpoint = c.GenerateWorkOSAdminPortalLink()
 				data, err = organizationsc.BuildGenerateWorkOSAdminPortalLinkPayload(*organizationsGenerateWorkOSAdminPortalLinkBodyFlag, *organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag)
+			case "list-setup-tasks":
+				endpoint = c.ListSetupTasks()
+				data, err = organizationsc.BuildListSetupTasksPayload(*organizationsListSetupTasksIncludeHiddenFlag, *organizationsListSetupTasksSessionTokenFlag)
+			case "update-setup-task":
+				endpoint = c.UpdateSetupTask()
+				data, err = organizationsc.BuildUpdateSetupTaskPayload(*organizationsUpdateSetupTaskBodyFlag, *organizationsUpdateSetupTaskSessionTokenFlag)
 			}
 		case "otel":
 			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16473,6 +16495,8 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    verify-onboarding-hooks-setup: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.`)
 	fmt.Fprintln(os.Stderr, `    send-enterprise-admin-onboarding-email: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.`)
 	fmt.Fprintln(os.Stderr, `    generate-work-os-admin-portal-link: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).`)
+	fmt.Fprintln(os.Stderr, `    list-setup-tasks: List the fixed setup task catalog projected with organization state and completion evidence.`)
+	fmt.Fprintln(os.Stderr, `    update-setup-task: Update status, ownership, or visibility for one fixed setup task.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organizations COMMAND --help\n", os.Args[0])
@@ -16741,6 +16765,46 @@ func organizationsGenerateWorkOSAdminPortalLinkUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations generate-work-os-admin-portal-link --body '{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+func organizationsListSetupTasksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-setup-tasks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -include-hidden BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the fixed setup task catalog projected with organization state and completion evidence.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -include-hidden BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-setup-tasks --include-hidden false --session-token \"abc123\"")
+}
+
+func organizationsUpdateSetupTaskUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations update-setup-task", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update status, ownership, or visibility for one fixed setup task.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations update-setup-task --body '{\n      \"assignee\": {\n         \"email\": \"alice@example.com\",\n         \"user_id\": \"abc123\"\n      },\n      \"clear_assignee\": false,\n      \"hidden\": false,\n      \"status\": \"in_progress\",\n      \"task_key\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 // otelUsage displays the usage of the otel command and its subcommands.

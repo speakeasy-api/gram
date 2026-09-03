@@ -430,6 +430,7 @@ BEGIN
   -- visitor created would abort the run here; it goes first.
   DELETE FROM litellm_instances WHERE organization_id = demo_org;
   DELETE FROM api_keys WHERE organization_id = demo_org;
+  DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -453,6 +454,17 @@ BEGIN
       SET email = EXCLUDED.email, display_name = EXCLUDED.display_name,
           workos_id = EXCLUDED.workos_id;
   END LOOP;
+
+  -- Setup board: persisted overrides cover each non-default state while
+  -- catalog-derived rows continue to demonstrate To Do and blocked tasks.
+  INSERT INTO organization_setup_tasks
+    (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
+  VALUES
+    (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
+    (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
+     'security-owner@demo.getgram.ai', NULL),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
+    (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
   -- surfaces render. Real users still never join the demo org — access is by
@@ -1846,6 +1858,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM risk_results WHERE organization_id = demo_org AND risk_results.found;
   SELECT count(*) INTO member_count
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
+  SELECT count(*) INTO stray FROM organization_setup_tasks
+  WHERE organization_id = demo_org;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
+  END IF;
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
 

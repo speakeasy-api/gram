@@ -113,6 +113,12 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
     carrying most of the errors. Back on the MCP listing, the gateway card
     shows no "never used" marker.
+14. **Organization setup board** — with the `gram-setup-board` flag enabled,
+    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
+    Instrument agents, `security-owner@demo.getgram.ai` owns Configure
+    integrations in Awaiting Support, Configure policies is Done, and Confirm
+    traffic is visibly blocked. As a platform admin, enable **Include hidden
+    tasks** and confirm Set up Platform MCP appears with a Hidden badge.
 
 ## On failure
 

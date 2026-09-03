@@ -314,6 +314,56 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "generateWorkOSAdminPortalLink")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GenerateWorkOSAdminPortalLink"}`)
 	})
+
+	Method("listSetupTasks", func() {
+		Description("List the fixed setup task catalog projected with organization state and completion evidence.")
+
+		Payload(func() {
+			Attribute("include_hidden", Boolean, "Include hidden tasks for platform administrators.")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			GET("/rpc/organizations.listSetupTasks")
+			Param("include_hidden")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSetupTasks")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSetupTasks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSetupTasks"}`)
+	})
+
+	Method("updateSetupTask", func() {
+		Description("Update status, ownership, or visibility for one fixed setup task.")
+
+		Payload(func() {
+			Attribute("task_key", String, "Stable setup task key.")
+			Attribute("status", String, "Setup task status.", func() {
+				Enum("todo", "in_progress", "awaiting_support", "done")
+			})
+			Attribute("assignee", SetupTaskAssigneeInput, "Replacement task assignee.")
+			Attribute("clear_assignee", Boolean, "Clear the current task assignee.")
+			Attribute("hidden", Boolean, "Hide or restore the task.")
+			Required("task_key")
+			security.SessionPayload()
+		})
+
+		Result(SetupTask)
+
+		HTTP(func() {
+			POST("/rpc/organizations.updateSetupTask")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateSetupTask")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateSetupTask")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
@@ -448,4 +498,37 @@ var VerifyOnboardingHooksSetupResult = Type("VerifyOnboardingHooksSetupResult", 
 	Attribute("total_count", Int, "Total events received with time_unix_nano greater than since_unix_nano. May exceed len(events) when truncated.")
 
 	Required("events", "latest_unix_nano", "total_count")
+})
+
+var SetupTaskAssigneeInput = Type("SetupTaskAssigneeInput", func() {
+	Attribute("user_id", String, "Active organization member to assign.")
+	Attribute("email", String, "Email address to assign before membership exists.", func() {
+		Format(FormatEmail)
+	})
+})
+
+var SetupTaskAssignee = Type("SetupTaskAssignee", func() {
+	Attribute("user_id", String, "Resolved active organization member ID.")
+	Attribute("email", String, "Assignee email address.")
+	Attribute("name", String, "Resolved member display name.")
+	Attribute("photo_url", String, "Resolved member photo URL.")
+	Required("email")
+})
+
+var SetupTask = Type("SetupTask", func() {
+	Attribute("key", String, "Stable code-owned task key.")
+	Attribute("title", String, "Task title.")
+	Attribute("description", String, "Task description.")
+	Attribute("status", String, "Effective task status.", func() {
+		Enum("todo", "in_progress", "awaiting_support", "done")
+	})
+	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
+	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
+	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
+	Required("key", "title", "description", "status", "blocked_by", "hidden")
+})
+
+var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
+	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
+	Required("tasks")
 })
