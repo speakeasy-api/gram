@@ -57,6 +57,28 @@ var _ = Service("agent", func() {
 			Attribute("hostname", String, "Hostname of the machine the agent runs on, when it can be read.", func() {
 				Example("dev-macbook-pro")
 			})
+			// What KIND of machine this is. Optional and must stay that way, for
+			// the same reason as the two above: agents predating the header omit
+			// it, and Goa rejects a request missing a Required attribute.
+			//
+			// Absent means "endpoint", which is why the agent does not send that
+			// value — an absent header and an endpoint header describe the same
+			// device, so every deployed agent's poll is unchanged.
+			//
+			// Not cosmetic. A cloud sandbox reports no serial, so its heartbeat
+			// lands on the email-matched fallback that device coverage also
+			// reads; without this, a session polling under a real person's
+			// address marks that person's laptop covered whether or not the
+			// laptop runs the agent.
+			//
+			// Deliberately NOT an Enum. Goa rejects an out-of-set value with a
+			// 400, and a rejected poll means that device syncs no plugins at
+			// all — an outage caused by an attribution hint. The value is
+			// normalized in the handler instead, where an unrecognized one
+			// degrades to "endpoint" and the sync proceeds.
+			Attribute("environment", String, "What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.", func() {
+				Example("ephemeral")
+			})
 		})
 
 		Result(GetPluginsResult)
@@ -72,6 +94,7 @@ var _ = Service("agent", func() {
 			Param("legacy_email:email")
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
+			Header("environment:Gram-Device-Environment")
 			Response(StatusOK)
 		})
 

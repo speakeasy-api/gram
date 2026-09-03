@@ -5254,6 +5254,7 @@ examples:
           Gram-Device-Serial: "C02XK1ABCDEF"
           Gram-Device-Hostname: "dev-macbook-pro"
           Gram-User-Email: "dev@acme.corp"
+          Gram-Device-Environment: "ephemeral"
       responses:
         "200":
           application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}

@@ -1144,6 +1144,65 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
 ON device_agent_syncs (organization_id, LOWER(email));
 
+-- Per-ENVIRONMENT agent heartbeats: the same poll as device_agent_syncs, but
+-- from a box that is not somebody's laptop — a cloud coding sandbox, a
+-- container, a shared self-hosted server. The agent declares which via the
+-- Gram-Device-Environment header; absent means laptop, so every agent
+-- predating the header keeps writing to device_agent_syncs exactly as before.
+--
+-- A separate table rather than an environment column on device_agent_syncs,
+-- for two reasons. Keeping these rows OUT of that table is the point: the
+-- coverage join falls back to matching an MDM device's assigned-user email
+-- against it, so a cloud session polling under a real person's email would
+-- otherwise mark that person's laptop agent_active whether or not the laptop
+-- runs the agent — a false coverage claim, which is worse than an absent one.
+-- And widening device_agent_syncs would mean changing its
+-- (organization_id, email) unique key, which the upsert infers by name; the
+-- migration must ship ahead of the code, so an already-deployed server would
+-- be left issuing an ON CONFLICT against an index that no longer exists.
+--
+-- Keyed on (organization_id, email, environment) because one identity legally
+-- polls from several kinds of box: the same address may run a laptop agent and
+-- be the shared identity a fleet of cloud sandboxes enrolls with. Those are
+-- different facts and must not overwrite each other.
+--
+-- These rows count sessions, never machines. An ephemeral box reports no
+-- hardware serial and a hostname that is a constant string baked into the
+-- image, so nothing here identifies an individual machine and none of it
+-- belongs in a per-device count.
+CREATE TABLE IF NOT EXISTS device_agent_environment_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  -- One of 'ephemeral' or 'server'. Never 'laptop': that is the default the
+  -- agent does not send, and those heartbeats belong in device_agent_syncs.
+  -- Validated in application code rather than by a CHECK so the set can grow
+  -- without a migration.
+  environment TEXT NOT NULL,
+
+  -- Descriptive only. Generic by nature here ('cursor', 'vm'), so it is a
+  -- breadcrumb for an operator reading a row, not an identifier.
+  hostname TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_environment_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_environment_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- The dedup key, an expression index for the same reason the sibling device
+-- table uses one: every reader compares LOWER(email), and a raw-column key
+-- would let 'Dev@acme.com' and 'dev@acme.com' hold two rows for one identity.
+-- The upsert infers this index via
+-- ON CONFLICT (organization_id, LOWER(email), environment).
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_environment_syncs_org_lower_email_env_key
+ON device_agent_environment_syncs (organization_id, LOWER(email), environment);
+
 -- Per-DEVICE agent heartbeats, the sibling of device_agent_syncs. Both are
 -- written by the same agent.getPlugins poll: that table answers "does this
 -- user run the agent somewhere", this one answers "does THIS machine run
@@ -2655,7 +2714,9 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
-  disable_causes TEXT[],
+  -- NULL is reserved for legacy rows awaiting provenance classification. New
+  -- writes must start classified and enabled.
+  disable_causes TEXT[] DEFAULT '{}'::text[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

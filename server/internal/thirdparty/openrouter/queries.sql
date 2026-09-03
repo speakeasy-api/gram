@@ -100,14 +100,6 @@ LEFT JOIN updated ON TRUE;
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
-    disabled = CASE
-      WHEN @reinstate::boolean AND disable_causes IS NULL THEN FALSE
-      ELSE disabled
-    END,
-    disable_causes = CASE
-      WHEN @reinstate::boolean AND disable_causes IS NULL THEN '{}'::text[]
-      ELSE disable_causes
-    END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
@@ -181,15 +173,21 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: DisableOpenRouterAPIKey :exec
--- Locks the key down without deleting it, so a reinstated organization keeps
--- the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
--- refuses to hand the key to a completion.
+-- Legacy query retained for compatibility. Generic disables are admin locks and
+-- must preserve classified causes; unclassified rows remain untouched.
 UPDATE openrouter_api_keys
-SET disabled = TRUE,
-    disable_causes = NULL,
-    updated_at = clock_timestamp()
+SET disable_causes = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN disable_causes
+      ELSE array_prepend('admin_lock', disable_causes)
+    END,
+    disabled = TRUE,
+    updated_at = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
 WHERE organization_id = @organization_id
   AND key_type = @key_type
+  AND disable_causes IS NOT NULL
   AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKeyMonthlyCredits :exec

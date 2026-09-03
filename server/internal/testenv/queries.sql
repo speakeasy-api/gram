@@ -373,6 +373,15 @@ FROM device_agent_device_syncs
 WHERE organization_id = @organization_id
 ORDER BY serial_number ASC;
 
+-- name: ListDeviceAgentEnvironmentSyncsFixture :many
+-- Reads back non-laptop agent heartbeats so tests can assert the write path,
+-- and — the part that matters — assert that these rows land HERE rather than
+-- in device_agent_syncs, which the coverage join reads.
+SELECT organization_id, email, environment, hostname, first_seen_at, last_seen_at
+FROM device_agent_environment_syncs
+WHERE organization_id = @organization_id
+ORDER BY environment ASC, email ASC;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);

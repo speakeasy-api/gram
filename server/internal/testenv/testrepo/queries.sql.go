@@ -1520,6 +1520,52 @@ func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organiz
 	return items, nil
 }
 
+const listDeviceAgentEnvironmentSyncsFixture = `-- name: ListDeviceAgentEnvironmentSyncsFixture :many
+SELECT organization_id, email, environment, hostname, first_seen_at, last_seen_at
+FROM device_agent_environment_syncs
+WHERE organization_id = $1
+ORDER BY environment ASC, email ASC
+`
+
+type ListDeviceAgentEnvironmentSyncsFixtureRow struct {
+	OrganizationID string
+	Email          string
+	Environment    string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+}
+
+// Reads back non-laptop agent heartbeats so tests can assert the write path,
+// and — the part that matters — assert that these rows land HERE rather than
+// in device_agent_syncs, which the coverage join reads.
+func (q *Queries) ListDeviceAgentEnvironmentSyncsFixture(ctx context.Context, organizationID string) ([]ListDeviceAgentEnvironmentSyncsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentEnvironmentSyncsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeviceAgentEnvironmentSyncsFixtureRow
+	for rows.Next() {
+		var i ListDeviceAgentEnvironmentSyncsFixtureRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.Email,
+			&i.Environment,
+			&i.Hostname,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture = `-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
 SELECT disable_causes
 FROM openrouter_api_keys

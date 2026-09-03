@@ -42,6 +42,7 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 			email        *string
 			serialNumber *string
 			hostname     *string
+			environment  *string
 		)
 		legacyEmailRaw := r.URL.Query().Get("email")
 		if legacyEmailRaw != "" {
@@ -63,7 +64,11 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if hostnameRaw != "" {
 			hostname = &hostnameRaw
 		}
-		payload = NewGetPluginsPayload(legacyEmail, apikeyToken, email, serialNumber, hostname)
+		environmentRaw := r.Header.Get("Gram-Device-Environment")
+		if environmentRaw != "" {
+			environment = &environmentRaw
+		}
+		payload = NewGetPluginsPayload(legacyEmail, apikeyToken, email, serialNumber, hostname, environment)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

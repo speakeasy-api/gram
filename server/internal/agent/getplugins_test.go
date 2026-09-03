@@ -683,3 +683,150 @@ func TestGetPlugins_DeviceSyncRejectsPlaceholderSerials(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, userRows, 1)
 }
+
+// The environment header exists to keep a cloud session's heartbeat out of the
+// table device coverage matches on. These pin that routing, because the bug it
+// prevents is silent: coverage would read agent_active for a laptop that is not
+// running the agent at all.
+
+func TestGetPlugins_NonLaptopEnvironmentRecordsSeparately(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"ephemeral", "server"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAgentService(t)
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+			_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+				Email:       new(mockidp.MockUserEmail),
+				Hostname:    new("cursor"),
+				Environment: new(environment),
+			})
+			require.NoError(t, err)
+
+			rows, err := testrepo.New(ti.conn).ListDeviceAgentEnvironmentSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			require.Equal(t, environment, rows[0].Environment)
+			require.Equal(t, conv.NormalizeEmail(mockidp.MockUserEmail), rows[0].Email)
+			require.Equal(t, "cursor", rows[0].Hostname.String)
+
+			// The assertion this whole change exists for.
+			userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Empty(t, userRows,
+				"a cloud heartbeat must not land in device_agent_syncs: coverage matches an MDM device's assigned-user email against it, so this row would mark that person's laptop covered whether or not the laptop runs the agent")
+		})
+	}
+}
+
+// Absent, endpoint, and unrecognized all mean the same thing, and none of them
+// may change what a deployed agent's poll does today.
+func TestGetPlugins_EndpointAndUnknownEnvironmentsKeepTheUserHeartbeat(t *testing.T) {
+	t.Parallel()
+	for name, environment := range map[string]*string{
+		"absent":       nil,
+		"empty":        new(""),
+		"endpoint":     new("endpoint"),
+		"padded":       new("  ENDPOINT  "),
+		"unrecognized": new("toaster"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAgentService(t)
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+			_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+				Email:       new(mockidp.MockUserEmail),
+				Environment: environment,
+			})
+			require.NoError(t, err,
+				"an environment value must never fail the sync — a rejected poll means this device syncs no plugins at all")
+
+			userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Len(t, userRows, 1, "still the ordinary user heartbeat")
+
+			envRows, err := testrepo.New(ti.conn).ListDeviceAgentEnvironmentSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Empty(t, envRows)
+		})
+	}
+}
+
+// One identity legitimately polls from more than one kind of box: the same
+// address may run a laptop agent and be the shared identity a fleet of cloud
+// sandboxes enrolls with. Those are different facts, and the key keeps them
+// from overwriting each other.
+func TestGetPlugins_EnvironmentsCoexistForOneIdentity(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, environment := range []*string{nil, new("ephemeral"), new("server")} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:       new(mockidp.MockUserEmail),
+			Environment: environment,
+		})
+		require.NoError(t, err)
+	}
+
+	envRows, err := testrepo.New(ti.conn).ListDeviceAgentEnvironmentSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, envRows, 2, "ephemeral and server are separate rows, not one overwritten one")
+
+	userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, userRows, 1, "the laptop poll still records normally")
+}
+
+// device_agent_device_syncs backs DEVICE-level coverage, which matches an MDM
+// device's serial. A shared server or an ephemeral box that happens to report a
+// serial is not a managed endpoint, so letting its heartbeat land there would
+// reopen the same hole through the serial match that the environment split
+// closes through the email one.
+func TestGetPlugins_NonEndpointEnvironmentSkipsTheDeviceHeartbeat(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"ephemeral", "server"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAgentService(t)
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+			_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+				Email:        new(mockidp.MockUserEmail),
+				SerialNumber: new("C02XK1ABCDEF"),
+				Hostname:     new("build-host"),
+				Environment:  new(environment),
+			})
+			require.NoError(t, err)
+
+			deviceRows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Empty(t, deviceRows,
+				"a non-endpoint heartbeat must not reach device_agent_device_syncs: that table backs device-level coverage, which attests a specific managed machine")
+
+			envRows, err := testrepo.New(ti.conn).ListDeviceAgentEnvironmentSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Len(t, envRows, 1, "it is recorded as an environment instead")
+		})
+	}
+}
+
+// The endpoint path is unchanged: a serial still records a per-device heartbeat.
+func TestGetPlugins_EndpointWithSerialStillRecordsTheDeviceHeartbeat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        new(mockidp.MockUserEmail),
+		SerialNumber: new("C02XK1ABCDEF"),
+		Environment:  new("endpoint"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "an endpoint's device heartbeat must be unaffected by the environment split")
+}
