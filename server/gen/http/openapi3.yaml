@@ -14758,6 +14758,87 @@ paths:
             x-speakeasy-name-override: listDestinations
             x-speakeasy-react-hook:
                 name: DataExportDestinations
+    /rpc/dataExports.listForOrg:
+        get:
+            description: List data export destinations and routes across the active organization.
+            operationId: listDataExportsForOrg
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDataExportsForOrgResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listForOrg dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: listForOrg
+            x-speakeasy-react-hook:
+                name: ListDataExportsForOrg
     /rpc/dataExports.listRoutes:
         get:
             description: List data source export route configurations for the selected project.
@@ -74842,6 +74923,22 @@ components:
                         $ref: '#/components/schemas/DataExportRoute'
                     description: Active data export routes in the selected project.
             required:
+                - routes
+        ListDataExportsForOrgResult:
+            type: object
+            properties:
+                destinations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Destination'
+                    description: Active data export destinations across the active organization.
+                routes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DataExportRoute'
+                    description: Active data export routes across the active organization.
+            required:
+                - destinations
                 - routes
         ListDefinitionsResponseBody:
             type: object

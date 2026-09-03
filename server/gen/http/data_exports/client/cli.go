@@ -44,6 +44,21 @@ func BuildListDestinationsPayload(dataExportsListDestinationsSessionToken string
 	return v, nil
 }
 
+// BuildListForOrgPayload builds the payload for the dataExports listForOrg
+// endpoint from CLI flags.
+func BuildListForOrgPayload(dataExportsListForOrgSessionToken string) (*dataexports.ListForOrgPayload, error) {
+	var sessionToken *string
+	{
+		if dataExportsListForOrgSessionToken != "" {
+			sessionToken = &dataExportsListForOrgSessionToken
+		}
+	}
+	v := &dataexports.ListForOrgPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateDestinationPayload builds the payload for the dataExports
 // createDestination endpoint from CLI flags.
 func BuildCreateDestinationPayload(dataExportsCreateDestinationBody string, dataExportsCreateDestinationSessionToken string, dataExportsCreateDestinationApikeyToken string, dataExportsCreateDestinationProjectSlugInput string) (*dataexports.CreateDestinationPayload, error) {

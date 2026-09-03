@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// List data export destinations for the selected project.
 	ListDestinations(context.Context, *ListDestinationsPayload) (res *ListDestinationsResult, err error)
+	// List data export destinations and routes across the active organization.
+	ListForOrg(context.Context, *ListForOrgPayload) (res *ListDataExportsForOrgResult, err error)
 	// Create a data export destination in the selected project.
 	CreateDestination(context.Context, *CreateDestinationPayload) (res *Destination, err error)
 	// Replace a data export destination in the selected project.
@@ -54,7 +56,7 @@ const ServiceName = "dataExports"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listDestinations", "createDestination", "updateDestination", "deleteDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
+var MethodNames = [9]string{"listDestinations", "listForOrg", "createDestination", "updateDestination", "deleteDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
 
 // CreateDestinationPayload is the payload type of the dataExports service
 // createDestination method.
@@ -172,6 +174,15 @@ type ListDataExportRoutesResult struct {
 	Routes []*DataExportRoute
 }
 
+// ListDataExportsForOrgResult is the result type of the dataExports service
+// listForOrg method.
+type ListDataExportsForOrgResult struct {
+	// Active data export destinations across the active organization.
+	Destinations []*Destination
+	// Active data export routes across the active organization.
+	Routes []*DataExportRoute
+}
+
 // ListDestinationsPayload is the payload type of the dataExports service
 // listDestinations method.
 type ListDestinationsPayload struct {
@@ -185,6 +196,12 @@ type ListDestinationsPayload struct {
 type ListDestinationsResult struct {
 	// Active data export destinations in the selected project.
 	Destinations []*Destination
+}
+
+// ListForOrgPayload is the payload type of the dataExports service listForOrg
+// method.
+type ListForOrgPayload struct {
+	SessionToken *string
 }
 
 // ListRoutesPayload is the payload type of the dataExports service listRoutes

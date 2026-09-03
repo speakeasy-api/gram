@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts            []*MountPoint
 	ListDestinations  http.Handler
+	ListForOrg        http.Handler
 	CreateDestination http.Handler
 	UpdateDestination http.Handler
 	DeleteDestination http.Handler
@@ -57,6 +58,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ListDestinations", "GET", "/rpc/dataExports.listDestinations"},
+			{"ListForOrg", "GET", "/rpc/dataExports.listForOrg"},
 			{"CreateDestination", "POST", "/rpc/dataExports.createDestination"},
 			{"UpdateDestination", "POST", "/rpc/dataExports.updateDestination"},
 			{"DeleteDestination", "DELETE", "/rpc/dataExports.deleteDestination"},
@@ -66,6 +68,7 @@ func New(
 			{"DeleteRoute", "DELETE", "/rpc/dataExports.deleteRoute"},
 		},
 		ListDestinations:  NewListDestinationsHandler(e.ListDestinations, mux, decoder, encoder, errhandler, formatter),
+		ListForOrg:        NewListForOrgHandler(e.ListForOrg, mux, decoder, encoder, errhandler, formatter),
 		CreateDestination: NewCreateDestinationHandler(e.CreateDestination, mux, decoder, encoder, errhandler, formatter),
 		UpdateDestination: NewUpdateDestinationHandler(e.UpdateDestination, mux, decoder, encoder, errhandler, formatter),
 		DeleteDestination: NewDeleteDestinationHandler(e.DeleteDestination, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +85,7 @@ func (s *Server) Service() string { return "dataExports" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListDestinations = m(s.ListDestinations)
+	s.ListForOrg = m(s.ListForOrg)
 	s.CreateDestination = m(s.CreateDestination)
 	s.UpdateDestination = m(s.UpdateDestination)
 	s.DeleteDestination = m(s.DeleteDestination)
@@ -97,6 +101,7 @@ func (s *Server) MethodNames() []string { return dataexports.MethodNames[:] }
 // Mount configures the mux to serve the dataExports endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListDestinationsHandler(mux, h.ListDestinations)
+	MountListForOrgHandler(mux, h.ListForOrg)
 	MountCreateDestinationHandler(mux, h.CreateDestination)
 	MountUpdateDestinationHandler(mux, h.UpdateDestination)
 	MountDeleteDestinationHandler(mux, h.DeleteDestination)
@@ -141,6 +146,59 @@ func NewListDestinationsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listDestinations")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListForOrgHandler configures the mux to serve the "dataExports" service
+// "listForOrg" endpoint.
+func MountListForOrgHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/dataExports.listForOrg", f)
+}
+
+// NewListForOrgHandler creates a HTTP handler which loads the HTTP request and
+// calls the "dataExports" service "listForOrg" endpoint.
+func NewListForOrgHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListForOrgRequest(mux, decoder)
+		encodeResponse = EncodeListForOrgResponse(encoder)
+		encodeError    = EncodeListForOrgError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listForOrg")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {

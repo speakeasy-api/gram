@@ -7,6 +7,7 @@ import { dataExportsCreateRoute } from "../funcs/dataExportsCreateRoute.js";
 import { dataExportsDeleteDestination } from "../funcs/dataExportsDeleteDestination.js";
 import { dataExportsDeleteRoute } from "../funcs/dataExportsDeleteRoute.js";
 import { dataExportsListDestinations } from "../funcs/dataExportsListDestinations.js";
+import { dataExportsListForOrg } from "../funcs/dataExportsListForOrg.js";
 import { dataExportsListRoutes } from "../funcs/dataExportsListRoutes.js";
 import { dataExportsUpdateDestination } from "../funcs/dataExportsUpdateDestination.js";
 import { dataExportsUpdateRoute } from "../funcs/dataExportsUpdateRoute.js";
@@ -14,6 +15,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { DataExportRoute } from "../models/components/dataexportroute.js";
 import { Destination } from "../models/components/destination.js";
 import { ListDataExportRoutesResult } from "../models/components/listdataexportroutesresult.js";
+import { ListDataExportsForOrgResult } from "../models/components/listdataexportsfororgresult.js";
 import { ListDestinationsResult } from "../models/components/listdestinationsresult.js";
 import {
   CreateDataExportDestinationRequest,
@@ -39,6 +41,10 @@ import {
   ListDataExportRoutesRequest,
   ListDataExportRoutesSecurity,
 } from "../models/operations/listdataexportroutes.js";
+import {
+  ListDataExportsForOrgRequest,
+  ListDataExportsForOrgSecurity,
+} from "../models/operations/listdataexportsfororg.js";
 import {
   UpdateDataExportDestinationRequest,
   UpdateDataExportDestinationSecurity,
@@ -138,6 +144,25 @@ export class DataExports extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListDestinationsResult> {
     return unwrapAsync(dataExportsListDestinations(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listForOrg dataExports
+   *
+   * @remarks
+   * List data export destinations and routes across the active organization.
+   */
+  async listForOrg(
+    request?: ListDataExportsForOrgRequest | undefined,
+    security?: ListDataExportsForOrgSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDataExportsForOrgResult> {
+    return unwrapAsync(dataExportsListForOrg(
       this,
       request,
       security,
