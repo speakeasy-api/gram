@@ -112,24 +112,6 @@ func TestPushEmptyVariadic(t *testing.T) {
 	require.Equal(t, []string{"a"}, keysOf(wide.Emit(ctx)))
 }
 
-func TestPushedAttrsAliasing(t *testing.T) {
-	t.Parallel()
-
-	// Characterization: Push stores the caller's slice header by reference, so
-	// post-Push mutation of the caller-owned slice is visible through Emit.
-	// design.md describes attrs as "fixed at allocation" but that is an internal
-	// invariant, not a caller-facing contract. Update this test if Push ever
-	// copies.
-	ctx := wide.Start(t.Context())
-	attrs := []slog.Attr{slog.String(testGenericKey, "original")}
-	wide.Push(ctx, attrs...)
-	attrs[0] = slog.String(testGenericKey, "mutated")
-
-	got := wide.Emit(ctx)
-	require.Len(t, got, 1)
-	require.Equal(t, "mutated", got[0].Value.String())
-}
-
 func TestCancelledContextEmitStillWorks(t *testing.T) {
 	t.Parallel()
 

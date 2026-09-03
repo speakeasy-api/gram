@@ -20,6 +20,8 @@ type ctxState struct {
 	head atomic.Pointer[node]
 }
 
+// Start creates an attribute collector on ctx. It retains attrs; callers must
+// not modify the slice or its elements after calling Start.
 func Start(ctx context.Context, attrs ...slog.Attr) context.Context {
 	ev := &ctxState{head: atomic.Pointer[node]{}}
 	if len(attrs) > 0 {
@@ -30,6 +32,8 @@ func Start(ctx context.Context, attrs ...slog.Attr) context.Context {
 	return context.WithValue(ctx, eventCtxKey, ev)
 }
 
+// Push adds attrs to the collector on ctx. It retains attrs; callers must not
+// modify the slice or its elements after calling Push.
 func Push(ctx context.Context, attrs ...slog.Attr) {
 	ev, ok := ctx.Value(eventCtxKey).(*ctxState)
 	if !ok {

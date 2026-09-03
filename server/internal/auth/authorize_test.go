@@ -157,6 +157,41 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	require.Equal(t, projects[1].ID, *secondAuthCtx.ProjectID)
 }
 
+func TestAuthorizeOrganizationlessSessionOmitsEmptyWideAttrs(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	session := sessions.Session{
+		SessionID: "organizationless-session",
+		UserID:    userInfo.UserID,
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = wide.Start(ctx)
+	ctx, err := instance.authorizer.Authorize(ctx, session.SessionID, sessionScheme)
+	require.NoError(t, err)
+
+	emptyAuthKeys := map[string]struct{}{
+		string(attr.RequestAuthOrganizationIDKey):   {},
+		string(attr.RequestAuthOrganizationSlugKey): {},
+		string(attr.RequestAuthAccountTypeKey):      {},
+	}
+	var userIDFound bool
+	for _, eventAttr := range wide.Emit(ctx) {
+		_, isEmptyAuthAttr := emptyAuthKeys[eventAttr.Key]
+		require.False(t, isEmptyAuthAttr, "empty attribute %q must be omitted", eventAttr.Key)
+		if eventAttr.Key == string(attr.RequestAuthUserIDKey) {
+			userIDFound = true
+			require.Equal(t, userInfo.UserID, eventAttr.Value.String())
+		}
+	}
+	require.True(t, userIDFound)
+}
+
 func TestAuthorizeSessionRejectsUngrantedOrganizationProject(t *testing.T) {
 	t.Parallel()
 

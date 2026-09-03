@@ -3,6 +3,7 @@ package wide_test
 import (
 	"context"
 	"log/slog"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -148,26 +149,31 @@ func BenchmarkSerialPushEmit(b *testing.B) {
 }
 
 // ---------------------------------------------------------------------------
-// Serial: Push only (measures raw insert cost)
+// Serial: create an accumulator and Push a fixed batch (no Emit)
 // ---------------------------------------------------------------------------
 
 func BenchmarkSerialPush(b *testing.B) {
+	const pushes = 10
+
 	for _, v := range variants {
 		b.Run(v.name, func(b *testing.B) {
-			ctx := v.start(context.Background())
 			for b.Loop() {
-				v.push(ctx, slog.String(testGenericKey, "v"))
+				ctx := v.start(context.Background())
+				for i := range pushes {
+					v.push(ctx, testAttrs(i)...)
+				}
 			}
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Concurrent: N goroutines each push attrs, then one Emit
+// Concurrent: N goroutines each push a fixed batch
 // ---------------------------------------------------------------------------
 
 func BenchmarkConcurrentPush(b *testing.B) {
 	goroutines := []int{2, 4, 8}
+	const pushesPerGoroutine = 10
 
 	for _, v := range variants {
 		// Skip baseline under concurrency — it's unsafe and only here for
@@ -177,15 +183,20 @@ func BenchmarkConcurrentPush(b *testing.B) {
 		}
 		for _, g := range goroutines {
 			b.Run(v.name+"/goroutines="+itoa(g), func(b *testing.B) {
-				ctx := v.start(context.Background())
-				b.RunParallel(func(pb *testing.PB) {
-					i := 0
-					for pb.Next() {
-						v.push(ctx, testAttrs(i)...)
-						i++
+				for b.Loop() {
+					ctx := v.start(context.Background())
+					var wg sync.WaitGroup
+					wg.Add(g)
+					for worker := range g {
+						go func() {
+							defer wg.Done()
+							for i := range pushesPerGoroutine {
+								v.push(ctx, testAttrs(worker*pushesPerGoroutine+i)...)
+							}
+						}()
 					}
-				})
-				sinkAttrs = v.emit(ctx)
+					wg.Wait()
+				}
 			})
 		}
 	}
@@ -216,12 +227,14 @@ func BenchmarkConcurrentPushWithEmit(b *testing.B) {
 					for range g {
 						go func() {
 							defer wg.Done()
+							var emitted []slog.Attr
 							for i := range pushesPerIter {
 								v.push(ctx, testAttrs(i)...)
 								if i%5 == 0 {
-									sinkAttrs = v.emit(ctx)
+									emitted = v.emit(ctx)
 								}
 							}
+							runtime.KeepAlive(emitted)
 						}()
 					}
 					wg.Wait()

@@ -217,25 +217,26 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		attrs = append(attrs, errAttr)
 	}
 
-	if !wide.Contains(ctx, string(attr.RequestAuthOrganizationIDKey)) {
-		attrs = append(
-			attrs,
-			attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID),
-			attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug),
-			attr.SlogRequestAuthAccountType(authCtx.AccountType),
-		)
-		if authCtx.UserID != "" {
-			attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
-		}
-		if authCtx.ExternalUserID != "" {
-			attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
-		}
-		if authCtx.Email != nil {
-			attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
-		}
-		if authCtx.APIKeyID != "" {
-			attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
-		}
+	if authCtx.ActiveOrganizationID != "" && !wide.Contains(ctx, string(attr.RequestAuthOrganizationIDKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthOrganizationID(authCtx.ActiveOrganizationID))
+	}
+	if authCtx.OrganizationSlug != "" && !wide.Contains(ctx, string(attr.RequestAuthOrganizationSlugKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthOrganizationSlug(authCtx.OrganizationSlug))
+	}
+	if authCtx.AccountType != "" && !wide.Contains(ctx, string(attr.RequestAuthAccountTypeKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthAccountType(authCtx.AccountType))
+	}
+	if authCtx.UserID != "" && !wide.Contains(ctx, string(attr.RequestAuthUserIDKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthUserID(authCtx.UserID))
+	}
+	if authCtx.ExternalUserID != "" && !wide.Contains(ctx, string(attr.RequestAuthUserExternalIDKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthUserExternalID(authCtx.ExternalUserID))
+	}
+	if authCtx.Email != nil && *authCtx.Email != "" && !wide.Contains(ctx, string(attr.RequestAuthUserEmailKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthUserEmail(*authCtx.Email))
+	}
+	if authCtx.APIKeyID != "" && !wide.Contains(ctx, string(attr.RequestAuthAPIKeyIDKey)) {
+		attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
 	}
 	if authCtx.ProjectID != nil && !wide.Contains(ctx, string(attr.RequestAuthProjectIDKey)) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectID(authCtx.ProjectID.String()))
