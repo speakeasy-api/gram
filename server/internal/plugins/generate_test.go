@@ -2009,6 +2009,69 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
+func TestGenerateCodexInstallScriptConfiguresOTELLogs(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai/",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Exporter map[string]struct {
+				Endpoint string            `toml:"endpoint"`
+				Protocol string            `toml:"protocol"`
+				Headers  map[string]string `toml:"headers"`
+			} `toml:"exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+
+	exporter, ok := decoded.OTel.Exporter["otlp-http"]
+	require.True(t, ok)
+	require.Equal(t, "https://app.getgram.ai/rpc/hooks.otel/v1/logs", exporter.Endpoint)
+	require.Equal(t, "json", exporter.Protocol)
+	require.Equal(t, map[string]string{
+		"Gram-Key":     cfg.HooksAPIKey,
+		"Gram-Project": cfg.ProjectSlug,
+	}, exporter.Headers)
+}
+
+func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "[otel]\nexporter = \"none\"\n")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Exporter string `toml:"exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (for example, when a bootstrap argument changes) the installer must
@@ -2198,7 +2261,12 @@ func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
 func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
@@ -2222,6 +2290,10 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
 	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
 	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
+	require.Equal(t, 1, countTableHeaderLines(patched, "[otel.exporter.otlp-http]"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "endpoint"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "protocol"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "headers"))
 
 	for _, approval := range approvals {
 		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)

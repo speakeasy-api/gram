@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -952,6 +953,41 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.Contains(t, result.ContentDisposition, "download-test.zip")
 	require.NotNil(t, body)
 	require.NoError(t, body.Close())
+}
+
+func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELLogs(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	_, err := pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                *authCtx.ProjectID,
+		InstallationID:           12345,
+		RepoOwner:                "test-owner",
+		RepoName:                 "test-marketplace",
+		MarketplaceToken:         conv.ToPGText("marketplace-token"),
+		PublishedMcpFingerprints: []byte(`{}`),
+		PublishedHooksVersion:    pgtype.Text{},
+		PublishedHooksConfig:     nil,
+	})
+	require.NoError(t, err)
+
+	result, body, err := ti.service.DownloadCodexInstallScript(ctx, &gen.DownloadCodexInstallScriptPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "text/x-shellscript", result.ContentType)
+	script, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+
+	scriptText := string(script)
+	require.Contains(t, scriptText, `OTEL_ENDPOINT = "https://app.getgram.ai/rpc/hooks.otel/v1/logs"`)
+	require.Contains(t, scriptText, fmt.Sprintf("OTEL_PROJECT = %q", *authCtx.ProjectSlug))
+	require.Contains(t, scriptText, `OTEL_API_KEY = "gram_local_`)
 }
 
 func TestPluginsService_AgentPluginCompatibilityIsConsistent(t *testing.T) {

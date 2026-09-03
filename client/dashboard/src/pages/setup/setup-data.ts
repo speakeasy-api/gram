@@ -49,7 +49,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
       {
         title: "Update Managed settings on Claude.ai",
         description:
-          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Speakeasy API key to every install so tool traffic lands in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
+          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Speakeasy API key to every install so logs, metrics, and traces land in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
@@ -58,11 +58,13 @@ const SETUP_AGENT_PLATFORMS: Array<{
         code: `{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/rpc/hooks.otel",
     "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
     "FORCE_AUTOUPDATE_PLUGINS": "1"
   },
   "extraKnownMarketplaces": {

@@ -2131,7 +2131,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 
 // GenerateCodexInstallScript produces a bash install script that:
 //   - Registers the Gram marketplace with the Codex CLI
-//   - Patches ~/.codex/config.toml with feature flags and plugin entry
+//   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP log export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
 // When marketplaceURL is empty the script uses the directory it was run from as
@@ -2146,10 +2146,15 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
 
-	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, approvals), nil
+	otelEndpoint := ""
+	if cfg.HooksAPIKey != "" {
+		otelEndpoint = strings.TrimRight(cfg.ServerURL, "/") + "/rpc/hooks.otel/v1/logs"
+	}
+
+	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpoint, cfg.ProjectSlug, cfg.HooksAPIKey, approvals), nil
 }
 
-func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approvals []codexHookApproval) []byte {
+func renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpoint, projectSlug, hooksAPIKey string, approvals []codexHookApproval) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
@@ -2241,7 +2246,7 @@ case "$(uname -s)" in
 esac
 export SPEAKEASY_HOOKS_OS
 python3 - <<'PYTHON'
-import os, re
+import json, os, re
 
 WINDOWS = os.environ.get("SPEAKEASY_HOOKS_OS") == "windows"
 
@@ -2283,6 +2288,23 @@ def ensure_table_entry(text, table_header, key, value):
         prefix += '\n'
     return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
 
+def set_table_entry(text, table_header, key, value):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
+    body = text[bounds[0]:bounds[1]]
+    pattern = re.compile(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*(?:\n|$)')
+    if pattern.search(body):
+        body = pattern.sub(key + ' = ' + value + '\n', body, count=1)
+        return text[:bounds[0]] + body + text[bounds[1]:]
+    return ensure_table_entry(text, table_header, key, value)
+
+def table_has_entry(text, table_header, key):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return False
+    return re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]) is not None
+
 def has_table_header(text, header):
     return table_body_bounds(text, header) is not None
 
@@ -2290,12 +2312,27 @@ def has_table_header(text, header):
 
 	// Python literals — embedded at generation time, not expanded by bash.
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
-	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
+	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n", marketplace)
+	fmt.Fprintf(&b, "OTEL_ENDPOINT = %q\n", otelEndpoint)
+	fmt.Fprintf(&b, "OTEL_PROJECT = %q\n", projectSlug)
+	fmt.Fprintf(&b, "OTEL_API_KEY = %q\n\n", hooksAPIKey)
 
 	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
 content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
+
+if OTEL_ENDPOINT and OTEL_API_KEY:
+    exporter_table = "[otel.exporter.otlp-http]"
+    has_inline_exporter = table_has_entry(content, "[otel]", "exporter")
+    has_other_exporter_table = re.search(r'(?m)^[ \t]*\[otel\.exporter\.', content) and not has_table_header(content, exporter_table)
+    if has_inline_exporter or has_other_exporter_table:
+        print("  ⚠  Existing Codex OTEL log exporter preserved; configure Speakeasy telemetry manually.")
+    else:
+        content = set_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT))
+        content = set_table_entry(content, exporter_table, "protocol", '"json"')
+        headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+        content = set_table_entry(content, exporter_table, "headers", headers)
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
 if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^[ \t]*\[hooks\.state\.', content):
