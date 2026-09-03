@@ -28,7 +28,7 @@ describe("AGENT_PLATFORMS", () => {
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
         "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
-      OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
       OTEL_LOGS_EXPORTER: "otlp",
       OTEL_METRICS_EXPORTER: "otlp",
       OTEL_TRACES_EXPORTER: "otlp",

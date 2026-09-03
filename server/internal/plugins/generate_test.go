@@ -2053,7 +2053,7 @@ func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 		exporter, ok := signalExporters["otlp-http"]
 		require.True(t, ok, "%s exporter missing", signal)
 		require.Equal(t, "https://app.getgram.ai/otel/v1/"+signal, exporter.Endpoint)
-		require.Equal(t, "json", exporter.Protocol)
+		require.Equal(t, "binary", exporter.Protocol)
 		require.Equal(t, map[string]string{
 			"Gram-Key":     cfg.HooksAPIKey,
 			"Gram-Project": cfg.ProjectSlug,

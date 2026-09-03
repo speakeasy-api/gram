@@ -2572,7 +2572,7 @@ if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
             print(f"  ⚠  Existing Codex OTEL {signal} exporter preserved; configure Speakeasy telemetry manually.")
             continue
         content = ensure_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT_BASE + "/" + signal))
-        content = ensure_table_entry(content, exporter_table, "protocol", '"json"')
+        content = ensure_table_entry(content, exporter_table, "protocol", '"binary"')
         content = ensure_table_entry(content, exporter_table, "headers", headers)
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
