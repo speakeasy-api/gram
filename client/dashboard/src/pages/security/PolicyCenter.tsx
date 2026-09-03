@@ -2,6 +2,7 @@ import { IdentityLink } from "@/components/identity-link";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { TabbedPage } from "@/components/page-templates";
+import { ShadowMCPPolicyUseCaseSection } from "@/components/shadow-mcp/ShadowMCPPolicyUseCaseSection";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
@@ -1224,7 +1225,12 @@ function PolicyCenterContent() {
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
       )}
-      {activeTab === "policies" && policiesBody}
+      {activeTab === "policies" && (
+        <div className="space-y-8">
+          <ShadowMCPPolicyUseCaseSection compact />
+          {policiesBody}
+        </div>
+      )}
       {activeTab === "detection-rules" && (
         <DetectionRulesTab
           createOpen={ruleCreateOpen}
