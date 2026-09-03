@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -89,6 +90,7 @@ func NewLogRelayHandler(
 			db,
 			encryptionClient,
 			policy,
+			dataexports.DataSourceProductTelemetry,
 			"/v1/logs",
 			"log",
 		),

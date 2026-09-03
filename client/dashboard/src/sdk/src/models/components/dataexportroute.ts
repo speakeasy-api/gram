@@ -14,6 +14,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export const DataExportRouteDataSource = {
   ProductTelemetry: "product_telemetry",
+  RiskFindings: "risk_findings",
 } as const;
 /**
  * Class of data exported by this route.

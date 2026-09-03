@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -111,8 +112,8 @@ func TestLogRelayHandlerFailsOnlyProjectWithMalformedDestinationHeaders(t *testi
 		encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "healthy"}),
 		"include",
 	)
-	createRelayTestRoute(t, db, "org-test", malformedProjectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: malformedDestination.ID, Valid: true})
-	createRelayTestRoute(t, db, "org-test", healthyProjectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: healthyDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", malformedProjectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: malformedDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", healthyProjectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: healthyDestination.ID, Valid: true})
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)

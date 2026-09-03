@@ -118,6 +118,7 @@ function submitLabel(
 export function ConfigureExportSheet({
   projects,
   project,
+  dataSources,
   destinations,
   route,
   saving,
@@ -128,6 +129,11 @@ export function ConfigureExportSheet({
 }: {
   projects: ProjectEntry[];
   project: ProjectEntry;
+  dataSources: Array<{
+    value: DataSourceValue;
+    label: string;
+    description: string;
+  }>;
   destinations: OtelDataExportDestination[];
   route?: DataExportRoute;
   saving: boolean;
@@ -176,10 +182,12 @@ export function ConfigureExportSheet({
     [destinations],
   );
   const initialDestinationId = initialDestinationID(route, destinations);
+  const initialDataSource =
+    route?.dataSource ?? dataSources[0]?.value ?? DataSource.ProductTelemetry;
   const form = useForm({
     defaultValues: {
       projectSlug: project.slug,
-      dataSource: DataSource.ProductTelemetry,
+      dataSource: initialDataSource as DataSourceValue,
       destinationId: initialDestinationId,
       enabled: (route?.enabled ?? true) as boolean,
       destinationName: "",
@@ -240,29 +248,36 @@ export function ConfigureExportSheet({
             </div>
 
             <form.Field name="dataSource">
-              {(field) => (
-                <div className="space-y-3 border-t py-5">
-                  <Label htmlFor={sourceControlId}>Data to export</Label>
-                  <Select
-                    value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange(value as DataSourceValue)
-                    }
-                  >
-                    <SelectTrigger id={sourceControlId} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={DataSource.ProductTelemetry}>
-                        Product telemetry
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Text muted className="text-sm leading-relaxed">
-                    OTLP traces and logs from MCP servers and tool calls.
-                  </Text>
-                </div>
-              )}
+              {(field) => {
+                const selectedSource = dataSources.find(
+                  (source) => source.value === field.state.value,
+                );
+                return (
+                  <div className="space-y-3 border-t py-5">
+                    <Label htmlFor={sourceControlId}>Data to export</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(value) =>
+                        field.handleChange(value as DataSourceValue)
+                      }
+                    >
+                      <SelectTrigger id={sourceControlId} className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dataSources.map((source) => (
+                          <SelectItem key={source.value} value={source.value}>
+                            {source.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Text muted className="text-sm leading-relaxed">
+                      {selectedSource?.description}
+                    </Text>
+                  </div>
+                );
+              }}
             </form.Field>
 
             <form.Field name="destinationId">

@@ -317,6 +317,50 @@ func (q *Queries) ListDataExportRoutes(ctx context.Context, arg ListDataExportRo
 	return items, nil
 }
 
+const listDataExportRoutesByOrganizationID = `-- name: ListDataExportRoutesByOrganizationID :many
+SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted
+FROM data_export_routes AS route
+JOIN projects AS project
+  ON project.id = route.project_id
+ AND project.organization_id = route.organization_id
+WHERE project.organization_id = $1
+  AND project.deleted IS FALSE
+  AND route.deleted IS FALSE
+ORDER BY route.created_at, route.id
+`
+
+// List active routes across live projects in one organization.
+func (q *Queries) ListDataExportRoutesByOrganizationID(ctx context.Context, organizationID string) ([]DataExportRoute, error) {
+	rows, err := q.db.Query(ctx, listDataExportRoutesByOrganizationID, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DataExportRoute
+	for rows.Next() {
+		var i DataExportRoute
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.DataSource,
+			&i.Enabled,
+			&i.OtelDestinationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOtelDestinations = `-- name: ListOtelDestinations :many
 SELECT id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
@@ -334,6 +378,51 @@ type ListOtelDestinationsParams struct {
 // List active destinations in stable creation order for the management API.
 func (q *Queries) ListOtelDestinations(ctx context.Context, arg ListOtelDestinationsParams) ([]OtelDestination, error) {
 	rows, err := q.db.Query(ctx, listOtelDestinations, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OtelDestination
+	for rows.Next() {
+		var i OtelDestination
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.EndpointUrl,
+			&i.HeadersEncrypted,
+			&i.SensitiveData,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOtelDestinationsByOrganizationID = `-- name: ListOtelDestinationsByOrganizationID :many
+SELECT destination.id, destination.organization_id, destination.project_id, destination.name, destination.endpoint_url, destination.headers_encrypted, destination.sensitive_data, destination.created_at, destination.updated_at, destination.deleted_at, destination.deleted
+FROM otel_destinations AS destination
+JOIN projects AS project
+  ON project.id = destination.project_id
+ AND project.organization_id = destination.organization_id
+WHERE project.organization_id = $1
+  AND project.deleted IS FALSE
+  AND destination.deleted IS FALSE
+ORDER BY destination.created_at, destination.id
+`
+
+// List active destinations across live projects in one organization.
+func (q *Queries) ListOtelDestinationsByOrganizationID(ctx context.Context, organizationID string) ([]OtelDestination, error) {
+	rows, err := q.db.Query(ctx, listOtelDestinationsByOrganizationID, organizationID)
 	if err != nil {
 		return nil, err
 	}

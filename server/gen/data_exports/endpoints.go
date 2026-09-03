@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "dataExports" service endpoints.
 type Endpoints struct {
 	ListDestinations  goa.Endpoint
+	ListForOrg        goa.Endpoint
 	CreateDestination goa.Endpoint
 	UpdateDestination goa.Endpoint
 	DeleteDestination goa.Endpoint
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListDestinations:  NewListDestinationsEndpoint(s, a.APIKeyAuth),
+		ListForOrg:        NewListForOrgEndpoint(s, a.APIKeyAuth),
 		CreateDestination: NewCreateDestinationEndpoint(s, a.APIKeyAuth),
 		UpdateDestination: NewUpdateDestinationEndpoint(s, a.APIKeyAuth),
 		DeleteDestination: NewDeleteDestinationEndpoint(s, a.APIKeyAuth),
@@ -45,6 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "dataExports" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListDestinations = m(e.ListDestinations)
+	e.ListForOrg = m(e.ListForOrg)
 	e.CreateDestination = m(e.CreateDestination)
 	e.UpdateDestination = m(e.UpdateDestination)
 	e.DeleteDestination = m(e.DeleteDestination)
@@ -110,6 +113,29 @@ func NewListDestinationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListDestinations(ctx, p)
+	}
+}
+
+// NewListForOrgEndpoint returns an endpoint function that calls the method
+// "listForOrg" of service "dataExports".
+func NewListForOrgEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListForOrgPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListForOrg(ctx, p)
 	}
 }
 

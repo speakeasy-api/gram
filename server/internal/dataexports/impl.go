@@ -105,6 +105,41 @@ func (s *Service) ListDestinations(ctx context.Context, _ *gen.ListDestinationsP
 	return &gen.ListDestinationsResult{Destinations: destinations}, nil
 }
 
+func (s *Service) ListForOrg(ctx context.Context, _ *gen.ListForOrgPayload) (*gen.ListDataExportsForOrgResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	queries := repo.New(s.db)
+	destinationRows, err := queries.ListOtelDestinationsByOrganizationID(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization OTEL destinations").LogError(ctx, logger)
+	}
+	destinations, err := s.buildDestinationViews(destinationRows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "decode organization OTEL destinations").LogError(ctx, logger)
+	}
+
+	routeRows, err := queries.ListDataExportRoutesByOrganizationID(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization data export routes").LogError(ctx, logger)
+	}
+	routes := make([]*gen.DataExportRoute, 0, len(routeRows))
+	for _, row := range routeRows {
+		routes = append(routes, buildDataExportRouteView(row))
+	}
+
+	return &gen.ListDataExportsForOrgResult{
+		Destinations: destinations,
+		Routes:       routes,
+	}, nil
+}
+
 func (s *Service) listOtelDestinations(ctx context.Context, authCtx *contextvalues.AuthContext) ([]*gen.Destination, error) {
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	rows, err := repo.New(s.db).ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
@@ -115,11 +150,15 @@ func (s *Service) listOtelDestinations(ctx context.Context, authCtx *contextvalu
 		return nil, oops.E(oops.CodeUnexpected, err, "list OTEL destinations").LogError(ctx, logger)
 	}
 
+	return s.buildDestinationViews(rows)
+}
+
+func (s *Service) buildDestinationViews(rows []repo.OtelDestination) ([]*gen.Destination, error) {
 	destinations := make([]*gen.Destination, 0, len(rows))
 	for _, row := range rows {
 		view, err := s.buildDestinationView(row)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination").LogError(ctx, logger)
+			return nil, err
 		}
 		destinations = append(destinations, view)
 	}

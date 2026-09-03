@@ -29,6 +29,18 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY created_at, id;
 
+-- List active destinations across live projects in one organization.
+-- name: ListOtelDestinationsByOrganizationID :many
+SELECT destination.*
+FROM otel_destinations AS destination
+JOIN projects AS project
+  ON project.id = destination.project_id
+ AND project.organization_id = destination.organization_id
+WHERE project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+  AND destination.deleted IS FALSE
+ORDER BY destination.created_at, destination.id;
+
 
 -- Lock a destination before merging preserved header secrets or deleting it.
 -- The lock keeps the before snapshot and subsequent mutation on one row version.
@@ -117,6 +129,18 @@ WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at, id;
+
+-- List active routes across live projects in one organization.
+-- name: ListDataExportRoutesByOrganizationID :many
+SELECT route.*
+FROM data_export_routes AS route
+JOIN projects AS project
+  ON project.id = route.project_id
+ AND project.organization_id = route.organization_id
+WHERE project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+  AND route.deleted IS FALSE
+ORDER BY route.created_at, route.id;
 
 -- Serialize route update/delete transitions so audit snapshots describe the
 -- exact row version mutated by the transaction.

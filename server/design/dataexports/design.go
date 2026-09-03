@@ -33,6 +33,27 @@ var _ = Service("dataExports", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DataExportDestinations"}`)
 	})
 
+	Method("listForOrg", func() {
+		Description("List data export destinations and routes across the active organization.")
+
+		// Session-only: this dashboard flow spans projects, while API keys are
+		// project-scoped and must not enumerate organization-wide configuration.
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+		Result(ListDataExportsForOrgResult)
+		HTTP(func() {
+			GET("/rpc/dataExports.listForOrg")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listDataExportsForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDataExportsForOrg"}`)
+	})
+
 	Method("createDestination", func() {
 		Description("Create a data export destination in the selected project.")
 		Payload(func() {
@@ -270,7 +291,7 @@ var DataExportRoute = Type("DataExportRoute", func() {
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "Project that owns the route.", func() { Format(FormatUUID) })
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("product_telemetry")
+		Enum("product_telemetry", "risk_findings")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Omitted when no OTEL destination is selected.", func() { Format(FormatUUID) })
@@ -281,7 +302,7 @@ var DataExportRoute = Type("DataExportRoute", func() {
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Description("Form for creating the selected data source's export route.")
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("data_source")
@@ -290,7 +311,7 @@ var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Description("Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry", "risk_findings") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("id", "data_source", "enabled")
@@ -299,6 +320,12 @@ var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 var ListDestinationsResult = Type("ListDestinationsResult", func() {
 	Attribute("destinations", ArrayOf(Destination), "Active data export destinations in the selected project.")
 	Required("destinations")
+})
+
+var ListDataExportsForOrgResult = Type("ListDataExportsForOrgResult", func() {
+	Attribute("destinations", ArrayOf(Destination), "Active data export destinations across the active organization.")
+	Attribute("routes", ArrayOf(DataExportRoute), "Active data export routes across the active organization.")
+	Required("destinations", "routes")
 })
 
 var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {
