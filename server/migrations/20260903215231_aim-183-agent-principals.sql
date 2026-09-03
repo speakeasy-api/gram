@@ -25,3 +25,5 @@ CREATE UNIQUE INDEX "agents_organization_id_id_key" ON "agents" ("organization_i
 CREATE UNIQUE INDEX "agents_organization_name_key" ON "agents" ("organization_id", (lower(name))) WHERE (deleted IS FALSE);
 -- Create index "agents_organization_owner_idx" to table: "agents"
 CREATE INDEX "agents_organization_owner_idx" ON "agents" ("organization_id", "owner_user_id") WHERE (deleted IS FALSE);
+-- Create index "agents_organization_owner_all_idx" to table: "agents"
+CREATE INDEX "agents_organization_owner_all_idx" ON "agents" ("organization_id", "owner_user_id");

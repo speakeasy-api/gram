@@ -3930,6 +3930,10 @@ CREATE INDEX IF NOT EXISTS agents_organization_owner_idx
 ON agents (organization_id, owner_user_id)
 WHERE deleted IS FALSE;
 
+-- Supports foreign-key checks for every agent, including deleted agents.
+CREATE INDEX IF NOT EXISTS agents_organization_owner_all_idx
+ON agents (organization_id, owner_user_id);
+
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
