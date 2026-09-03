@@ -58,6 +58,27 @@ SELECT
   END as indexed;
 
 -- name: SearchToolsetToolEmbeddingsAnyTagsMatch :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = @project_id
+    AND toolset_id = @toolset_id
+    AND toolset_version = @toolset_version
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality(sqlc.arg('tags')::text[]) = 0 OR tags && sqlc.arg('tags')::text[])
+    AND deleted IS FALSE
+)
 SELECT
     id,
     project_id,
@@ -70,17 +91,32 @@ SELECT
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> @query_embedding_1536))::float8 AS similarity
-FROM toolset_embeddings
-WHERE project_id = @project_id
-  AND toolset_id = @toolset_id
-  AND toolset_version = @toolset_version
-  AND entry_key LIKE 'tools:%'
-  AND (cardinality(sqlc.arg('tags')::text[]) = 0 OR tags && sqlc.arg('tags')::text[])
-  AND deleted IS FALSE
+FROM candidates
 ORDER BY embedding_1536 <=> @query_embedding_1536
 LIMIT @result_limit;
 
 -- name: SearchToolsetToolEmbeddingsAllTagsMatch :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = @project_id
+    AND toolset_id = @toolset_id
+    AND toolset_version = @toolset_version
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality(@tags::text[]) = 0 OR tags @> @tags)
+    AND deleted IS FALSE
+)
 SELECT
     id,
     project_id,
@@ -93,13 +129,7 @@ SELECT
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> @query_embedding_1536))::float8 AS similarity
-FROM toolset_embeddings
-WHERE project_id = @project_id
-  AND toolset_id = @toolset_id
-  AND toolset_version = @toolset_version
-  AND entry_key LIKE 'tools:%'
-  AND (cardinality(@tags::text[]) = 0 OR tags @> @tags)
-  AND deleted IS FALSE
+FROM candidates
 ORDER BY embedding_1536 <=> @query_embedding_1536
 LIMIT @result_limit;
 

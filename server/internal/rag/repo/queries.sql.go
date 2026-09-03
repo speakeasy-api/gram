@@ -92,6 +92,27 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 }
 
 const searchToolsetToolEmbeddingsAllTagsMatch = `-- name: SearchToolsetToolEmbeddingsAllTagsMatch :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags @> $6)
+    AND deleted IS FALSE
+)
 SELECT
     id,
     project_id,
@@ -104,24 +125,18 @@ SELECT
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> $1))::float8 AS similarity
-FROM toolset_embeddings
-WHERE project_id = $2
-  AND toolset_id = $3
-  AND toolset_version = $4
-  AND entry_key LIKE 'tools:%'
-  AND (cardinality($5::text[]) = 0 OR tags @> $5)
-  AND deleted IS FALSE
+FROM candidates
 ORDER BY embedding_1536 <=> $1
-LIMIT $6
+LIMIT $2
 `
 
 type SearchToolsetToolEmbeddingsAllTagsMatchParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
 	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
 	ToolsetVersion     int64
 	Tags               []string
-	ResultLimit        int32
 }
 
 type SearchToolsetToolEmbeddingsAllTagsMatchRow struct {
@@ -141,11 +156,11 @@ type SearchToolsetToolEmbeddingsAllTagsMatchRow struct {
 func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatch(ctx context.Context, arg SearchToolsetToolEmbeddingsAllTagsMatchParams) ([]SearchToolsetToolEmbeddingsAllTagsMatchRow, error) {
 	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAllTagsMatch,
 		arg.QueryEmbedding1536,
+		arg.ResultLimit,
 		arg.ProjectID,
 		arg.ToolsetID,
 		arg.ToolsetVersion,
 		arg.Tags,
-		arg.ResultLimit,
 	)
 	if err != nil {
 		return nil, err
@@ -178,6 +193,27 @@ func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatch(ctx context.Context, a
 }
 
 const searchToolsetToolEmbeddingsAnyTagsMatch = `-- name: SearchToolsetToolEmbeddingsAnyTagsMatch :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags && $6::text[])
+    AND deleted IS FALSE
+)
 SELECT
     id,
     project_id,
@@ -190,24 +226,18 @@ SELECT
     created_at,
     updated_at,
     (1 - (embedding_1536 <=> $1))::float8 AS similarity
-FROM toolset_embeddings
-WHERE project_id = $2
-  AND toolset_id = $3
-  AND toolset_version = $4
-  AND entry_key LIKE 'tools:%'
-  AND (cardinality($5::text[]) = 0 OR tags && $5::text[])
-  AND deleted IS FALSE
+FROM candidates
 ORDER BY embedding_1536 <=> $1
-LIMIT $6
+LIMIT $2
 `
 
 type SearchToolsetToolEmbeddingsAnyTagsMatchParams struct {
 	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
 	ProjectID          uuid.UUID
 	ToolsetID          uuid.UUID
 	ToolsetVersion     int64
 	Tags               []string
-	ResultLimit        int32
 }
 
 type SearchToolsetToolEmbeddingsAnyTagsMatchRow struct {
@@ -227,11 +257,11 @@ type SearchToolsetToolEmbeddingsAnyTagsMatchRow struct {
 func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatch(ctx context.Context, arg SearchToolsetToolEmbeddingsAnyTagsMatchParams) ([]SearchToolsetToolEmbeddingsAnyTagsMatchRow, error) {
 	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAnyTagsMatch,
 		arg.QueryEmbedding1536,
+		arg.ResultLimit,
 		arg.ProjectID,
 		arg.ToolsetID,
 		arg.ToolsetVersion,
 		arg.Tags,
-		arg.ResultLimit,
 	)
 	if err != nil {
 		return nil, err
