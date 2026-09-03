@@ -601,7 +601,7 @@ importers:
     devDependencies:
       '@gram-ai/functions':
         specifier: workspace:^
-        version: 0.18.1
+        version: link:../functions
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
