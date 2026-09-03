@@ -1,4 +1,9 @@
-import { useOrganization, useSession, useUser } from "@/contexts/Auth";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+  useUser,
+} from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
@@ -39,6 +44,7 @@ import {
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
+  const isPlatformAdmin = useIsPlatformAdmin();
   const session = useSession();
   const organization = useOrganization();
   const navigate = useNavigate();
@@ -126,15 +132,17 @@ export function SidebarUserMenu(): JSX.Element {
                   {user.email}
                 </p>
               </div>
-              <a
-                href="https://gram-admin.tail7d394.ts.net"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Platform admin"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <CrownIcon className="h-4 w-4" />
-              </a>
+              {isPlatformAdmin && (
+                <a
+                  href="https://gram-admin.tail7d394.ts.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Platform admin"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <CrownIcon className="h-4 w-4" />
+                </a>
+              )}
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

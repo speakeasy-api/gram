@@ -8,12 +8,14 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const orgSlug = vi.hoisted(() => ({ current: "acme" }));
+const isPlatformAdmin = vi.hoisted(() => vi.fn(() => true));
 const exploreDemoGoTo = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
   useSession: () => ({ organizations: [{ id: "o1" }] }),
   useOrganization: () => ({ slug: orgSlug.current }),
+  useIsPlatformAdmin: () => isPlatformAdmin(),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "proj" }),
@@ -89,6 +91,8 @@ afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, "Pylon");
   orgSlug.current = "acme";
+  isPlatformAdmin.mockReset();
+  isPlatformAdmin.mockReturnValue(true);
   exploreDemoGoTo.mockReset();
 });
 
@@ -109,6 +113,14 @@ describe("SidebarUserMenu", () => {
     expect(platformAdmin.getAttribute("target")).toBe("_blank");
     expect(platformAdmin.getAttribute("rel")).toBe("noopener noreferrer");
     expect(platformAdmin.querySelector(".lucide-crown")).toBeTruthy();
+  });
+
+  it("hides the Platform admin link from regular users", () => {
+    isPlatformAdmin.mockReturnValue(false);
+
+    render(<SidebarUserMenu />);
+
+    expect(screen.queryByRole("link", { name: "Platform admin" })).toBeNull();
   });
 
   it("links Roadmap to roadmap.speakeasy.com and has no GitHub issues link", () => {
