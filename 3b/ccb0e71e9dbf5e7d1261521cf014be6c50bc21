@@ -1,0 +1,740 @@
+.changeset/audit-and-usage-attribution.md
+  h_2620cc60cfd1e9 1-5
+.changeset/data-exports-dashboard.md
+  h_2620cc60cfd1e9 1-5
+.changeset/gateway-endpoints-e2e-fixes-dashboard.md
+  h_2620cc60cfd1e9 1-5
+.changeset/gateway-endpoints-e2e-fixes-server.md
+  h_2620cc60cfd1e9 1-5
+.changeset/identity-detail-pages.md
+  h_2620cc60cfd1e9 1-11
+.changeset/identity-widgets-time-range.md
+  h_2620cc60cfd1e9 1-18
+.config/wt.toml
+  h_2620cc60cfd1e9 22-25
+.mise-tasks/ensure-stack.sh
+  h_2620cc60cfd1e9 1-50
+.mise-tasks/git/workboot.sh
+  h_2620cc60cfd1e9 30-39,60,75
+.mise-tasks/git/workstatus.sh
+  h_2620cc60cfd1e9 35-37,56-57,81-84
+.mise-tasks/git/worktui.mts
+  h_2620cc60cfd1e9 31,196-198,214-216,236-239,270,754-758
+.mise-tasks/idle-pause.sh
+  h_2620cc60cfd1e9 1-162
+.mise-tasks/park.mts
+  h_2620cc60cfd1e9 1-395
+.mise-tasks/pause.sh
+  h_2620cc60cfd1e9 1-138
+.mise-tasks/playwright/_default
+  h_2620cc60cfd1e9 4-6
+.mise-tasks/seed.sh
+  h_2620cc60cfd1e9 5
+.mise-tasks/wake.sh
+  h_2620cc60cfd1e9 1-133
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 874-889,1485-1500,9035-9050,72126-72129,72145-72148,85501
+CLAUDE.md
+  h_2620cc60cfd1e9 7-8,74-76
+cli/internal/o11y/slog.go
+  h_2620cc60cfd1e9 97-102,108
+client/dashboard/src/components/app-sidebar.tsx
+  h_2620cc60cfd1e9 196-198
+client/dashboard/src/components/assistants/assistant-owner.tsx
+  h_2620cc60cfd1e9 1,69-77
+client/dashboard/src/components/auditlogs/resource-audit-feed.tsx
+  h_2620cc60cfd1e9 1,172-180
+client/dashboard/src/components/chart/DailyActivityChart.tsx
+  h_2620cc60cfd1e9 1-162
+client/dashboard/src/components/chart/RankedBarList.tsx
+  h_2620cc60cfd1e9 1-4,11-13,18-25,36,38-42,45-66,68-84
+client/dashboard/src/components/chart/ShareBar.tsx
+  h_2620cc60cfd1e9 1-131
+client/dashboard/src/components/chart/SplitRankedBarList.tsx
+  h_2620cc60cfd1e9 1-102
+client/dashboard/src/components/chart/useSeriesColors.ts
+  h_2620cc60cfd1e9 1,4
+client/dashboard/src/components/chat-owner-label.tsx
+  h_2620cc60cfd1e9 1,3-8,29-40,44-46,54
+client/dashboard/src/components/command-palette/CommandPalette.test.tsx
+  h_2620cc60cfd1e9 26
+client/dashboard/src/components/command-palette/CommandPalette.tsx
+  h_2620cc60cfd1e9 23,254-258
+client/dashboard/src/components/command-palette/ResourceResults.tsx
+  h_2620cc60cfd1e9 7,14,22,406-467
+client/dashboard/src/components/connections/ConnectionsList.tsx
+  h_2620cc60cfd1e9 1,21,90,185-191,198-207,425-440,442-455,457,460-471,499-507,520,607,626-631,661,703-705
+client/dashboard/src/components/connections/ConnectionsListSection.tsx
+  h_2620cc60cfd1e9 21,26-36,52-54,67-81,137-147,150
+client/dashboard/src/components/connections/groupConnections.ts
+  h_2620cc60cfd1e9 20,27-30,60-62,107-115,196-199
+client/dashboard/src/components/gradient-colors.ts
+  h_2620cc60cfd1e9 1-4,61-66,68-71,76-81,88-98
+client/dashboard/src/components/identity-link.tsx
+  h_2620cc60cfd1e9 1-100
+client/dashboard/src/components/identity-rail-items.ts
+  h_2620cc60cfd1e9 1-76
+client/dashboard/src/components/identity-rail.tsx
+  h_2620cc60cfd1e9 1-71
+client/dashboard/src/components/mcp-approvals/ApprovalReview.tsx
+  h_2620cc60cfd1e9 1,362-365,367
+client/dashboard/src/components/member-facepile.test.tsx
+  h_2620cc60cfd1e9 2-3,6-16,22-43
+client/dashboard/src/components/member-facepile.tsx
+  h_2620cc60cfd1e9 2-3,44,146,214-224,234
+client/dashboard/src/components/nav-menu.tsx
+  h_2620cc60cfd1e9 38-39,51,258,268,301-318,480,552,556-560,588-589,713
+client/dashboard/src/components/observe/InsightsAgents.tsx
+  h_2620cc60cfd1e9 24-25,942-948,1247-1248,1253,1257
+client/dashboard/src/components/observe/LogsTools.tsx
+  h_2620cc60cfd1e9 1-2,1052-1055,1111-1114,1116
+client/dashboard/src/components/observe/account-display.tsx
+  h_2620cc60cfd1e9 2,40-48
+client/dashboard/src/components/observe/employee-data-flow.tsx
+  h_2620cc60cfd1e9 1,3,20-21,25,125-131,139
+client/dashboard/src/components/observe/identity-data-flow-query.ts
+  h_2620cc60cfd1e9 1-33
+client/dashboard/src/components/observe/insightsEmployeesData.ts
+  h_2620cc60cfd1e9 7
+client/dashboard/src/components/org-sidebar.tsx
+  h_2620cc60cfd1e9 92-94,141,226-227,231-234
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  h_2620cc60cfd1e9 1,75-84
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  h_2620cc60cfd1e9 1,12,54,211-213,602-606,718-721,728-736
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.test.tsx
+  h_2620cc60cfd1e9 235-237,251,329-331
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.tsx
+  h_2620cc60cfd1e9 197-199
+client/dashboard/src/components/ui/Avatar/index.tsx
+  h_2620cc60cfd1e9 45-48
+client/dashboard/src/components/ui/Combobox/index.tsx
+  h_2620cc60cfd1e9 27-28,39,53,72,119,127-134
+client/dashboard/src/components/ui/MoreActions/index.tsx
+  h_2620cc60cfd1e9 135-142
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  h_2620cc60cfd1e9 2,14-24,400-432
+client/dashboard/src/components/ui/Table/index.tsx
+  h_2620cc60cfd1e9 555,614-636,651,859-863,869-874,876,878-885,887-889
+client/dashboard/src/components/ui/styles/base.css
+  h_2620cc60cfd1e9 551-553
+client/dashboard/src/components/write-only-header-row.tsx
+  h_2620cc60cfd1e9 1-72
+client/dashboard/src/contexts/AuthProvider.test.tsx
+  h_2620cc60cfd1e9 32-34,225-264
+client/dashboard/src/contexts/AuthProvider.tsx
+  h_2620cc60cfd1e9 200-201,206-207,214
+client/dashboard/src/hooks/useProjectNavRoutes.test.tsx
+  h_2620cc60cfd1e9 35
+client/dashboard/src/hooks/useProjectNavRoutes.ts
+  h_2620cc60cfd1e9 84
+client/dashboard/src/lib/identity-urn.ts
+  h_2620cc60cfd1e9 1-90
+client/dashboard/src/lib/route-errors.ts
+  h_2620cc60cfd1e9 28-31
+client/dashboard/src/lib/theme.ts
+  h_2620cc60cfd1e9 1-18
+client/dashboard/src/lib/useIdentityHref.ts
+  h_2620cc60cfd1e9 1-34
+client/dashboard/src/lib/write-only-headers.test.ts
+  h_2620cc60cfd1e9 1-75
+client/dashboard/src/lib/write-only-headers.ts
+  h_2620cc60cfd1e9 1-73
+client/dashboard/src/pages/access/useChallengeRowColumns.tsx
+  h_2620cc60cfd1e9 1,125-128,139,225-227
+client/dashboard/src/pages/budgets/Budgets.tsx
+  h_2620cc60cfd1e9 1,761-763
+client/dashboard/src/pages/budgets/RuleDetailSheet.tsx
+  h_2620cc60cfd1e9 1-2,229-233,253-265,434-436
+client/dashboard/src/pages/chat/Chat.tsx
+  h_2620cc60cfd1e9 49,833,849
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  h_2620cc60cfd1e9 1,349-351,835,874-882,1458-1470,1482,1494
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  h_2620cc60cfd1e9 5,58-68,99-102
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  h_2620cc60cfd1e9 1-2,116-119,276,283,349-355,1195-1203
+client/dashboard/src/pages/costs/EntityProfile.tsx
+  h_2620cc60cfd1e9 2,600-604
+client/dashboard/src/pages/costs/SessionTable.tsx
+  h_2620cc60cfd1e9 143-145
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 1-511
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 1-691
+client/dashboard/src/pages/data-exports/LegacyDataRedirect.tsx
+  h_2620cc60cfd1e9 1-14
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_2620cc60cfd1e9 1-5,7-8,16,18-35,40-60,62-79,81-83,86,90-92,94,96-98,100,111-113,116-129,132-139,141-154,156-219,221-233,236-237,239-240,242-251,254-256,258-268,270-271,274-293,295-298,300,302-323,325-327,329-332,334-336,338-343,345,347-349,351-356,359-384,386-393,395-402,404,406-413,417-450,452-474,476,478-484,486-488,493-498,502-510,512,514-519,523-526,537,543-544,561-566,575-583,586-596,599-628
+client/dashboard/src/pages/identities/IdentityAccess.tsx
+  h_2620cc60cfd1e9 1-299
+client/dashboard/src/pages/identities/IdentityActivity.tsx
+  h_2620cc60cfd1e9 1-223
+client/dashboard/src/pages/identities/IdentityConnections.tsx
+  h_2620cc60cfd1e9 1-145
+client/dashboard/src/pages/identities/IdentityCost.tsx
+  h_2620cc60cfd1e9 1-225
+client/dashboard/src/pages/identities/IdentityDetailRoot.tsx
+  h_2620cc60cfd1e9 1-294
+client/dashboard/src/pages/identities/IdentityDevices.tsx
+  h_2620cc60cfd1e9 1-327
+client/dashboard/src/pages/identities/IdentityOverview.tsx
+  h_2620cc60cfd1e9 1-488
+client/dashboard/src/pages/identities/IdentityPanel.tsx
+  h_2620cc60cfd1e9 1-283
+client/dashboard/src/pages/identities/IdentitySection.tsx
+  h_2620cc60cfd1e9 1-39
+client/dashboard/src/pages/identities/IdentitySecurity.tsx
+  h_2620cc60cfd1e9 1-257
+client/dashboard/src/pages/identities/IdentityUsage.tsx
+  h_2620cc60cfd1e9 1-274
+client/dashboard/src/pages/identities/identityHandoffs.ts
+  h_2620cc60cfd1e9 1-104
+client/dashboard/src/pages/identities/identityKind.ts
+  h_2620cc60cfd1e9 1-44
+client/dashboard/src/pages/identities/identityPeers.ts
+  h_2620cc60cfd1e9 1-209
+client/dashboard/src/pages/identities/identityRoster.ts
+  h_2620cc60cfd1e9 1-58
+client/dashboard/src/pages/identities/identityRoute.ts
+  h_2620cc60cfd1e9 1-13
+client/dashboard/src/pages/identities/sectionMeta.ts
+  h_2620cc60cfd1e9 1-24
+client/dashboard/src/pages/identities/useIdentityQueries.ts
+  h_2620cc60cfd1e9 1-507
+client/dashboard/src/pages/insights/Insights.tsx
+  h_2620cc60cfd1e9 2
+client/dashboard/src/pages/killswitch/KillswitchDetail.test.tsx
+  h_2620cc60cfd1e9 41-51,60-68
+client/dashboard/src/pages/killswitch/KillswitchDetail.tsx
+  h_2620cc60cfd1e9 1,584-589,616-625,786,885-890
+client/dashboard/src/pages/mcp/MCPTeamAccessTab.tsx
+  h_2620cc60cfd1e9 1,375-379,468
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.tsx
+  h_2620cc60cfd1e9 396-399,540-542,580-586,619
+client/dashboard/src/pages/mcp/overview/TopUsersTable.tsx
+  h_2620cc60cfd1e9 1-2,22-30
+client/dashboard/src/pages/mcp/x/tabs/UnproxiedMcpUsageBreakdown.tsx
+  h_2620cc60cfd1e9 1,43-49
+client/dashboard/src/pages/org/OrgAuditLogs.tsx
+  h_2620cc60cfd1e9 1,219-227
+client/dashboard/src/pages/org/OrgHome.tsx
+  h_2620cc60cfd1e9 1,989-994,996
+client/dashboard/src/pages/org/device-integrations/coverage-widgets.tsx
+  h_2620cc60cfd1e9 1-2,273,346,365,371,379-382,384-388,391
+client/dashboard/src/pages/org/litellm-integration-row.tsx
+  h_2620cc60cfd1e9 327
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  h_2620cc60cfd1e9 1,82-92
+client/dashboard/src/pages/remote-identity-providers/tabs/client/SessionsTab.tsx
+  h_2620cc60cfd1e9 1,136-150
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  h_2620cc60cfd1e9 1,1013-1015,1123-1129
+client/dashboard/src/pages/security/RiskEvents.tsx
+  h_2620cc60cfd1e9 1-2,769-771
+client/dashboard/src/pages/security/RiskOverviewUserDetail.tsx
+  h_2620cc60cfd1e9 6,140-146
+client/dashboard/src/pages/security/RiskOverviewUsersIndex.tsx
+  h_2620cc60cfd1e9 7,104-113,115-119,141,143
+client/dashboard/src/pages/security/SecurityOverview.test.tsx
+  h_2620cc60cfd1e9 99-104,106
+client/dashboard/src/pages/security/SecurityOverview.tsx
+  h_2620cc60cfd1e9 24,267-280,288
+client/dashboard/src/pages/security/risk-ui.test.tsx
+  h_2620cc60cfd1e9 4,81,85-120
+client/dashboard/src/pages/security/risk-ui.tsx
+  h_2620cc60cfd1e9 228-230,233-237,315-355,392,397-398,400-409,411-414
+client/dashboard/src/pages/security/watchdog/SignalDrawer.tsx
+  h_2620cc60cfd1e9 1,492-508
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.test.tsx
+  h_2620cc60cfd1e9 41-57,62,438,440-443,536
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.tsx
+  h_2620cc60cfd1e9 1-6,240-254,538-542
+client/dashboard/src/pages/sources/tunneled-mcp/hooks.ts
+  h_2620cc60cfd1e9 217-222,224,226,228-230
+client/dashboard/src/pages/team/Team.tsx
+  h_2620cc60cfd1e9 1-2,74,174-175,181-185,205,230,235,530,541-544,546-548,642-648,674,708,766-786,939-944,958
+client/dashboard/src/routes.test.tsx
+  h_2620cc60cfd1e9 2,9-10,17-21,33-50
+client/dashboard/src/routes.tsx
+  h_2620cc60cfd1e9 33-34,54,56-68,646-658,660-661,664-709,1136,1140-1145,1149-1154
+client/dashboard/src/sdk/src/funcs/accessListChallenges.ts
+  h_2620cc60cfd1e9 110,119
+client/dashboard/src/sdk/src/funcs/accessListShadowMCPInventoryServersForUser.ts
+  h_2620cc60cfd1e9 114,117
+client/dashboard/src/sdk/src/funcs/auditlogsList.ts
+  h_2620cc60cfd1e9 124,129
+client/dashboard/src/sdk/src/models/components/updateconfigurationrequestbody.ts
+  h_2620cc60cfd1e9 9
+client/dashboard/src/sdk/src/models/operations/listauditlogs.ts
+  h_2620cc60cfd1e9 53-60,116-117,136-137
+client/dashboard/src/sdk/src/models/operations/listchallenges.ts
+  h_2620cc60cfd1e9 51-58,121-122,141-142
+client/dashboard/src/sdk/src/models/operations/listshadowmcpinventoryserversforuser.ts
+  h_2620cc60cfd1e9 18-25,69-70,84-85
+client/dashboard/src/sdk/src/react-query/auditLogs.core.ts
+  h_2620cc60cfd1e9 90-91,138-139,185-186,204-205
+client/dashboard/src/sdk/src/react-query/auditLogs.ts
+  h_2620cc60cfd1e9 208-209,233-234
+client/dashboard/src/sdk/src/react-query/challenges.core.ts
+  h_2620cc60cfd1e9 57-58,96-97
+client/dashboard/src/sdk/src/react-query/challenges.ts
+  h_2620cc60cfd1e9 115-116,140-141
+client/dashboard/src/sdk/src/react-query/shadowMCPInventoryServersForUser.core.ts
+  h_2620cc60cfd1e9 55-56,88-89
+client/dashboard/src/sdk/src/react-query/shadowMCPInventoryServersForUser.ts
+  h_2620cc60cfd1e9 122-123,144-145
+docs/pubsub-topology.md
+  h_2620cc60cfd1e9 42-43,66,89-100,129-130,137-180,211-212,240
+docs/research/2026-08-18-request-reply-recipes.md
+  h_2620cc60cfd1e9 1-117
+docs/research/2026-08-20-enforcement-reply-load-test.md
+  h_2620cc60cfd1e9 1-198
+docs/research/2026-08-26-temporal-reply-spike.md
+  h_2620cc60cfd1e9 1-90
+functions/internal/bootstrap/prepare.go
+  h_2620cc60cfd1e9 90,127,133,268,285
+functions/internal/o11y/logger.go
+  h_2620cc60cfd1e9 86-93,99
+functions/internal/runner/handle_tool_call.go
+  h_2620cc60cfd1e9 90,108,195,205
+infra/gen/gram/risk/v1/enforcement_reply.pb.go
+  h_2620cc60cfd1e9 1-995
+infra/gen/gram/risk/v1/gitleaks_enforcement.pb.go
+  h_2620cc60cfd1e9 1-417
+infra/gen/gram/risk/v1/gitleaks_enforcer.pb.go
+  h_2620cc60cfd1e9 1-111
+infra/gen/kcc.yaml
+  h_2620cc60cfd1e9 917-936,1332-1349,1615-1630
+infra/gen_py/gram/risk/v1/enforcement_reply_pb2.py
+  h_2620cc60cfd1e9 1-45
+infra/gen_py/gram/risk/v1/enforcement_reply_pb2.pyi
+  h_2620cc60cfd1e9 1-86
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.py
+  h_2620cc60cfd1e9 1-40
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.pyi
+  h_2620cc60cfd1e9 1-28
+infra/gen_py/gram/risk/v1/gitleaks_enforcer_pb2.py
+  h_2620cc60cfd1e9 1-40
+infra/gen_py/gram/risk/v1/gitleaks_enforcer_pb2.pyi
+  h_2620cc60cfd1e9 1-10
+infra/pkg/gcp/publisher.go
+  h_2620cc60cfd1e9 6,19,23-51,157-160,162-166,173,178,182
+infra/pkg/gcp/publisher_mock.go
+  h_2620cc60cfd1e9 45
+infra/pkg/gcp/publisher_noop.go
+  h_2620cc60cfd1e9 11
+infra/pkg/gcp/publisher_test.go
+  h_2620cc60cfd1e9 26,32-48,52,78
+infra/pkg/topics/topics_gen.go
+  h_2620cc60cfd1e9 52-53,81,117-118,164-165
+infra/proto/gram/risk/v1/enforcement_reply.proto
+  h_2620cc60cfd1e9 1-51
+infra/proto/gram/risk/v1/gitleaks_enforcement.proto
+  h_2620cc60cfd1e9 1-26
+infra/proto/gram/risk/v1/gitleaks_enforcer.proto
+  h_2620cc60cfd1e9 1-21
+pitchfork.toml
+  h_2620cc60cfd1e9 62-73
+seed/demo/PAGES.md
+  h_2620cc60cfd1e9 12-42,58-64
+server/clickhouse/local/golang_migrate/20260831143540_shadow-ai-detections.down.sql
+  h_2620cc60cfd1e9 1-4
+server/clickhouse/local/golang_migrate/20260831143540_shadow-ai-detections.up.sql
+  h_2620cc60cfd1e9 1-26
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_2620cc60cfd1e9 1,97
+server/clickhouse/migrations/20260831143534_shadow-ai-detections.sql
+  h_2620cc60cfd1e9 1-26
+server/clickhouse/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,102
+server/clickhouse/schema.sql
+  h_2620cc60cfd1e9 303-334
+server/cmd/gram/admin.go
+  h_2620cc60cfd1e9 368
+server/cmd/gram/deps.go
+  h_2620cc60cfd1e9 470
+server/cmd/gram/start.go
+  h_2620cc60cfd1e9 1938
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 59,417-429,530,538,546,556
+server/cmd/tools/enforceload/main.go
+  h_2620cc60cfd1e9 1-1041
+server/cmd/tools/enforceproto/main.go
+  h_2620cc60cfd1e9 1-158
+server/design/access/design.go
+  h_2620cc60cfd1e9 388-393,409-410,487-492,518-519
+server/design/agent/design.go
+  h_2620cc60cfd1e9 134
+server/design/auditlogs/design.go
+  h_2620cc60cfd1e9 41-42,141-148
+server/gen/access/service.go
+  h_2620cc60cfd1e9 314-319,416-422
+server/gen/agent/service.go
+  h_2620cc60cfd1e9 300-303
+server/gen/auditlogs/service.go
+  h_2620cc60cfd1e9 140-144
+server/gen/http/access/client/cli.go
+  h_2620cc60cfd1e9 531,557-576,606-607,706,758-777,834-835
+server/gen/http/access/client/encode_decode.go
+  h_2620cc60cfd1e9 3102-3107,3840-3845
+server/gen/http/access/server/encode_decode.go
+  h_2620cc60cfd1e9 2845-2846,2867-2880,2906,3537-3538,3578-3591,3634
+server/gen/http/access/server/types.go
+  h_2620cc60cfd1e9 7522,7526-7527,7570,7578-7579
+server/gen/http/agent/client/types.go
+  h_2620cc60cfd1e9 19-22
+server/gen/http/agent/server/types.go
+  h_2620cc60cfd1e9 21-24
+server/gen/http/auditlogs/client/cli.go
+  h_2620cc60cfd1e9 20,79-98,120-121
+server/gen/http/auditlogs/client/encode_decode.go
+  h_2620cc60cfd1e9 77-82
+server/gen/http/auditlogs/server/encode_decode.go
+  h_2620cc60cfd1e9 47-48,86-99,111
+server/gen/http/auditlogs/server/types.go
+  h_2620cc60cfd1e9 783,793-794
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 326-327,347-348,605-606,7134,7143,7312,9888-9889,9901-9902,9908,9962-9963,9981-9982,9990,11061-11062,11080-11081,11087
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 2936-2951,3541-3556,10995-11010,73674-73677,73693-73696,87047
+server/internal/access/impl.go
+  h_2620cc60cfd1e9 777-784,794-795
+server/internal/access/shadow_mcp_inventory.go
+  h_2620cc60cfd1e9 172-173,375-376,561-567,579-580
+server/internal/admin/impl.go
+  h_2620cc60cfd1e9 758-759,803-809
+server/internal/admin/verifier.go
+  h_2620cc60cfd1e9 144
+server/internal/agent/aitargets/aitargets.go
+  h_2620cc60cfd1e9 1-76
+server/internal/agent/aitargets/aitargets_test.go
+  h_2620cc60cfd1e9 1-60
+server/internal/agent/configuration.go
+  h_2620cc60cfd1e9 40-46,135-147
+server/internal/agent/configuration_test.go
+  h_2620cc60cfd1e9 145-178
+server/internal/agent/handoffs.go
+  h_2620cc60cfd1e9 260
+server/internal/assets/adminhandlers.go
+  h_2620cc60cfd1e9 29,46
+server/internal/assets/functions.go
+  h_2620cc60cfd1e9 26
+server/internal/assets/impl.go
+  h_2620cc60cfd1e9 222,239,340,359,462,481,738,901,973,1105,1129,1348,1365
+server/internal/assets/organizationhandlers.go
+  h_2620cc60cfd1e9 29,57
+server/internal/assets/store_fs.go
+  h_2620cc60cfd1e9 97
+server/internal/assets/store_gcs.go
+  h_2620cc60cfd1e9 240
+server/internal/assets/store_s3.go
+  h_2620cc60cfd1e9 274
+server/internal/attr/conventions.go
+  h_2620cc60cfd1e9 410-412,740-741,1629-1648,1797-1800
+server/internal/audit/audittest/queries.sql
+  h_2620cc60cfd1e9 44-52
+server/internal/audit/audittest/repo/queries.sql.go
+  h_2620cc60cfd1e9 15-34
+server/internal/audit/list_test.go
+  h_2620cc60cfd1e9 5,12,14,51-179
+server/internal/audit/queries.sql
+  h_2620cc60cfd1e9 72-86,89-93,135-144,181-188,194-201
+server/internal/audit/repo/queries.sql.go
+  h_2620cc60cfd1e9 243-250,256-260,279-281,309,312-316,358-367,383-384,388-408,414-427,440-441,471
+server/internal/auditapi/impl.go
+  h_2620cc60cfd1e9 108-109,112-121,300-312,395-406
+server/internal/authz/repo/challenge_window_test.go
+  h_2620cc60cfd1e9 1-63
+server/internal/authz/repo/queries.go
+  h_2620cc60cfd1e9 6,169-181,220-228
+server/internal/background/activities/generate_toolset_embeddings.go
+  h_2620cc60cfd1e9 9,19,22-23,75-76,81-92
+server/internal/background/activities/generate_toolset_embeddings_test.go
+  h_2620cc60cfd1e9 1-39
+server/internal/billing/stub.go
+  h_2620cc60cfd1e9 404,479
+server/internal/chat/impl.go
+  h_2620cc60cfd1e9 1835-1839
+server/internal/chat/message_capture_strategy.go
+  h_2620cc60cfd1e9 442-445
+server/internal/chat/message_capture_strategy_test.go
+  h_2620cc60cfd1e9 5,12,19,120-185
+server/internal/chat/turnstream_tee.go
+  h_2620cc60cfd1e9 29,80,117-119,233
+server/internal/chat/turnstream_tee_test.go
+  h_2620cc60cfd1e9 17,31
+server/internal/conv/from.go
+  h_2620cc60cfd1e9 499-556
+server/internal/conv/from_test.go
+  h_2620cc60cfd1e9 4,248-334
+server/internal/demoseed/clickhouse.sql
+  h_2620cc60cfd1e9 117-126,170-269,286,312-322,512,679-685,803-805,809-815,833-846,849-862,867-875,882,1184-1210
+server/internal/demoseed/postgres.sql
+  h_2620cc60cfd1e9 492-496,500,512-516,519-521,524-528,532-616,854-922,2259-2264,2270-2291,2313-2314,2319-2339
+server/internal/deployments/helpers_test.go
+  h_2620cc60cfd1e9 27
+server/internal/externalkeys/verify.go
+  h_2620cc60cfd1e9 137
+server/internal/externalmcp/oauthdiscovery.go
+  h_2620cc60cfd1e9 358
+server/internal/externalmcp/process.go
+  h_2620cc60cfd1e9 189
+server/internal/externalmcp/proxytoolexecutor.go
+  h_2620cc60cfd1e9 165
+server/internal/externalmcp/registryclient.go
+  h_2620cc60cfd1e9 527
+server/internal/functions/deploy_fly.go
+  h_2620cc60cfd1e9 606,866,917,930
+server/internal/functions/deploy_local.go
+  h_2620cc60cfd1e9 333,566,579
+server/internal/functions/process.go
+  h_2620cc60cfd1e9 177,210
+server/internal/gateway/proxy.go
+  h_2620cc60cfd1e9 959,1112
+server/internal/identityapi/impl.go
+  h_2620cc60cfd1e9 68-75
+server/internal/jsonwebkeysets/mint.go
+  h_2620cc60cfd1e9 155
+server/internal/mcp/authnchallenge.go
+  h_2620cc60cfd1e9 278,659-661
+server/internal/mcp/authnchallenge_consent.go
+  h_2620cc60cfd1e9 441-443
+server/internal/mcp/authnchallenge_consent_meta_resource_test.go
+  h_2620cc60cfd1e9 48
+server/internal/mcp/authnchallenge_consent_tools.go
+  h_2620cc60cfd1e9 169
+server/internal/mcp/authnchallenge_token.go
+  h_2620cc60cfd1e9 908-910
+server/internal/mcp/consent_assets/consent-tools.js
+  h_2620cc60cfd1e9 2
+server/internal/mcp/consent_page_assets/consent-page.css
+  h_2620cc60cfd1e9 2
+server/internal/mcp/consent_template.html
+  h_2620cc60cfd1e9 366-370
+server/internal/mcp/impl.go
+  h_2620cc60cfd1e9 1076-1082
+server/internal/mcp/serve_meta.go
+  h_2620cc60cfd1e9 117-123
+server/internal/mcp/serve_platform.go
+  h_2620cc60cfd1e9 98-104
+server/internal/mcp/servepublic_credentialspresent_test.go
+  h_2620cc60cfd1e9 11,14,111-165,186-187
+server/internal/mcp/servepublic_test.go
+  h_2620cc60cfd1e9 10,26,66-96,500-546
+server/internal/mcp/setup_test.go
+  h_2620cc60cfd1e9 9-10,121-178,181,195,245,256,261
+server/internal/mcpapproval/exposure/exposure.go
+  h_2620cc60cfd1e9 171-172
+server/internal/mcpservers/impl.go
+  h_2620cc60cfd1e9 1009-1011,1019,1028-1030
+server/internal/mcpservers/queries.sql
+  h_2620cc60cfd1e9 383-384,390
+server/internal/mcpservers/repo/queries.sql.go
+  h_2620cc60cfd1e9 961-962,968
+server/internal/metamcp/impl.go
+  h_2620cc60cfd1e9 858-896,916-921
+server/internal/metamcp/queries.sql
+  h_2620cc60cfd1e9 356-395
+server/internal/metamcp/removemetamcpmember_test.go
+  h_2620cc60cfd1e9 125-258
+server/internal/metamcp/repo/queries.sql.go
+  h_2620cc60cfd1e9 62-116
+server/internal/metamcp/setup_test.go
+  h_2620cc60cfd1e9 30,32,242-344
+server/internal/metering/handler_stripe.go
+  h_2620cc60cfd1e9 26-27,30,33-35,65,77-78,87-95,104,117,136,150,165,203-210
+server/internal/metering/handler_stripe_test.go
+  h_2620cc60cfd1e9 13-14,18,42-83,88-89,93-108,116-117,125,133-134,143,150,153,165,173,176,189,197-198,203,211-227,239-240,252,289-290,296
+server/internal/metering/pipeline_test.go
+  h_2620cc60cfd1e9 93,123,174
+server/internal/mv/toolset.go
+  h_2620cc60cfd1e9 764-766
+server/internal/o11y/slog.go
+  h_2620cc60cfd1e9 174-181,187
+server/internal/o11y/slog_test.go
+  h_2620cc60cfd1e9 1-58
+server/internal/oops/codes.go
+  h_2620cc60cfd1e9 8-14,50,79-80,127-128
+server/internal/oops/mcp_test.go
+  h_2620cc60cfd1e9 110
+server/internal/openapi/process.go
+  h_2620cc60cfd1e9 416
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 63,89
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 62,88
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 67,93
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 49,98,105,163
+server/internal/platformmcp/catalog_identity_provider_attachment.go
+  h_2620cc60cfd1e9 308,314
+server/internal/platformmcp/client_admission.go
+  h_2620cc60cfd1e9 71,78,113,119,135,156,186,189
+server/internal/platformmcp/localfixture/configurator.go
+  h_2620cc60cfd1e9 274,325,344
+server/internal/platformmcp/queries.sql
+  h_2620cc60cfd1e9 533-534
+server/internal/platformmcp/repo/queries.sql.go
+  h_2620cc60cfd1e9 3868-3869
+server/internal/platformtools/usersessions/tools.go
+  h_2620cc60cfd1e9 120,123,125,163,202,250,271
+server/internal/rag/search_tools.go
+  h_2620cc60cfd1e9 8,23,34-38,121-124,135,150,296-301,337-339,345,349-353,426-551,556-563,608,644-647,656,686-692,694-699,701-743,745,747-748,750-759,762-768,771-933
+server/internal/rag/search_tools_test.go
+  h_2620cc60cfd1e9 1-185
+server/internal/redisinbox/inbox.go
+  h_2620cc60cfd1e9 1-585
+server/internal/redisinbox/inbox_test.go
+  h_2620cc60cfd1e9 1-197
+server/internal/redisinbox/requester.go
+  h_2620cc60cfd1e9 1-62
+server/internal/redisinbox/writer.go
+  h_2620cc60cfd1e9 1-95
+server/internal/remotesessions/challenge.go
+  h_2620cc60cfd1e9 647
+server/internal/remotesessions/client_bindings.go
+  h_2620cc60cfd1e9 39,57
+server/internal/remotesessions/clienthandlers.go
+  h_2620cc60cfd1e9 73,298-302,305-307,403-409,551,608,620-622,696,710-712,758
+server/internal/remotesessions/migrateissuer_test.go
+  h_2620cc60cfd1e9 167
+server/internal/remotesessions/platformmigrateissuer_test.go
+  h_2620cc60cfd1e9 242
+server/internal/remotesessions/queries.sql
+  h_2620cc60cfd1e9 488,506,534,554,594,604-606,616,639,645,884,996,1015,1032,1045,1071,1103,1143,1190-1192,1195,1197-1199,1202,1205-1206,1209,1213-1216,1224,1232,1291,1293-1296,1299,1303-1306,1314,1322
+server/internal/remotesessions/refreshservice.go
+  h_2620cc60cfd1e9 258
+server/internal/remotesessions/repo/queries.sql.go
+  h_2620cc60cfd1e9 45,95-97,100,102-104,107,110-111,114,118-121,129,137,1036,1042,1049,1260,1262-1265,1268,1272-1275,1283,1291,1864,1868-1870,1877,1910,1913-1914,1920,1930,2472-2474,2478-2480,2484,3389,3402,3467,3472-3473,3475,3485,3506,3575,3660,3927,4025,4028-4030,4032,4037,4058,4284,4422,4429-4431,4439,4604,4679,4821
+server/internal/remotesessions/sessionhandlers.go
+  h_2620cc60cfd1e9 50,103-105
+server/internal/remotesessions/upstreamrevoke.go
+  h_2620cc60cfd1e9 269
+server/internal/requestreply/contracts.go
+  h_2620cc60cfd1e9 1-25
+server/internal/risk/enforcereply/dispatch.go
+  h_2620cc60cfd1e9 1-172
+server/internal/risk/enforcereply/dispatch_test.go
+  h_2620cc60cfd1e9 1-156
+server/internal/risk/enforcereply/inbox.go
+  h_2620cc60cfd1e9 1-175
+server/internal/risk/enforcereply/inbox_test.go
+  h_2620cc60cfd1e9 1-225
+server/internal/risk/enforcereply/setup_test.go
+  h_2620cc60cfd1e9 1-56
+server/internal/risk/enforcereply/writer_test.go
+  h_2620cc60cfd1e9 1-23
+server/internal/scanners/gitleaks/enforce_handler.go
+  h_2620cc60cfd1e9 1-181
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  h_2620cc60cfd1e9 1-168
+server/internal/scanners/gitleaks/enforce_metrics.go
+  h_2620cc60cfd1e9 1-33
+server/internal/scanners/gitleaks/setup_test.go
+  h_2620cc60cfd1e9 1-60
+server/internal/scanners/publish_test.go
+  h_2620cc60cfd1e9 24
+server/internal/telemetry/repo/queries.sql.go
+  h_2620cc60cfd1e9 201-257,585-591,1307,1407,1468,1484-1494,3374-3376,3396-3406,3558-3564,3568
+server/internal/telemetry/shadow_mcp_inventory.go
+  h_2620cc60cfd1e9 95-96
+server/internal/telemetry/shadow_mcp_inventory_test.go
+  h_2620cc60cfd1e9 533-534,574-575,953-954,965-1051,1084-1085
+server/internal/testenv/queries.sql
+  h_2620cc60cfd1e9 842-857
+server/internal/testenv/testrepo/queries.sql.go
+  h_2620cc60cfd1e9 1252-1287
+server/internal/thirdparty/openrouter/completion_client.go
+  h_2620cc60cfd1e9 190-196
+server/internal/thirdparty/openrouter/embedding_errors_test.go
+  h_2620cc60cfd1e9 1-101
+server/internal/thirdparty/openrouter/embeddings_test.go
+  h_2620cc60cfd1e9 1-190
+server/internal/thirdparty/openrouter/errors.go
+  h_2620cc60cfd1e9 10,188-251
+server/internal/thirdparty/openrouter/response_choice_test.go
+  h_2620cc60cfd1e9 25
+server/internal/thirdparty/openrouter/types.go
+  h_2620cc60cfd1e9 291-297,338-344
+server/internal/thirdparty/openrouter/unified_client.go
+  h_2620cc60cfd1e9 16,41-44,463,530,621,660,734-736,878-1037,1061-1072,1086
+server/internal/thirdparty/openrouter/unified_client_test.go
+  h_2620cc60cfd1e9 209,284,322,367,475
+server/internal/tools/setup_test.go
+  h_2620cc60cfd1e9 144
+server/internal/toolsets/set_user_session_issuer.go
+  h_2620cc60cfd1e9 63-65
+server/internal/toolsets/setup_test.go
+  h_2620cc60cfd1e9 342
+server/internal/usersessions/cimdclienthandlers.go
+  h_2620cc60cfd1e9 184-186,197,281,320-322,361-363,373-375
+server/internal/usersessions/clienthandlers.go
+  h_2620cc60cfd1e9 82,137-139,217-219,239-241,280-282,351,406-408
+server/internal/usersessions/consenthandlers.go
+  h_2620cc60cfd1e9 52,120-122
+server/internal/usersessions/deleteusersessionissuer_test.go
+  h_2620cc60cfd1e9 8,16-17,21,316-525
+server/internal/usersessions/getusersessionclient_test.go
+  h_2620cc60cfd1e9 224-238
+server/internal/usersessions/getusersessionissuer_test.go
+  h_2620cc60cfd1e9 133-165
+server/internal/usersessions/issuerhandlers.go
+  h_2620cc60cfd1e9 129-131,151,201-204,252-254,311-313,323,334-336,342
+server/internal/usersessions/listusersessionclients_test.go
+  h_2620cc60cfd1e9 241-274
+server/internal/usersessions/listusersessionconsents_test.go
+  h_2620cc60cfd1e9 255-290
+server/internal/usersessions/listusersessionissuers_test.go
+  h_2620cc60cfd1e9 78-96
+server/internal/usersessions/listusersessions_test.go
+  h_2620cc60cfd1e9 611-648
+server/internal/usersessions/minthandler.go
+  h_2620cc60cfd1e9 117-119
+server/internal/usersessions/queries.sql
+  h_2620cc60cfd1e9 28-30,33-37,45,63-65,83,90-111,115,120-121,123-130,136-137,139-146,152,161-167,170-212,226-227,240-242,258-261,265,301,332-335,350,353,366,371-374,378,398,408-410,417,435,440-442,446-448,480,505-509,515,552,752,754-756,762,774,788,865-867,876-879,890-892,906,931-934,963
+server/internal/usersessions/repo/queries.sql.go
+  h_2620cc60cfd1e9 369,371-372,384-385,402-405,420-425,446,451-452,454-461,467-468,470-477,483,491-493,498-519,521,546,553-555,565,584-588,597,612,627-629,633-635,638-640,642,798-800,804-806,810,843-845,849-851,870,892-894,898-900,904,934-938,964,970-972,976,1077,1098,1135-1138,1187-1190,1195-1199,1206-1207,1230,1233-1234,1236,1241,1249-1252,1256,1306,1310-1313,1315,1320,1346,1388-1389,1392,1394,1399,1405-1408,1412,1448,1450,1452,1456-1459,1463-1468,1504-1506,1511-1515,1522-1523,1549-1551,1557-1561,1568-1569,1616,1625,1632-1636,1638,1643,1682,1735,1741-1743,1758,1770,1777-1779,1799,1801-1803,1805,1839,1845-1847,1850-1854,1856,1928,1934-1936,1940,1975,1981-1983,2002,2082-2083,2211-2213,2215,2221,2237,2319,2342,2351,2365,2406-2408,2419,2430,2594-2636,2642-2643,2648-2654,2656
+server/internal/usersessions/revokeusersession_test.go
+  h_2620cc60cfd1e9 17,134-156
+server/internal/usersessions/revokeusersessionclient_test.go
+  h_2620cc60cfd1e9 266-288
+server/internal/usersessions/revokeusersessionconsent_test.go
+  h_2620cc60cfd1e9 17,118-140
+server/internal/usersessions/sessionhandlers.go
+  h_2620cc60cfd1e9 56,60,99,142-145,149-152,156-159,212-214
+server/internal/usersessions/setup_test.go
+  h_2620cc60cfd1e9 29,32,35,412-553
+server/internal/usersessions/updateusersessionissuer_test.go
+  h_2620cc60cfd1e9 126-146
+server/internal/usersessions/usersessionissuercimdclients_test.go
+  h_2620cc60cfd1e9 1-86
+server/internal/usersessions/usersessions_facets_test.go
+  h_2620cc60cfd1e9 54-80
+tunnel/cmd/tunnel-gateway/main.go
+  h_2620cc60cfd1e9 13,82-100,103,114,116-117,121-125
+tunnel/e2e/tunnel_test.go
+  h_2620cc60cfd1e9 52,167,231,285,312-372,422-433,530
+tunnel/gateway/gateway.go
+  h_2620cc60cfd1e9 13,51-52,57-62,76-79,81-86,94,100,105-112,119-151,154-158,221-230,246,257-260,262,271,376-377,380,407-408,413-415
+tunnel/gateway/gateway_test.go
+  h_2620cc60cfd1e9 39-46,98-99,132-133,149-150,167-168,191,210,249-253,285-286,302,314,337,354-370
+tunnel/gateway/reconciler.go
+  h_2620cc60cfd1e9 1-430
+tunnel/gateway/reconciler_test.go
+  h_2620cc60cfd1e9 1-1012
+tunnel/gateway/registry.go
+  h_2620cc60cfd1e9 25,30,41-45,50,54,57,65-69,93,96-159,304-318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3bccb0e71e9dbf5e7d1261521cf014be6c50bc21",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
