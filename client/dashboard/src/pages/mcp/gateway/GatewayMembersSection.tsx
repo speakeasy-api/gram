@@ -37,7 +37,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -475,6 +475,7 @@ export function GatewayMembersSection({
         servers={servers}
         toolsets={toolsets}
         isLoading={isLoading || toolsets.isLoading}
+        toolsetsFailed={toolsets.isError}
         memberServerIds={new Set(rows.map((row) => row.member.mcpServerId))}
         onAdd={(server) => void handleAdd(server)}
         onAddToolset={(toolset) => void handleAddToolset(toolset)}
@@ -541,6 +542,7 @@ function AddMemberSheet({
   servers,
   toolsets,
   isLoading,
+  toolsetsFailed,
   memberServerIds,
   onAdd,
   onAddToolset,
@@ -553,6 +555,7 @@ function AddMemberSheet({
   servers: McpServer[];
   toolsets: ToolsetEntry[];
   isLoading: boolean;
+  toolsetsFailed: boolean;
   memberServerIds: Set<string>;
   onAdd: (server: McpServer) => void;
   onAddToolset: (toolset: ToolsetEntry) => void;
@@ -606,11 +609,18 @@ function AddMemberSheet({
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-6 py-4">
+          {toolsetsFailed && (
+            <Text className="text-destructive text-xs">
+              Couldn't load hosted MCP servers. Only servers with their own
+              entry are listed.
+            </Text>
+          )}
           {isLoading ? (
             <Text muted className="py-8 text-center">
               Loading MCP servers…
             </Text>
-          ) : candidates.length === 0 ? (
+          ) : candidates.length === 0 &&
+            toolsetsFailed ? null : candidates.length === 0 ? (
             <Text muted className="py-8 text-center">
               {search
                 ? `No MCP servers matching \u201c${search}\u201d`
@@ -627,9 +637,20 @@ function AddMemberSheet({
                     slug={toolset.slug}
                     label={CLASSIFICATION_LABEL.hosted}
                     badge={toolset.mcpEnabled ? undefined : "MCP off"}
-                    canAdd
-                    adding={adding}
-                    onAdd={() => onAddToolset(toolset)}
+                    action={
+                      // Minting the server row is a project-level write, so
+                      // gate on the project rather than the gateway.
+                      <RequireScope
+                        scope="mcp:write"
+                        resourceId={projectId}
+                        level="component"
+                      >
+                        <AddButton
+                          disabled={adding}
+                          onClick={() => onAddToolset(toolset)}
+                        />
+                      </RequireScope>
+                    }
                   />
                 );
               }
@@ -652,9 +673,12 @@ function AddMemberSheet({
                   slug={server.slug}
                   label={CLASSIFICATION_LABEL[classification]}
                   badge={servable ? undefined : "Excluded"}
-                  canAdd={canAdd}
-                  adding={adding}
-                  onAdd={() => onAdd(server)}
+                  action={
+                    <AddButton
+                      disabled={adding || !canAdd}
+                      onClick={() => onAdd(server)}
+                    />
+                  }
                 />
               );
             })
@@ -671,18 +695,14 @@ function CandidateRow({
   slug,
   label,
   badge,
-  canAdd,
-  adding,
-  onAdd,
+  action,
 }: {
   mcpServerId?: string;
   name: string;
   slug: string | undefined;
   label: string;
   badge: string | undefined;
-  canAdd: boolean;
-  adding: boolean;
-  onAdd: () => void;
+  action: ReactNode;
 }): JSX.Element {
   return (
     <div className="border-border/60 hover:border-border hover:bg-muted/40 trans flex items-center gap-3 border px-3 py-2.5">
@@ -708,14 +728,21 @@ function CandidateRow({
           <Badge.Text>{badge}</Badge.Text>
         </Badge>
       )}
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={adding || !canAdd}
-        onClick={onAdd}
-      >
-        <Button.Text>Add</Button.Text>
-      </Button>
+      {action}
     </div>
+  );
+}
+
+function AddButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <Button variant="secondary" size="sm" disabled={disabled} onClick={onClick}>
+      <Button.Text>Add</Button.Text>
+    </Button>
   );
 }
