@@ -8,16 +8,19 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -27,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -149,8 +153,9 @@ func callFingerprint(text string) string {
 }
 
 type scannerMetrics struct {
-	scanDuration metric.Float64Histogram
-	scanResults  metric.Int64Counter
+	scanDuration   metric.Float64Histogram
+	scanResults    metric.Int64Counter
+	pubsubDegraded metric.Int64Counter
 }
 
 func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *scannerMetrics {
@@ -176,13 +181,28 @@ func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName("risk.enforcement.scan_results"), attr.SlogError(err))
 	}
 
+	pubsubDegraded, err := meter.Int64Counter(
+		"risk.enforcement.pubsub_degraded",
+		metric.WithDescription("Total Pub/Sub enforcement lanes failed open by reason"),
+		metric.WithUnit("{lane}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName("risk.enforcement.pubsub_degraded"), attr.SlogError(err))
+	}
+
 	return &scannerMetrics{
-		scanDuration: scanDuration,
-		scanResults:  scanResults,
+		scanDuration:   scanDuration,
+		scanResults:    scanResults,
+		pubsubDegraded: pubsubDegraded,
 	}
 }
 
 var _ RiskScanner = (*Scanner)(nil)
+
+// EnforcementDispatcher is the request-reply seam used by realtime scanning.
+type EnforcementDispatcher interface {
+	Dispatch(context.Context, enforcereply.DispatchRequest) (enforcereply.Outcome, error)
+}
 
 // Scanner implements RiskScanner using gitleaks and optionally Presidio.
 // It pre-creates a gitleaks detector at construction time to avoid the
@@ -198,6 +218,7 @@ type Scanner struct {
 	piScanner         *promptinjection.Scanner    // never nil
 	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
 	flags             feature.Provider            // nil disables prompt_based enforcement
+	dispatcher        EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
 	metrics           *scannerMetrics
 	celEng            *celenv.Engine
 	recommended       ra.RecommendedSet
@@ -221,6 +242,39 @@ func NewScanner(
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+) (*Scanner, error) {
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, nil)
+}
+
+// NewScannerWithEnforcementDispatcher creates a scanner with Pub/Sub enforcement enabled when flagged.
+func NewScannerWithEnforcementDispatcher(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	customRuleScanner *customruleanalyzer.Scanner,
+	piiScanner ra.PIIScanner,
+	piScanner *promptinjection.Scanner,
+	promptPolicy *promptpolicy.Scanner,
+	flags feature.Provider,
+	celEng *celenv.Engine,
+	dispatcher EnforcementDispatcher,
+) (*Scanner, error) {
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcher)
+}
+
+func newScanner(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	customRuleScanner *customruleanalyzer.Scanner,
+	piiScanner ra.PIIScanner,
+	piScanner *promptinjection.Scanner,
+	promptPolicy *promptpolicy.Scanner,
+	flags feature.Provider,
+	celEng *celenv.Engine,
+	dispatcher EnforcementDispatcher,
 ) (*Scanner, error) {
 	if piScanner == nil {
 		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
@@ -246,6 +300,7 @@ func NewScanner(
 		piScanner:         piScanner,
 		promptPolicy:      promptPolicy,
 		flags:             flags,
+		dispatcher:        dispatcher,
 		metrics:           newScannerMetrics(meterProvider, logger),
 		celEng:            celEng,
 		recommended:       recommended,
@@ -351,6 +406,11 @@ func (s *Scanner) ScanForEnforcement(
 	if len(applicablePolicies) > 0 {
 		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
 	}
+
+	var pubsubFindings map[string][]scanners.Finding
+	if len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub) {
+		pubsubFindings = s.dispatchEnforcement(ctx, organizationID, projectID, text, applicablePolicies)
+	}
 	hasQuarantinePolicy := slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return p.Action == "quarantine"
 	})
@@ -369,7 +429,7 @@ func (s *Scanner) ScanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn, pubsubFindings)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -526,7 +586,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -625,9 +685,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		}
 		switch source {
 		case ra.SourceGitleaks:
-			gitleaksFindings, err := s.scanGitleaks(ctx, text)
-			if err != nil {
-				return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
+			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
+			if pubsubFindings == nil {
+				gitleaksFindings, err = s.scanGitleaks(ctx, text)
+				if err != nil {
+					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
+				}
 			}
 			findings := categoryScope.FilterFindings(view, filter(gitleaksFindings))
 			if len(findings) > 0 {
@@ -647,21 +710,29 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				}, nil
 			}
 		case ra.SourcePresidio:
-			if s.piiScanner == nil {
-				continue
+			var presidioFindings []scanners.Finding
+			if pubsubFindings != nil {
+				presidioFindings = filterPresidioFindings(pubsubFindings[ra.SourcePresidio], policy)
+			} else {
+				if s.piiScanner == nil {
+					continue
+				}
+				batchResults, analyzeErr := s.piiScanner.AnalyzeBatch(
+					ctx,
+					[]string{text},
+					policy.PresidioEntities,
+					ra.PresidioScoreThresholdFromConfig(policy.AnalyzerConfig),
+					func() {},
+				)
+				if analyzeErr != nil {
+					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
+				}
+				if len(batchResults) > 0 {
+					presidioFindings = batchResults[0]
+				}
 			}
-			batchResults, err := s.piiScanner.AnalyzeBatch(
-				ctx,
-				[]string{text},
-				policy.PresidioEntities,
-				ra.PresidioScoreThresholdFromConfig(policy.AnalyzerConfig),
-				func() {},
-			)
-			if err != nil {
-				return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", err))
-			}
-			if len(batchResults) > 0 {
-				filtered := categoryScope.FilterFindings(view, filter(batchResults[0]))
+			if len(presidioFindings) > 0 {
+				filtered := categoryScope.FilterFindings(view, filter(presidioFindings))
 				if len(filtered) > 0 {
 					// A Presidio failure surfaces as a dead-letter sentinel finding
 					// (DeadLetterReason set) rather than an error. Prefer a real
@@ -803,6 +874,161 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Entity:           finding.RuleID,
 		CallFingerprint:  "",
 		DeadLetterReason: "",
+	}
+}
+
+func (s *Scanner) dispatchEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, text string, policies []repo.RiskPolicy) map[string][]scanners.Finding {
+	lanes := make([]enforcereply.Lane, 0, 2)
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool { return slices.Contains(p.Sources, ra.SourceGitleaks) }) {
+		lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""})
+	}
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool { return slices.Contains(p.Sources, ra.SourcePresidio) }) {
+		lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""})
+	}
+	findings := make(map[string][]scanners.Finding, len(lanes))
+	if len(lanes) == 0 {
+		return findings
+	}
+	if s.dispatcher == nil {
+		for _, lane := range lanes {
+			s.recordPubsubDegraded(ctx, lane, "unavailable", nil)
+		}
+		return findings
+	}
+
+	presidioThreshold := presidioDispatchThreshold(policies)
+	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
+		OrganizationID:         organizationID,
+		ProjectID:              projectID.String(),
+		Content:                text,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: presidioThreshold,
+		Lanes:                  lanes,
+	})
+	if err != nil {
+		for _, lane := range lanes {
+			s.recordPubsubDegraded(ctx, lane, "dispatch_error", err)
+		}
+		return findings
+	}
+
+	for _, lane := range lanes {
+		reply := outcome.ByLane[lane]
+		switch {
+		case reply == nil:
+			reason := "incomplete"
+			laneErr := outcome.Failed[lane]
+			if errors.Is(laneErr, context.DeadlineExceeded) || (laneErr == nil && outcome.Deadline) {
+				reason = "deadline"
+			} else if laneErr != nil {
+				reason = "request_error"
+			}
+			s.recordPubsubDegraded(ctx, lane, reason, laneErr)
+		case reply.GetScanner() != lane.Scanner || reply.GetPolicyId() != lane.PolicyID:
+			s.recordPubsubDegraded(ctx, lane, "invalid_reply", nil)
+		case reply.GetStatus() != riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK:
+			s.recordPubsubDegraded(ctx, lane, "reply_"+strings.ToLower(strings.TrimPrefix(reply.GetStatus().String(), "ENFORCEMENT_STATUS_")), nil)
+		default:
+			source := ra.SourceGitleaks
+			if lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO {
+				source = ra.SourcePresidio
+			}
+			converted, convertErr := enforcementFindings(text, source, reply.GetFindings())
+			if convertErr != nil {
+				s.recordPubsubDegraded(ctx, lane, "invalid_finding", convertErr)
+				continue
+			}
+			findings[source] = converted
+		}
+	}
+	return findings
+}
+
+func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) ([]scanners.Finding, error) {
+	out := make([]scanners.Finding, 0, len(in))
+	for _, finding := range in {
+		if finding == nil || finding.GetRuleId() == "" {
+			return nil, errors.New("enforcement finding is missing a rule id")
+		}
+		start, end := int(finding.GetStartPos()), int(finding.GetEndPos())
+		if start < 0 || start > end || end > len(text) {
+			return nil, fmt.Errorf("enforcement finding has invalid byte range %d:%d", start, end)
+		}
+		match := text[start:end]
+		description := finding.GetRuleId()
+		if source == ra.SourcePresidio {
+			_, description = ra.DescribePresidioEntity(strings.ToUpper(strings.TrimPrefix(finding.GetRuleId(), "pii.")))
+		}
+		out = append(out, scanners.Finding{
+			RuleID:              finding.GetRuleId(),
+			Description:         description,
+			Match:               match,
+			StartPos:            start,
+			EndPos:              end,
+			Tags:                []string{finding.GetCategory()},
+			Source:              source,
+			Confidence:          finding.GetScore(),
+			DeadLetterReason:    "",
+			McpLookupToolCallID: finding.GetToolCallId(),
+			SpanGroupKey:        "",
+			Field:               finding.GetField(),
+			Path:                finding.GetPath(),
+		})
+	}
+	return out, nil
+}
+
+func presidioDispatchThreshold(policies []repo.RiskPolicy) *float64 {
+	threshold := 1.0
+	found := false
+	for _, policy := range policies {
+		if !slices.Contains(policy.Sources, ra.SourcePresidio) {
+			continue
+		}
+		found = true
+		threshold = min(threshold, effectivePresidioThreshold(policy.AnalyzerConfig))
+	}
+	if !found {
+		return nil
+	}
+	return &threshold
+}
+
+func effectivePresidioThreshold(config []byte) float64 {
+	threshold := ra.PresidioScoreThresholdFromConfig(config)
+	if threshold <= 0 || threshold > 1 {
+		return ra.DefaultPresidioScoreThreshold
+	}
+	return threshold
+}
+
+func filterPresidioFindings(findings []scanners.Finding, policy repo.RiskPolicy) []scanners.Finding {
+	threshold := effectivePresidioThreshold(policy.AnalyzerConfig)
+	out := make([]scanners.Finding, 0, len(findings))
+	for _, finding := range findings {
+		entity := strings.ToUpper(strings.TrimPrefix(finding.RuleID, "pii."))
+		if finding.Confidence < threshold || (len(policy.PresidioEntities) > 0 && !slices.Contains(policy.PresidioEntities, entity)) {
+			continue
+		}
+		out = append(out, finding)
+	}
+	return out
+}
+
+func (s *Scanner) recordPubsubDegraded(ctx context.Context, lane enforcereply.Lane, reason string, err error) {
+	args := []any{
+		attr.SlogValueString(lane.String()),
+		attr.SlogReason(reason),
+	}
+	if err != nil {
+		args = append(args, attr.SlogError(err))
+	}
+	s.logger.ErrorContext(ctx, "pub/sub enforcement lane failed open", args...)
+	if s.metrics.pubsubDegraded != nil {
+		s.metrics.pubsubDegraded.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("lane", lane.String()),
+			attr.Reason(reason),
+		))
 	}
 }
 

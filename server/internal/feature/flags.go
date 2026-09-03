@@ -22,6 +22,8 @@ const (
 	// FlagRiskRecommendedScopes gates per-project composition of recommended
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching

@@ -139,11 +139,14 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	}
 	dispatcher := testDispatcherWithPresidio(te.inbox, gitleaksPub, presidioPub, time.Second)
 
+	threshold := 0.25
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID: "org-presidio",
-		ProjectID:      "project-presidio",
-		Content:        "safe content",
-		Lanes:          []Lane{gitleaksLane, presidioLane},
+		OrganizationID:         "org-presidio",
+		ProjectID:              "project-presidio",
+		Content:                "safe content",
+		PresidioEntities:       []string{"EMAIL_ADDRESS", "PHONE_NUMBER"},
+		PresidioScoreThreshold: &threshold,
+		Lanes:                  []Lane{gitleaksLane, presidioLane},
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -154,6 +157,9 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	require.Equal(t, "org-presidio", message.GetOrganizationId())
 	require.Equal(t, "project-presidio", message.GetProjectId())
 	require.Equal(t, "safe content", message.GetContent())
+	require.Equal(t, []string{"EMAIL_ADDRESS", "PHONE_NUMBER"}, message.GetEntities())
+	require.True(t, message.HasScoreThreshold())
+	require.InDelta(t, threshold, message.GetScoreThreshold(), 1e-9)
 	_, err = time.Parse(time.RFC3339Nano, message.GetCreatedAt())
 	require.NoError(t, err)
 	requestID, err := uuid.Parse(message.GetRequestId())
@@ -168,6 +174,35 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	_, gitleaksCorrelation, err := ParseReplyURN(gitleaksPub.attributes[0][requestreply.ReplyURNAttribute])
 	require.NoError(t, err)
 	require.NotEqual(t, gitleaksCorrelation, correlationID)
+}
+
+func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-partial")
+	gitleaksPub := &captureEnforcementPublisher{onPublish: func(context.Context, *riskv1.GitleaksEnforcement, map[string]string) error {
+		return errors.New("publish failed")
+	}}
+	presidioPub := &capturePresidioPublisher{onPublish: func(ctx context.Context, _ *riskv1.PresidioEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}}
+	dispatcher := testDispatcherWithPresidio(te.inbox, gitleaksPub, presidioPub, time.Second)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-partial",
+		ProjectID:      "project-partial",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane, presidioLane},
+	})
+	require.NoError(t, err)
+	require.False(t, outcome.Complete)
+	require.ErrorContains(t, outcome.Failed[gitleaksLane], "publish failed")
+	require.NotNil(t, outcome.ByLane[presidioLane])
 }
 
 func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {

@@ -63,6 +63,12 @@ type DispatchRequest struct {
 	// Content is the raw text scanned by each lane.
 	Content string
 
+	// PresidioEntities is an optional scanner superset; empty requests all entities.
+	PresidioEntities []string
+
+	// PresidioScoreThreshold is an optional scanner minimum.
+	PresidioScoreThreshold *float64
+
 	// Lanes is the distinct set of scanner and policy results required.
 	Lanes []Lane
 }
@@ -139,7 +145,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		return Outcome{}, fmt.Errorf("enforcement content is %d bytes; maximum is %d bytes", len(request.Content), MaxContentBytes)
 	}
 	if len(request.Lanes) == 0 {
-		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Complete: true, Deadline: false}, nil
+		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false}, nil
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {
@@ -160,6 +166,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	}
 	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
 	byLane := make(map[Lane]*riskv1.EnforcementReply, len(request.Lanes))
+	failed := make(map[Lane]error, len(request.Lanes))
 	deadline := false
 	var mu sync.Mutex
 	group, groupCtx := errgroup.WithContext(ctx)
@@ -178,6 +185,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 					OrganizationId: new(request.OrganizationID),
 					CreatedAt:      new(createdAt),
 					Content:        new(request.Content),
+					Entities:       request.PresidioEntities,
+					ScoreThreshold: request.PresidioScoreThreshold,
 				}.Build()
 			default:
 				laneBroker = d.gitleaks
@@ -191,13 +200,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			}
 			reply, requestErr := laneBroker.Request(laneCtx, enforcement)
 			if requestErr != nil {
-				if errors.Is(requestErr, context.DeadlineExceeded) {
-					mu.Lock()
-					deadline = true
-					mu.Unlock()
-					return nil
-				}
-				return fmt.Errorf("request enforcement lane %s: %w", lane.String(), requestErr)
+				mu.Lock()
+				failed[lane] = requestErr
+				deadline = deadline || errors.Is(requestErr, context.DeadlineExceeded)
+				mu.Unlock()
+				return nil
 			}
 			mu.Lock()
 			byLane[lane] = reply
@@ -208,7 +215,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if err := group.Wait(); err != nil {
 		return Outcome{}, fmt.Errorf("dispatch enforcement lanes: %w", err)
 	}
-	return Outcome{ByLane: byLane, Complete: len(byLane) == len(request.Lanes), Deadline: deadline}, nil
+	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline}, nil
 }
 
 // Close flushes and stops the dispatcher's publishers.
