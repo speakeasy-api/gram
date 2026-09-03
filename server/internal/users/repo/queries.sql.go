@@ -530,7 +530,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
@@ -559,6 +561,9 @@ type UpsertUserRow struct {
 	WasCreated      bool
 }
 
+// Login and other IDP upserts mean the user is authenticating now, so clear
+// WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+// email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertUserRow, error) {
 	row := q.db.QueryRow(ctx, upsertUser,
 		arg.ID,
