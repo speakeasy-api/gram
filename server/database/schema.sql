@@ -1662,7 +1662,7 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   CONSTRAINT external_oauth_server_metadata_source_check CHECK (
     (metadata IS NULL) <> (authorization_server_issuer IS NULL)
   ),
-  CONSTRAINT external_oauth_server_metadata_authorization_server_issuer_check CHECK (
+  CONSTRAINT external_oauth_server_metadata_authorization_server_issuer_chec CHECK (
     authorization_server_issuer IS NULL OR (
       authorization_server_issuer <> '' AND
       CHAR_LENGTH(authorization_server_issuer) <= 500
