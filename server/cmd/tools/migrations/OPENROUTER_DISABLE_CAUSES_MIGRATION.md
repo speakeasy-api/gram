@@ -9,6 +9,7 @@
 - Automatic billing classification fails closed. `billing_inactive` requires a current `free` account with no subscription and a durable `organization:payg_deactivated` audit whose organization subject and snapshots prove a `payg` to `free` transition. Never-PAYG, malformed, and contradictory rows remain ambiguous.
 - Admin evidence requires the production audit identity: subject ID `<ORG_ID>/<KEY_TYPE>` and subject type `openrouter_api_key`.
 - Output is aggregate JSON only. Blocked logs expose only `ambiguous_rows`, `validation_failed`, `override_conflict`, `database_or_timeout`, or `unexpected`; they do not include row identifiers, override contents, credentials, or database URLs.
+- Application code never infers a cause while handling a business event. In particular, trial demotion remains transactional and fail-closed for `NULL`: the classifier is the single owner of historical provenance decisions. Temporal marks that data-contract error non-retryable within the current run, but the hourly sweep continues reporting the undemoted trial until classification succeeds.
 
 Set `GRAM_DATABASE_URL` in the environment. Do not put credentials in flags or shell history. Set `GRAM_CODE_SHA` to the published commit being run.
 
@@ -63,7 +64,7 @@ If the category is `database_or_timeout`, verify connectivity and database healt
 
 ## Rollout order
 
-1. Deploy the nullable compatibility schema and application reads/writes.
-2. Deploy this Wave B classifier and operator safeguards.
-3. Run dry-run, apply, and validation in that order.
-4. Do not begin Wave C cause-specific recovery or make `disable_causes` mandatory until Wave B validation succeeds and its contract has been reviewed.
+1. Deploy the nullable column and its `{}` default. The default affects only future inserts and is safe while ambiguous `NULL` rows remain. Do not add `NOT NULL` or rewrite existing rows.
+2. Deploy application writers that explicitly create `{}` and mutate named causes. This includes routing the legacy generic disable entry point through `admin_lock`; it must fail closed rather than overwrite a `NULL` row. Complete this step before running the classifier so application traffic cannot reintroduce `NULL`.
+3. Deploy this classifier and operator safeguards, then run dry-run, apply, and validation in that order. Trial demotion may continue surfacing non-retryable data-contract failures during this interval; those failures preserve the transaction and are not permission to skip a row.
+4. Treat any validation failure or remaining ambiguity as a rollout stop. A future `NOT NULL` migration is allowed only after production validation reports zero `NULL` rows, every writer in every deployed version is known to preserve classified state, and that precondition has been reviewed explicitly.

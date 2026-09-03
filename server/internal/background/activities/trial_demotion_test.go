@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -465,7 +466,11 @@ func TestDemoteExpiredTrials_NullDisableCausesFailClosedAndRollBack(t *testing.T
 	materializeTrialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat, nil)
 
 	err := ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID})
-	require.ErrorContains(t, err, "unclassified key")
+	require.ErrorIs(t, err, openrouter.ErrAPIKeyDisableCausesUnclassified)
+	var applicationErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &applicationErr)
+	require.True(t, applicationErr.NonRetryable())
+	require.Equal(t, "openrouter_disable_causes_unclassified", applicationErr.Type())
 
 	trial, getErr := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, getErr)
