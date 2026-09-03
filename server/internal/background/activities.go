@@ -98,6 +98,11 @@ type Publishers struct {
 	Outbox                  topics.Publisher
 }
 
+type expiredTrialDemoter interface {
+	List(context.Context) ([]string, error)
+	Demote(context.Context, activities.DemoteExpiredTrialArgs) error
+}
+
 type Activities struct {
 	db                              *pgxpool.Pool
 	temporalEnv                     *tenv.Environment
@@ -173,7 +178,7 @@ type Activities struct {
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
-	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	demoteExpiredTrials             expiredTrialDemoter
 	trialEmails                     *trialemails.Service
 	mcpResearch                     *activities.McpResearch
 	mcpApprovalRecheck              *activities.McpApprovalRecheck

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,7 +11,32 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+type unclassifiedTrialDemoter struct{}
+
+func (unclassifiedTrialDemoter) List(context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (unclassifiedTrialDemoter) Demote(context.Context, activities.DemoteExpiredTrialArgs) error {
+	return fmt.Errorf("add trial demotion cause: %w", openrouter.ErrAPIKeyDisableCausesUnclassified)
+}
+
+func TestDemoteExpiredTrialActivity_UnclassifiedCauseIsNonRetryable(t *testing.T) {
+	t.Parallel()
+
+	a := new(Activities)
+	a.demoteExpiredTrials = unclassifiedTrialDemoter{}
+	err := a.DemoteExpiredTrial(t.Context(), activities.DemoteExpiredTrialArgs{OrganizationID: "org_1"})
+
+	var applicationErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &applicationErr)
+	require.True(t, applicationErr.NonRetryable())
+	require.Equal(t, "openrouter_disable_causes_unclassified", applicationErr.Type())
+	require.ErrorIs(t, err, openrouter.ErrAPIKeyDisableCausesUnclassified)
+}
 
 func TestDemoteExpiredTrialsWorkflow_DemotesEveryExpiredTrial(t *testing.T) {
 	t.Parallel()
