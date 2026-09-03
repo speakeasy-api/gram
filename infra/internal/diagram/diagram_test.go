@@ -130,3 +130,40 @@ var _ = riskv1.Finding{}
 		t.Errorf("imports[%q] = %q, want %q", "riskv1", got, "gram.risk.v1")
 	}
 }
+
+func TestPyImportsInlineComments(t *testing.T) {
+	src := `from gram.ping.v2 import ping_pb2  # trailing comment
+from gram.risk.v1 import (
+    finding_pb2,  # mid-block comment must not swallow the next item
+    presidio_analysis_pb2,
+    reply_pb2,  # a ) inside a comment must not close the block
+    presidio_enforcement_pb2,
+)
+from redis import asyncio as redis_asyncio
+`
+	path := filepath.Join(t.TempDir(), "multi.py")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	imports, err := pyImports(path)
+	if err != nil {
+		t.Fatalf("pyImports: %v", err)
+	}
+
+	want := map[string]string{
+		"ping_pb2":                 "gram.ping.v2",
+		"finding_pb2":              "gram.risk.v1",
+		"presidio_analysis_pb2":    "gram.risk.v1",
+		"reply_pb2":                "gram.risk.v1",
+		"presidio_enforcement_pb2": "gram.risk.v1",
+	}
+	for name, pkg := range want {
+		if got := imports[name]; got != pkg {
+			t.Errorf("imports[%q] = %q, want %q", name, got, pkg)
+		}
+	}
+	if len(imports) != len(want) {
+		t.Errorf("imports has %d entries, want %d: %v", len(imports), len(want), imports)
+	}
+}

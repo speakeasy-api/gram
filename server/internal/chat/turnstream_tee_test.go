@@ -14,7 +14,7 @@ func TestTeeCompletionStreamAssemblesTextAndDeltas(t *testing.T) {
 	t.Parallel()
 
 	body := strings.Join([]string{
-		`data: {"id":"gen-1","model":"anthropic/claude-haiku-4.5","choices":[{"delta":{"content":"Hello"}}]}`,
+		`data: {"id":"gen-1","model":"anthropic/claude-haiku-4.5","provider":"Amazon Bedrock","choices":[{"delta":{"content":"Hello"}}]}`,
 		`data: {"choices":[{"delta":{"content":", world"}}]}`,
 		`data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":3,"total_tokens":14}}`,
 		`data: [DONE]`,
@@ -28,6 +28,7 @@ func TestTeeCompletionStreamAssemblesTextAndDeltas(t *testing.T) {
 	require.Equal(t, "Hello, world", got.Content)
 	require.Equal(t, "gen-1", got.MessageID)
 	require.Equal(t, "anthropic/claude-haiku-4.5", got.Model)
+	require.Equal(t, "Amazon Bedrock", got.Provider)
 	require.NotNil(t, got.FinishReason)
 	require.Equal(t, "stop", *got.FinishReason)
 	require.Equal(t, 11, got.Usage.PromptTokens)

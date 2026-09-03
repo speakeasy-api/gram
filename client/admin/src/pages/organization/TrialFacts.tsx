@@ -29,6 +29,14 @@ function stateLabel(state: unknown): string {
   }
 }
 
+const LABEL_BY_STATE: Record<string, string | undefined> = TRIAL_LABELS;
+
+function trialLabel(state: unknown): string {
+  return typeof state === "string" && Object.hasOwn(TRIAL_LABELS, state)
+    ? (LABEL_BY_STATE[state] ?? "Unknown")
+    : stateLabel(state);
+}
+
 function nextRemainingChange(remaining: number): number {
   if (remaining > 72 * HOUR_MS) {
     return Math.max(72 * HOUR_MS, (Math.ceil(remaining / DAY_MS) - 1) * DAY_MS);
@@ -57,25 +65,85 @@ function Fact({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[7rem_1fr] gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{children}</span>
+    <div className="grid grid-cols-1 gap-1 py-1 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+      <span data-slot="field-label" className="text-muted-foreground text-sm">
+        {label}
+      </span>
+      <span className="text-sm">{children}</span>
     </div>
   );
 }
 
-// Detail-only trial facts. List and peek surfaces deliberately keep using the
-// compact Trial component; this view has room for exact and changing facts.
+// Exact trial fields belong in Details. The side card summarizes the same trial
+// for action, rather than replacing these record facts with another table.
 export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
   const live =
     org.trial_state === "running" || org.trial_state === "ending_soon";
   const [now, setNow] = useState(() => new Date());
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const end = new Date(org.trial_ends_at ?? "");
-  const endTime = end.getTime();
+  const endTime = new Date(org.trial_ends_at ?? "").getTime();
+  const attachExpiration = useCallback(
+    (node: HTMLDivElement | null) => {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+      if (!node || !live || Number.isNaN(endTime)) return;
+
+      const tick = () => {
+        const currentTime = Date.now();
+        const remaining = endTime - currentTime;
+        if (remaining <= 0) {
+          setNow(new Date(currentTime));
+          return;
+        }
+        timer.current = setTimeout(tick, Math.min(remaining, MAX_TIMEOUT_MS));
+      };
+
+      tick();
+    },
+    [endTime, live],
+  );
+  useOnUnmount(() => clearTimeout(timer.current));
+  const expired = live && !Number.isNaN(endTime) && endTime <= now.getTime();
+  const lifecycleFact =
+    org.trial_state === "converted"
+      ? { label: "Conversion date", date: org.trial_converted_at }
+      : org.trial_state === "demoted"
+        ? { label: "Demotion date", date: org.trial_demoted_at }
+        : undefined;
+  const state =
+    org.trial_state === "none" || !org.trial_state
+      ? "No trial"
+      : expired
+        ? TRIAL_LABELS.expired
+        : trialLabel(org.trial_state);
+
+  return (
+    <div ref={attachExpiration} className="mt-5 border-t pt-5">
+      <Fact label="Trial state">{state}</Fact>
+      {state !== "No trial" && (
+        <>
+          <Fact label="Trial tier">{tierLabel(org.trial_tier)}</Fact>
+          <Fact label="End date">{dateLabel(org.trial_ends_at)}</Fact>
+          {lifecycleFact && (
+            <Fact label={lifecycleFact.label}>
+              {dateLabel(lifecycleFact.date)}
+            </Fact>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function TrialSummary({ org }: { org: AdminOrganization }): JSX.Element {
+  const live =
+    org.trial_state === "running" || org.trial_state === "ending_soon";
+  const [now, setNow] = useState(() => new Date());
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const endTime = new Date(org.trial_ends_at ?? "").getTime();
 
   const attachRemainingTime = useCallback(
-    (node: HTMLSpanElement | null) => {
+    (node: HTMLParagraphElement | null) => {
       clearTimeout(timer.current);
       timer.current = undefined;
       if (!node) return;
@@ -83,16 +151,12 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
       const tick = () => {
         const currentTime = Date.now();
         setNow(new Date(currentTime));
-
         const remaining = endTime - currentTime;
         if (Number.isNaN(endTime) || remaining <= 0) return;
-
         const delay = remaining - nextRemainingChange(remaining);
         timer.current = setTimeout(tick, Math.min(delay, MAX_TIMEOUT_MS));
       };
 
-      // The component may have spent time in a completed state with no timer.
-      // Refresh before scheduling whenever the countdown is attached.
       tick();
     },
     [endTime],
@@ -100,48 +164,40 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
 
   useOnUnmount(() => clearTimeout(timer.current));
 
-  if (org.trial_state === "none" || !org.trial_state) {
-    return <span className="text-muted-foreground text-sm">No trial</span>;
-  }
-
   const expired = live && !Number.isNaN(endTime) && endTime <= now.getTime();
-
-  if (!live || expired) {
-    // Keep each lifecycle date beside its state branch. Conversion and demotion
-    // timestamps are both present on the wire, so selecting one generically
-    // would make it too easy to silently show the other event.
-    const lifecycleFact =
-      org.trial_state === "converted"
-        ? { label: "Conversion date", date: org.trial_converted_at }
-        : org.trial_state === "demoted"
-          ? { label: "Demotion date", date: org.trial_demoted_at }
-          : undefined;
-    const label = expired ? TRIAL_LABELS.expired : stateLabel(org.trial_state);
-
-    return (
-      <div className="space-y-1 text-sm">
-        <Fact label="State">{label}</Fact>
-        <Fact label="Tier">{tierLabel(org.trial_tier)}</Fact>
-        {lifecycleFact && (
-          <Fact label={lifecycleFact.label}>
-            {dateLabel(lifecycleFact.date)}
-          </Fact>
-        )}
-        <Fact label="Original end">{dateLabel(org.trial_ends_at)}</Fact>
-      </div>
-    );
-  }
-
-  const remaining = formatTrialTimeRemaining(org.trial_ends_at, now);
+  const remaining =
+    live && !expired
+      ? formatTrialTimeRemaining(org.trial_ends_at, now)
+      : undefined;
+  const hero = remaining
+    ? `${remaining} left`
+    : expired || org.trial_state === "expired"
+      ? "Trial ended"
+      : org.trial_state === "demoted"
+        ? "Trial demoted"
+        : "Trial status unknown";
+  const status = expired ? TRIAL_LABELS.expired : trialLabel(org.trial_state);
 
   return (
-    <div className="space-y-1 text-sm">
-      <Fact label="State">{TRIAL_LABELS[org.trial_state] ?? "Unknown"}</Fact>
-      <Fact label="Tier">{tierLabel(org.trial_tier)}</Fact>
-      <Fact label="Ends">{dateLabel(org.trial_ends_at)}</Fact>
-      <Fact label="Remaining">
-        <span ref={attachRemainingTime}>{remaining ?? "Unknown"}</span>
-      </Fact>
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <h5 className="text-sm font-semibold">
+          {live && !expired ? "Active trial" : "Enterprise trial"}
+        </h5>
+        <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium tracking-wide">
+          {status.toUpperCase()}
+        </span>
+      </div>
+      <p
+        ref={live && !expired ? attachRemainingTime : undefined}
+        className="mt-5 text-2xl font-semibold tracking-tight"
+      >
+        {hero}
+      </p>
+      <p className="text-muted-foreground mt-1 text-xs">
+        End date {dateLabel(org.trial_ends_at)} · {tierLabel(org.trial_tier)}{" "}
+        tier
+      </p>
     </div>
   );
 }

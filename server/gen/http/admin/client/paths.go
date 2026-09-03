@@ -126,3 +126,8 @@ func CancelStripeSubscriptionAdminPath() string {
 func ResumeStripeSubscriptionAdminPath() string {
 	return "/admin/organization.resumeStripeSubscription"
 }
+
+// MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
+func MarkEnterpriseTrialConvertedAdminPath() string {
+	return "/admin/trial.convert"
+}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -157,9 +158,15 @@ func TestProxy_Post_NonStrictForwardsDuplicateJSONMembers(t *testing.T) {
 	t.Parallel()
 
 	var upstreamHits atomic.Int32
+	type forwardedRequest struct {
+		body string
+		err  error
+	}
+	forwardedRequests := make(chan forwardedRequest, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upstreamHits.Add(1)
-		_, _ = io.Copy(io.Discard, r.Body)
+		body, err := io.ReadAll(r.Body)
+		forwardedRequests <- forwardedRequest{body: string(body), err: err}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":3,"result":{}}`))
@@ -167,10 +174,25 @@ func TestProxy_Post_NonStrictForwardsDuplicateJSONMembers(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	p := newProxyForTest(t, upstream.URL)
-
-	_, err := postJSON(t, p, `{"jsonrpc":"2.0","id":3,"method":"ping","method":"ping"}`)
-	require.NoError(t, err)
-	require.Equal(t, int32(1), upstreamHits.Load())
+	require.Empty(t, p.ToolsCallPreForwardInterceptors)
+	bodies := []string{
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","method":"ping","params":{"name":"protected","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"protected"},"params":[]}`,
+	}
+	for _, body := range bodies {
+		rr, err := postJSON(t, p, body)
+		require.NoError(t, err)
+		var forwarded forwardedRequest
+		select {
+		case forwarded = <-forwardedRequests:
+		case <-time.After(2 * time.Second):
+			require.FailNow(t, "timed out waiting for forwarded request")
+		}
+		require.NoError(t, forwarded.err)
+		require.Equal(t, body, forwarded.body)
+		require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"result":{}}`, rr.Body.String())
+	}
+	require.Equal(t, int32(len(bodies)), upstreamHits.Load())
 }
 
 func TestProxy_Post_NonStrictForwardsMalformedToolsCall(t *testing.T) {

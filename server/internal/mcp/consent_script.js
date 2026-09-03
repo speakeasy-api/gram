@@ -2,12 +2,20 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Neutralises double-clicks on the consent controls. A second activation
-// while the first request is still pending sends the user to an authn
-// challenge that has already been consumed, producing "authn challenge
-// state not found or expired" (AIS-103). Both the "Give Access" submit and
-// the per-remote Connect/Reconnect links are guarded, and each swaps in a
-// loading spinner so the pending state is visible.
+// Two jobs:
+//
+//   1. Neutralise double-clicks on the consent controls. A second activation
+//      while the first request is still pending sends the user to an authn
+//      challenge that has already been consumed, producing "authn challenge
+//      state not found or expired" (AIS-103).
+//   2. Fan the page-level auto-refresh choice out to every card.
+//
+// Connect deliberately stays a full-page form POST. Running it in a popup kept
+// the page's state through the provider round trip, but handed the provider a
+// window.opener onto this consent screen — a reverse-tabnabbing target on the
+// one page where a spoof is worth the most — and reloading the parent when the
+// popup closed discarded any pending tool selection, silently widening the
+// grant back to "all tools".
 (function () {
   "use strict";
 
@@ -24,7 +32,8 @@
   function showPending(el, label) {
     el.textContent = "";
     var spinner = document.createElement("span");
-    spinner.className = "spinner";
+    spinner.className =
+      "mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent align-[-0.125em]";
     spinner.setAttribute("aria-hidden", "true");
     el.appendChild(spinner);
     el.appendChild(document.createTextNode(label));
@@ -55,28 +64,47 @@
     });
   }
 
-  // Connect / Reconnect and Refresh now each make an upstream request. Guard
-  // both against repeat clicks and make their pending state visible.
+  // Connect / Reconnect and Refresh each make an upstream request. Guard both
+  // against repeat clicks and make their pending state visible.
   function guardActionButtons(selector, pendingLabel) {
     var buttons = document.querySelectorAll(selector);
-    Array.prototype.forEach.call(buttons, function (button) {
-      button.addEventListener("click", function (event) {
-        if (button.getAttribute("aria-disabled") === "true") {
+    Array.prototype.forEach.call(buttons, function (actionButton) {
+      actionButton.addEventListener("click", function (event) {
+        if (actionButton.getAttribute("aria-disabled") === "true") {
           event.preventDefault();
           return;
         }
-        button.setAttribute("aria-disabled", "true");
-        showPending(button, pendingLabel);
+        actionButton.setAttribute("aria-disabled", "true");
+        showPending(actionButton, pendingLabel);
         // Preserve the clicked button's action in the form submission, then
         // make the pending state native for keyboard and assistive technology.
         window.setTimeout(function () {
-          button.disabled = true;
+          actionButton.disabled = true;
         }, 0);
       });
     });
   }
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
+
+  // Session length is stated on the summary line so it is visible without
+  // opening the configuration disclosure; keep the two in step when the
+  // control inside the disclosure changes.
+  var sessionDuration = document.querySelector(
+    'select[name="session_duration_hours"]',
+  );
+  var sessionDurationLabel = document.querySelector(
+    "[data-session-duration-label]",
+  );
+  if (sessionDuration && sessionDurationLabel) {
+    sessionDuration.addEventListener("change", function () {
+      var option = sessionDuration.options[sessionDuration.selectedIndex];
+      var short = option && option.getAttribute("data-short-label");
+      if (short) {
+        sessionDurationLabel.textContent = short;
+      }
+    });
+  }
 
   // Auto refresh: the page-level combobox drives every provider at once. A
   // change syncs each card's hidden auto_refresh input (so a subsequent
@@ -90,9 +118,12 @@
       Array.prototype.forEach.call(inputs, function (input) {
         input.value = value;
       });
-      var form = document.getElementById("auto-refresh-form");
-      if (form && form.hasAttribute("data-auto-refresh-persist")) {
-        form.submit();
+      var refreshForm = document.getElementById("auto-refresh-form");
+      if (
+        refreshForm &&
+        refreshForm.hasAttribute("data-auto-refresh-persist")
+      ) {
+        refreshForm.submit();
       }
     });
   }

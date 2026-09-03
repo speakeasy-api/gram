@@ -17,6 +17,10 @@ export type AdminOpenRouterKey = {
    */
   createdAt: Date;
   /**
+   * Administrative view of every reason currently disabling the key. Values are open-ended for forward compatibility.
+   */
+  disableCauses?: Array<string> | undefined;
+  /**
    * Whether the key is locked down (refused locally and disabled upstream).
    */
   disabled: boolean;
@@ -60,6 +64,7 @@ export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    disable_causes: z.optional(z.array(z.string())),
     disabled: z.boolean(),
     gram_account_type: z.string(),
     key_type: z.string(),
@@ -75,6 +80,7 @@ export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "disable_causes": "disableCauses",
       "gram_account_type": "gramAccountType",
       "key_type": "keyType",
       "monthly_credits": "monthlyCredits",

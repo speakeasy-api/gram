@@ -324,10 +324,12 @@ func TestDeleteMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac forbidden delete")
 
-	err := ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
-		ID:               uuid.NewString(),
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	err := ti.service.DeleteMcpServer(denied, &gen.DeleteMcpServerPayload{
+		ID:               fixture.server.ID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,

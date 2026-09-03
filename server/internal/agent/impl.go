@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -57,6 +58,7 @@ type Service struct {
 	productFeatures ProductFeaturesClient
 	serverURL       string
 	blobStore       assets.BlobStore
+	telemetry       *telemetry.Logger
 }
 
 var (
@@ -75,6 +77,7 @@ func NewService(
 	productFeatures ProductFeaturesClient,
 	serverURL string,
 	blobStore assets.BlobStore,
+	telemetryLogger *telemetry.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -88,6 +91,7 @@ func NewService(
 		productFeatures: productFeatures,
 		serverURL:       serverURL,
 		blobStore:       blobStore,
+		telemetry:       telemetryLogger,
 	}
 }
 

@@ -351,3 +351,68 @@ func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing
 		remoteIssuerB: {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: clientB},
 	}, tokens)
 }
+
+// The partial variant the meta MCP gate calls: a bound client the subject
+// never linked is skipped, and the linked sibling still resolves with its
+// qualified resource — one unconnected provider must not blank the session.
+func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-partial")
+	clientA, remoteIssuerA := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-a")
+	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-b")
+
+	subject := urn.NewUserSubject("resolve-partial-subject")
+	accessEnc, err := enc.Encrypt([]byte("token-a"))
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: clientA,
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+		Resource:              conv.ToPGText("https://a.example.com/mcp"),
+	})
+	require.NoError(t, err)
+
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
+		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
+	}, tokens)
+
+	// The strict variant still refuses the same shape, pinning that partial
+	// resolution changed nothing for direct-endpoint callers.
+	_, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+}
+
+// Every bound client unlinked: the partial variant returns an empty map, not
+// an error — the session serves and each member degrades member-scoped.
+func TestResolveAvailableAccessTokens_AllUnlinkedResolvesEmpty(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-partial-empty")
+	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-empty")
+
+	subject := urn.NewUserSubject("resolve-partial-empty-subject")
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	require.NoError(t, err)
+	require.Empty(t, tokens)
+}

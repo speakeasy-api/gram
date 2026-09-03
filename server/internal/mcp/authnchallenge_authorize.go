@@ -193,6 +193,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		Subject:             subject,
 		CreatedAt:           time.Now(),
 		FirstParty:          false,
+		// Auto-connect has not run for a challenge this new.
+		AutoConnectDone: false,
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

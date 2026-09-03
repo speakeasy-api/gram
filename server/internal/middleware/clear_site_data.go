@@ -6,7 +6,7 @@ import (
 )
 
 const clearSiteDataHeader = "Clear-Site-Data"
-const clearSiteDataLogout = `"cookies", "storage"`
+const clearSiteDataLogout = `"cache", "cookies", "storage"`
 
 func ClearSiteDataOnLogout(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

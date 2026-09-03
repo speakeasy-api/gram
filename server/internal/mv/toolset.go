@@ -761,8 +761,9 @@ func DescribeToolset(
 	var userSessionIssuerSlug *types.Slug
 	if toolset.UserSessionIssuerID.Valid {
 		usi, err := usersessionsR.New(tx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
-			ID:        toolset.UserSessionIssuerID.UUID,
-			ProjectID: pid,
+			ID:             toolset.UserSessionIssuerID.UUID,
+			ProjectID:      pid,
+			OrganizationID: toolset.OrganizationID,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

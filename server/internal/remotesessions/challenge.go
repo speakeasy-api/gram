@@ -297,12 +297,19 @@ type RemoteSessionState struct {
 	Status      RemoteSessionStatus
 	AutoRefresh bool
 	// AccessExpiresAt is the upstream-reported deadline for the current access
-	// token. RefreshExpiresAt is the earliest known deadline for renewal,
-	// combining the refresh-token idle timeout and absolute authorization
-	// lifetime. Either is nil when the provider omitted that lifetime.
-	AccessExpiresAt  *time.Time
-	RefreshExpiresAt *time.Time
-	CanRefresh       bool
+	// token. RefreshExpiresAt is the refresh token's own deadline — an idle
+	// timeout that using the session postpones. AuthorizationExpiresAt is the
+	// absolute end of the grant, which renewing does not move. The two are kept
+	// apart rather than reduced to the earliest, because auto refresh defeats
+	// the first and is powerless against the second, and a caller that cannot
+	// tell them apart cannot say which applies. Any is nil when the provider
+	// omitted that lifetime, which is common.
+	AccessExpiresAt        *time.Time
+	RefreshExpiresAt       *time.Time
+	AuthorizationExpiresAt *time.Time
+	CanRefresh             bool
+	// Resource is the RFC 8707 resource recorded on the grant, if any.
+	Resource string
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -344,17 +351,19 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			expires := row.RefreshExpiresAt.Time
 			refreshExpiresAt = &expires
 		}
-		if row.AuthorizationExpiresAt.Valid &&
-			(refreshExpiresAt == nil || row.AuthorizationExpiresAt.Time.Before(*refreshExpiresAt)) {
+		var authorizationExpiresAt *time.Time
+		if row.AuthorizationExpiresAt.Valid {
 			expires := row.AuthorizationExpiresAt.Time
-			refreshExpiresAt = &expires
+			authorizationExpiresAt = &expires
 		}
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
-			Status:           RemoteSessionStatus(row.Status),
-			AutoRefresh:      row.AutoRefresh,
-			AccessExpiresAt:  accessExpiresAt,
-			RefreshExpiresAt: refreshExpiresAt,
-			CanRefresh:       row.CanRefresh,
+			Status:                 RemoteSessionStatus(row.Status),
+			AutoRefresh:            row.AutoRefresh,
+			AccessExpiresAt:        accessExpiresAt,
+			RefreshExpiresAt:       refreshExpiresAt,
+			AuthorizationExpiresAt: authorizationExpiresAt,
+			CanRefresh:             row.CanRefresh,
+			Resource:               row.Resource.String,
 		}
 	}
 	return statuses, nil
@@ -638,7 +647,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
 		ProjectID:      state.ProjectID,
-		OrganizationID: conv.ToPGText(state.OrganizationID),
+		OrganizationID: state.OrganizationID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
@@ -691,16 +700,30 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		refreshEnc = &v
 	}
 
-	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
-	// store NULL — "no known expiry" — rather than fabricating a deadline the
-	// provider never asserted. validateAndRefresh serves that token as-is; a
-	// refresh token does not imply that the access token expires.
+	// A token with no reported expiry — neither expires_in nor a JWT exp —
+	// is stored with NULL access_expires_at, "no known expiry", rather than a
+	// deadline the provider never asserted. validateAndRefresh serves that
+	// token as-is; a refresh token does not imply that the access token
+	// expires.
 	now := time.Now()
-	var accessExpires *time.Time
-	if tok.ExpiresIn > 0 {
-		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
-		accessExpires = &v
+	accessExpires := tok.AccessExpiresAt(now)
+
+	// A deadline the provider asserts is persisted even when it has already
+	// passed: with a refresh grant the first resolution refreshes, and the
+	// session recovers on its own. With no refresh grant there is nothing to
+	// recover with — the row would report the session as connected while
+	// every resolution answered with a reconnect prompt, and a provider that
+	// pins exp to its own session rather than to this grant would mint the
+	// same dead row again on reconnect. exp is upstream wall-clock time, so a
+	// host clock running ahead of the provider reaches this too. The margin
+	// is the one the request path refreshes at, and the armed revocation
+	// above returns the pair to the provider.
+	if tok.RefreshToken == "" && accessExpires != nil && !accessExpires.After(now.Add(AccessTokenExpirySkew)) {
+		return oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
+			attr.SlogRemoteSessionAccessExpiresAt(*accessExpires),
+		)
 	}
+
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := expirationDeadline(now, refreshTimeout, refreshTimeoutReported)
 	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()

@@ -156,6 +156,32 @@ export function recordVisit(
   }
 }
 
+export function shouldRemoveRestrictedRecents(access: {
+  canAccess: boolean;
+  isLoading: boolean;
+}): boolean {
+  return !access.isLoading && !access.canAccess;
+}
+
+/** Remove entries that are no longer safe to expose or navigate to. */
+export function removeVisitsMatching(
+  userId: string | undefined,
+  orgSlug: string | undefined,
+  projectSlug: string | undefined,
+  predicate: (entry: RecentEntry) => boolean,
+): void {
+  const key = storageKey(userId, orgSlug, projectSlug);
+  const current = read(key);
+  const next = current.filter((entry) => !predicate(entry));
+  if (next.length === current.length) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+    window.dispatchEvent(new Event(UPDATED_EVENT));
+  } catch {
+    // Recents are best-effort. Access control remains enforced by the route.
+  }
+}
+
 /**
  * Read the recents for the current scope. `enabled` (the palette's open state)
  * gates the read so we only touch localStorage when the palette is shown.

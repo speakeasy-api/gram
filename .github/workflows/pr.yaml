@@ -757,7 +757,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:25.8.3
+        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
@@ -899,7 +899,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -1008,7 +1008,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
@@ -1849,6 +1849,10 @@ jobs:
 
       - name: Rebuild committed consent island bundle
         run: aube run build:consent
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent page assets
+        run: aube run build:consent-page
         working-directory: client/dashboard
 
       - name: Check for dirty files

@@ -162,6 +162,11 @@ type Service struct {
 	// eligible and carry their existing hooks — so a missing provider can never
 	// force-advance an org.
 	features feature.Provider
+	// publisher enqueues the republish that propagates a plugin change to the
+	// project's marketplace repo. Nil on the automated publisher (which is
+	// itself the thing doing the publishing) and in tests; signalPublish is a
+	// no-op then.
+	publisher PluginPublishSignaler
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -179,6 +184,7 @@ func NewService(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	publisher PluginPublishSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -198,7 +204,8 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features: features,
+		features:  features,
+		publisher: publisher,
 	}
 }
 
@@ -226,6 +233,8 @@ func NewPublisher(
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
 		features:  features,
+		// The publisher runs the publish workflow itself; it never signals one.
+		publisher: nil,
 	}
 }
 
@@ -360,6 +369,12 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	// A legacy project gets its Default plugin here, on a read. That is a
+	// change to what a publish would generate like any other, so it signals
+	// too rather than waiting out the rollout sweep.
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
@@ -510,6 +525,8 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return pluginToGen(plugin, nil, nil, classifyAgentPlugin(PluginInfo{
 		Name: plugin.Name, Slug: plugin.Slug, Description: conv.FromPGTextOrEmpty[string](plugin.Description), Servers: nil, Skills: nil, AgentPluginsV1Issues: nil,
 	}).Compatible), nil
@@ -600,6 +617,8 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
 	servers, err := s.repo.ListPluginServers(ctx, pluginID)
 	if err != nil {
@@ -727,6 +746,9 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
@@ -861,6 +883,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return pluginServerToGen(row), nil
 }
 
@@ -990,6 +1014,8 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return pluginServerToGen(row), nil
 }
 
@@ -1058,6 +1084,9 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
@@ -2183,15 +2212,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
-		if needsSkillFeedbackHooksKey(pluginInfos) {
-			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
-			}
-			hooksCandidate = &candidate
-			cfg.HooksAPIKey = candidate.fullKey
-			candidates = append(candidates, candidate)
-		}
 		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)

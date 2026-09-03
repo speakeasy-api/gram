@@ -38,6 +38,11 @@ WHERE workos_id = @workos_id
 SELECT * FROM users
 WHERE id = $1;
 
+-- name: LockUserForPlatformAdminCheck :one
+SELECT * FROM users
+WHERE id = $1
+FOR SHARE;
+
 -- name: GetUserByEmail :one
 SELECT * FROM users
 WHERE email = $1;

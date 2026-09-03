@@ -476,8 +476,8 @@ function ConfirmDomainRootDialog({
 }
 
 // Confirmation for removing a server's only address. Without an address the
-// server can't serve traffic and stops being publishable — it can't be added
-// to plugins or collections until a new address is created.
+// server can't serve traffic — it can't be added to plugins until a new
+// address is created.
 function RemoveLastAddressDialog({
   isOpen,
   isLoading,
@@ -497,7 +497,7 @@ function RemoveLastAddressDialog({
           <Dialog.Description>
             This is the last address for this MCP server. Removing it means
             clients can no longer connect, and the server can't be added to
-            plugins or published to collections until you create a new address.
+            plugins until you create a new address.
           </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

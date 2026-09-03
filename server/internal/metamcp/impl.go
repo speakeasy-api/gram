@@ -855,6 +855,45 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "remove meta mcp member").LogError(ctx, logger)
 	}
 
+	// Reverse the add-side auto-attach: when no other live member of this
+	// gateway still fronts the removed member's upstream, unbind that provider
+	// client from the gateway issuer so it stops appearing on the consent
+	// screen. The member row is already soft-deleted above, so the detach's
+	// "last member" guard sees the post-removal set. Mirrors the add path's
+	// lock + post-commit resync.
+	wiredGatewayIssuer := false
+	if meta.UserSessionIssuerID.Valid {
+		server, serr := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        deleted.McpServerID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		switch {
+		case errors.Is(serr, pgx.ErrNoRows):
+			// The member's server is itself gone (e.g. removed as part of a
+			// server deletion); its binding is cleaned up on that path.
+		case serr != nil:
+			return oops.E(oops.CodeUnexpected, serr, "load removed member server").LogError(ctx, logger)
+		case server.RemoteSessionIssuerID.Valid:
+			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
+				return oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+			}
+			detached, derr := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
+				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+				RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
+				ProjectID:       *authCtx.ProjectID,
+			})
+			if derr != nil {
+				return oops.E(oops.CodeUnexpected, derr, "detach member provider client").LogError(ctx, logger)
+			}
+			if detached > 0 {
+				logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
+					attr.SlogMetaMcpServerID(meta.ID.String()),
+					attr.SlogMcpServerID(server.ID.String()))
+			}
+			wiredGatewayIssuer = true
+		}
+	}
+
 	if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -872,6 +911,12 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Keep the denormalized mcp_servers.remote_session_issuer_id in sync after a
+	// binding change, matching the add path's post-commit resync.
+	if wiredGatewayIssuer {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 
 	return nil

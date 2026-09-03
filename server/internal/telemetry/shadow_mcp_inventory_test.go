@@ -530,6 +530,8 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		GramProjectID: projectID,
 		Limit:         50,
+		From:          nil,
+		To:            nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, usage, 1)
@@ -569,6 +571,8 @@ func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T)
 		GramProjectID:       projectID,
 		CanonicalServerURLs: []string{"https://target.example.com/mcp"},
 		Limit:               1,
+		From:                nil,
+		To:                  nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, usage, 1)
@@ -946,6 +950,8 @@ func TestListShadowMCPInventoryUsage_FiltersByUser(t *testing.T) {
 		CanonicalServerURLs: nil,
 		UserKeys:            []string{"ada@example.com"},
 		Limit:               50,
+		From:                nil,
+		To:                  nil,
 	})
 	require.NoError(t, err)
 
@@ -954,6 +960,93 @@ func TestListShadowMCPInventoryUsage_FiltersByUser(t *testing.T) {
 		urls = append(urls, row.CanonicalServerURL)
 	}
 	require.ElementsMatch(t, []string{"https://one.example.com/mcp", "https://two.example.com/mcp"}, urls)
+}
+
+// The identity pages read this through the same time range as every other
+// panel, so a call outside the window must not be attributed to it.
+func TestListShadowMCPInventoryUsage_FiltersByWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	// Anchored to now rather than a fixed date: trace_summaries carries a
+	// 90-day TTL on start_time_unix_nano, so a hard-coded base eventually ages
+	// past it and ClickHouse drops the row before the test can read it. Both
+	// calls sit well inside that window, and the gap between them is what the
+	// bounds are checked against.
+	now := time.Now().UTC()
+	oldCall := now.AddDate(0, 0, -30)
+	recentCall := now.AddDate(0, 0, -2)
+
+	const oldURL = "https://old.example.com/mcp"
+	const recentURL = "https://recent.example.com/mcp"
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  oldURL,
+		ServerName: "Old",
+		UserEmail:  "ada@example.com",
+		ObservedAt: oldCall,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  recentURL,
+		ServerName: "Recent",
+		UserEmail:  "ada@example.com",
+		ObservedAt: recentCall,
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	listWindow := func(from, to *time.Time) []telemetryRepo.ShadowMCPInventoryUsageRow {
+		t.Helper()
+		usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
+			OrganizationID:      uuid.NewString(),
+			GramProjectID:       projectID,
+			CanonicalServerURLs: nil,
+			UserKeys:            []string{"ada@example.com"},
+			Limit:               50,
+			From:                from,
+			To:                  to,
+		})
+		require.NoError(t, err)
+		return usage
+	}
+	urls := func(rows []telemetryRepo.ShadowMCPInventoryUsageRow) []string {
+		out := make([]string, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, row.CanonicalServerURL)
+		}
+		return out
+	}
+
+	unbounded := listWindow(nil, nil)
+	require.ElementsMatch(t, []string{oldURL, recentURL}, urls(unbounded),
+		"no bound is no filter")
+
+	between := now.AddDate(0, 0, -9)
+	require.ElementsMatch(t, []string{recentURL}, urls(listWindow(&between, nil)),
+		"from alone drops the call that precedes it")
+	require.ElementsMatch(t, []string{oldURL}, urls(listWindow(nil, &between)),
+		"to alone drops the call that follows it")
+
+	// Half-open, checked against the instant the pipeline actually recorded
+	// rather than the one handed to the insert: the bound has to line up with
+	// what the query compares, and asserting on the input would make this fail
+	// on any rounding between the two rather than on the filter being wrong.
+	var recorded time.Time
+	for _, row := range unbounded {
+		if row.CanonicalServerURL == recentURL {
+			require.NotNil(t, row.LastCalled, "recent call carries a timestamp")
+			recorded = *row.LastCalled
+		}
+	}
+	require.False(t, recorded.IsZero(), "recent call is in the unbounded listing")
+
+	require.Contains(t, urls(listWindow(&recorded, nil)), recentURL,
+		"from is inclusive")
+	require.NotContains(t, urls(listWindow(nil, &recorded)), recentURL,
+		"to is exclusive")
 }
 
 // Without user keys the usage listing is unchanged, so the project-wide
@@ -988,6 +1081,8 @@ func TestListShadowMCPInventoryUsage_NoUserKeysIsUnnarrowed(t *testing.T) {
 		CanonicalServerURLs: nil,
 		UserKeys:            nil,
 		Limit:               50,
+		From:                nil,
+		To:                  nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, usage, 2)

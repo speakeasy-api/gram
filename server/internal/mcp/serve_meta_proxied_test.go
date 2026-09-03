@@ -256,6 +256,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	require.False(t, isError, "member B execute_tool must succeed")
 	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
 		"member B's upstream must receive exactly member B's bearer and never A's")
+
+	// The proxied members' tool_call rows carry the gateway id.
+	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'`, 2, meta.ID.String())
 }
 
 // A caller's _meta must not reach a proxied member: WireMeta re-serializes
@@ -392,4 +395,93 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
 	require.Empty(t, upstreamA.capturedAuth(),
 		"no bearer may be forwarded to a member with no matching credential — least of all a sibling's")
+}
+
+// A subject who connected only one of the gateway's two providers still gets
+// a served session: the covered member forwards its own bearer, the
+// uncovered member is called anonymously, and no request-level 401 fires.
+// Before partial resolution, the missing grant rejected the whole session.
+func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-partial-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstreamA := newRecordingUpstream(t, "ping")
+	upstreamB := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
+
+	// Both providers are attached to the gateway, but the subject linked
+	// only member B's — the exact shape of a user who skipped one consent
+	// tile. Member A's client stays attached with no token on purpose: the
+	// partial resolver must skip it, where the strict resolver would have
+	// failed the whole session.
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
+
+	subject := urn.NewUserSubject("meta-partial-user-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
+
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "the covered member must serve on a partially connected session: %s", text)
+	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
+		"the covered member must receive its own bearer")
+
+	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
+	text, isError = metaToolResultText(t, rpc)
+	require.False(t, isError, "the uncovered member must degrade to an anonymous call, not fail the session: %s", text)
+	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
+	require.Empty(t, upstreamA.capturedAuth(),
+		"no bearer may reach the member whose provider was never connected")
+}
+
+// An upstream 401 means two different things to the caller: the gateway
+// found no credential that routes to the member, or it forwarded one the
+// member refused. The message must say which, since only the second is fixed
+// by a reconnect.
+func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-401-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, deny.URL)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-401", "", []uuid.UUID{sharedIssuerID})
+	subject := urn.NewUserSubject("meta-401-user-" + uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	// A legacy grant with no resource routes nowhere: the dial is anonymous.
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-legacy", "")
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "holds no credential that routes to it")
+
+	// A grant qualified to the member is forwarded, and the member refuses it.
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
+	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "rejected the stored credential")
 }

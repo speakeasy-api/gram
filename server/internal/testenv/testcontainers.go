@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/docker/go-connections/nat"
@@ -17,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -36,6 +39,65 @@ func NewTestcontainersLogger() log.Logger {
 			Pretty:      true,
 			DataDogAttr: false,
 		})),
+	}
+}
+
+const dockerReadyTimeout = 30 * time.Second
+
+var (
+	dockerReady      atomic.Bool
+	dockerReadyGroup singleflight.Group
+)
+
+func ensureDockerReady(ctx context.Context) error {
+	if dockerReady.Load() {
+		return nil
+	}
+
+	_, err, _ := dockerReadyGroup.Do("docker", func() (any, error) {
+		if dockerReady.Load() {
+			return nil, nil
+		}
+
+		readyCtx, cancel := context.WithTimeout(ctx, dockerReadyTimeout)
+		defer cancel()
+
+		cli, err := client.New(client.FromEnv)
+		if err != nil {
+			return nil, fmt.Errorf("create docker client: %w", err)
+		}
+		defer o11y.NoLogDefer(cli.Close)
+
+		if err := retryDockerInfo(readyCtx, func(ctx context.Context) error {
+			if _, err := cli.Info(ctx, client.InfoOptions{}); err != nil {
+				return fmt.Errorf("query docker info: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		dockerReady.Store(true)
+		return nil, nil
+	})
+
+	return err
+}
+
+func retryDockerInfo(ctx context.Context, info func(context.Context) error) error {
+	for {
+		err := info(ctx)
+		if err == nil {
+			return nil
+		}
+
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("docker info after retries: %w", errors.Join(err, ctx.Err()))
+		case <-timer.C:
+		}
 	}
 }
 

@@ -1,3 +1,4 @@
+import { useRef, useState, type JSX } from "react";
 import {
   act,
   cleanup,
@@ -159,14 +160,15 @@ async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
 // broken by that caller.
 async function renderMenuWith(
   actions: "all" | "lifecycle" | "trial",
+  org: AdminOrganization = ORG,
 ): Promise<void> {
   await renderWithApp(
     <WriteReportProvider value={REPORTER}>
-      <OrganizationActions org={ORG} layout="menu" actions={actions} />
+      <OrganizationActions org={org} layout="menu" actions={actions} />
     </WriteReportProvider>,
   );
   fireEvent.pointerDown(
-    screen.getByRole("button", { name: `Actions for ${ORG.name}` }),
+    screen.getByRole("button", { name: `Actions for ${org.name}` }),
     { button: 0, ctrlKey: false, pointerType: "mouse" },
   );
 }
@@ -491,19 +493,23 @@ describe("the row menu", () => {
   });
 });
 
-// The record draws two bars at once, so each has to be able to ask for its own
-// half. Both layouts are gated, not just the one the record happens to use.
+// The Overview separates lifecycle actions into Danger zone and trial actions
+// into the Enterprise trial panel, so each instance needs its own action scope.
+// Both layouts honor that scope, not just the buttons used by the Overview.
 describe("the actions prop", () => {
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s as buttons",
-    async (actions, expected) => {
+    ["all", "live running", ORG, ["Disable", "Extend trial"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Extend trial"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s as buttons for a %s organization",
+    async (actions, _state, org, expected) => {
       await renderWithApp(
         <WriteReportProvider value={REPORTER}>
-          <OrganizationActions org={ORG} layout="buttons" actions={actions} />
+          <OrganizationActions org={org} layout="buttons" actions={actions} />
         </WriteReportProvider>,
       );
 
@@ -514,13 +520,16 @@ describe("the actions prop", () => {
   );
 
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s in the menu too",
-    async (actions, expected) => {
-      await renderMenuWith(actions);
+    ["all", "live running", ORG, ["Disable", "Extend trial"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Extend trial"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s in the menu for a %s organization",
+    async (actions, _state, org, expected) => {
+      await renderMenuWith(actions, org);
 
       expect(menuItems()).toEqual(expected);
     },
@@ -1062,7 +1071,8 @@ describe("the re-arm trial dialog", () => {
     const text = dialog().textContent ?? "";
     expect(text).toContain(`Re-arm the trial for ${DEMOTED_ORG.name}?`);
     expect(text).toContain("account type");
-    expect(text).toContain("model provider keys");
+    expect(text).toContain("removes the trial disable cause");
+    expect(text).toContain("admin, billing, or unknown causes remain disabled");
     expect(text).toContain("book-a-demo gate");
     expect(text).toContain("counted from now");
   });
@@ -1496,6 +1506,93 @@ describe("a rejected write", () => {
 // every one of these paths ends with the keyboard on document.body, at the top
 // of the page, after an action the operator took on one row of a long table.
 describe("the keyboard when a dialog closes", () => {
+  function ActionsWithStableFallback({
+    initialOrg,
+    exposeSetOrg,
+  }: {
+    initialOrg: AdminOrganization;
+    exposeSetOrg: (setOrg: (org: AdminOrganization) => void) => void;
+  }): JSX.Element {
+    const [org, setOrg] = useState(initialOrg);
+    const fallback = useRef<HTMLHeadingElement>(null);
+    exposeSetOrg(setOrg);
+
+    return (
+      <>
+        <h5 ref={fallback} tabIndex={-1}>
+          Details
+        </h5>
+        <WriteReportProvider value={REPORTER}>
+          <OrganizationActions
+            org={org}
+            layout="buttons"
+            focusFallbackRef={fallback}
+          />
+        </WriteReportProvider>
+      </>
+    );
+  }
+
+  it.each(["disable", "re-enable", "re-arm"] as const)(
+    "uses the caller fallback after a successful %s replaces its opener",
+    async (action) => {
+      const initialOrg =
+        action === "disable"
+          ? ORG
+          : action === "re-enable"
+            ? DISABLED_ORG
+            : DEMOTED_ORG;
+      const nextOrg = action === "disable" ? DISABLED_ORG : REARMED_ORG;
+      let setOrg = (_org: AdminOrganization): void => {};
+      const write =
+        action === "disable"
+          ? mocks.disableOrganization
+          : action === "re-enable"
+            ? mocks.enableOrganization
+            : mocks.rearmTrial;
+      write.mockImplementation(async () => {
+        setOrg(nextOrg);
+        return nextOrg;
+      });
+
+      await renderWithApp(
+        <ActionsWithStableFallback
+          initialOrg={initialOrg}
+          exposeSetOrg={(next) => {
+            setOrg = next;
+          }}
+        />,
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name:
+            action === "disable"
+              ? `Disable ${ORG.name}`
+              : action === "re-enable"
+                ? `Re-enable ${ORG.name}`
+                : `Re-arm trial for ${ORG.name}`,
+        }),
+      );
+
+      if (action === "re-arm") {
+        await screen.findByRole("dialog");
+        await submitRearmDays("30");
+      } else if (action === "disable") {
+        await screen.findByRole("dialog");
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+        });
+      }
+
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole("heading", { name: "Details" }),
+        );
+      });
+      expect(document.activeElement).not.toBe(document.body);
+    },
+  );
+
   it("goes back to the row menu trigger when the write succeeds", async () => {
     const trigger = await renderMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));

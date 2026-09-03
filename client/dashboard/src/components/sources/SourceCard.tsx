@@ -36,7 +36,6 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
-      organizationMcpCollectionRegistryId?: string;
       registryId?: string;
       iconUrl?: string;
     }
@@ -120,7 +119,11 @@ export function SourceMcpIcon({
 }): JSX.Element {
   const { data } = useGetMcpMetadata({ mcpServerId }, undefined, {
     enabled: !!mcpServerId,
+    // 404 is the normal "no metadata set" answer; don't re-request it on every
+    // remount or each navigation replays a console error per server.
     retry: false,
+    retryOnMount: false,
+    staleTime: 5 * 60 * 1000,
     throwOnError: false,
   });
   const logoAssetId = data?.metadata?.logoAssetId;
@@ -171,10 +174,7 @@ export function SourceCard({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
-  const sourceTypeLabel =
-    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
-      ? "Collection"
-      : config.label;
+  const sourceTypeLabel = config.label;
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 

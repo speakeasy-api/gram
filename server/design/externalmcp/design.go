@@ -188,16 +188,13 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
-	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)", func() {
+	Attribute("toolset_id", String, "ID of the attached toolset backing this server", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)", func() {
+	Attribute("mcp_server_id", String, "ID of the attached MCP server backing this server", func() {
 		Format(FormatUUID)
 	})
 	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
-		Format(FormatUUID)
-	})
-	Attribute("organization_mcp_collection_registry_id", String, "ID of the internal collection registry this server came from", func() {
 		Format(FormatUUID)
 	})
 	Attribute("title", String, "Display name for the server")
@@ -229,16 +226,13 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
-	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)", func() {
+	Attribute("toolset_id", String, "ID of the attached toolset backing this server", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)", func() {
+	Attribute("mcp_server_id", String, "ID of the attached MCP server backing this server", func() {
 		Format(FormatUUID)
 	})
 	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
-		Format(FormatUUID)
-	})
-	Attribute("organization_mcp_collection_registry_id", String, "ID of the internal collection registry this server came from", func() {
 		Format(FormatUUID)
 	})
 	Attribute("title", String, "Display name for the server")

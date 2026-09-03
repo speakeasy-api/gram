@@ -63,6 +63,11 @@ type CreateServerPayload struct {
 	ProjectSlugInput *string
 	// Human-readable display name for the tunneled MCP server
 	Name string
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// identifier is already known; it is usually recorded later, once the tunnel
+	// is up.
+	ResourceIdentifier *string
 }
 
 // CreateTunneledMcpServerResult is the result type of the tunneledMcp service
@@ -143,11 +148,27 @@ type UpdateServerPayload struct {
 	ProjectSlugInput *string
 	// The ID of the tunneled MCP server to update
 	ID string
-	// Human-readable display name for the tunneled MCP server
-	Name string
+	// Human-readable display name for the tunneled MCP server. Omit to leave
+	// unchanged.
+	Name *string
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Pass an empty
+	// string to clear. Omit to leave unchanged.
+	ResourceIdentifier *string
+	// Sustained anonymous MCP requests per second admitted when this source is
+	// served through a public MCP endpoint. Applies to every MCP interaction; one
+	// bucket is shared by every caller. Omit to leave unchanged, 0 to clear back
+	// to the deployment default.
+	PublicRequestRatePerSecond *int
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Each request takes one token; tokens refill at the sustained
+	// rate up to this cap. Omit to leave unchanged, 0 to clear (twice the
+	// sustained rate applies).
+	PublicRequestBurst *int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

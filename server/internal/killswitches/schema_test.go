@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -321,6 +322,62 @@ func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) 
 	require.Equal(t, []string{"expires_at", "prescription_id", "version"}, indexColumns)
 	require.Equal(t, "btree", indexAccessMethod)
 	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
+}
+
+func TestInsertKillswitchPrescriptionFixtureValidatesResourceScope(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "killswitch_fixture_scope")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	insertOrganization(t, conn, organizationID)
+	fixtures := testrepo.New(conn)
+
+	testCases := []struct {
+		name          string
+		resourceScope ResourceScope
+		resourceKeys  []string
+		wantErr       bool
+	}{
+		{name: "all without resources", resourceScope: ResourceScopeAll},
+		{name: "selected with resources", resourceScope: ResourceScopeSelected, resourceKeys: []string{"resource_1"}},
+		{name: "all with resources", resourceScope: ResourceScopeAll, resourceKeys: []string{"resource_1"}, wantErr: true},
+		{name: "selected without resources", resourceScope: ResourceScopeSelected, wantErr: true},
+		{name: "invalid scope", resourceScope: ResourceScope("invalid"), wantErr: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			prescriptionID := uuid.New()
+			err := fixtures.InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
+				ResourceKeys:   testCase.resourceKeys,
+				PrescriptionID: prescriptionID,
+				OrganizationID: organizationID,
+				DefinitionKey:  "test_capability",
+				PrincipalKind:  "user",
+				PrincipalKey:   "user_1",
+				ResourceKind:   "test_resource",
+				ResourceScope:  string(testCase.resourceScope),
+				InternalNote:   "internal",
+				ExternalNote:   "external",
+			})
+			if !testCase.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			var prescriptions int
+			require.NoError(t, conn.QueryRow(t.Context(), `
+				SELECT count(*)
+				FROM killswitch_prescriptions
+				WHERE id = $1
+			`, prescriptionID).Scan(&prescriptions))
+			require.Zero(t, prescriptions)
+		})
+	}
 }
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {

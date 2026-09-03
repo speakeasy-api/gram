@@ -1,3 +1,9 @@
+import { IdentityLink } from "@/components/identity-link";
+import {
+  encodeIdentityUrn,
+  identityRefForUserKey,
+  identityUrnFor,
+} from "@/lib/identity-urn";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
@@ -231,7 +237,21 @@ function TopUsersTable({
     {
       key: "user",
       header: "User",
-      render: (user) => <Text variant="small">{user.userKey}</Text>,
+      render: (user) => (
+        <Text variant="small">
+          {/* The row carries the address whenever the inventory resolved one;
+              the key is only guessed at when it does not. */}
+          <IdentityLink
+            identifier={
+              user.email
+                ? { email: user.email }
+                : identityRefForUserKey(user.userKey)
+            }
+          >
+            {user.userKey}
+          </IdentityLink>
+        </Text>
+      ),
       width: "1fr",
     },
     {
@@ -515,9 +535,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const onOpenUser = (user: ShadowMCPInventoryUser) => {
     if (!user.email) return;
 
-    // The employee detail route resolves a raw email segment, so no
-    // name-slug lookup is needed here.
-    void navigate(routes.employees.detail.href(encodeURIComponent(user.email)));
+    void navigate(
+      routes.identities.detail.overview.href(
+        encodeIdentityUrn(identityUrnFor({ email: user.email })),
+      ),
+    );
   };
 
   useEffect(() => {

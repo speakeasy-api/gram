@@ -58,8 +58,7 @@ services:
       retries: 12
 
   clickhouse:
-    build:
-      context: ./local/clickhouse
+    image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
     restart: unless-stopped
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
@@ -71,6 +70,11 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./local/clickhouse/config.d/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+      - ./local/clickhouse/config.d/limits.xml:/etc/clickhouse-server/config.d/limits.xml:ro
+      - ./local/clickhouse/config.d/ssl.xml:/etc/clickhouse-server/config.d/ssl.xml:ro
+      - ./local/clickhouse/users.d/dev_profile.xml:/etc/clickhouse-server/users.d/dev_profile.xml:ro
+      - ./local/clickhouse/certs:/etc/clickhouse-server/certs:ro
     ulimits:
       nofile:
         soft: 262144

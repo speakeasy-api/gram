@@ -1415,7 +1415,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1440,7 +1440,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
@@ -1485,7 +1485,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1510,7 +1510,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
@@ -1808,7 +1808,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1833,7 +1833,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{

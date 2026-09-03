@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -57,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -144,40 +144,6 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
-		&cli.StringFlag{
-			Name:    "stripe-api-key",
-			Usage:   "The Stripe API key",
-			EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "stripe-webhook-secret",
-			Usage:   "The Stripe webhook signing secret",
-			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-price-id-tum",
-			Aliases: []string{"stripe.price_id_tum"},
-			Usage:   "The Stripe metered TUM price ID",
-			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-id-tum",
-			Aliases: []string{"stripe.meter_id_tum"},
-			Usage:   "The Stripe TUM billing meter ID",
-			EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-event-name",
-			Aliases: []string{"stripe.meter_event_name"},
-			Usage:   "The Stripe TUM meter event name",
-			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-portal-configuration-id",
-			Aliases: []string{"stripe.portal_configuration_id"},
-			Usage:   "The controlled Stripe customer portal configuration ID",
-			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -272,6 +238,7 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, stripeFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
@@ -382,6 +349,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
+			stripeMeterEvents, err := newStripeMeterEventClient(guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
+			}
+			stripeCatalog := newStripeCatalog(c)
 
 			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
@@ -442,6 +414,19 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
+				logger,
+				meterProvider,
+				enforcereply.NewWriter(redisClient),
+				func(tenantID string, message []byte) (string, error) {
+					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
+					return risk.EncodeFingerprint(sum), fingerprintErr
+				},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+			)
+			if err != nil {
+				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
+			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
@@ -505,6 +490,7 @@ func newStreamsCommand() *cli.Command {
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
@@ -513,6 +499,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
+				}
+				if err := trialConversionKeyReconcileHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule enterprise trial conversion key reconciliation: %w", err))
 				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
@@ -538,16 +527,15 @@ func newStreamsCommand() *cli.Command {
 			logRelayHandler := otelsvc.NewLogRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
-				featureFlags,
 			)
 
 			metricRelayHandler := otelsvc.NewMetricRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -555,7 +543,7 @@ func newStreamsCommand() *cli.Command {
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -565,6 +553,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
@@ -573,8 +562,9 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
-				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,

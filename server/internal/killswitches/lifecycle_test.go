@@ -50,6 +50,7 @@ func TestLifecycleVersionsSnapshotsAndStaleReferences(t *testing.T) {
 	require.Equal(t, []ResourceKey{ResourceKey(orgID + ":tool:a"), ResourceKey(orgID + ":tool:b")}, v1.SelectedResourceKeys)
 	require.Equal(t, "required context", v1.InternalNote)
 	require.Equal(t, "Access paused.", v1.ExternalNote)
+	require.Equal(t, StartModeAt, v1.StartMode)
 	require.Equal(t, startsAt.UTC(), v1.StartsAt)
 
 	validatedMu.Lock()
@@ -765,6 +766,7 @@ type testPrescriptionVersion struct {
 	Version              int64
 	State                PrescriptionState
 	ResourceScope        ResourceScope
+	StartMode            StartMode
 	SelectedResourceKeys []ResourceKey
 	StartsAt             time.Time
 	ExpiresAt            *time.Time
@@ -821,13 +823,22 @@ func getPrescriptionForTest(ctx context.Context, conn *pgxpool.Pool, organizatio
 	for rows.Next() {
 		var version testPrescriptionVersion
 		var state, scope string
+		var storedStartsAt *time.Time
 		var resources []string
-		if err := rows.Scan(&version.Version, &state, &scope, &version.StartsAt, &version.ExpiresAt, &version.ActivatedAt, &version.SupersededAt, &version.InternalNote, &version.ExternalNote, &resources); err != nil {
+		if err := rows.Scan(&version.Version, &state, &scope, &storedStartsAt, &version.ExpiresAt, &version.ActivatedAt, &version.SupersededAt, &version.InternalNote, &version.ExternalNote, &resources); err != nil {
 			return testPrescription{}, fmt.Errorf("scan test prescription version: %w", err)
 		}
 		version.State = PrescriptionState(state)
 		version.ResourceScope = ResourceScope(scope)
-		version.StartsAt = version.StartsAt.UTC()
+		version.StartMode = StartModeAt
+		if storedStartsAt == nil {
+			version.StartMode = StartModeNow
+			storedStartsAt = version.ActivatedAt
+		}
+		if storedStartsAt == nil {
+			return testPrescription{}, errors.New("test prescription version has no effective start time")
+		}
+		version.StartsAt = storedStartsAt.UTC()
 		for _, value := range []*time.Time{version.ExpiresAt, version.ActivatedAt, version.SupersededAt} {
 			if value != nil {
 				*value = value.UTC()

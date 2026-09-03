@@ -18,7 +18,10 @@ import (
 type Service interface {
 	// Get the current state of all product feature flags.
 	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GetProductFeaturesResult, err error)
-	// Enable or disable an organization feature flag.
+	// Enable or disable an organization feature flag. Staff-managed entitlements
+	// (such as sso and scim) additionally require a Speakeasy platform
+	// administrator; organization admins can set only the org-settable operational
+	// toggles.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
 	// Set the organization policy for automatic remote-session refresh.
 	SetRemoteSessionAutoRefreshPolicy(context.Context, *SetRemoteSessionAutoRefreshPolicyPayload) (err error)

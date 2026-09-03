@@ -105,8 +105,7 @@ import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote- or unproxied-MCP-backed mcp_server. The kind determines
-// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
-// collections picker.
+// whether it is submitted as a toolset_id or an mcp_server_id.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;

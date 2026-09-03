@@ -198,6 +198,63 @@ const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_em
 // chat completions already set total = input + output), so the two row shapes
 // stay consistent. Without the fallback, Claude Code sessions surface "0 tokens"
 // in the costs/session views (DNO-323).
+// The per-user and per-project summaries must count the same usage the cost
+// dashboard bills. attribute_metrics_summaries_mv reads Claude Code usage off
+// flat attributes (input_tokens, cost_usd, ...) and Codex off native
+// *_token_count attributes; only generic OTel rows carry gen_ai.usage.*.
+// Reading the gen_ai.usage.* path alone therefore reported zero tokens and zero
+// spend for a Claude-Code-only identity that the Costs page bills in full, and
+// undercounted anyone whose usage spans both.
+//
+// The guard is deliberately WIDER than the MV's is_usage_row: it adds any row
+// carrying a gen_ai.usage.* field. Gram-hosted completions are not an agent
+// surface and the MV does not bill them, but these summaries have always
+// counted them, so narrowing to the MV's row set would silently drop them.
+// Every branch below mirrors the MV where the MV has an opinion.
+const summaryUsageRowFilter = "(" + sessionUsageMeasureFilter +
+	" OR toString(attributes.gen_ai.usage.input_tokens) != ''" +
+	" OR toString(attributes.gen_ai.usage.output_tokens) != ''" +
+	" OR toString(attributes.gen_ai.usage.total_tokens) != ''" +
+	" OR toString(attributes.gen_ai.usage.cost) != '')"
+
+const summaryInputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+	"toInt64OrZero(toString(attributes.input_tokens)), " +
+	sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + ", " +
+	"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), " + summaryUsageRowFilter + ")"
+
+const summaryOutputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+	"toInt64OrZero(toString(attributes.output_tokens)), " +
+	sessionCodexAPIRequestPredicate + ", toInt64OrZero(toString(attributes.output_token_count)), " +
+	"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + summaryUsageRowFilter + ")"
+
+// The generic branch keeps totalTokensExpr's rule — an explicit reported total
+// wins, otherwise input + output — so rows that were already counted keep their
+// existing totals. The Claude branch adds cache writes because that is what the
+// MV bills for that surface.
+const summaryTotalTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+	"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
+	"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+	sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + " + toInt64OrZero(toString(attributes.output_token_count)), " +
+	"toString(attributes.gen_ai.usage.total_tokens) != '', toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), " +
+	"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " +
+	summaryUsageRowFilter + ")"
+
+const summaryCacheReadTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+	"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
+	sessionCodexAPIRequestPredicate + ", " + sessionCodexCacheReadTokensExpr + ", " +
+	"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + summaryUsageRowFilter + ")"
+
+// Codex reports no cache writes, so it falls into the gen_ai.usage.* branch and
+// sums 0 there — the same shape the MV uses.
+const summaryCacheCreationTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+	"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + summaryUsageRowFilter + ")"
+
+const summaryCostExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	"multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), " +
+	"toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), " +
+	"toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), " + summaryUsageRowFilter + ")"
+
 const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
 	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
 
@@ -525,7 +582,13 @@ type ListShadowMCPInventoryUsageParams struct {
 	// inverse question the inventory table cannot: which shadow MCP servers
 	// one person reached.
 	UserKeys []string
-	Limit    int
+	// From and To bound the window on the span start, half-open ([From, To)),
+	// so consecutive ranges neither double-count a call nor drop one that lands
+	// exactly on a boundary. A nil bound is no bound, which is what a caller
+	// listing the whole history sends.
+	From  *time.Time
+	To    *time.Time
+	Limit int
 }
 
 type ShadowMCPInventoryUsageRow struct {
@@ -1241,7 +1304,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.From, arg.To, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,7 +1404,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		}
 	}
 
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, nil, nil, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1402,7 +1465,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, from *time.Time, to *time.Time, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -1417,6 +1480,17 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID st
 		GroupBy("trace_id").
 		Having("server_url != ''").
 		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	// Bound the spans, not the grouped traces: a session that ran across the
+	// edge of the window would otherwise drag its whole history in. Bound as
+	// nanos rather than as a time.Time, because clickhouse-go's positional
+	// binding truncates a time.Time to whole seconds.
+	if from != nil {
+		sb = sb.Where("start_time_unix_nano >= ?", from.UTC().UnixNano())
+	}
+	if to != nil {
+		sb = sb.Where("start_time_unix_nano < ?", to.UTC().UnixNano())
+	}
 
 	if len(userKeys) > 0 {
 		lowered := make([]string, 0, len(userKeys))
@@ -2192,11 +2266,11 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		havingParts = append(havingParts, "event_source = ?")
 		havingArgs = append(havingArgs, arg.EventSource)
 	} else {
-		// Exclude hook logs and trigger delivery logs by default when no
-		// event_source filter is specified. Trigger delivery rows carry a
-		// tool_name (trigger:<slug>) and a trace id but are not tool calls.
-		havingParts = append(havingParts, "event_source NOT IN (?, ?)")
-		havingArgs = append(havingArgs, "hook", "trigger")
+		// Exclude hook, trigger delivery, and gateway discovery logs by
+		// default when no event_source filter is specified: they carry a
+		// tool_name and a trace id but are not tool calls.
+		havingParts = append(havingParts, "event_source NOT IN (?, ?, ?)")
+		havingArgs = append(havingArgs, "hook", "trigger", "meta_discovery")
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering
@@ -2399,6 +2473,7 @@ type GetTimeSeriesMetricsParams struct {
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
 	EventSource         string                // Optional filter - filters by event_source
 	HookSource          string                // Optional filter - filters by hook_source
 	AccountType         string                // Optional filter - filters by account_type
@@ -2462,6 +2537,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	if arg.MCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
+	if arg.MetaMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -2534,6 +2612,7 @@ type GetToolMetricsBreakdownParams struct {
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
 	EventSource         string                // Optional filter - filters by event_source
 	HookSource          string                // Optional filter - filters by hook_source
 	AccountType         string                // Optional filter - filters by account_type
@@ -2577,6 +2656,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.MCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
+	if arg.MetaMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -2653,6 +2735,7 @@ type GetOverviewSummaryParams struct {
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
 	EventSource         string                // Optional filter - filters by event_source
 	HookSource          string                // Optional filter - filters by hook_source
 	AccountType         string                // Optional filter - filters by account_type
@@ -2667,7 +2750,7 @@ type GetOverviewSummaryParams struct {
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
 	// A canonical user scope is a user filter even though arg.User stays empty
 	// in fold mode, so it must force the raw path off the unfiltered MV.
-	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
+	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -2781,6 +2864,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.MCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
+	if arg.MetaMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -3297,9 +3383,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"min(time_unix_nano) AS first_seen_unix_nano",
 		"max(time_unix_nano) AS last_seen_unix_nano",
 
-		// Token metrics (from any event with gen_ai usage data)
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+		// Token metrics, source-aware — see the summaryUsageRowFilter block.
+		summaryInputTokensExpr + " AS total_input_tokens",
+		summaryOutputTokensExpr + " AS total_output_tokens",
 
 		// Raw user_id values folded into this summary. The group key is email-first,
 		// so callers joining against user_id-keyed stores (user_accounts, role
@@ -3319,12 +3405,17 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
 			"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
 
-			// Remaining token/cost metrics
-			totalTokensExpr+" AS total_tokens",
-			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
-			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
-			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
-			"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
+			// Remaining token/cost metrics, source-aware for the same reason as
+			// the input/output sums above. avg_tokens_per_request divides the
+			// aligned total by the rows that actually carry usage: no agent
+			// surface but a generic OTel one reports gen_ai.usage.total_tokens,
+			// so averaging that field alone answered 0 for every Claude Code
+			// and Codex identity.
+			summaryTotalTokensExpr+" AS total_tokens",
+			summaryCacheReadTokensExpr+" AS cache_read_input_tokens",
+			summaryCacheCreationTokensExpr+" AS cache_creation_input_tokens",
+			"toFloat64("+summaryTotalTokensExpr+") / greatest(countIf("+summaryUsageRowFilter+"), 1) AS avg_tokens_per_request",
+			summaryCostExpr+" AS total_cost",
 
 			// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
 			"countIf("+tc.isCall+") AS total_tool_calls",
@@ -3476,17 +3567,17 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
 		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
 
-		// Token metrics (from any event with gen_ai usage data)
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		totalTokensExpr+" AS total_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+		// Token metrics, source-aware — see the summaryUsageRowFilter block.
+		summaryInputTokensExpr+" AS total_input_tokens",
+		summaryOutputTokensExpr+" AS total_output_tokens",
+		summaryTotalTokensExpr+" AS total_tokens",
+		summaryCacheReadTokensExpr+" AS cache_read_input_tokens",
+		summaryCacheCreationTokensExpr+" AS cache_creation_input_tokens",
+		"toFloat64("+summaryTotalTokensExpr+") / greatest(countIf("+summaryUsageRowFilter+"), 1) AS avg_tokens_per_request",
 
 		// Cost lives on MetricsSummaryRow but was never selected here, so callers
 		// wanting a user's cost had to read it from the grouped employees list.
-		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
+		summaryCostExpr+" AS total_cost",
 
 		// Chat request metrics
 		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
@@ -3912,6 +4003,7 @@ const (
 	ToolUsageTargetTypeShadowMCP   = "shadow_mcp_server"
 	ToolUsageTargetTypeLocalTool   = "local_tool"
 	ToolUsageTargetTypeSkill       = "skill"
+	ToolUsageTargetTypeMetaMCP     = "meta_mcp_server"
 
 	toolUsageTargetKindServer     = "server"
 	toolUsageTargetKindLocalTools = "local_tools"
@@ -4481,7 +4573,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 	return result, nil
 }
 
-// GetMcpServerActivity returns one row per MCP server (hosted or tunneled) that
+// GetMcpServerActivity returns one row per MCP server (hosted, tunneled, or gateway) that
 // has received at least one tool call inside the lookback window. It reuses the
 // same target-attribution pipeline as the tool usage summary (normalized_events)
 // so target_id matches the toolset slug (hosted) or MCP server slug (tunneled)
@@ -4553,6 +4645,54 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		result = append(result, row)
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Gateway rows come from trace_summaries.meta_mcp_server_id; normalized
+	// events classify those traces as the member. Appended unsorted: the
+	// service re-sorts after resolving gateway labels.
+	metaGroupedSB := sq.Select(
+		"min(start_time_unix_nano) AS event_time_ns",
+		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
+		"any(event_source) AS g_event_source",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("g_meta_mcp_server_id != ''").
+		Having("g_event_source = 'tool_call'")
+	metaGroupedSB = withTraceWindowScanBounds(metaGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	metaQuery, metaArgs, err := sq.Select(
+		"'"+ToolUsageTargetTypeMetaMCP+"' AS target_type",
+		"g_meta_mcp_server_id AS target_id",
+		"g_meta_mcp_server_id AS target_label",
+		"count() AS total_tool_calls",
+		recentExpr,
+		"max(event_time_ns) AS last_tool_call_unix_nano",
+	).
+		FromSelect(metaGroupedSB, "gateway_traces").
+		GroupBy("g_meta_mcp_server_id").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building meta mcp server activity query: %w", err)
+	}
+
+	metaRows, err := q.conn.Query(ctx, metaQuery, metaArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("query meta mcp server activity: %w", err)
+	}
+	defer metaRows.Close()
+	for metaRows.Next() {
+		var row McpServerActivityRow
+		if err = metaRows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan meta mcp server activity row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = metaRows.Err(); err != nil {
 		return nil, err
 	}
 	return result, nil

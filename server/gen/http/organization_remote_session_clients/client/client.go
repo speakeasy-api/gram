@@ -46,6 +46,14 @@ type Client struct {
 	// updateClient endpoint.
 	UpdateClientDoer goahttp.Doer
 
+	// AttachClientKeySet Doer is the HTTP client used to make requests to the
+	// attachClientKeySet endpoint.
+	AttachClientKeySetDoer goahttp.Doer
+
+	// DetachClientKeySet Doer is the HTTP client used to make requests to the
+	// detachClientKeySet endpoint.
+	DetachClientKeySetDoer goahttp.Doer
+
 	// DeleteClient Doer is the HTTP client used to make requests to the
 	// deleteClient endpoint.
 	DeleteClientDoer goahttp.Doer
@@ -82,6 +90,8 @@ func NewClient(
 		CreateClientDoer:              doer,
 		CreateCimdClientDoer:          doer,
 		UpdateClientDoer:              doer,
+		AttachClientKeySetDoer:        doer,
+		DetachClientKeySetDoer:        doer,
 		DeleteClientDoer:              doer,
 		RemoveClientFromMcpServerDoer: doer,
 		RestoreResponseBody:           restoreBody,
@@ -255,6 +265,54 @@ func (c *Client) UpdateClient() goa.Endpoint {
 		resp, err := c.UpdateClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "updateClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachClientKeySet returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionClients service attachClientKeySet server.
+func (c *Client) AttachClientKeySet() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachClientKeySetRequest(c.encoder)
+		decodeResponse = DecodeAttachClientKeySetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachClientKeySetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AttachClientKeySetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "attachClientKeySet", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DetachClientKeySet returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionClients service detachClientKeySet server.
+func (c *Client) DetachClientKeySet() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDetachClientKeySetRequest(c.encoder)
+		decodeResponse = DecodeDetachClientKeySetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDetachClientKeySetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DetachClientKeySetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "detachClientKeySet", err)
 		}
 		return decodeResponse(resp)
 	}

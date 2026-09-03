@@ -34,7 +34,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 
 const ORG = anOrganization();
 
-// Live and trialling, so the callout has a reason to draw.
+// Live and trialling, so a legacy page-wide callout would have drawn.
 const TRIALLING = anOrganization({
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
@@ -117,11 +117,8 @@ describe("RecordLayout", () => {
     expect(await screen.findByRole("heading", { name: ORG.name })).toBeTruthy();
   });
 
-  // The claim that the header and the callout are record chrome rather than
-  // part of Overview. Without it, putting both inside `Overview.tsx` passes
-  // every other test in this file.
   it.each(["", "/activity", "/projects", "/members"])(
-    "renders the header and the callout above the view at %s",
+    "renders the header without a page-wide trial callout at %s",
     async (view) => {
       mocks.getOrganization.mockResolvedValue(TRIALLING);
 
@@ -132,31 +129,11 @@ describe("RecordLayout", () => {
       expect(
         await screen.findByRole("button", { name: /Open in Dashboard/ }),
       ).toBeTruthy();
-      const callout = await screen.findByRole("status");
-      expect(callout.textContent).toContain("Trial ends");
+      expect(screen.queryByRole("status")).toBeNull();
     },
   );
 
-  it("draws the callout under the record's title, not above it", async () => {
-    mocks.getOrganization.mockResolvedValue(TRIALLING);
-
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${TRIALLING.slug}`,
-    });
-
-    const heading = await screen.findByRole("heading", {
-      name: TRIALLING.name,
-    });
-    const callout = await screen.findByRole("status");
-    // The drawing puts the trial badge in the title and the warning beneath
-    // it. Both present in either order passes every other test here.
-    expect(
-      heading.compareDocumentPosition(callout) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("speaks the result of a write started from the record chrome", async () => {
+  it("speaks the result of a write started from the overview", async () => {
     // The actions report through context whose default is silent, so a record
     // page with no reporter of its own announces nothing at all.
     const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
@@ -179,7 +156,7 @@ describe("RecordLayout", () => {
     });
     expect(liveRegion().getAttribute("aria-live")).toBe("polite");
     // Heard and not read. Without the class every write result is printed into
-    // the record as body text, between the callout and the view.
+    // the record as body text above the view.
     expect(liveRegion().className.split(" ")).toContain("sr-only");
   });
 

@@ -21,6 +21,8 @@ const (
 	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
 	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
 	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
+	ActionRemoteSessionClientAttachJsonWebKeySet     Action = "remote-session-client:attach-json-web-key-set"
+	ActionRemoteSessionClientDetachJsonWebKeySet     Action = "remote-session-client:detach-json-web-key-set"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -242,28 +244,76 @@ func (l *Logger) logRemoteSessionClientUserSessionIssuerAttachment(ctx context.C
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
+}
 
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+// LogRemoteSessionClientJsonWebKeySetAttachmentEvent describes an attach or detach of
+// a JSON Web Key Set to/from a remote_session_client. The set is captured in
+// metadata rather than as a before/after snapshot, matching the
+// user_session_issuer attachment events on this subject: the action names the
+// direction and the metadata names the set, which together fully describe the
+// change. On a detach the set recorded is the one that was removed, so the
+// entry stays readable without joining the preceding attach.
+type LogRemoteSessionClientJsonWebKeySetAttachmentEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
 
-		Action: string(action),
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
 
-		SubjectID:          event.RemoteSessionClientURN.ID.String(),
-		SubjectType:        string(subjectTypeRemoteSessionClient),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+	RemoteSessionClientURN urn.RemoteSessionClient
+	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	JsonWebKeySetURN       urn.JsonWebKeySet
+}
 
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-		Metadata:       metadata,
+// LogRemoteSessionClientAttachJsonWebKeySet records that a JSON Web Key Set was
+// attached to a remote_session_client.
+func (l *Logger) LogRemoteSessionClientAttachJsonWebKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientJsonWebKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientAttachJsonWebKeySet, event)
+}
+
+// LogRemoteSessionClientDetachJsonWebKeySet records that a JSON Web Key Set was
+// detached from a remote_session_client.
+func (l *Logger) LogRemoteSessionClientDetachJsonWebKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientJsonWebKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientDetachJsonWebKeySet, event)
+}
+
+func (l *Logger) logRemoteSessionClientJsonWebKeySetAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientJsonWebKeySetAttachmentEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
+		"json_web_key_set_id": event.JsonWebKeySetURN.ID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
 }
 
 type LogRemoteSessionClientRevokeSessionsEvent struct {
@@ -315,4 +365,46 @@ func (l *Logger) LogRemoteSessionClientRevokeSessions(ctx context.Context, dbtx 
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// remoteSessionClientAttachment is the shape both attachment writers on this
+// subject share: an action naming the direction, the client as subject, and the
+// attached resource in metadata. No before/after snapshot, because the action
+// and the metadata already describe the change in full.
+type remoteSessionClientAttachment struct {
+	organizationID   string
+	projectID        uuid.UUID
+	actor            urn.Principal
+	actorDisplayName *string
+	actorSlug        *string
+	action           Action
+	clientURN        urn.RemoteSessionClient
+	clientID         string
+	metadata         []byte
+}
+
+// remoteSessionClientAttachmentRow builds the audit row for attaching or
+// detaching something to a remote_session_client, so the user_session_issuer
+// and JSON Web Key Set writers cannot drift apart as the row shape changes.
+func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.InsertAuditLogParams {
+	return repo.InsertAuditLogParams{
+		OrganizationID: a.organizationID,
+		ProjectID:      uuid.NullUUID{UUID: a.projectID, Valid: a.projectID != uuid.Nil},
+
+		ActorID:          a.actor.ID,
+		ActorType:        string(a.actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(a.actorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(a.actorSlug),
+
+		Action: string(a.action),
+
+		SubjectID:          a.clientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(a.clientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       a.metadata,
+	}
 }

@@ -19,7 +19,10 @@ workinit = "mise run git:workinit"
 
 # Background: brings the worktree's stack up on the ports workinit just
 # assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
-# seed. Non-blocking, so worktree creation returns without waiting on it;
+# seed — and then PAUSES it (`mise run pause`): daemons stopped, containers
+# stopped but not removed. A worktree is therefore handed over complete but
+# idle; `mise run wake` restarts it in seconds when you (or your agent) want
+# it. Non-blocking, so worktree creation returns without waiting on it;
 # `wt config state logs` has the output. The task also publishes a pid marker
 # while it runs, which is what lets `wt status` say "booting" rather than
 # "down". Keep the hook key `stack` — the log file is named after it.

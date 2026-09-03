@@ -1,0 +1,21 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message GitleaksEnforcer {
+  // The handler ACKs scanner and reply-write failures because redelivery cannot
+  // rescue an inline scan. The dead-letter topic therefore only receives
+  // undecodable or malformed requests. Those payloads contain raw content and
+  // require restricted access and retention.
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.GitleaksEnforcement"
+    ack_deadline: {seconds: 10}
+    retention: {seconds: 600}
+    dead_letter: {max_delivery_attempts: 5}
+    retry_policy: {minimum_backoff: {seconds: 10}}
+  };
+}

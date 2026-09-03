@@ -118,13 +118,6 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOTELLogCustomerRelay controls which organizations have normalized
-	// OTEL logs relayed to customer-defined destinations. It is targeted by
-	// PostHog organization group (org slug) and fails closed per organization,
-	// so one unavailable evaluation never changes another organization's
-	// delivery.
-	FlagOTELLogCustomerRelay Flag = "otel-log-customer-relay"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

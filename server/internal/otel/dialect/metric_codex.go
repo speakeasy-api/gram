@@ -20,12 +20,12 @@ func (CodexMetric) SessionID(point MetricDataPoint) (string, string, error) {
 }
 
 func (CodexMetric) ExternalUserID(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.account_id")
+	key, value := getOneMetricPointAttr(point, vendorUserAccountIDKey)
 	return key, value, nil
 }
 
 func (CodexMetric) ExternalUserEmail(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.email")
+	key, value := getOneMetricPointAttr(point, userEmailKey)
 	return key, value, nil
 }
 

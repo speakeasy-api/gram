@@ -11,7 +11,6 @@ import {
 } from "@/pages/organizations/OrganizationActions";
 
 import { RecordHeader } from "./RecordHeader";
-import { TrialCallout } from "./TrialCallout";
 
 export function RecordLayout(): JSX.Element {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -56,7 +55,6 @@ function Record({ org }: { org: AdminOrganization }): JSX.Element {
     <WriteReportProvider value={reporter}>
       <div className="flex min-h-0 flex-1 flex-col gap-6">
         <RecordHeader org={org} />
-        <TrialCallout org={org} />
         {failure && <p className="text-destructive text-sm">{failure}</p>}
         {/* Polite, and load-bearing. Radix marks the rest of the document
             aria-hidden while a dialog is open and exempts live regions by name,

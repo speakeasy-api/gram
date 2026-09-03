@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -45,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -52,7 +56,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -116,9 +119,67 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	return newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{hasAccessOK: true})
 }
 
+// errorLogRecorder is a slog.Handler that keeps the messages of ERROR-level
+// records, so a test can assert a code path logs nothing at that level. It
+// guards its state so a handler that fans out to goroutines stays safe to
+// assert on. Attributes and groups are dropped: the service derives loggers
+// with logger.With, and returning the receiver is what keeps those derived
+// loggers reporting into the same recorder.
+type errorLogRecorder struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (r *errorLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (r *errorLogRecorder) Handle(_ context.Context, record slog.Record) error {
+	if record.Level < slog.LevelError {
+		return nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.msgs = append(r.msgs, record.Message)
+
+	return nil
+}
+
+func (r *errorLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return r }
+func (r *errorLogRecorder) WithGroup(string) slog.Handler      { return r }
+
+// reset drops everything recorded so far, so a test can ignore whatever its
+// fixture setup logged and assert only on the code path under test.
+func (r *errorLogRecorder) reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.msgs = nil
+}
+
+func (r *errorLogRecorder) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.msgs)
+}
+
+// newTestMCPServiceWithLogger wires the permissive identity resolver over a
+// caller-supplied logger, for tests that assert on what the service logs.
+// testenv.NewLogger discards records unless the run is verbose, so a test that
+// needs to see them has to supply its own.
+func newTestMCPServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil)
+}
+
 func newTestMCPServiceWithCacheWrapper(t *testing.T, wrap func(cache.Cache) cache.Cache) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
@@ -132,7 +193,7 @@ func newTestMCPServiceWithCacheWrapper(t *testing.T, wrap func(cache.Cache) cach
 // service records rather than the noop provider the other constructors use.
 func newTestMCPServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
@@ -182,7 +243,7 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 func newTestMCPServiceWithMeterProviderAndGuardianOptions(t *testing.T, meterProvider metric.MeterProvider, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
@@ -193,11 +254,12 @@ func newTestMCPServiceWithMeterProviderAndGuardianOptions(t *testing.T, meterPro
 
 func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.IdentityResolver, tunnelPublicConfig mcp.TunnelPublicConfig, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewMeterProvider(t), identityResolver, tunnelPublicConfig, nil, guardianOpts...)
+	return newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), identityResolver, tunnelPublicConfig, nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	t *testing.T,
+	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	identityResolver mcp.IdentityResolver,
 	tunnelPublicConfig mcp.TunnelPublicConfig,
@@ -208,7 +270,6 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 
 	ctx := t.Context()
 
-	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
@@ -286,10 +347,11 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, cacheAdapter, serverURL)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()))
+	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+	require.NoError(t, err)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
-	feedbackRecorder := feedbackrecorder.NewRecorder(conn, logger, nil)
-	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, feedbackRecorder)
+	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
 		AssistantSkillTools:           assistantSkillTools,
@@ -308,7 +370,8 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig, mcp.MetaRuntimeConfig{MemberCallTimeout: 0})
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig, mcp.MetaRuntimeConfig{MemberCallTimeout: 0})
+	require.NoError(t, err)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
@@ -523,4 +586,17 @@ func (ti *testInstance) addToolWithDualSecurity(ctx context.Context, t *testing.
 	require.NoError(t, err)
 
 	return deploymentID
+}
+
+// requireTelemetryRowCount polls telemetry_logs until the count for the WHERE
+// clause matches; emission is fire-and-forget.
+func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...any) {
+	t.Helper()
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	var count uint64
+	require.Eventually(t, func() bool {
+		row := chConn.QueryRow(t.Context(), "SELECT count() FROM telemetry_logs WHERE "+where, args...)
+		return row.Scan(&count) == nil && count == want
+	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs rows for %q: want %d, got %d", where, want, count)
 }

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/metric"
 	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -44,7 +44,7 @@ type SpanRelayHandler struct {
 type spanProvenanceKey struct {
 	source           string
 	organizationID   string
-	projectID        string
+	projectID        uuid.UUID
 	organizationSlug string
 	projectSlug      string
 	apiKeyID         string
@@ -64,7 +64,7 @@ type spanProvenanceGroup struct {
 func NewSpanRelayHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
 ) *SpanRelayHandler {
@@ -90,7 +90,7 @@ func NewSpanRelayHandler(
 		spansDropped: spansDropped,
 		spansFailed:  spansFailed,
 		relay: newSignalRelay(
-			readReplica,
+			db,
 			encryptionClient,
 			policy,
 			"/v1/traces",
@@ -126,7 +126,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 		destination *relayDestination
 		err         error
 	}
-	destinations := make(map[string]destinationResult)
+	destinations := make(map[relayRouteKey]destinationResult)
 	type delivery struct {
 		destination *relayDestination
 		request     *collectortracev1.ExportTraceServiceRequest
@@ -135,10 +135,14 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 	deliveries := make([]delivery, 0, len(groups))
 
 	for _, provenanceGroup := range groups {
-		result, ok := destinations[provenanceGroup.key.organizationID]
+		routeKey := relayRouteKey{
+			organizationID: provenanceGroup.key.organizationID,
+			projectID:      provenanceGroup.key.projectID,
+		}
+		result, ok := destinations[routeKey]
 		if !ok {
-			result.destination, result.err = h.relay.destinationForOrganization(ctx, provenanceGroup.key.organizationID)
-			destinations[provenanceGroup.key.organizationID] = result
+			result.destination, result.err = h.relay.destinationForRoute(ctx, routeKey)
+			destinations[routeKey] = result
 		}
 		if result.err != nil {
 			err := fmt.Errorf("load span relay destination: %w", result.err)
@@ -151,6 +155,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 				"load span relay destination",
 				attr.SlogError(result.err),
 				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+				attr.SlogProjectID(provenanceGroup.key.projectID.String()),
 			)
 			continue
 		}
@@ -163,7 +168,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 		for i, message := range provenanceGroup.messages {
 			spans[i] = message.span
 		}
-		request, err := newRelayExportRequest(spans)
+		request, err := newRelayExportRequest(spans, result.destination.includeSensitiveData)
 		if err != nil {
 			h.recordDroppedSpans(ctx, len(provenanceGroup.messages), relayReasonInvalid)
 			continue
@@ -201,6 +206,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 					"relay otel spans",
 					attr.SlogError(err),
 					attr.SlogOrganizationID(item.destination.organizationID),
+					attr.SlogProjectID(item.destination.projectID.String()),
 					attr.SlogURLFull(item.destination.endpoint),
 				)
 			}
@@ -245,11 +251,16 @@ func groupSpansByProvenance(messages []spanRelayMessage) ([]spanProvenanceGroup,
 			invalid++
 			continue
 		}
+		projectID, err := uuid.Parse(provenance.GetProjectId())
+		if err != nil {
+			invalid++
+			continue
+		}
 
 		key := spanProvenanceKey{
 			source:           provenance.GetSource(),
 			organizationID:   provenance.GetOrganizationId(),
-			projectID:        provenance.GetProjectId(),
+			projectID:        projectID,
 			organizationSlug: provenance.GetOrganizationSlug(),
 			projectSlug:      provenance.GetProjectSlug(),
 			apiKeyID:         provenance.GetApiKeyId(),
@@ -287,7 +298,7 @@ func removeGramSpanFields(span *tracev1.Span) error {
 	return nil
 }
 
-func newRelayExportRequest(spans []*otelv1.Span) (*collectortracev1.ExportTraceServiceRequest, error) {
+func newRelayExportRequest(spans []*otelv1.Span, includeSensitiveData bool) (*collectortracev1.ExportTraceServiceRequest, error) {
 	type scopeGroupKey struct {
 		scope     string
 		schemaURL string
@@ -389,6 +400,9 @@ func newRelayExportRequest(spans []*otelv1.Span) (*collectortracev1.ExportTraceS
 	}
 	for i, group := range resourceGroups {
 		request.ResourceSpans[i] = group.resourceSpans
+	}
+	if !includeSensitiveData {
+		redactSensitiveOTLP(request)
 	}
 	return request, nil
 }

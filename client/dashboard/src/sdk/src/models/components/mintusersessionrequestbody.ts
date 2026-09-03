@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type MintUserSessionRequestBody = {
   /**
-   * Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
+   * Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
    */
   mcpServerId?: string | undefined;
   /**
@@ -15,7 +15,7 @@ export type MintUserSessionRequestBody = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
+   * Bind the JWT to this toolset's audience. When the toolset has an mcp_servers wrapper the mint resolves to that server (identical to passing its mcp_server_id); otherwise the JWT is bound to the legacy toolset audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
    */
   toolsetId?: string | undefined;
 };

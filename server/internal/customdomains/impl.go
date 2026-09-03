@@ -487,6 +487,28 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 			if !server.Slug.Valid || server.Slug.String == "" {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp server has no slug to name its domain endpoint; attach an endpoint to the domain first").LogError(ctx, s.logger)
 			}
+			// Direct repo calls: the mcpendpoints service package would be an
+			// import cycle through background.
+			if err := mcpendpointsrepo.New(dbtx).LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{
+				CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+				Slug:           server.Slug.String,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
+			}
+			available, err := mcpendpointsrepo.New(dbtx).CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
+				Slug:               server.Slug.String,
+				CustomDomainID:     uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:     authCtx.ActiveOrganizationID,
+				ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
+				SkipDomainCheck:    false,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
+			}
+			if !available.Bool {
+				return nil, oops.E(oops.CodeConflict, nil, "an endpoint named %s already exists on this domain", server.Slug.String).LogError(ctx, s.logger)
+			}
 			// Deliberately narrower than the mcpendpoints creation flow: no
 			// default-plugin attachment or marketplace publish — those are
 			// project-scoped concerns, and mapping a domain root should not

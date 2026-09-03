@@ -13,6 +13,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const clearRemoteSessionClientKeySetFixture = `-- name: ClearRemoteSessionClientKeySetFixture :execrows
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = $1
+`
+
+// Releases a key set the way the detach endpoint does, so the delete guard can
+// be shown to read the live reference rather than any reference.
+func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearRemoteSessionClientKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
@@ -58,6 +74,20 @@ type CountFunctionsAccessParams struct {
 
 func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAccessParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countFunctionsAccess, arg.ProjectID, arg.DeploymentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOrganizationFeaturesFixture = `-- name: CountOrganizationFeaturesFixture :one
+SELECT count(*)
+FROM organization_features
+WHERE organization_id = $1
+`
+
+// Test-only fixture: verifies entitlement writes roll back with trial provisioning.
+func (q *Queries) CountOrganizationFeaturesFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationFeaturesFixture, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -269,6 +299,22 @@ func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx 
 	return err
 }
 
+const createStripeBillingMetadataFixture = `-- name: CreateStripeBillingMetadataFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES ($1, $2)
+`
+
+type CreateStripeBillingMetadataFixtureParams struct {
+	OrganizationID   string
+	StripeCustomerID pgtype.Text
+}
+
+// Test-only fixture: associates an organization with a Stripe customer.
+func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
@@ -311,6 +357,28 @@ WHERE device_integration_config_id = $1
 
 func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, disableDeviceIntegrationSchedulesFixture, deviceIntegrationConfigID)
+	return err
+}
+
+const disableOpenRouterAdminDisableAuditFailureFixture = `-- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
+ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit
+`
+
+func (q *Queries) DisableOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, disableOpenRouterAdminDisableAuditFailureFixture)
+	return err
+}
+
+const enableOpenRouterAdminDisableAuditFailureFixture = `-- name: EnableOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE TRIGGER fail_admin_key_audit
+BEFORE INSERT ON audit_logs
+FOR EACH ROW
+WHEN (NEW.action = 'openrouter-key:disable')
+EXECUTE FUNCTION fail_admin_key_audit()
+`
+
+func (q *Queries) EnableOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, enableOpenRouterAdminDisableAuditFailureFixture)
 	return err
 }
 
@@ -570,6 +638,57 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 	return items, nil
 }
 
+const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
+SELECT id::text
+FROM audit_logs
+WHERE organization_id = $1
+  AND action = 'organization:enterprise_trial_armed'
+ORDER BY seq DESC, id DESC
+LIMIT 1
+`
+
+// Test-only fixture: reads the arm operation selected by the production ordering.
+func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getLatestTrialArmAuditIDFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+`
+
+type GetOpenRouterAPIKeyStateFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+type GetOpenRouterAPIKeyStateFixtureRow struct {
+	KeyHash        string
+	MonthlyCredits int64
+	Disabled       bool
+	DisableCauses  []string
+	Deleted        bool
+}
+
+// Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+func (q *Queries) GetOpenRouterAPIKeyStateFixture(ctx context.Context, arg GetOpenRouterAPIKeyStateFixtureParams) (GetOpenRouterAPIKeyStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterAPIKeyStateFixture, arg.OrganizationID, arg.KeyType)
+	var i GetOpenRouterAPIKeyStateFixtureRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
 SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata
@@ -610,55 +729,26 @@ func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id st
 	return i, err
 }
 
-const getOutboxEntry = `-- name: GetOutboxEntry :one
-SELECT id FROM outbox WHERE id = $1
+const getOrganizationRoleAssignmentMembershipIDFixture = `-- name: GetOrganizationRoleAssignmentMembershipIDFixture :one
+SELECT workos_membership_id::text
+FROM organization_role_assignments
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted_at IS NULL
+LIMIT 1
 `
 
-// Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-func (q *Queries) GetOutboxEntry(ctx context.Context, id int64) (int64, error) {
-	row := q.db.QueryRow(ctx, getOutboxEntry, id)
-	var id_2 int64
-	err := row.Scan(&id_2)
-	return id_2, err
+type GetOrganizationRoleAssignmentMembershipIDFixtureParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
 }
 
-const getOutboxRelayState = `-- name: GetOutboxRelayState :one
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = $1
-`
-
-type GetOutboxRelayStateRow struct {
-	OutboxID      int64
-	ProcessedAt   pgtype.Timestamptz
-	Noop          bool
-	DeadLettered  bool
-	SvixMessageID pgtype.Text
-	Attempts      int32
-	LastError     pgtype.Text
-}
-
-// Reads the relay tracking state for a single outbox row.
-func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetOutboxRelayStateRow, error) {
-	row := q.db.QueryRow(ctx, getOutboxRelayState, outboxID)
-	var i GetOutboxRelayStateRow
-	err := row.Scan(
-		&i.OutboxID,
-		&i.ProcessedAt,
-		&i.Noop,
-		&i.DeadLettered,
-		&i.SvixMessageID,
-		&i.Attempts,
-		&i.LastError,
-	)
-	return i, err
+// Test-only fixture: reads the external membership attached during reconciliation.
+func (q *Queries) GetOrganizationRoleAssignmentMembershipIDFixture(ctx context.Context, arg GetOrganizationRoleAssignmentMembershipIDFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleAssignmentMembershipIDFixture, arg.OrganizationID, arg.UserID)
+	var workos_membership_id string
+	err := row.Scan(&workos_membership_id)
+	return workos_membership_id, err
 }
 
 const getPlatformMCPReadinessFingerprintFixture = `-- name: GetPlatformMCPReadinessFingerprintFixture :one
@@ -1001,6 +1091,78 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertKillswitchPrescriptionFixture = `-- name: InsertKillswitchPrescriptionFixture :exec
+WITH fixture_clock AS (
+  SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since
+),
+inserted_prescription AS (
+  INSERT INTO killswitch_prescriptions (
+    id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
+  ) VALUES (
+    $2, $3, $4, $5, $6, $7, 1
+  )
+  RETURNING organization_id, id
+),
+inserted_version AS (
+  INSERT INTO killswitch_prescription_versions (
+    organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+  )
+  SELECT
+    organization_id,
+    id,
+    1,
+    'active',
+    CASE
+      WHEN $8::text = 'all' AND cardinality(COALESCE($1::text[], ARRAY[]::text[])) = 0 THEN $8::text
+      WHEN $8::text = 'selected' AND cardinality(COALESCE($1::text[], ARRAY[]::text[])) > 0 THEN $8::text
+      ELSE NULL
+    END,
+    active_since,
+    NULL,
+    active_since,
+    $9,
+    $10
+  FROM inserted_prescription
+  CROSS JOIN fixture_clock
+  RETURNING organization_id, prescription_id, version
+)
+INSERT INTO killswitch_prescription_version_resources (
+  organization_id, prescription_id, version, resource_key
+)
+SELECT organization_id, prescription_id, version, resource_key
+FROM inserted_version
+CROSS JOIN unnest($1::text[]) AS resource(resource_key)
+`
+
+type InsertKillswitchPrescriptionFixtureParams struct {
+	ResourceKeys   []string
+	PrescriptionID uuid.UUID
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	PrincipalKey   string
+	ResourceKind   string
+	ResourceScope  string
+	InternalNote   string
+	ExternalNote   string
+}
+
+func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg InsertKillswitchPrescriptionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPrescriptionFixture,
+		arg.ResourceKeys,
+		arg.PrescriptionID,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.PrincipalKey,
+		arg.ResourceKind,
+		arg.ResourceScope,
+		arg.InternalNote,
+		arg.ExternalNote,
+	)
+	return err
+}
+
 const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
 VALUES ($1, $2, $3, 'deny', $4)
@@ -1052,6 +1214,42 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 	return err
 }
 
+const insertOrganizationTierUserSessionIssuerFixture = `-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, $1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertOrganizationTierUserSessionIssuerFixtureParams struct {
+	OrganizationID     pgtype.Text
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+// Writes an issuer that belongs to an organization and to no project. No
+// production surface creates one: CreateUserSessionIssuer always writes a
+// project_id. Tests need such a row to exercise the organization-tier arm of
+// the issuer predicates, the delete path's sweep for owners in a project other
+// than the caller's included.
+func (q *Queries) InsertOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg InsertOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertOrganizationTierUserSessionIssuerFixture,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)
@@ -1086,6 +1284,38 @@ type InsertUserFixtureParams struct {
 func (q *Queries) InsertUserFixture(ctx context.Context, arg InsertUserFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertUserFixture, arg.ID, arg.Email, arg.DisplayName)
 	return err
+}
+
+const installOpenRouterAdminDisableAuditFailureFixture = `-- name: InstallOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE FUNCTION fail_admin_key_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'forced audit failure';
+END
+$$
+`
+
+func (q *Queries) InstallOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, installOpenRouterAdminDisableAuditFailureFixture)
+	return err
+}
+
+const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND state = 'active'
+      AND wait_event_type = 'Lock'
+      AND query LIKE $1::text
+)
+`
+
+// Test-only synchronization: reports whether a matching active query is waiting on a lock.
+func (q *Queries) IsQueryBlockedOnLockFixture(ctx context.Context, queryPattern string) (bool, error) {
+	row := q.db.QueryRow(ctx, isQueryBlockedOnLockFixture, queryPattern)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
@@ -1290,6 +1520,36 @@ func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organiz
 	return items, nil
 }
 
+const listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture = `-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY key_type
+FOR UPDATE NOWAIT
+`
+
+// Test-only lock-order probe: fails immediately if any matching key row is locked.
+func (q *Queries) ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx context.Context, organizationID string) ([][]string, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]string
+	for rows.Next() {
+		var disable_causes []string
+		if err := rows.Scan(&disable_causes); err != nil {
+			return nil, err
+		}
+		items = append(items, disable_causes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublishOutboxRows = `-- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at
@@ -1406,6 +1666,42 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
+SELECT 1
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+FOR UPDATE
+`
+
+type LockOpenRouterAPIKeyForUpdateFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only synchronization: holds a row lock even when the key is soft-deleted.
+func (q *Queries) LockOpenRouterAPIKeyForUpdateFixture(ctx context.Context, arg LockOpenRouterAPIKeyForUpdateFixtureParams) (int32, error) {
+	row := q.db.QueryRow(ctx, lockOpenRouterAPIKeyForUpdateFixture, arg.OrganizationID, arg.KeyType)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const lockOrganizationMetadataForUpdateNowaitFixture = `-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE NOWAIT
+`
+
+// Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+func (q *Queries) LockOrganizationMetadataForUpdateNowaitFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadataForUpdateNowaitFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET auto_paused_at = clock_timestamp(),
@@ -1420,6 +1716,64 @@ func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
+const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
+WITH deleted AS (
+    DELETE FROM trials AS doomed
+    WHERE doomed.organization_id = $4
+    RETURNING doomed.organization_id
+)
+INSERT INTO trials (organization_id, tier, created_at, ends_at)
+SELECT deleted.organization_id, $1, $2, $3
+FROM deleted
+`
+
+type RecreateTrialGenerationFixtureParams struct {
+	Tier                 string
+	CreatedAt            pgtype.Timestamptz
+	EndsAt               pgtype.Timestamptz
+	TargetOrganizationID string
+}
+
+// Test-only fixture: replaces a trial while preserving timestamp precision.
+func (q *Queries) RecreateTrialGenerationFixture(ctx context.Context, arg RecreateTrialGenerationFixtureParams) error {
+	_, err := q.db.Exec(ctx, recreateTrialGenerationFixture,
+		arg.Tier,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.TargetOrganizationID,
+	)
+	return err
+}
+
+const redemoteTrialLifecycleFixture = `-- name: RedemoteTrialLifecycleFixture :exec
+WITH demoted_trial AS (
+    UPDATE trials
+    SET ends_at = clock_timestamp() - interval '1 day',
+        demoted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    WHERE organization_id = $1
+)
+UPDATE organization_metadata
+SET gram_account_type = 'free', whitelisted = FALSE
+WHERE id = $1
+`
+
+// Test-only fixture: starts another demotion/re-arm cycle in the same generation.
+func (q *Queries) RedemoteTrialLifecycleFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, redemoteTrialLifecycleFixture, organizationID)
+	return err
+}
+
+const rejectPublishOutboxWritesFixture = `-- name: RejectPublishOutboxWritesFixture :exec
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID
+`
+
+// Test-only failure injection proving audit callers roll back when enqueueing fails.
+func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
+	return err
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `
@@ -1428,6 +1782,25 @@ UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deploymen
 func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deploymentID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, scrubDeploymentFunctionMachineSpecs, deploymentID)
 	return err
+}
+
+const seedAuditLogFixture = `-- name: SeedAuditLogFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES ($1, 'user:<USER_ID>', 'user', $2, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', $3::text))
+RETURNING seq
+`
+
+type SeedAuditLogFixtureParams struct {
+	OrganizationID string
+	Action         string
+	KeyType        string
+}
+
+func (q *Queries) SeedAuditLogFixture(ctx context.Context, arg SeedAuditLogFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, seedAuditLogFixture, arg.OrganizationID, arg.Action, arg.KeyType)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const seedCapturedAgentChatFixture = `-- name: SeedCapturedAgentChatFixture :one
@@ -1506,6 +1879,52 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	return id, err
 }
 
+const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES ($1, 'gcp_iam', $2 || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT $1, credential.id, 'gcp_kms', 'RS256', $2 || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT $1, key.id, $2 FROM key
+RETURNING id
+`
+
+type SeedJsonWebKeySetFixtureParams struct {
+	OrganizationID string
+	Name           string
+}
+
+// Builds the external credential / external key / key set chain a
+// json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+// Those tests reference the set row and never read its keys, so this skips the
+// KMS mint that jsonwebkeysets.CreateSet performs.
+func (q *Queries) SeedJsonWebKeySetFixture(ctx context.Context, arg SeedJsonWebKeySetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedJsonWebKeySetFixture, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedOpenRouterSpendPrivacyFixture = `-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES ($1, 'chat', CURRENT_DATE, $2::text::numeric)
+`
+
+type SeedOpenRouterSpendPrivacyFixtureParams struct {
+	OrganizationID string
+	SpendUsd       string
+}
+
+func (q *Queries) SeedOpenRouterSpendPrivacyFixture(ctx context.Context, arg SeedOpenRouterSpendPrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOpenRouterSpendPrivacyFixture, arg.OrganizationID, arg.SpendUsd)
+	return err
+}
+
 const seedOpenRouterSpendRangeFixture = `-- name: SeedOpenRouterSpendRangeFixture :exec
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
 SELECT
@@ -1537,26 +1956,19 @@ func (q *Queries) SeedOpenRouterSpendRangeFixture(ctx context.Context, arg SeedO
 	return err
 }
 
-const seedOutboxEntry = `-- name: SeedOutboxEntry :one
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES ($1, $2, $3)
-RETURNING id
+const seedPromptTemplatePrivacyFixture = `-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', $1, generate_uuidv7(), 'Privacy fixture', $2, 'prompt')
 `
 
-type SeedOutboxEntryParams struct {
-	OrganizationID string
-	EventType      string
-	Payload        []byte
+type SeedPromptTemplatePrivacyFixtureParams struct {
+	ProjectID uuid.UUID
+	Prompt    string
 }
 
-// Fixture insert for the deprecated outbox table. Producers write to
-// publish_outbox now, so the only thing that still needs to create one of
-// these rows is the legacy relay's own tests; this goes away with them.
-func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams) (int64, error) {
-	row := q.db.QueryRow(ctx, seedOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) SeedPromptTemplatePrivacyFixture(ctx context.Context, arg SeedPromptTemplatePrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPromptTemplatePrivacyFixture, arg.ProjectID, arg.Prompt)
+	return err
 }
 
 const seedPublishOutboxRow = `-- name: SeedPublishOutboxRow :one
@@ -1603,6 +2015,52 @@ func (q *Queries) SeedPublishOutboxRow(ctx context.Context, arg SeedPublishOutbo
 	var i SeedPublishOutboxRowRow
 	err := row.Scan(&i.ID, &i.PublicID)
 	return i, err
+}
+
+const seedRearmAuditMetadataFixture = `-- name: SeedRearmAuditMetadataFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_rearmed', $1, 'organization', $2::jsonb)
+`
+
+type SeedRearmAuditMetadataFixtureParams struct {
+	OrganizationID string
+	Metadata       []byte
+}
+
+// Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
+func (q *Queries) SeedRearmAuditMetadataFixture(ctx context.Context, arg SeedRearmAuditMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRearmAuditMetadataFixture, arg.OrganizationID, arg.Metadata)
+	return err
+}
+
+const seedRemoteSessionClientForKeySetFixture = `-- name: SeedRemoteSessionClientForKeySetFixture :exec
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES ($1, $4, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT $1, issuer.id, $2, $3 FROM issuer
+`
+
+type SeedRemoteSessionClientForKeySetFixtureParams struct {
+	OrganizationID  pgtype.Text
+	ClientID        string
+	JsonWebKeySetID uuid.NullUUID
+	IssuerSlug      string
+}
+
+// Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+// delete guard and its preflight. Those live in the jsonwebkeysets package,
+// which cannot reach the remotesessions service to build the reference.
+func (q *Queries) SeedRemoteSessionClientForKeySetFixture(ctx context.Context, arg SeedRemoteSessionClientForKeySetFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteSessionClientForKeySetFixture,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.JsonWebKeySetID,
+		arg.IssuerSlug,
+	)
+	return err
 }
 
 const seedRiskPolicyFixture = `-- name: SeedRiskPolicyFixture :one
@@ -1668,6 +2126,48 @@ func (q *Queries) SeedRiskResultFixture(ctx context.Context, arg SeedRiskResultF
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedTrialArmAuditFixture = `-- name: SeedTrialArmAuditFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_armed', $1, 'organization')
+RETURNING id::text
+`
+
+// Test-only fixture: records the immutable audit operation for a trial generation.
+func (q *Queries) SeedTrialArmAuditFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, seedTrialArmAuditFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedTrialDemotionAuditFixture = `-- name: SeedTrialDemotionAuditFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_demoted', $1, 'organization')
+`
+
+// Test-only fixture: records the committed demotion boundary for a retry cycle.
+func (q *Queries) SeedTrialDemotionAuditFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, seedTrialDemotionAuditFixture, organizationID)
+	return err
+}
+
+const seedUnrelatedAuditHistoryFixture = `-- name: SeedUnrelatedAuditHistoryFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+SELECT $1, 'user:<USER_ID>', 'user', 'unrelated:' || n, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', $2::text)
+FROM generate_series(1, $3::int) AS n
+`
+
+type SeedUnrelatedAuditHistoryFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	EventCount     int32
+}
+
+func (q *Queries) SeedUnrelatedAuditHistoryFixture(ctx context.Context, arg SeedUnrelatedAuditHistoryFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUnrelatedAuditHistoryFixture, arg.OrganizationID, arg.KeyType, arg.EventCount)
+	return err
 }
 
 const seedUserAccountFixture = `-- name: SeedUserAccountFixture :one
@@ -1770,6 +2270,32 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disabled = $1,
+    disable_causes = $2::text[]
+WHERE organization_id = $3
+  AND key_type = $4
+`
+
+type SetOpenRouterAPIKeyClassificationFixtureParams struct {
+	Disabled       bool
+	DisableCauses  []string
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: creates compatibility states that production writes reject.
+func (q *Queries) SetOpenRouterAPIKeyClassificationFixture(ctx context.Context, arg SetOpenRouterAPIKeyClassificationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyClassificationFixture,
+		arg.Disabled,
+		arg.DisableCauses,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	return err
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1
@@ -1786,6 +2312,77 @@ type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
 func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID)
 	return err
+}
+
+const setOpenRouterAPIKeyHashFixture = `-- name: SetOpenRouterAPIKeyHashFixture :exec
+UPDATE openrouter_api_keys
+SET key_hash = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyHashFixtureParams struct {
+	KeyHash        string
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: simulates key rotation between an upstream response and CAS.
+func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpenRouterAPIKeyHashFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyHashFixture, arg.KeyHash, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+UPDATE openrouter_api_keys
+SET key = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
+	ProviderPayload pgtype.Text
+	OrganizationID  string
+	KeyType         string
+}
+
+// Test-only privacy sentinel in the deprecated plaintext provider payload column.
+func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterKeyLifecycleFixture = `-- name: SetOpenRouterKeyLifecycleFixture :execrows
+UPDATE openrouter_api_keys
+SET disabled = $1,
+    disable_causes = $2,
+    monthly_credits = $3
+WHERE organization_id = $4
+  AND key_type = $5
+  AND deleted IS FALSE
+`
+
+type SetOpenRouterKeyLifecycleFixtureParams struct {
+	Disabled       bool
+	DisableCauses  []string
+	MonthlyCredits int64
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture for Stripe lifecycle tests.
+func (q *Queries) SetOpenRouterKeyLifecycleFixture(ctx context.Context, arg SetOpenRouterKeyLifecycleFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setOpenRouterKeyLifecycleFixture,
+		arg.Disabled,
+		arg.DisableCauses,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
@@ -1840,6 +2437,23 @@ type SetRemoteSessionResourceFixtureParams struct {
 // Test-only fixture stamping a stored RFC 8707 resource binding on a row.
 func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRemoteSessionResourceFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRemoteSessionResourceFixture, arg.Resource, arg.SubjectUrn, arg.RemoteSessionClientID)
+	return err
+}
+
+const setUserPlatformAdminFixture = `-- name: SetUserPlatformAdminFixture :exec
+UPDATE users
+SET admin = $1
+WHERE id = $2
+`
+
+type SetUserPlatformAdminFixtureParams struct {
+	Admin bool
+	ID    string
+}
+
+// Test-only fixture: controls platform-admin eligibility for invitation flows.
+func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPlatformAdminFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserPlatformAdminFixture, arg.Admin, arg.ID)
 	return err
 }
 
@@ -1906,6 +2520,60 @@ type SetWorkosLastEventIDFixtureParams struct {
 func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
 	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
 	return err
+}
+
+const softDeleteOpenRouterAPIKeyFixture = `-- name: SoftDeleteOpenRouterAPIKeyFixture :exec
+UPDATE openrouter_api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+`
+
+type SoftDeleteOpenRouterAPIKeyFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: soft-deletes one classified key row.
+func (q *Queries) SoftDeleteOpenRouterAPIKeyFixture(ctx context.Context, arg SoftDeleteOpenRouterAPIKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOpenRouterAPIKeyFixture, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const softDeleteRemoteSessionClientsForKeySetFixture = `-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = $1
+  AND deleted IS FALSE
+`
+
+// Tombstones the clients referencing a key set, so the delete guard can be
+// shown to ignore them.
+func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
+SELECT pg_try_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type TryAcquireOpenRouterKeyBillingLockFixtureParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Test-only non-blocking probe of the production OpenRouter billing lock key.
+func (q *Queries) TryAcquireOpenRouterKeyBillingLockFixture(ctx context.Context, arg TryAcquireOpenRouterKeyBillingLockFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireOpenRouterKeyBillingLockFixture, arg.KeyType, arg.OrganizationID)
+	var pg_try_advisory_lock bool
+	err := row.Scan(&pg_try_advisory_lock)
+	return pg_try_advisory_lock, err
 }
 
 const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec

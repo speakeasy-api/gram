@@ -20,14 +20,16 @@ import {
 /**
  * Transport type (sse or streamable-http)
  */
-export const TransportType = {
+export const ExternalMCPRemoteTransportType = {
   Sse: "sse",
   StreamableHttp: "streamable-http",
 } as const;
 /**
  * Transport type (sse or streamable-http)
  */
-export type TransportType = ClosedEnum<typeof TransportType>;
+export type ExternalMCPRemoteTransportType = ClosedEnum<
+  typeof ExternalMCPRemoteTransportType
+>;
 
 /**
  * A remote endpoint for an MCP server
@@ -40,7 +42,7 @@ export type ExternalMCPRemote = {
   /**
    * Transport type (sse or streamable-http)
    */
-  transportType: TransportType;
+  transportType: ExternalMCPRemoteTransportType;
   /**
    * URL of the remote endpoint
    */
@@ -52,8 +54,9 @@ export type ExternalMCPRemote = {
 };
 
 /** @internal */
-export const TransportType$inboundSchema: z.ZodMiniEnum<typeof TransportType> =
-  z.enum(TransportType);
+export const ExternalMCPRemoteTransportType$inboundSchema: z.ZodMiniEnum<
+  typeof ExternalMCPRemoteTransportType
+> = z.enum(ExternalMCPRemoteTransportType);
 
 /** @internal */
 export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
@@ -62,7 +65,7 @@ export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     headers: z.optional(z.array(ExternalMCPRemoteHeader$inboundSchema)),
-    transport_type: TransportType$inboundSchema,
+    transport_type: ExternalMCPRemoteTransportType$inboundSchema,
     url: z.string(),
     variables: z.optional(
       z.record(z.string(), ExternalMCPRemoteVariable$inboundSchema),

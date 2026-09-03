@@ -158,14 +158,14 @@ function InspectBody({
   }
 
   if (needsAuth) {
-    // The common cause is an unconnected upstream provider, not a broken
-    // issuer: a session needs every attached provider connected, so one
-    // missing grant rejects the whole session.
+    // Unconnected providers no longer reject a session (members degrade
+    // member-scoped instead). A 401 here means either the session token was
+    // refused or minting failed and the anonymous probe was denied, so the
+    // copy asserts neither.
     return (
       <Text muted small>
-        This gateway rejected the dashboard&apos;s session. Every attached
-        identity provider must be connected before it will serve — connect them
-        from the gateway&apos;s sign-in page, or review its providers in{" "}
+        This gateway could not authenticate the dashboard&apos;s connection.
+        Reload to try again, or review the gateway&apos;s authentication in{" "}
         <Link to={settingsHref}>Settings</Link>.
       </Text>
     );

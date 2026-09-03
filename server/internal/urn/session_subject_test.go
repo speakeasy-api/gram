@@ -47,8 +47,24 @@ func TestNewSessionSubject(t *testing.T) {
 			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:    "id too long",
-			build:   func() urn.SessionSubject { return urn.NewUserSubject(strings.Repeat("a", 129)) },
+			name: "id at byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2))
+			},
+			wantErr: nil,
+		},
+		{
+			name: "ASCII id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("a", urn.MaxSessionSubjectIDLength+1))
+			},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name: "multibyte id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2+1))
+			},
 			wantErr: urn.ErrInvalid,
 		},
 	}

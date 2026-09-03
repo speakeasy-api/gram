@@ -68,6 +68,7 @@ type CurrentPrescription struct {
 	Version              int64
 	State                PrescriptionState
 	ResourceScope        ResourceScope
+	StartMode            StartMode
 	SelectedResourceKeys []ResourceKey
 	StartsAt             time.Time
 	ExpiresAt            *time.Time
@@ -242,9 +243,15 @@ type currentPrescriptionRow struct {
 }
 
 func (f *Facade) currentPrescription(row currentPrescriptionRow) (CurrentPrescription, error) {
+	activatedAt := optionalTime(row.activatedAt)
 	startsAt := optionalTime(row.startsAt)
+	startMode := StartModeAt
 	if startsAt == nil {
-		return CurrentPrescription{}, errors.New("current killswitch prescription has no start time")
+		startMode = StartModeNow
+		startsAt = activatedAt
+	}
+	if startsAt == nil {
+		return CurrentPrescription{}, errors.New("current killswitch prescription has no effective start time")
 	}
 	state := PrescriptionState(row.state)
 	if !validPrescriptionState(state) {
@@ -262,9 +269,9 @@ func (f *Facade) currentPrescription(row currentPrescriptionRow) (CurrentPrescri
 		ID: PrescriptionID(row.id.String()), OrganizationID: OrganizationID(row.organizationID),
 		Definition: DefinitionKey(row.definitionKey), PrincipalKind: PrincipalKind(row.principalKind),
 		PrincipalKey: PrincipalKey(row.principalKey), ResourceKind: ResourceKind(row.resourceKind),
-		Version: row.currentVersion, State: state, ResourceScope: scope,
+		Version: row.currentVersion, State: state, ResourceScope: scope, StartMode: startMode,
 		SelectedResourceKeys: resourceKeys, StartsAt: *startsAt, ExpiresAt: optionalTime(row.expiresAt),
-		ActivatedAt: optionalTime(row.activatedAt), SupersededAt: optionalTime(row.supersededAt),
+		ActivatedAt: activatedAt, SupersededAt: optionalTime(row.supersededAt),
 		InternalNote: row.internalNote, ExternalNote: row.externalNote,
 	}, nil
 }

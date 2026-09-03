@@ -2,9 +2,14 @@
    which owns its own document styles — so Tailwind's global preflight is
    deliberately omitted (it would reset the page's headings, buttons, and
    forms) and a minimal equivalent is scoped under the mount element. */
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities) source(none);
+/* Distinct layer names, not theme/base/utilities. This island is injected into
+   the server-rendered consent page, which ships its own Tailwind build: shared
+   layer names put both stylesheets' utilities in one layer, where the island —
+   loading second — silently outranks the page's own responsive variants. The
+   page declares the full order and puts these first. */
+@layer island-theme, island-base, island-utilities;
+@import "tailwindcss/theme.css" layer(island-theme);
+@import "tailwindcss/utilities.css" layer(island-utilities) source(none);
 
 @source "../consent-tools";
 @source "../components/tool-selection";
@@ -22,7 +27,7 @@
   }
 }
 
-@layer base {
+@layer island-base {
   /* Scoped preflight subset: Tailwind border/box utilities assume these
      defaults exist. Confined to the island so the host page is untouched. */
   #consent-tools-root,

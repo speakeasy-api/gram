@@ -1,3 +1,4 @@
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +29,9 @@ vi.mock("@/contexts/Sdk", async () => {
 
 // The route table pulls in every page; the provider only reads the org-level
 // path list from it.
-vi.mock("@/routes", () => ({ orgRoutePaths: [] }));
+vi.mock("@/routes", () => ({
+  orgRoutePaths: ["data", "data/event-feed", "data/exports"],
+}));
 
 vi.mock("@/pages/demo/BookDemo", () => ({
   default: () => <div data-testid="book-demo" />,
@@ -43,6 +46,7 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
   useSessionData: () => mocks.sessionData() as unknown,
 }));
 
+import { useSession } from "./Auth";
 import { AuthProvider } from "./AuthProvider";
 import { nullTelemetry, TelemetryStateProvider } from "./Telemetry";
 
@@ -91,6 +95,10 @@ const LocationProbe = () => {
   );
 };
 
+const SessionProbe = () => (
+  <div data-testid="session">{useSession().session ?? "none"}</div>
+);
+
 function renderGate(initialPath: string | string[] = "/") {
   const initialEntries = Array.isArray(initialPath)
     ? initialPath
@@ -105,6 +113,7 @@ function renderGate(initialPath: string | string[] = "/") {
         <LocationProbe />
         <AuthProvider>
           <div data-testid="app" />
+          <SessionProbe />
         </AuthProvider>
       </MemoryRouter>
     </TelemetryStateProvider>,
@@ -174,6 +183,35 @@ describe("AuthProvider organization telemetry group", () => {
     expect(registeredOrgGroups()).toEqual([]);
   });
 
+  it("retains cached authentication after a transient focus refetch error", () => {
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ activeOrganizationId: undefined }),
+      error: new Error("temporary network failure"),
+      status: "error",
+    });
+
+    renderGate();
+
+    expect(screen.getByTestId("session").textContent).toBe("session-token");
+  });
+
+  it("drops cached authentication after an unauthorized focus refetch", () => {
+    const error = new GramError("unauthorized", {
+      response: new Response(null, { status: 401 }),
+      request: new Request("https://app.getgram.ai/rpc/auth.info"),
+      body: "",
+    });
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ activeOrganizationId: undefined }),
+      error,
+      status: "error",
+    });
+
+    renderGate();
+
+    expect(screen.getByTestId("session").textContent).toBe("");
+  });
+
   it("lets authenticated users stay on /guide until the guide route resolves", () => {
     mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
 
@@ -181,6 +219,46 @@ describe("AuthProvider organization telemetry group", () => {
 
     expect(screen.getByTestId("app")).toBeTruthy();
     expect(screen.getByTestId("location").textContent).toBe("/guide");
+  });
+});
+
+describe("AuthProvider legacy project redirects", () => {
+  const DATA_PROJECT_ORG = {
+    ...ORG,
+    projects: [{ ...PROJECT, slug: "data" }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [DATA_PROJECT_ORG],
+        organization: DATA_PROJECT_ORG,
+        activeOrganizationId: DATA_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+  });
+
+  afterEach(cleanup);
+
+  it.each([
+    "/test-org/data",
+    "/test-org/data/event-feed",
+    "/test-org/data/exports?status=enabled#latest",
+  ])("preserves exact organization route %s", (path) => {
+    renderGate(path);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe(path);
+  });
+
+  it("redirects an unknown Data subpath as a legacy project URL", () => {
+    renderGate("/test-org/data/toolsets?status=enabled#latest");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/projects/data/toolsets?status=enabled#latest",
+    );
   });
 });
 

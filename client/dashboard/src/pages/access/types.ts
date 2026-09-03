@@ -45,12 +45,7 @@ export type AnnotationHint =
 export type CustomTab = "select" | "auto-groups";
 
 /** Which panel the scope picker is displaying. Derived from selectors. */
-export type ActivePanel =
-  | "all"
-  | "projects"
-  | "servers"
-  | "tools"
-  | "collection";
+export type ActivePanel = "all" | "projects" | "servers" | "tools";
 
 /**
  * UI-only rule effect. "deny" means an exception rule in the dashboard and is

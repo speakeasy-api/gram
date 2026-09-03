@@ -113,10 +113,12 @@ export function GrantAccessDialog({
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header>
           <Dialog.Title>Grant Access</Dialog.Title>
+          {/* Opened from access-request emails and from server team-access
+              rows alike, so the copy names the permission without assuming a
+              request. */}
           <Dialog.Description>
-            This member requested the{" "}
+            Assign a role that includes the{" "}
             <span className="font-mono text-xs">{scope}</span> permission.
-            Assign a role that includes it.
           </Dialog.Description>
         </Dialog.Header>
 

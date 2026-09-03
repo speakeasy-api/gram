@@ -1,4 +1,6 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 
 import {
@@ -17,6 +19,7 @@ import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -32,6 +35,16 @@ import { providerLabel } from "@/lib/provider-label";
 import { subjectLabel } from "@/lib/user-session-status";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { useOrgRoutes } from "@/routes";
+import { KillswitchUserBadgeLink } from "@/components/killswitch/KillswitchUserBadgeLink";
+import {
+  canonicalUserId,
+  killswitchCreateHref,
+  killswitchStatusHref,
+  useKillswitchUserBadges,
+} from "@/components/killswitch/KillswitchUserStatus";
+import type { KillswitchUserBadge } from "@gram/client/models/components/killswitchuserbadge.js";
+import type { KillswitchCapabilityKey } from "@gram/client/models/components/killswitchcapabilitykey.js";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
@@ -83,8 +96,21 @@ function useNow(): number {
 }
 
 /** What a sub-row stands for, given what its parent row stands for. */
+export type ConnectionKillswitchContext = {
+  capabilityKey: KillswitchCapabilityKey;
+  originatingMcpServerId?: string;
+};
+
+type PersonKillswitch = {
+  badge?: KillswitchUserBadge;
+  unavailable: boolean;
+  createHref: string;
+  statusHref: string;
+};
+
 const CHILD_OF: Record<ConnectionGrouping, "agent" | "person"> = {
   subject: "agent",
+  issuer: "person",
   provider: "person",
   client: "person",
 };
@@ -118,32 +144,81 @@ function providerNames(group: ConnectionGroup): string[] {
   );
 }
 
+function personKillswitch(
+  subjectUrn: string,
+  context: ConnectionKillswitchContext | undefined,
+  badges: ReadonlyMap<string, KillswitchUserBadge>,
+  unavailableUserIds: ReadonlySet<string>,
+  baseHref: string,
+): PersonKillswitch | undefined {
+  const userId = canonicalUserId(subjectUrn);
+  if (!userId || !context) return undefined;
+  return {
+    badge: badges.get(userId),
+    unavailable: unavailableUserIds.has(userId),
+    statusHref: killswitchStatusHref(baseHref, userId),
+    createHref: killswitchCreateHref(baseHref, {
+      userId,
+      capabilityKey: context.capabilityKey,
+      originatingMcpServerId: context.originatingMcpServerId,
+    }),
+  };
+}
+
 function ConnectionRowActions({
   session,
+  canRevoke,
+  killswitch,
+  onOpenKillswitch,
   onRevoked,
 }: {
   session: UserSession;
+  canRevoke: boolean;
+  killswitch?: PersonKillswitch;
+  onOpenKillswitch: (href: string) => void;
   onRevoked: () => void;
-}): JSX.Element {
+}): JSX.Element | null {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  return (
-    <>
-      <MoreActions
-        actions={[
+  const actions = [
+    ...(killswitch
+      ? [
+          {
+            label: "View killswitches",
+            onClick: () => onOpenKillswitch(killswitch.statusHref),
+          },
+          {
+            label: "New killswitch…",
+            onClick: () => onOpenKillswitch(killswitch.createHref),
+          },
+        ]
+      : []),
+    ...(canRevoke
+      ? [
           {
             label: "Revoke connection",
             destructive: true,
             onClick: () => setConfirmOpen(true),
           },
-        ]}
+        ]
+      : []),
+  ];
+  if (actions.length === 0) return null;
+
+  return (
+    <>
+      <MoreActions
+        actions={actions}
+        triggerAriaLabel={`Actions for ${subjectLabel(session)}`}
       />
-      <RevokeSessionDialog
-        session={session}
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        onRevoked={onRevoked}
-      />
+      {canRevoke && (
+        <RevokeSessionDialog
+          session={session}
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onRevoked={onRevoked}
+        />
+      )}
     </>
   );
 }
@@ -179,13 +254,29 @@ function ClientIcon({ label }: { label: string }): JSX.Element {
   );
 }
 
-function GroupIcon({ group }: { group: ConnectionGroup }): JSX.Element {
+function GroupIcon({
+  group,
+  grouping,
+}: {
+  group: ConnectionGroup;
+  grouping: ConnectionGrouping;
+}): JSX.Element {
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
     );
   }
   if (group.client) return <ClientIcon label={group.label} />;
+  // An MCP server group has no identity or registration behind it, but it is
+  // the identity page's default grouping — an empty cell on every row there
+  // reads as a failed avatar rather than as a deliberate blank.
+  if (grouping === "issuer") {
+    return (
+      <span className="bg-muted/50 flex size-6 shrink-0 items-center justify-center">
+        <Icon name="server" className="text-muted-foreground size-3.5" />
+      </span>
+    );
+  }
 
   // Provider groups have neither an identity nor a registration to show, but
   // the cell still has to be occupied or every column after it shifts left.
@@ -207,11 +298,13 @@ function ConnectionSubRow({
   grouping,
   now,
   actions,
+  killswitch,
 }: {
   session: UserSession;
   grouping: ConnectionGrouping;
   now: number;
   actions?: React.ReactNode;
+  killswitch?: PersonKillswitch;
 }): JSX.Element {
   const state = connectionState(session, now);
   const presentation = CONNECTION_STATE_PRESENTATION[state];
@@ -252,6 +345,13 @@ function ConnectionSubRow({
             <ClientIcon label={label} />
           )}
           <span className="text-foreground truncate text-sm">{label}</span>
+          {childIsPerson && killswitch ? (
+            <KillswitchUserBadgeLink
+              badge={killswitch.badge}
+              unavailable={killswitch.unavailable}
+              href={killswitch.statusHref}
+            />
+          ) : null}
           {/* Only where the row names an agent. A sub-row names a person under
               provider and agent grouping alike, and a person has no credential
               of their own. */}
@@ -305,6 +405,13 @@ function ConnectionGroupRow({
   canRevoke,
   onRevoked,
   project,
+  killswitchContext,
+  killswitchBadges,
+  killswitchUnavailableUserIds,
+  killswitchBaseHref,
+  expanded,
+  onExpandedChange,
+  onOpenKillswitch,
 }: {
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
@@ -314,8 +421,14 @@ function ConnectionGroupRow({
   project?: { slug: string; id: string };
   canRevoke: boolean;
   onRevoked: () => void;
+  killswitchContext?: ConnectionKillswitchContext;
+  killswitchBadges: ReadonlyMap<string, KillswitchUserBadge>;
+  killswitchUnavailableUserIds: ReadonlySet<string>;
+  killswitchBaseHref: string;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onOpenKillswitch: (href: string) => void;
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
   const [revokeAllOpen, setRevokeAllOpen] = useState(false);
   const [revokeClientOpen, setRevokeClientOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -325,6 +438,16 @@ function ConnectionGroupRow({
   const [detailMounted, setDetailMounted] = useState(false);
 
   const providers = grouping === "provider" ? [] : providerNames(group);
+  const groupKillswitch =
+    grouping === "subject"
+      ? personKillswitch(
+          group.key,
+          killswitchContext,
+          killswitchBadges,
+          killswitchUnavailableUserIds,
+          killswitchBaseHref,
+        )
+      : undefined;
 
   const actions = [
     // Reading a registration needs project read, which every viewer of this
@@ -339,6 +462,18 @@ function ConnectionGroupRow({
               setDetailMounted(true);
               setDetailOpen(true);
             },
+          },
+        ]
+      : []),
+    ...(groupKillswitch
+      ? [
+          {
+            label: "View killswitches",
+            onClick: () => onOpenKillswitch(groupKillswitch.statusHref),
+          },
+          {
+            label: "New killswitch…",
+            onClick: () => onOpenKillswitch(groupKillswitch.createHref),
           },
         ]
       : []),
@@ -403,25 +538,60 @@ function ConnectionGroupRow({
       )}
     >
       <div className={cn(CONNECTION_ROW_FRAME, "hover:bg-muted/30 py-2.5")}>
-        <button
-          type="button"
-          onClick={() => setExpanded((open) => !open)}
-          className={CONNECTION_ROW_GRID}
-          aria-expanded={expanded}
+        {/* The toggle is the chevron, not the whole row. A row that is itself
+            a button flattens the identity link inside it: assistive technology
+            cannot reach the link, and Enter on it expands the row instead of
+            opening the profile. The row still expands on a click anywhere that
+            is not a control, so the mouse affordance is unchanged. */}
+        <div
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("a,button")
+            ) {
+              return;
+            }
+            onExpandedChange(!expanded);
+          }}
+          className={cn(CONNECTION_ROW_GRID, "cursor-pointer text-left")}
         >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground size-3.5 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
+            onClick={() => onExpandedChange(!expanded)}
+            className="focus-visible:ring-ring flex size-3.5 shrink-0 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground size-3.5 shrink-0 transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+          </button>
 
-          <GroupIcon group={group} />
+          <GroupIcon group={group} grouping={grouping} />
 
           <span className="flex min-w-0 items-center gap-2">
-            <span className="text-foreground truncate text-sm font-medium">
-              {group.label}
-            </span>
+            {group.identity?.urn ? (
+              <IdentityLink
+                identifier={{ urn: group.identity.urn }}
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {group.label}
+              </IdentityLink>
+            ) : (
+              <span className="text-foreground truncate text-sm font-medium">
+                {group.label}
+              </span>
+            )}
+            {groupKillswitch ? (
+              <KillswitchUserBadgeLink
+                badge={groupKillswitch.badge}
+                unavailable={groupKillswitch.unavailable}
+                href={groupKillswitch.statusHref}
+              />
+            ) : null}
             {/* Absent unless the row names a registration, which is what
                 grouping by agent makes it. */}
             <ClientCredentialBadge
@@ -449,11 +619,15 @@ function ConnectionGroupRow({
             ) : grouping !== "provider" ? (
               // Said rather than left blank: reaching only native tools is a
               // real state, and an empty slot beside every other row's provider
-              // count reads as data we failed to load.
-              <span className="text-muted-foreground/70">
-                {" "}
-                · Speakeasy tools only
-              </span>
+              // count reads as data we failed to load. Short enough to survive
+              // the column, with the sentence in the tooltip — spelled out it
+              // truncated to "Speakeasy to…", which says nothing.
+              <SimpleTooltip tooltip="Reaches Speakeasy-native tools only — this session holds no upstream provider tokens.">
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  · no upstreams
+                </span>
+              </SimpleTooltip>
             ) : null}
           </span>
 
@@ -466,10 +640,15 @@ function ConnectionGroupRow({
             <StatusDot state={groupState} />
             {showStateLabel ? groupPresentation.label : ""}
           </span>
-        </button>
+        </div>
 
         <span className={CONNECTION_ACTIONS_SLOT}>
-          {actions.length > 0 ? <MoreActions actions={actions} /> : null}
+          {actions.length > 0 ? (
+            <MoreActions
+              actions={actions}
+              triggerAriaLabel={`Actions for ${group.label}`}
+            />
+          ) : null}
         </span>
       </div>
 
@@ -486,31 +665,46 @@ function ConnectionGroupRow({
             </div>
           ) : null}
 
-          {group.sessions.map((session) => (
-            <ConnectionSubRow
-              key={session.id}
-              session={session}
-              grouping={grouping}
-              now={now}
-              actions={
-                // Gated on this session being revocable, not merely on the
-                // viewer's scope: a revoked or expired connection has nothing
-                // left to cut off, and offering the action opened a dialog that
-                // could only fail.
-                canRevoke && group.revocableIds.includes(session.id) ? (
-                  <ConnectionRowActions
-                    session={session}
-                    onRevoked={onRevoked}
-                  />
-                ) : null
-              }
-            />
-          ))}
+          {group.sessions.map((session) => {
+            const sessionKillswitch =
+              CHILD_OF[grouping] === "person"
+                ? personKillswitch(
+                    session.subjectUrn,
+                    killswitchContext,
+                    killswitchBadges,
+                    killswitchUnavailableUserIds,
+                    killswitchBaseHref,
+                  )
+                : undefined;
+            const sessionCanRevoke =
+              canRevoke && group.revocableIds.includes(session.id);
+            return (
+              <ConnectionSubRow
+                key={session.id}
+                session={session}
+                grouping={grouping}
+                now={now}
+                killswitch={sessionKillswitch}
+                actions={
+                  sessionCanRevoke || sessionKillswitch ? (
+                    <ConnectionRowActions
+                      session={session}
+                      canRevoke={sessionCanRevoke}
+                      killswitch={sessionKillswitch}
+                      onOpenKillswitch={onOpenKillswitch}
+                      onRevoked={onRevoked}
+                    />
+                  ) : null
+                }
+              />
+            );
+          })}
         </div>
       ) : null}
 
       <RevokeSessionsDialog
         sessionIds={group.revocableIds}
+        newKillswitchHref={groupKillswitch?.createHref}
         open={revokeAllOpen}
         onOpenChange={setRevokeAllOpen}
         onRevoked={onRevoked}
@@ -553,6 +747,8 @@ export function ConnectionsList({
   onRevoked,
   clients,
   project,
+  bordered = true,
+  killswitchContext,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -571,36 +767,86 @@ export function ConnectionsList({
    * the literal "default" and both the lookup and its refresh would miss.
    */
   project?: { slug: string; id: string };
+  /**
+   * Whether the table draws its own frame. Off for a caller that already
+   * encloses it — a panel with its own border and heading — where a second box
+   * inside the first reads as a table nested in a table.
+   */
+  bordered?: boolean;
+  /** Enables user-only Killswitch status/actions on this sessions surface. */
+  killswitchContext?: ConnectionKillswitchContext;
 }): JSX.Element {
   const now = useNow();
+  const navigate = useNavigate();
+  const orgRoutes = useOrgRoutes();
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const { active, inactive } = useMemo(
     () =>
       splitByActivity(groupConnections(sessions, grouping, { clients, now })),
     [sessions, grouping, clients, now],
   );
+  const allGroups = useMemo(() => [...active, ...inactive], [active, inactive]);
+  const killswitchUserIds = useMemo(() => {
+    const visibleSessions =
+      grouping === "subject"
+        ? sessions
+        : allGroups
+            .filter((group) => expandedGroups.has(`${grouping}:${group.key}`))
+            .flatMap((group) => group.sessions);
+    return visibleSessions.flatMap((session) => {
+      const userId = canonicalUserId(session.subjectUrn);
+      return userId ? [userId] : [];
+    });
+  }, [allGroups, expandedGroups, grouping, sessions]);
+  const killswitch = useKillswitchUserBadges(
+    killswitchUserIds,
+    killswitchContext != null,
+  );
 
   const rows = (groups: ConnectionGroup[]) => (
     <div className="divide-border divide-y">
-      {groups.map((group) => (
-        <ConnectionGroupRow
-          key={group.key}
-          group={group}
-          grouping={grouping}
-          now={now}
-          canRevoke={canRevoke}
-          onRevoked={onRevoked}
-          project={project}
-        />
-      ))}
+      {groups.map((group) => {
+        const expandedKey = `${grouping}:${group.key}`;
+        return (
+          <ConnectionGroupRow
+            key={group.key}
+            group={group}
+            grouping={grouping}
+            now={now}
+            canRevoke={canRevoke}
+            onRevoked={onRevoked}
+            project={project}
+            killswitchContext={
+              killswitch.canAccess ? killswitchContext : undefined
+            }
+            killswitchBadges={killswitch.badges}
+            killswitchUnavailableUserIds={killswitch.unavailableUserIds}
+            killswitchBaseHref={orgRoutes.killswitch.href()}
+            expanded={expandedGroups.has(expandedKey)}
+            onExpandedChange={(expanded) =>
+              setExpandedGroups((current) => {
+                const next = new Set(current);
+                if (expanded) next.add(expandedKey);
+                else next.delete(expandedKey);
+                return next;
+              })
+            }
+            onOpenKillswitch={(href) => void navigate(href)}
+          />
+        );
+      })}
     </div>
   );
 
   return (
     <div className="space-y-6">
+      {killswitch.loader}
       {/* Header and rows share one box rather than the header floating above
           it: unenclosed, the column labels read as a caption hanging off the
           grouping control above them instead of as the top of this table. */}
-      <div className="border-border border">
+      <div className={cn(bordered && "border-border border")}>
         {/* Fixed to the body row's height rather than padded to approximate it:
             a group row is `py-2.5` around a `size-6` icon, so 44px. The header
             has no icon, so equal padding would leave it visibly shorter. */}
@@ -642,7 +888,9 @@ export function ConnectionsList({
           {/* No column header of its own — the labels above still apply, and
               repeating them would make this read as a second table rather than
               the tail of the first. */}
-          <div className="border-border border">{rows(inactive)}</div>
+          <div className={cn(bordered && "border-border border")}>
+            {rows(inactive)}
+          </div>
         </div>
       ) : null}
     </div>

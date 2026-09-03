@@ -27,7 +27,9 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -192,11 +194,12 @@ func seedTunnelBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pr
 	t.Helper()
 
 	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      "tunnel " + uuid.NewString(),
-		KeyHash:   "key-hash-" + uuid.NewString(),
-		KeyPrefix: "key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "tunnel " + uuid.NewString(),
+		KeyHash:            "key-hash-" + uuid.NewString(),
+		KeyPrefix:          "key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -235,4 +238,107 @@ func seedOtherProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	require.NoError(t, err)
 
 	return otherProject.ID
+}
+
+// --- Shared provider-binding test wiring (used by the auto-attach/detach tests) ---
+
+// seedRemoteSessionIssuer inserts a minimal remote_session_issuer (an upstream
+// authorization server) and returns its id.
+func seedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slugPrefix string) uuid.UUID {
+	t.Helper()
+
+	issuer, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(projectID),
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              slugPrefix + "-" + uuid.NewString()[:8],
+		Issuer:                            "https://as.example.com/" + uuid.NewString(),
+		Name:                              conv.ToPGTextEmpty(""),
+		LogoAssetID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientSetupDocumentationUrl:       conv.ToPGTextEmpty(""),
+		AuthorizationEndpoint:             conv.ToPGTextEmpty(""),
+		TokenEndpoint:                     conv.ToPGTextEmpty(""),
+		RevocationEndpoint:                conv.ToPGTextEmpty(""),
+		RegistrationEndpoint:              conv.ToPGTextEmpty(""),
+		JwksUri:                           conv.ToPGTextEmpty(""),
+		ServiceDocumentation:              conv.ToPGTextEmpty(""),
+		OpPolicyUri:                       conv.ToPGTextEmpty(""),
+		OpTosUri:                          conv.ToPGTextEmpty(""),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+		ClientIDMetadataDocumentSupported: false,
+		Oidc:                              false,
+		Passthrough:                       false,
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// createRemoteSessionClient inserts a remote_session_client for an upstream AS.
+func createRemoteSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, remoteIssuerID uuid.UUID, externalID string) uuid.UUID {
+	t.Helper()
+
+	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(projectID),
+		OrganizationID:          conv.ToPGText(organizationID),
+		RemoteSessionIssuerID:   remoteIssuerID,
+		ClientID:                externalID,
+		ClientSecretEncrypted:   conv.ToPGTextEmpty(""),
+		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		TokenEndpointAuthMethod: conv.ToPGTextEmpty(""),
+		Scope:                   []string{},
+		Audience:                conv.ToPGTextEmpty(""),
+		LegacyCallbackUrl:       false,
+	})
+	require.NoError(t, err)
+	return client.ID
+}
+
+// stampAndWireMemberClient binds a client to the member server's own issuer and
+// stamps the server's denormalized remote_session_issuer_id, mirroring the state
+// AddMetaMcpMember's auto-attach reads from.
+func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID, remoteIssuerID, clientID uuid.UUID) {
+	t.Helper()
+
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        serverID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, server.UserSessionIssuerID.Valid)
+
+	require.NoError(t, remotesessionsrepo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
+	}))
+	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+		ID:                    serverID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+}
+
+// countGatewayClientsForUpstream counts provider-client bindings on the gateway
+// issuer for a given upstream AS.
+func countGatewayClientsForUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, gatewayIssuerID, remoteIssuerID uuid.UUID) int {
+	t.Helper()
+
+	rows, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+		UserSessionIssuerID: gatewayIssuerID,
+		ProjectID:           conv.ToNullUUID(projectID),
+		OrganizationID:      conv.ToPGText(organizationID),
+	})
+	require.NoError(t, err)
+	count := 0
+	for _, row := range rows {
+		if row.RemoteSessionIssuerID == remoteIssuerID {
+			count++
+		}
+	}
+	return count
 }

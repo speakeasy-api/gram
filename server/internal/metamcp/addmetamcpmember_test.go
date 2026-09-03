@@ -150,10 +150,8 @@ func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
 			name:    "tunnel",
 			backend: mcpserversrepo.CreateMCPServerParams{TunneledMcpServerID: conv.ToNullUUID(seedTunnelBackend(t, ctx, ti.conn, *authCtx.ProjectID))},
 		},
-		{
-			name:    "toolset",
-			backend: mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID))},
-		},
+		// No toolset case: mcp_servers_toolset_id_key forbids two live wrappers
+		// over one toolset.
 	}
 
 	for _, tt := range tests {

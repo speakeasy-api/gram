@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -13,7 +14,6 @@ import {
 } from "./GatewayDetailsRouting";
 import { MCPTeamAccessTab } from "@/pages/mcp/MCPTeamAccessTab";
 import { GatewayInspectTab } from "./GatewayInspectTab";
-import { GatewayMembersTab } from "./GatewayMembersTab";
 import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
 
@@ -23,6 +23,7 @@ export default function GatewayDetails(): JSX.Element {
   const routes = useRoutes();
   const id = gatewayId ?? "";
   const activeTab = activeTabFromPath(location.pathname, id);
+  const tabContentRef = useTabScrollReset(activeTab);
 
   const {
     data: metaMcpServer,
@@ -61,12 +62,6 @@ export default function GatewayDetails(): JSX.Element {
             endpoints={endpoints}
             isLoadingEndpoints={isLoadingEndpoints}
           />
-        );
-      case "members":
-        return (
-          <RequireScope scope="mcp:read" level="page">
-            <GatewayMembersTab metaMcpServer={metaMcpServer} />
-          </RequireScope>
         );
       case "inspect":
         return (
@@ -121,7 +116,10 @@ export default function GatewayDetails(): JSX.Element {
       </Page.Header>
 
       <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderTabContent()}
         </div>
       </Page.Body>

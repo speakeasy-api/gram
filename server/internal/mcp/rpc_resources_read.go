@@ -161,6 +161,7 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
 			ResponseStatusCode:    rw.statusCode,

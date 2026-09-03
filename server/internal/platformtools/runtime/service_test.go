@@ -167,10 +167,9 @@ func TestManagedAssistantPluginsToolsExposesCatalog(t *testing.T) {
 func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	tools := AssistantSkillTools(testenv.NewLogger(t), nil, nil)
+	tools := AssistantSkillTools(testenv.NewLogger(t), nil)
 	require.Equal(t, []string{
 		platformtools.ToolNameSkillsLoad,
-		platformtools.ToolNamePlatformSkillFeedback,
 	}, toolNames(tools))
 	for _, tool := range tools {
 		require.Empty(t, tool.RequiredFeature)

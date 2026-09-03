@@ -54,6 +54,16 @@ function renderApp(overrides: Partial<ConsentToolsAppProps> = {}) {
   return { ...render(<ConsentToolsApp {...props} />), button };
 }
 
+type User = ReturnType<typeof userEvent.setup>;
+
+/** Reveal the picker, which sits behind the "Specific tools" mode. */
+async function openPicker(user: User): Promise<void> {
+  await user.click(
+    await screen.findByRole("radio", { name: /Specific tools/ }),
+  );
+  await screen.findByRole("button", { name: /All/ });
+}
+
 function formFieldValues(name: string): string[] {
   return [...document.querySelectorAll('input[form="consent-approve-form"]')]
     .map((f) => f as HTMLInputElement)
@@ -119,7 +129,7 @@ describe("ConsentToolsApp", () => {
 
   it("keeps approval disabled while consentEnabled is false", async () => {
     const { button } = renderApp({ consentEnabled: false });
-    await screen.findByText("get_thing");
+    await screen.findByRole("radio", { name: /All tools/ });
     expect(button.disabled).toBe(true);
   });
 
@@ -130,32 +140,51 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(true);
   });
 
-  it("defaults to the unrestricted all-tools grant", async () => {
+  it("defaults to the unrestricted all-tools grant with the picker collapsed", async () => {
     renderApp();
-    await screen.findByText("get_thing");
+    await screen.findByRole("radio", { name: /All tools/ });
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tools")).toEqual([]);
     expect(formFieldValues("tool_inventory_id")).toHaveLength(1);
     expect(
-      screen.getByText("Includes tools the server adds later"),
+      screen.getByText("All 3 tools, plus any the server adds later."),
     ).toBeTruthy();
+    expect(screen.queryByText("get_thing")).toBeNull();
   });
 
-  it("navigating groups filters the list without changing the grant", async () => {
+  it("returning to all tools drops the narrowed grant", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    expect(screen.queryByText("delete_thing")).toBeNull();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /delete_thing/ }));
+    expect(formFieldValues("tool_filtering")).toEqual(["on"]);
+
+    await user.click(screen.getByRole("radio", { name: /All tools/ }));
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tools")).toEqual([]);
+    expect(screen.queryByText("get_thing")).toBeNull();
+  });
+
+  it("navigating groups filters the list without granting anything", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    expect(screen.queryByText("delete_thing")).toBeNull();
+    // Narrowing is on the moment the mode is "specific", but browsing a group
+    // grants nothing: the scope is still empty.
+    expect(formFieldValues("tool_filtering")).toEqual(["on"]);
+    expect(formFieldValues("tools")).toEqual([]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
   });
 
   it("granting a group's annotation submits live intent by default", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
     expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
@@ -170,9 +199,9 @@ describe("ConsentToolsApp", () => {
   it("freezing a granted annotation submits snapshot intent", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
     await user.click(
       screen.getByRole("checkbox", { name: /Include future matching tools/ }),
     );
@@ -186,10 +215,10 @@ describe("ConsentToolsApp", () => {
   it("ticking a tool row is a manual pick unioned with annotation grants", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
-    await user.click(screen.getByRole("button", { name: /All tools/ }));
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    await user.click(screen.getByRole("button", { name: /All/ }));
     await user.click(screen.getByRole("checkbox", { name: /delete_thing/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
@@ -201,9 +230,9 @@ describe("ConsentToolsApp", () => {
   it("locks rows covered by a granted annotation", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
     const row = screen.getByRole("checkbox", { name: /get_thing/ });
     expect(row.getAttribute("aria-disabled")).toBe("true");
     await user.click(row);
@@ -211,12 +240,38 @@ describe("ConsentToolsApp", () => {
     expect(formFieldValues("tools")).toEqual([]);
   });
 
+  it("clears an all-tools group that an annotation grant fully covers", async () => {
+    // Every tool is read-only, so granting that annotation covers the whole
+    // inventory. The All tools tick must then be able to turn it back off.
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.click(screen.getByRole("button", { name: /All/ }));
+    const allTick = screen.getByRole("checkbox", { name: /Select all 2/ });
+    expect(allTick.getAttribute("aria-checked")).toBe("true");
+    await user.click(allTick);
+
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual([]);
+  });
+
   it("bulk-picks the no-annotation group from its header tick", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
-    await user.click(screen.getByRole("button", { name: /No annotation/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Other/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
     expect(formFieldValues("tools")).toEqual(["plain_tool"]);
@@ -249,9 +304,8 @@ describe("ConsentToolsApp", () => {
       },
     });
     renderApp();
-    await screen.findByText("get_thing");
     expect(
-      screen.getByText(
+      await screen.findByText(
         "4 tools are hidden by your role and cannot be granted here.",
       ),
     ).toBeTruthy();
@@ -264,7 +318,7 @@ describe("ConsentToolsApp", () => {
   it("filters the viewed group with the search box", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByText("get_thing");
+    await openPicker(user);
     await user.type(
       screen.getByRole("searchbox", { name: "Search tools" }),
       "delete",
@@ -300,7 +354,11 @@ describe("ConsentToolsApp", () => {
       tools: [{ name: hostile }],
       nextCursor: undefined,
     });
+    const user = userEvent.setup();
     renderApp();
+    await user.click(
+      await screen.findByRole("radio", { name: /Specific tools/ }),
+    );
     expect(await screen.findByText(hostile)).toBeTruthy();
     expect(
       (window as unknown as Record<string, unknown>)["pwned"],

@@ -23,9 +23,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -48,38 +50,34 @@ const metaMemberUpstreamProtocolVersion = "2025-06-18"
 const memberSessionCloseTimeout = 5 * time.Second
 
 // routeMetaMemberToken selects the bearer forwarded to one meta MCP member.
-// Strict: a remote member gets only a token whose recorded RFC 8707 resource
-// names its upstream — no lone-token fallback, since mcp:write can attach a
-// member pointing anywhere and a fallback would forward a sibling's
-// credential there. No match means an anonymous call, never a mismatched
-// bearer. A tunneled member records no resource, so only a lone unqualified
-// token can be its credential; several tokens fail member-scoped.
+// No lone-token fallback on either arm: mcp:write can attach a member
+// pointing anywhere, and forwarding an unmatched credential would hand it a
+// sibling's bearer. No match means an anonymous call, never a mismatched one.
+//
+// A remote member matches on recorded RFC 8707 resource across the whole map,
+// because its routing key is its upstream URL — the same address the proxy
+// dials, so a credential that matches is being returned to the audience it
+// names.
+//
+// A tunneled member is routed by identity alone: only the entry keyed by its
+// own derived remote_session_issuer (mcpserverissuersync.go), accepted when
+// that grant is unqualified or names this member's recorded resource
+// identifier. The identifier cannot select across issuers the way a remote
+// URL does, because a tunnel's dial target is decoupled from the resource it
+// claims — an operator-supplied identifier that collided with a sibling's
+// upstream would otherwise deliver that sibling's bearer to the tunnel.
 func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
-	if member.tunneledServerID.Valid {
-		// A tunneled backend records no RFC 8707 resource, so there is nothing
-		// to match a credential against. One credential is that member's by
-		// construction (matching routeUpstreamToken on the direct surface);
-		// several are unroutable, so say which situation this is rather than
-		// leaving the operator to guess at "misconfiguration".
-		if len(tokens) > 1 {
-			return "", &metaMemberError{message: fmt.Sprintf("server %q is tunneled and has no upstream identity of its own, but this session holds %d upstream credentials, so none can be matched to it; connect only the provider it needs, or reach it through its own endpoint", member.slug, len(tokens))}
-		}
-		for _, entry := range tokens {
-			if entry.Resource == "" {
-				return entry.Token, nil
-			}
-		}
-		return "", nil
-	}
-
 	want := strings.TrimRight(upstreamResource, "/")
+	if member.tunneledServerID.Valid {
+		return tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want), nil
+	}
 	if want == "" {
 		return "", nil
 	}
 	matched := ""
 	found := 0
 	for _, entry := range tokens {
-		if strings.TrimRight(entry.Resource, "/") == want {
+		if grantRoutesToUpstream(entry.Resource, want, false) {
 			matched = entry.Token
 			found++
 		}
@@ -101,8 +99,24 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 // detached close is not built on an expired call context.
 type memberProxyBuilder func(ctx context.Context) (*proxy.Proxy, error)
 
+// memberDial is a routed member's proxy builder plus whether routing found
+// no credential, so a 401 can name the gateway's gap, not a rejected token.
+type memberDial struct {
+	build     memberProxyBuilder
+	anonymous bool
+}
+
+// memberAuthFailure names the member-scoped meaning of an upstream 401/403.
+func memberAuthFailure(member metaMember, anonymous bool) error {
+	if anonymous {
+		return &metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}
+	}
+	return &metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}
+}
+
 // dialMetaMember loads the member's backend rows, routes its credential
-// strictly, and returns a per-exchange proxy builder. The snapshot already
+// strictly, and returns the per-exchange proxy builder with the routing
+// outcome. The snapshot already
 // enforced mcp:connect for private members with the same key
 // authorizeProxyBackendAccess uses; per-tool RBAC for private members
 // attaches inside the proxy build.
@@ -112,13 +126,13 @@ func (s *Service) dialMetaMember(
 	gate metaGateContext,
 	member metaMember,
 	callerIdentity string,
-) (memberProxyBuilder, error) {
+) (memberDial, error) {
 	serverRow, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        member.serverID,
 		ProjectID: gate.projectID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("load meta MCP member server: %w", err)
+		return memberDial{}, fmt.Errorf("load meta MCP member server: %w", err)
 	}
 
 	// gate.toolSelection is provably nil today: meta endpoints mint no tool
@@ -130,46 +144,63 @@ func (s *Service) dialMetaMember(
 			ID:        member.remoteServerID.UUID,
 			ProjectID: gate.projectID,
 		})
+		if errors.Is(rerr, pgx.ErrNoRows) {
+			// The snapshot query does not join the backend source tables, so a
+			// soft-deleted upstream still yields a member. Isolate it rather
+			// than failing every member of the gateway.
+			return memberDial{}, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		}
 		if rerr != nil {
-			return nil, fmt.Errorf("load meta MCP member upstream: %w", rerr)
+			return memberDial{}, fmt.Errorf("load meta MCP member upstream: %w", rerr)
 		}
 		headers, herr := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, remoteServer.ID, false)
 		if herr != nil {
-			return nil, fmt.Errorf("load meta MCP member upstream headers: %w", herr)
+			return memberDial{}, fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
 		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		if terr != nil {
-			return nil, terr
+			s.metrics.RecordMetaMemberDispatch(ctx, "remote", mcpmetrics.MetaDispatchAmbiguous)
+			return memberDial{}, terr
 		}
-		return func(context.Context) (*proxy.Proxy, error) {
+		s.metrics.RecordMetaMemberDispatch(ctx, "remote", dispatchOutcome(upstreamToken))
+		return memberDial{anonymous: upstreamToken == "", build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
-			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.projectID.String(), upstreamToken, "", gate.toolSelection)
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, gate.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
 			return p, nil
-		}, nil
+		}}, nil
 
 	case member.tunneledServerID.Valid:
-		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, "")
+		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		if terr != nil {
-			return nil, terr
+			s.metrics.RecordMetaMemberDispatch(ctx, "tunneled", mcpmetrics.MetaDispatchAmbiguous)
+			return memberDial{}, terr
 		}
+		s.metrics.RecordMetaMemberDispatch(ctx, "tunneled", dispatchOutcome(upstreamToken))
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return func(ctx context.Context) (*proxy.Proxy, error) {
-			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, &serverRow, upstreamToken, "", gate.toolSelection)
+		return memberDial{anonymous: upstreamToken == "", build: func(ctx context.Context) (*proxy.Proxy, error) {
+			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
 			p.InitializeRequestInterceptors = nil
 			return p, nil
-		}, nil
+		}}, nil
 
 	default:
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return memberDial{}, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
+}
+
+func dispatchOutcome(token string) mcpmetrics.MetaDispatchOutcome {
+	if token == "" {
+		return mcpmetrics.MetaDispatchAnonymous
+	}
+	return mcpmetrics.MetaDispatchCredentialed
 }
 
 // memberAttributionContext gives member exchanges the identity billing and
@@ -252,14 +283,14 @@ func (r *memberResponseRecorder) Flush() {}
 type memberSession struct {
 	svc       *Service
 	logger    *slog.Logger
-	build     memberProxyBuilder
+	dial      memberDial
 	member    metaMember
 	sessionID string
 }
 
 // openMemberSession runs the initialize handshake. On any failure after a
 // session was minted, the session is closed before returning.
-func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, member metaMember) (*memberSession, error) {
+func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, member metaMember) (*memberSession, error) {
 	initBody, err := marshalUpstreamRequest(mcpjsonrpc.StringID("gram-gateway-init"), "initialize", map[string]any{
 		"protocolVersion": metaMemberUpstreamProtocolVersion,
 		"capabilities":    map[string]any{},
@@ -268,25 +299,28 @@ func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, bu
 	if err != nil {
 		return nil, fmt.Errorf("marshal upstream initialize: %w", err)
 	}
-	initRec, err := s.memberExchange(ctx, build, member, initBody, "")
+	initRec, err := s.memberExchange(ctx, dial.build, member, initBody, "")
 	if err != nil {
 		return nil, err
 	}
 	if initRec.status == http.StatusUnauthorized || initRec.status == http.StatusForbidden {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", member.slug)}
+		return nil, memberAuthFailure(member, dial.anonymous)
 	}
 	if initRec.status < http.StatusOK || initRec.status >= http.StatusMultipleChoices {
 		return nil, memberUpstreamFailure(member, initRec.status)
 	}
 
-	sess := &memberSession{svc: s, logger: logger, build: build, member: member, sessionID: initRec.header.Get(proxy.McpSessionIDHeader)}
+	sess := &memberSession{svc: s, logger: logger, dial: dial, member: member, sessionID: initRec.header.Get(proxy.McpSessionIDHeader)}
 	if sess.sessionID != "" {
 		ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
-		ackRec, aerr := s.memberExchange(ctx, build, member, ackBody, sess.sessionID)
+		ackRec, aerr := s.memberExchange(ctx, dial.build, member, ackBody, sess.sessionID)
 		if aerr != nil || ackRec.status < http.StatusOK || ackRec.status >= http.StatusMultipleChoices {
 			sess.close(ctx)
 			if aerr != nil {
 				return nil, aerr
+			}
+			if ackRec.status == http.StatusUnauthorized || ackRec.status == http.StatusForbidden {
+				return nil, memberAuthFailure(member, dial.anonymous)
 			}
 			return nil, memberUpstreamFailure(member, ackRec.status)
 		}
@@ -302,12 +336,12 @@ func (sess *memberSession) call(ctx context.Context, method string, params any) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal upstream %s request: %w", method, err)
 	}
-	rec, err := sess.svc.memberExchange(ctx, sess.build, sess.member, body, sess.sessionID)
+	rec, err := sess.svc.memberExchange(ctx, sess.dial.build, sess.member, body, sess.sessionID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
-		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", sess.member.slug)}
+		return nil, nil, memberAuthFailure(sess.member, sess.dial.anonymous)
 	}
 	if rec.status < http.StatusOK || rec.status >= http.StatusMultipleChoices {
 		return nil, nil, memberUpstreamFailure(sess.member, rec.status)
@@ -331,7 +365,7 @@ func (sess *memberSession) close(ctx context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memberSessionCloseTimeout)
 	defer cancel()
-	p, err := sess.build(ctx)
+	p, err := sess.dial.build(ctx)
 	if err != nil {
 		return
 	}
@@ -351,7 +385,7 @@ func (sess *memberSession) close(ctx context.Context) {
 func (s *Service) callProxiedMember(
 	ctx context.Context,
 	logger *slog.Logger,
-	build memberProxyBuilder,
+	dial memberDial,
 	member metaMember,
 	method string,
 	params any,
@@ -359,7 +393,7 @@ func (s *Service) callProxiedMember(
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
 
-	sess, err := s.openMemberSession(ctx, logger, build, member)
+	sess, err := s.openMemberSession(ctx, logger, dial, member)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -509,7 +543,7 @@ func (s *Service) executeProxiedMemberTool(
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
-	build, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
+	dial, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
@@ -521,7 +555,7 @@ func (s *Service) executeProxiedMemberTool(
 	// observability parse (re-serializing it emits empty/null fields that
 	// strict vendors reject with 400), and the per-call handshake already
 	// declares this proxy's identity and protocol version to the upstream.
-	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, build, member, "tools/call", toolsCallParams{
+	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, dial, member, "tools/call", toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
 		Meta:      nil,
@@ -572,7 +606,7 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 // tools/list interceptors.
 func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
-	build, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
+	dial, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
 		// Member-scoped errors stay detectable through the %w chain.
 		return nil, fmt.Errorf("dial meta MCP member: %w", err)
@@ -581,7 +615,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	// One deadline and one upstream session cover the whole pagination.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	sess, err := s.openMemberSession(ctx, logger, build, member)
+	sess, err := s.openMemberSession(ctx, logger, dial, member)
 	if err != nil {
 		return nil, err
 	}

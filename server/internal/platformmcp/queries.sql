@@ -530,7 +530,8 @@ SELECT EXISTS (
      AND project.deleted IS FALSE
     JOIN user_session_issuers AS issuer
       ON issuer.id = server.user_session_issuer_id
-     AND issuer.project_id = project.id
+     AND (issuer.project_id = project.id
+          OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
      AND issuer.deleted IS FALSE
     JOIN mcp_endpoints AS endpoint
       ON endpoint.mcp_server_id = server.id

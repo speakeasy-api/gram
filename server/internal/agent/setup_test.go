@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +29,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -68,6 +70,7 @@ func (s *stubProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 type testInstance struct {
 	service   *agent.Service
 	conn      *pgxpool.Pool
+	chConn    clickhouse.Conn
 	orgID     string
 	projectID uuid.UUID
 	features  *stubProductFeatures
@@ -109,11 +112,20 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	features := &stubProductFeatures{sessionPortability: true}
 	blobs := assetstest.NewTestBlobStore(t)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs)
+
+	// A real telemetry logger over the test ClickHouse so AI scan reports can
+	// be round-tripped through storage in tests.
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
+
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger)
 
 	return ctx, &testInstance{
 		service:   svc,
 		conn:      conn,
+		chConn:    chConn,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
 		features:  features,

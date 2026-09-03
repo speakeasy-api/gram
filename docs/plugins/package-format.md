@@ -52,6 +52,15 @@ When plugins are published, all platform configs land in a single repo. The root
 │   ├── .codex-plugin/plugin.json
 │   └── .mcp.json
 │
+├── <org-slug>-observability-openclaw/ # OpenClaw observability plugin
+│   ├── openclaw.plugin.json
+│   ├── package.json
+│   ├── index.js                       # plugin module; proxies typed hooks to agenthooks
+│   ├── speakeasy.json
+│   └── hooks/
+│       ├── bootstrap.sh
+│       └── bootstrap.ps1
+│
 ├── <org-slug>-observability-copilot/  # Copilot observability plugin
 │   ├── plugin.json                    # at the package root, not a vendor dir
 │   ├── speakeasy.json
@@ -387,6 +396,29 @@ The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root
 **Surface support.** Hooks run in Copilot CLI only. VS Code and the Copilot app load the plugin — MCP servers and skills work there — but never fire its hooks. Copilot's cloud agent reads hooks from `.github/hooks/*.json` in the repository and is not targeted by this package.
 
 **Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
+
+### OpenClaw observability
+
+Directory: `<org-slug>-observability-openclaw/`
+
+OpenClaw has no marketplace track: the observability package is the only OpenClaw output a publish produces, and it is a native OpenClaw plugin rather than a hooks-config package. `openclaw.plugin.json` declares the plugin and `package.json` points OpenClaw at the module:
+
+```json
+{
+  "id": "speakeasy-observability",
+  "name": "Speakeasy Observability",
+  "description": "Speakeasy observability hooks for OpenClaw.",
+  "activation": { "onStartup": true }
+}
+```
+
+`index.js` is plain JavaScript, not TypeScript: OpenClaw package installs reject a build step. It subscribes the typed plugin hooks and proxies each frame to `agenthooks serve --provider=openclaw`, returning the reply verbatim as the hook handler's return value so `before_tool_call` denials reach OpenClaw intact.
+
+**Conversation-scope hooks require opt-in.** `before_agent_run`, `llm_output` and `agent_end` only fire when the customer sets `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`. Without it the package still reports tool calls and session lifecycle, so a half-configured install looks partly working.
+
+**The shim owns its own deadlines.** OpenClaw applies no default hook timeout, so the module enforces them: 10s for the blocking gates (`before_tool_call`, `before_agent_run`) and 30s for observe-only hooks. `--timeout=60s` bounds the serve process, not a handler.
+
+See the [OpenClaw install runbook](../runbooks/openclaw-install.md) for the customer-facing install and the model-auth modes that determine coverage.
 
 ### Copilot marketplace manifest
 

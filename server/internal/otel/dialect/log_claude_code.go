@@ -12,7 +12,7 @@ func (ClaudeCodeLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
 }
 
 func (ClaudeCodeLog) InputContent(record *otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
-	key, value := getOneLogAttr(record, "user_prompt")
+	key, value := getOneLogAttr(record, claudeCodeUserPromptKey)
 	if key == "" || value == "" {
 		return "", nil, nil
 	}
@@ -37,12 +37,12 @@ func (ClaudeCodeLog) SessionID(record *otelv1.InboundLogRecord) (string, string,
 }
 
 func (ClaudeCodeLog) ExternalUserEmail(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.email")
+	key, value := getOneLogAttr(record, userEmailKey)
 	return key, value, nil
 }
 
 func (ClaudeCodeLog) ExternalUserID(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.account_id")
+	key, value := getOneLogAttr(record, vendorUserAccountIDKey)
 	return key, value, nil
 }
 

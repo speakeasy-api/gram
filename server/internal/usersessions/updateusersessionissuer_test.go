@@ -123,3 +123,24 @@ func TestUpdateUserSessionIssuer_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestUpdateUserSessionIssuer_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "update-iss-sibling")
+	renamed := "hijacked"
+
+	_, err := ti.service.UpdateUserSessionIssuer(ctx, &gen.UpdateUserSessionIssuerPayload{
+		SessionToken:                  nil,
+		ApikeyToken:                   nil,
+		ProjectSlugInput:              nil,
+		ID:                            sp.issuerID.String(),
+		Slug:                          &renamed,
+		AuthnChallengeMode:            nil,
+		SessionDurationHours:          nil,
+		ClientIDMetadataAdmissionMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	requireSiblingIssuerLive(t, ctx, ti, sp)
+}

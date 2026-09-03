@@ -4,6 +4,7 @@ import { useRoutes } from "@/routes";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { Network } from "lucide-react";
 import { Badge } from "../ui/Badge";
+import { GatewayStatusIndicator } from "./MCPStatusIndicator";
 
 // GatewayTableRow renders a meta MCP server (Gateway Endpoint) in the /mcp
 // listing table view. Mirrors MCPServerTableRow.
@@ -35,12 +36,13 @@ export function GatewayTableRow({
         </Text>
       </td>
 
-      {/* Visibility column slot: gateways have no visibility setting, so this
-          reports the closest equivalent — whether callers must sign in. */}
+      {/* Visibility column slot */}
       <td className="px-3 py-3">
-        <Text small muted>
-          {gateway.userSessionIssuerId ? "Requires sign-in" : "Open"}
-        </Text>
+        <GatewayStatusIndicator
+          visibility={gateway.visibility}
+          requiresSignIn={!!gateway.userSessionIssuerId}
+          size="sm"
+        />
       </td>
 
       {/* URL column slot */}

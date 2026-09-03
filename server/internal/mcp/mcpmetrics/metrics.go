@@ -62,6 +62,11 @@ type Metrics struct {
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
+	// metaMemberDispatchCounter counts proxied meta member dials by backend
+	// kind and credential routing outcome. No per-gateway dimension: that
+	// view lives in ClickHouse.
+	metaMemberDispatchCounter metric.Int64Counter
+
 	// mcpRequestRejectedCounter is the unsampled census of requests the issuer
 	// gate turned away before dispatch: the population that never reaches
 	// requestCensus. It carries a per-server URL because "which server is
@@ -72,6 +77,8 @@ type Metrics struct {
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
+	identityCoverage   *IdentityCoverageCounter
+	legacyFallback     *LegacyFallbackCounter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -96,6 +103,10 @@ type Metrics struct {
 	// oauthRefreshTokenReplayServedCounter counts refresh responses served from
 	// the encrypted replay cache rather than by rotating the database session.
 	oauthRefreshTokenReplayServedCounter metric.Int64Counter
+
+	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
+	// admission gate rejected with 429 before they reached the tunnel gateway.
+	tunnelPublicRejectedCounter metric.Int64Counter
 }
 
 // NewMetrics constructs every instrument the mcp service publishes. Each
@@ -120,6 +131,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create mcp request duration", attr.SlogError(err))
+	}
+
+	metaMemberDispatchCounter, err := meter.Int64Counter(
+		"mcp.meta.member.dispatch",
+		metric.WithDescription("Proxied meta MCP member dispatch attempts by backend kind and credential routing outcome"),
+		metric.WithUnit("{dispatch}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta member dispatch counter", attr.SlogError(err))
 	}
 
 	mcpInitializeCounter, err := meter.Int64Counter(
@@ -185,18 +205,62 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPRequestRejected), attr.SlogError(err))
 	}
 
+	tunnelPublicRejectedCounter, err := meter.Int64Counter(
+		"mcp.tunnel_public.rejected",
+		metric.WithDescription("Anonymous public tunnel requests rejected before proxying, by MCP server and reason"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create tunnel public rejected counter", attr.SlogError(err))
+	}
+
 	return &Metrics{
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
 		mcpInitializeCounter:                 mcpInitializeCounter,
+		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
+		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
+		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
+		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
+}
+
+// TunnelPublicRejectReason is the closed set of pre-proxy rejection causes on
+// the anonymous public tunnel path. Bounded so the metric dimension stays
+// low-cardinality; add a value only when a new admission gate is instrumented.
+type TunnelPublicRejectReason string
+
+const (
+	// TunnelPublicRejectRequestRate: the per-tunnel all-request bucket was empty.
+	TunnelPublicRejectRequestRate TunnelPublicRejectReason = "request_rate"
+	// TunnelPublicRejectInitializeRate: the per-tunnel initialize bucket was empty.
+	TunnelPublicRejectInitializeRate TunnelPublicRejectReason = "initialize_rate"
+	// TunnelPublicRejectSessionCapacity: the tunnel is at its live anonymous
+	// session cap.
+	TunnelPublicRejectSessionCapacity TunnelPublicRejectReason = "session_capacity"
+)
+
+// RecordTunnelPublicRejection counts one anonymous public tunnel request the
+// admission gate rejected with 429 before it reached the tunnel gateway.
+// ratelimit.decisions already counts limiter throttles by limiter name; this
+// counter adds the endpoint slug and the rejection reason (which also covers
+// the session cap, not a limiter) so a saturated tunnel is attributable.
+func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug string, reason TunnelPublicRejectReason) {
+	if m == nil || m.tunnelPublicRejectedCounter == nil {
+		return
+	}
+
+	m.tunnelPublicRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.ToolsetMCPSlug(mcpSlug),
+		attr.TunnelPublicRejectionReason(string(reason)),
+	))
 }
 
 func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
@@ -210,6 +274,35 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.OrganizationID(orgID),
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordKillswitchIdentityCoverage records the bounded coverage classes for
+// one tools/call observed at a registered MCP checkpoint.
+func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface KillswitchCoverageSurface, identity KillswitchIdentityClass, resource KillswitchResourceClass) {
+	if m == nil {
+		return
+	}
+	m.identityCoverage.Record(ctx, surface, identity, resource)
+}
+
+// RecordToolsetSlugFallback counts one request served through the legacy
+// toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
+// [LegacyFallbackCounter.RecordToolsetSlugFallback].
+func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
+	if m == nil {
+		return
+	}
+	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
+}
+
+// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
+// toolset-URN audience. Semantics on
+// [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+	if m == nil {
+		return
+	}
+	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
@@ -357,4 +450,28 @@ func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issue
 		return
 	}
 	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
+}
+
+// MetaDispatchOutcome classifies how a meta member dispatch was credentialed.
+type MetaDispatchOutcome string
+
+const (
+	// MetaDispatchCredentialed: a member-qualified credential was forwarded.
+	MetaDispatchCredentialed MetaDispatchOutcome = "credentialed"
+	// MetaDispatchAnonymous: no credential matched; the call went out bare.
+	MetaDispatchAnonymous MetaDispatchOutcome = "anonymous"
+	// MetaDispatchAmbiguous: several credentials claimed the member; the
+	// dispatch failed closed.
+	MetaDispatchAmbiguous MetaDispatchOutcome = "ambiguous"
+)
+
+// RecordMetaMemberDispatch counts one meta member dispatch.
+func (m *Metrics) RecordMetaMemberDispatch(ctx context.Context, backend string, outcome MetaDispatchOutcome) {
+	if m == nil || m.metaMemberDispatchCounter == nil {
+		return
+	}
+	m.metaMemberDispatchCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MetaMemberBackend(backend),
+		attr.MetaDispatchOutcome(outcome),
+	))
 }

@@ -144,7 +144,7 @@ interface UseRemoteMcpInstallWorkflowOptions {
   /**
    * Install every endpoint of multi-remote servers instead of pausing on the
    * interactive selectRemotes phase. Required by headless/auto-start callers
-   * (collection installs, onboarding), which have no UI to select from.
+   * (onboarding), which have no UI to select from.
    */
   autoSelectRemotes?: boolean;
 }

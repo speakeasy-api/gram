@@ -206,8 +206,6 @@ export default function Sources(): JSX.Element {
         name: externalMcp.name,
         slug: externalMcp.slug,
         type: "externalmcp" as const,
-        organizationMcpCollectionRegistryId:
-          externalMcp.organizationMcpCollectionRegistryId,
         registryId: externalMcp.registryId,
         iconUrl: catalogIconMap.get(externalMcp.registryServerSpecifier),
       }),
@@ -722,12 +720,6 @@ function sourceFacets(
     format:
       asset.type === "openapi"
         ? contentTypeToFormat(asset.contentType)
-        : undefined,
-    catalogKind:
-      asset.type === "externalmcp"
-        ? asset.organizationMcpCollectionRegistryId
-          ? "collection"
-          : "server"
         : undefined,
     failing,
   };

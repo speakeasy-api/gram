@@ -72,6 +72,18 @@ func (s *genericServiceStub) ListPrescriptions(_ context.Context, request ListPr
 	return ListPrescriptionsResult{Prescriptions: []CurrentPrescription{{OrganizationID: request.OrganizationID}}}, s.err
 }
 
+func (s *genericServiceStub) ListCustomerPrescriptions(context.Context, ListCustomerPrescriptionsRequest) (ListCustomerPrescriptionsResult, error) {
+	return ListCustomerPrescriptionsResult{}, s.err
+}
+
+type lifecycleOnlyStub struct{ GenericService }
+
+func TestNewAuthorizedServiceRequiresCustomerReadService(t *testing.T) {
+	t.Parallel()
+	_, err := NewAuthorizedService(&lifecycleOnlyStub{GenericService: &genericServiceStub{}}, &authorizerStub{})
+	require.ErrorIs(t, err, ErrInvalidArgument)
+}
+
 type authorizationCheck struct {
 	organizationID string
 	userID         string
@@ -201,7 +213,7 @@ func TestAuthorizedServiceRejectsCredentialAndBypassMatrixAcrossAllMethods(t *te
 		{name: "ordinary member", context: func(t *testing.T) context.Context {
 			t.Helper()
 			return validatedCustomerContext(t, "org", "member", "member@example.com")
-		}, authzErr: oops.C(oops.CodeForbidden), wantCode: oops.CodeForbidden, wantChecks: 6},
+		}, authzErr: oops.C(oops.CodeForbidden), wantCode: oops.CodeForbidden, wantChecks: 7},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -259,12 +271,16 @@ func authorizedMethodInvocations() []func(context.Context, *AuthorizedService) e
 			_, err := service.ListPrescriptions(ctx, AuthorizedListPrescriptionsRequest{})
 			return err
 		},
+		func(ctx context.Context, service *AuthorizedService) error {
+			_, err := service.ListCustomerPrescriptions(ctx, AuthorizedListCustomerPrescriptionsRequest{})
+			return err
+		},
 	}
 }
 
 func TestAuthorizedRequestDTOsContainNoTrustedOrBypassFields(t *testing.T) {
 	t.Parallel()
-	for _, value := range []any{AuthorizedActivatePrescriptionRequest{}, AuthorizedChangePrescriptionRequest{}, AuthorizedDeactivatePrescriptionRequest{}, AuthorizedGetPrescriptionRequest{}, AuthorizedListPrescriptionsRequest{}} {
+	for _, value := range []any{AuthorizedActivatePrescriptionRequest{}, AuthorizedChangePrescriptionRequest{}, AuthorizedDeactivatePrescriptionRequest{}, AuthorizedGetPrescriptionRequest{}, AuthorizedListPrescriptionsRequest{}, AuthorizedListCustomerPrescriptionsRequest{}} {
 		typeOf := reflect.TypeOf(value)
 		for field := range typeOf.Fields() {
 			name := strings.ToLower(field.Name)

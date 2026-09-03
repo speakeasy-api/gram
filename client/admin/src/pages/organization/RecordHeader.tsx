@@ -1,6 +1,5 @@
 import type { JSX } from "react";
 
-import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { badgeTone } from "@/lib/badgeTone";
@@ -10,7 +9,6 @@ import {
 } from "@/lib/gramAdminApi";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
 import { fmtDateShort } from "@/lib/utils";
-import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 
 // Ends the fact it follows rather than starting the next one, so a meta line
 // that wraps never opens a line with a separator.
@@ -34,9 +32,6 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
           <Badge variant="outline" className={badgeTone.neutral}>
             {org.account_type}
           </Badge>
-          {/* Keyed on `none`, never on "would `Trial` draw a dash". An
-              unrecognised state draws the same dash and has to keep it. */}
-          {org.trial_state && org.trial_state !== "none" && <Trial org={org} />}
         </div>
         {/* Two facts and no more. The line grows when the events slice lands;
             it is not padded to fill now. */}
@@ -67,9 +62,6 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
             <span className="sr-only">{LEAVES_THE_APP}</span>
           </Button>
         </form>
-        {/* Lifecycle only. The action that resolves the trial belongs beside
-            the deadline it acts on, in the callout. */}
-        <OrganizationActions org={org} layout="buttons" actions="lifecycle" />
       </div>
     </div>
   );

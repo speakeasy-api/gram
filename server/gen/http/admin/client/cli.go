@@ -768,3 +768,34 @@ func BuildResumeStripeSubscriptionPayload(adminResumeStripeSubscriptionBody stri
 
 	return v, nil
 }
+
+// BuildMarkEnterpriseTrialConvertedPayload builds the payload for the admin
+// markEnterpriseTrialConverted endpoint from CLI flags.
+func BuildMarkEnterpriseTrialConvertedPayload(adminMarkEnterpriseTrialConvertedBody string, adminMarkEnterpriseTrialConvertedAdminSessionToken string) (*admin.MarkEnterpriseTrialConvertedPayload, error) {
+	var err error
+	var body MarkEnterpriseTrialConvertedRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMarkEnterpriseTrialConvertedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMarkEnterpriseTrialConvertedAdminSessionToken != "" {
+			adminSessionToken = &adminMarkEnterpriseTrialConvertedAdminSessionToken
+		}
+	}
+	v := &admin.MarkEnterpriseTrialConvertedPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

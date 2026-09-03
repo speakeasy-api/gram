@@ -149,11 +149,12 @@ func TestGetMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac forbidden get")
 
-	id := uuid.NewString()
-	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               &id,
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.GetMcpServer(denied, &gen.GetMcpServerPayload{
+		ID:               &fixture.server.ID,
 		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,

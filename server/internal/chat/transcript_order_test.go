@@ -182,9 +182,9 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	roles := []string{"user", "assistant", "user", "assistant"}
-	params := make([]repo.CreateChatMessageParams, 0, len(roles))
+	writes := make([]chat.MessageWrite, 0, len(roles))
 	for _, role := range roles {
-		params = append(params, repo.CreateChatMessageParams{
+		writes = append(writes, chat.MessageWrite{Params: repo.CreateChatMessageParams{
 			ID:         uuid.Nil,
 			ChatID:     chatID,
 			ProjectID:  ti.projectID,
@@ -193,9 +193,9 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 			Model:      conv.ToPGTextEmpty(""),
 			MessageID:  conv.ToPGTextEmpty(""),
 			ToolCallID: conv.ToPGTextEmpty(""),
-		})
+		}, UserEmail: ""})
 	}
-	_, err := writer.Write(ctx, ti.projectID, params)
+	_, err := writer.Write(ctx, ti.projectID, writes)
 	require.NoError(t, err)
 
 	p := loadPayload(chatID.String())
@@ -224,16 +224,19 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
-	_, err := writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
-		ID:         uuid.Nil,
-		ChatID:     chatID,
-		ProjectID:  ti.projectID,
-		Role:       "user",
-		Content:    "correlated prompt",
-		Model:      conv.ToPGTextEmpty(""),
-		MessageID:  conv.ToPGText("agent-prompt:v1:test"),
-		ToolCallID: conv.ToPGTextEmpty(""),
-		Source:     conv.ToPGText("litellm"),
+	_, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: repo.CreateChatMessageParams{
+			ID:         uuid.Nil,
+			ChatID:     chatID,
+			ProjectID:  ti.projectID,
+			Role:       "user",
+			Content:    "correlated prompt",
+			Model:      conv.ToPGTextEmpty(""),
+			MessageID:  conv.ToPGText("agent-prompt:v1:test"),
+			ToolCallID: conv.ToPGTextEmpty(""),
+			Source:     conv.ToPGText("litellm"),
+		},
+		UserEmail: "",
 	}, "agent-prompt:v1:test")
 	require.NoError(t, err)
 
@@ -247,17 +250,20 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 	require.False(t, messages[0].CreatedAt.Time.IsZero())
 
 	eventTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
-	_, err = writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
-		ID:         uuid.Nil,
-		ChatID:     chatID,
-		ProjectID:  ti.projectID,
-		Role:       "user",
-		Content:    "correlated prompt",
-		Model:      conv.ToPGTextEmpty(""),
-		MessageID:  conv.ToPGText("agent-prompt:v1:test"),
-		ToolCallID: conv.ToPGTextEmpty(""),
-		Source:     conv.ToPGText("codex"),
-		CreatedAt:  conv.ToPGTimestamptz(eventTime),
+	_, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: repo.CreateChatMessageParams{
+			ID:         uuid.Nil,
+			ChatID:     chatID,
+			ProjectID:  ti.projectID,
+			Role:       "user",
+			Content:    "correlated prompt",
+			Model:      conv.ToPGTextEmpty(""),
+			MessageID:  conv.ToPGText("agent-prompt:v1:test"),
+			ToolCallID: conv.ToPGTextEmpty(""),
+			Source:     conv.ToPGText("codex"),
+			CreatedAt:  conv.ToPGTimestamptz(eventTime),
+		},
+		UserEmail: "",
 	}, "agent-prompt:v1:test")
 	require.NoError(t, err)
 

@@ -111,6 +111,37 @@ describe("groupSignals", () => {
     expect(groups[2]!.signals.map((s) => s.key)).toEqual(["b"]);
   });
 
+  it("sections by principal, treating the unknown-user placeholder as unattributed", () => {
+    const principalSignals = [
+      signal({
+        key: "a",
+        topUsers: [
+          {
+            email: "x@a.com",
+            externalUserId: "x@a.com",
+            team: "",
+            findings: 5,
+          },
+        ],
+      }),
+      signal({
+        key: "b",
+        topUsers: [
+          {
+            email: "Unknown user",
+            externalUserId: "",
+            team: "",
+            findings: 3,
+          },
+        ],
+      }),
+      signal({ key: "c", topUsers: [] }),
+    ];
+    const groups = groupSignals(principalSignals, "principal");
+    expect(groups.map((g) => g.key)).toEqual(["x@a.com", ""]);
+    expect(groups[1]!.signals.map((s) => s.key)).toEqual(["b", "c"]);
+  });
+
   it("sections by first observed app with unattributed last", () => {
     const appSignals = [
       signal({ key: "a", apps: ["codex", "cursor"] }),

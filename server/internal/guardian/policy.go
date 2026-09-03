@@ -142,6 +142,7 @@ type httpClientOptions struct {
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
 }
 
@@ -185,6 +186,20 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 				o.allowedCIDRBlocks = append(o.allowedCIDRBlocks, block)
 			}
 		}
+	}
+}
+
+// WithDialTimeout bounds only the TCP connect phase for this client,
+// replacing the policy dialer's default. A non-positive value disables the
+// dial timeout, leaving connects bounded only by request contexts. A raw
+// negative [net.Dialer.Timeout] would instead fail every dial with an
+// already-expired deadline, so it is normalized to zero here.
+func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		if timeout < 0 {
+			timeout = 0
+		}
+		o.dialTimeout = &timeout
 	}
 }
 
@@ -336,7 +351,11 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
-	transport.DialContext = p.Dialer(dialOpts...).DialContext
+	dialer := p.Dialer(dialOpts...)
+	if opts.dialTimeout != nil {
+		dialer.Timeout = *opts.dialTimeout
+	}
+	transport.DialContext = dialer.DialContext
 
 	// Merge into any existing transport TLS config rather than replacing
 	// it, so a future option that sets client certificates or pinning is

@@ -75,9 +75,50 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
 
+11. **Killswitch list and detail (local rewritten seed only)** — Killswitch
+    management intentionally rejects demo/support sessions. Verify this contract in
+    the local organization after `mise run seed`, not through the demo-org
+    impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
+    rows: three Active, one Scheduled, one Lifted, and one
+    Expired. Scope labels include both selected servers and all current/future
+    MCP servers. Filtering to Amara leaves two simultaneously effective rows
+    and preserves the principal filter in the URL; their detail overlap panels
+    identify each other. Open the changed Jonas row and confirm history narrows
+    **Acme Support Tools / Acme Ops / Linear** to **Acme Support Tools** without
+    losing the removed-server diff. Open the lifted and expired rows and confirm
+    their complete history and terminal status. On the active selected row, the
+    external message renders the newline, `<script>alert("demo")</script>`, and
+    `**This is plain text, not Markdown.**` literally: no script executes and no
+    Markdown formatting appears. Internal notes remain visible only on the
+    admin management detail/history surfaces.
+12. **Audit logs** — Killswitch history contributes nine rows: six
+    **activated**, one **changed**, one **lifted/deactivated**, and one
+    **expired**. Mutation rows name the same fictional operator and prescription
+    version as their Killswitch history entries; the expiry row is attributed to
+    **System**, follows the bounded row's deadline, and exposes no internal note
+    in the organization-visible audit snapshot.
+13. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
+    page. The Shadow AI section lists Claude Code, Cursor, Codex, and Ollama in
+    deterministic last-seen order, spans Harness and Local model categories,
+    and shows two devices where applicable. Installed / Running signals,
+    detected versions, and first / last seen values render without exposing
+    hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
+    proving each page is filtered to its canonical enrolled-user identity.
+
+14. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+    The Activity section shows non-zero tool calls over the last 7 days, a
+    Gateway tool usage chart with all four tools populated, the three discovery tools
+    decreasing (list_servers > describe_server > describe_tools) and
+    execute_tool counting the member calls, and a Calls-by-member
+    table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
+    carrying most of the errors. Back on the MCP listing, the gateway card
+    shows no "never used" marker.
+
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), re-run `mise run seed:demo`,
-re-check only the failed pages, and commit the SQL change once green.
+Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+the failed check: `mise run seed` for the local-only Killswitch checks, or
+`mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
+and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.

@@ -10,16 +10,17 @@ import (
 
 // ToolsCallOTELCounterInterceptor records the per-tool MCP call counter for each
 // tools/call invocation against a Remote MCP Server. It is a
-// [proxy.ToolsCallRequestInterceptor]: counting at the request side mirrors
-// `/mcp` (which records before forwarding to the upstream tool executor) so
-// the same metric tracks attempted calls regardless of upstream success.
+// [proxy.UserRequestInterceptor] so parseable calls with malformed method params
+// are still counted before typed request decoding. This mirrors `/mcp` (which
+// records before forwarding to the upstream tool executor) so the same metric
+// tracks attempted calls regardless of upstream success.
 type ToolsCallOTELCounterInterceptor struct {
 	metrics  *ProxyMetrics
 	identity proxy.ServerIdentity
 	logger   *slog.Logger
 }
 
-var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil)
+var _ proxy.UserRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil)
 
 // NewToolsCallOTELCounterInterceptor constructs an interceptor bound to the
 // given metrics object and server correlation ids. Construct one per request
@@ -34,16 +35,20 @@ func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, identity proxy.ServerId
 	}
 }
 
-// Name implements [proxy.ToolsCallRequestInterceptor].
+// Name implements [proxy.UserRequestInterceptor].
 func (i *ToolsCallOTELCounterInterceptor) Name() string {
 	return "tools-call-otel-counter"
 }
 
-// InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
-// Always returns nil — counter recording is best-effort and must not block
-// tool invocation on metrics-backend failures.
-func (i *ToolsCallOTELCounterInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
-	if i.metrics == nil || call == nil || call.Params == nil {
+// InterceptUserRequest implements [proxy.UserRequestInterceptor]. Always
+// returns nil — counter recording is best-effort and must not block tool
+// invocation or take ownership of method-parameter validation.
+func (i *ToolsCallOTELCounterInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
+	if i == nil || i.metrics == nil {
+		return nil
+	}
+	toolName, isToolsCall := proxy.ToolsCallName(req)
+	if !isToolsCall {
 		return nil
 	}
 
@@ -57,6 +62,6 @@ func (i *ToolsCallOTELCounterInterceptor) InterceptToolsCallRequest(ctx context.
 		mcpURL = requestContext.Host + requestContext.ReqURL
 	}
 
-	i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.identity, call.Params.Name)
+	i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.identity, toolName)
 	return nil
 }

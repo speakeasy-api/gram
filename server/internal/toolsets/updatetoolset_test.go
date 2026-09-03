@@ -635,7 +635,7 @@ func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit Clear External OAuth Toolset")
 	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
 		SessionToken: nil,

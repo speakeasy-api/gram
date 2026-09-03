@@ -68,6 +68,9 @@ type DisableKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -92,6 +95,9 @@ type EnableKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -850,6 +856,9 @@ type AdminOpenRouterKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -900,6 +909,12 @@ func NewDisableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Dis
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
 	}
+	if res.DisableCauses != nil {
+		body.DisableCauses = make([]string, len(res.DisableCauses))
+		for i, val := range res.DisableCauses {
+			body.DisableCauses[i] = val
+		}
+	}
 	return body
 }
 
@@ -916,6 +931,12 @@ func NewEnableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Enab
 		Disabled:         res.Disabled,
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.DisableCauses != nil {
+		body.DisableCauses = make([]string, len(res.DisableCauses))
+		for i, val := range res.DisableCauses {
+			body.DisableCauses[i] = val
+		}
 	}
 	return body
 }

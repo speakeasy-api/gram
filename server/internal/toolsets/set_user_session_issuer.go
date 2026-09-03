@@ -60,8 +60,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	// onto this toolset via cross-project id.
 	if usiID.Valid {
 		if _, err := usersessionsR.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
-			ID:        usiID.UUID,
-			ProjectID: *authCtx.ProjectID,
+			ID:             usiID.UUID,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)

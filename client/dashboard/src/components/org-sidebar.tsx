@@ -27,6 +27,7 @@ import { TrialStatusCard } from "./trial-status-card";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -69,6 +70,7 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
+  const killswitchAccess = useKillswitchAccess();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -87,10 +89,13 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
-  const dataActive = [orgRoutes.data].some((r) => r.active);
+  const dataActive = [orgRoutes.data, orgRoutes.dataExports].some(
+    (route) => route.active,
+  );
 
   const secureActive = [
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
   ].some((r) => r.active);
@@ -121,7 +126,6 @@ export function OrgSidebar({
 
   const allOrgNavRoutes = [
     orgRoutes.home,
-    orgRoutes.collections,
     orgRoutes.team,
     orgRoutes.billing,
     orgRoutes.apiKeys,
@@ -134,7 +138,9 @@ export function OrgSidebar({
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
     orgRoutes.data,
+    orgRoutes.dataExports,
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
     orgRoutes.mcpSessions,
@@ -182,12 +188,6 @@ export function OrgSidebar({
                 scope={["org:read", "project:read", "org:admin"]}
               />
 
-              {/* Collections — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.collections}
-                scope={["org:read", "org:admin"]}
-              />
-
               {/* Team — top-level */}
               <ScopeGatedTopLevelItem
                 item={orgRoutes.team}
@@ -223,12 +223,15 @@ export function OrgSidebar({
                 ]}
               />
 
-              {/* Data group — org-wide ingested telemetry surfaces. The Event
-                  Feed item carries a Preview badge via its route's `stage`. */}
+              {/* Data group — org-level access to ingested events and
+                  project-scoped export configuration. */}
               <ScopeGatedNavGroup
                 label="Data"
                 Icon={(p) => <Icon {...p} name="database" />}
-                items={[{ item: orgRoutes.data, scope: orgReadOrAdmin }]}
+                items={[
+                  { item: orgRoutes.data, scope: orgReadOrAdmin },
+                  { item: orgRoutes.dataExports, scope: orgReadOrAdmin },
+                ]}
               />
 
               {/* Secure group */}
@@ -237,6 +240,14 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  ...(killswitchAccess.canAccess
+                    ? [
+                        {
+                          item: orgRoutes.killswitch,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

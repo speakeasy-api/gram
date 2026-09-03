@@ -39,7 +39,10 @@ type ReadingRow struct {
 	// OccurredAt is the UTC work-execution time.
 	OccurredAt time.Time `ch:"occurred_at"`
 
-	// InsertedAt is the UTC ingestion time shared by the received batch.
+	// ProducedAt is the UTC source-production time used as the replacement version.
+	ProducedAt time.Time `ch:"produced_at"`
+
+	// InsertedAt is the UTC ClickHouse ingestion time used for delivery diagnostics.
 	InsertedAt time.Time `ch:"inserted_at"`
 
 	// CorrectsReadingID identifies the original reading for a compensation.
@@ -74,6 +77,7 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 		"unit",
 		"value",
 		"occurred_at",
+		"produced_at",
 		"inserted_at",
 		"corrects_reading_id",
 		"attributes",
@@ -92,6 +96,7 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 			row.Unit,
 			row.Value,
 			row.OccurredAt.Format("2006-01-02 15:04:05.999999999"),
+			row.ProducedAt.Format("2006-01-02 15:04:05.999999999"),
 			row.InsertedAt.Format("2006-01-02 15:04:05.999999999"),
 			correctsReadingID,
 			row.Attributes,

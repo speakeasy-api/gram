@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type {
@@ -51,6 +52,7 @@ export default function MCPServerDetails(): JSX.Element {
   const routes = useRoutes();
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
+  const tabContentRef = useTabScrollReset(activeTab);
   const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
     location.pathname,
     idOrSlug,
@@ -177,7 +179,10 @@ export default function MCPServerDetails(): JSX.Element {
         return (
           mcpServer && (
             <RequireScope scope="project:read" level="page">
-              <ClientsAndSessionsTab issuerId={mcpServer.userSessionIssuerId} />
+              <ClientsAndSessionsTab
+                issuerId={mcpServer.userSessionIssuerId}
+                originatingMcpServerId={mcpServer.id}
+              />
             </RequireScope>
           )
         );
@@ -213,7 +218,10 @@ export default function MCPServerDetails(): JSX.Element {
       </Page.Header>
 
       <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderTabContent()}
         </div>
       </Page.Body>

@@ -75,10 +75,21 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM ai_scan_receipts WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+
+-- Inserts must never race rows from the previous seed generation. The Go
+-- runner polls this same condition before advancing past the delete phase, and
+-- this preflight keeps the invariant explicit for every script executor.
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+   ) != 0,
+  'demo seed preflight: telemetry rows remain after scoped deletes');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -114,6 +125,16 @@ SELECT
     ',"user.roles":', rolesjson,
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
+    -- The account the call was made through, matching the chat rows below so
+    -- an account-scoped read of someone's usage keeps its tool calls; without
+    -- it every tool count drops to zero the moment a filter is applied. Only
+    -- the Claude half can be personal: the two seeded personal accounts are
+    -- Anthropic ones, so labelling a Cursor call personal would attribute it
+    -- to an account that does not exist.
+    ',"gram.account_type":"', if(hook = 'claude-code'
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', hook, '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -157,6 +178,106 @@ FROM (
   FROM numbers(180)
 );
 
+-- An agent that reports only an id for itself, and no address at all. The
+-- Identities roster classifies a subject by what it can be keyed on, so
+-- without this the demo org has no Agent row to show. Surfaced from the raw
+-- logs rather than the agent-metrics view, which is keyed by email. Cleaned up
+-- by the same project-scoped telemetry_logs delete as every other row here.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-unattributed-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.toolset.slug":"acme-support-tools"',
+    ',"http.response.status_code":200',
+    ',"http.server.request.duration":0.42',
+    ',"gram.project.id":"', toString(proj), '"',
+    concat(',"user.id":"', actor, '"'),
+    -- Also the external user id: that is the key every identity read path
+    -- filters a non-directory actor by (external:<id> resolves to exactly
+    -- this), so reporting only user.id leaves the agent's own page empty
+    -- while the roster still lists it.
+    concat(',"gram.external_user.id":"', actor, '"'),
+    ',"gram.hook.source":"codex"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('tools:http:acme:', tool_name),
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    'svc-nightly-triage' AS actor,
+    arrayElement(['search_logs', 'get_metrics', 'fetch_traces', 'check_health'],
+                 1 + (cityHash64('unattr', number) % 4)) AS tool_name,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 6)) + toIntervalHour(9 + (number % 8)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
+-- A person the directory has never heard of: an address that matches no
+-- member, so the roster can show an Unattributed row beside the members and
+-- the agent. It has to be an api_request row rather than a tool call because
+-- the agent-metrics view only admits the agent surfaces, and that view is what
+-- the roster reads for email-keyed identities.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name,
+   gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'claude_code.api_request',
+  lower(hex(MD5(concat('gram-demo-unattributed-api-', toString(i))))),
+  concat(
+    '{"prompt.id":"demo-unattributed-prompt-', toString(i), '"',
+    ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"', resp_id, '"',
+    ',"input_tokens":', toString(2200 + (i * 37) % 900),
+    ',"output_tokens":', toString(180 + (i * 11) % 220),
+    ',"cache_read_tokens":', toString(9000 + (i * 53) % 4000),
+    ',"cache_creation_tokens":600',
+    ',"cost_usd":0.1841',
+    ',"model":"claude-sonnet-4-6"',
+    ',"query_source":"user"',
+    ',"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', actor, '"',
+    ',"gram.external_user.id":"', actor, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'claude-code:otel:logs',
+  'claude-code',
+  chat_id
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    -- In the demo domain so the tenant rewrite reaches it, but deliberately
+    -- not one of the seeded members: that mismatch is the whole point.
+    'ana.vidal@demo.getgram.ai' AS actor,
+    concat('msg_', substring(lower(hex(MD5(concat('gram-demo-unattributed-resp-', toString(number + 1))))), 1, 24)) AS resp_id,
+    lower(hex(MD5(concat('gram-demo-unattributed-chat-', toString(number + 1))))) AS ch,
+    concat(substring(ch, 1, 8), '-', substring(ch, 9, 4), '-5', substring(ch, 14, 3), '-8',
+           substring(ch, 18, 3), '-', substring(ch, 21, 12)) AS chat_id,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 5)) + toIntervalHour(10 + (number % 6)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
 -- Claude provenance (odd chats): one claude_code.api_request row per turn.
 -- prompt.id demo-prompt-<i>-<turn> joins the Postgres user messages; the
 -- skill/agent/mcp attribution keys light up the Costs Skills/Subagents/MCP
@@ -173,6 +294,7 @@ SELECT
   concat(
     '{"prompt.id":"demo-prompt-', toString(i), '-', toString(turn), '"',
     ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-respid-', toString(i), '-', toString(turn))))), 1, 24), '"',
     ',"input_tokens":', toString(in_tok),
     ',"output_tokens":', toString(out_tok),
     ',"cache_read_tokens":', toString(in_tok * 6),
@@ -198,8 +320,17 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.provider":"anthropic"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
-    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai', 'flat_rate', 'metered'), '"}'
+    -- The contractor works entirely on his own subscription; the manager
+    -- splits, roughly a third of his chats going through the personal Claude
+    -- login user_accounts already lists for him. A person who is wholly one or
+    -- wholly the other never exercises the account filter on the identity
+    -- Usage tab, which exists precisely for the split case.
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'personal', 'team'), '"',
+    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai'
+      OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0),
+      'flat_rate', 'metered'), '"}'
   ),
   '{"service.name":"claude-code","gram.deployment.id":"demo-seed"}',
   proj,
@@ -389,6 +520,7 @@ SELECT
   lower(hex(MD5(concat('gram-demo-usagetrace-', toString(i))))),
   concat(
     '{"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-cursor-respid-', toString(i))))), 1, 24), '"',
     ',"gen_ai.usage.input_tokens":', toString(in_tok),
     ',"gen_ai.usage.output_tokens":', toString(out_tok),
     ',"gen_ai.usage.cache_read.input_tokens":', toString(in_tok * 4),
@@ -555,7 +687,13 @@ SELECT
     ',"user.groups":["', team, '"]',
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    -- Same split as the chat rows above, keyed the same way so a chat's
+    -- score lands on the account that ran it. Odd rows only: those are the
+    -- Anthropic ones, and both seeded personal accounts are Anthropic.
+    ',"gram.account_type":"', if(i % 2 = 1
+      AND (email = 'mateo@demo.getgram.ai'
+        OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
+      'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -673,10 +811,112 @@ FROM (
   FROM numbers(180)
 );
 
--- Authz challenges (org home "Recent challenges" panel + /access/challenges).
+-- Shadow AI detections (employee enrollment detail): device-agent AI scan
+-- results for the six demo directory users. Target
+-- ids and categories come from the aitargets catalog
+-- (server/internal/agent/aitargets); one row per (target, device, user,
+-- signal) matching the ReplacingMergeTree key. Priya carries two devices so
+-- the users/devices counts differ. Versions stamp installed rows only —
+-- running detections usually cannot extract one.
+INSERT INTO ai_detections
+  (organization_id, target_id, device_serial, user_email, signal, category,
+   version, first_seen, last_seen, updated_at)
+VALUES
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '2.0.41', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '2.0.38', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 30 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 22 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '2.0.41', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 12 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '1.7.52', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '1.7.49', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 28 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.7.52', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'codex', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '0.52.0', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'codex', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '0.50.1', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 50 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'local_model', '0.6.2', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'local_model', '0.6.0', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'local_model', '0.6.2', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'lmstudio', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'local_model', '0.3.9', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'aider', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9));
+
+-- Scan receipts: one per device per day over the trailing 5 days, proving
+-- every enrolled device scanned recently (the page's freshness story and the
+-- provable-coverage contract for zero-match devices).
+INSERT INTO ai_scan_receipts
+  (organization_id, device_serial, user_email, scan_started_at,
+   scan_completed_at, target_list_version, match_count, received_at)
+SELECT
+  'org_gram_demo_workspace',
+  arrayElement(['DEMO-MBP-AMARA', 'DEMO-MBP-JONAS', 'DEMO-MBP-PRIYA',
+                'DEMO-MSTUDIO-PRIYA', 'DEMO-MBP-MATEO', 'DEMO-MBP-HANA',
+                'DEMO-MBP-LUCAS'], didx),
+  arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                'priya@demo.getgram.ai', 'mateo@demo.getgram.ai', 'hana@demo.getgram.ai',
+                'lucas@demo.getgram.ai'], didx),
+  ts - toIntervalSecond(6),
+  ts - toIntervalSecond(1),
+  3,
+  arrayElement([4, 4, 7, 2, 6, 2, 1], didx),
+  ts
+FROM (
+  SELECT
+    1 + toUInt32(number % 7) AS didx,
+    toUInt32(intDiv(number, 7)) AS day_off,
+    now64(9) - toIntervalDay(day_off)
+      - toIntervalHour(2 + cityHash64('aiscan', number) % 4)
+      - toIntervalMinute(cityHash64('aiscanm', number) % 55) AS ts
+  FROM numbers(35)
+);
+
+-- Authz challenges (org home "Recent challenges" panel, /access/challenges, and
+-- the per-identity Access and Security tabs).
+--
 -- user_id values are demo members (organization_user_relationships rows exist,
 -- so the member-suppression filter keeps them visible); one api_key bucket
 -- stays visible regardless of membership.
+--
+-- The subject and the scope are drawn from DIFFERENT hashes on purpose. Keying
+-- both off `number % 3` locked each person to a single scope forever, so every
+-- identity's Access tab listed one action repeated N times and the whole panel
+-- read as a stuck query. Outcomes are mixed for the same reason: a log that is
+-- 100% denials says nothing about which denials matter, and the donut on the
+-- Access tab has only one segment to draw.
 INSERT INTO authz_challenges
   (timestamp, organization_id, project_id, trace_id, span_id, request_id,
    principal_urn, principal_type, user_id, user_email, api_key_id,
@@ -694,34 +934,56 @@ SELECT
   lower(hex(MD5(concat('gram-demo-chal-', toString(number))))),
   substring(lower(hex(MD5(concat('gram-demo-chalspan-', toString(number))))), 1, 16),
   concat('req_', substring(lower(hex(MD5(concat('gram-demo-chalreq-', toString(number))))), 1, 16)),
-  if(number % 5 = 4, 'api_key:akey_demo0000000001',
-     concat('user:', arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3)))),
-  if(number % 5 = 4, 'api_key', 'user'),
-  if(number % 5 = 4, NULL,
-     arrayElement(['user_demo_jonas', 'user_demo_priya', 'user_demo_hana'], 1 + (number % 3))),
-  if(number % 5 = 4, NULL,
-     arrayElement(['jonas@demo.getgram.ai', 'priya@demo.getgram.ai', 'hana@demo.getgram.ai'], 1 + (number % 3))),
-  if(number % 5 = 4, 'akey_demo0000000001', NULL),
+  if(number % 7 = 6, 'api_key:akey_demo0000000001',
+     concat('user:', arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                                  1 + toUInt32(cityHash64('chal-user', number) % 6)))),
+  if(number % 7 = 6, 'api_key', 'user'),
+  if(number % 7 = 6, NULL,
+     arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                   'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, NULL,
+     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                  1 + toUInt32(cityHash64('chal-user', number) % 6))),
+  if(number % 7 = 6, 'akey_demo0000000001', NULL),
   [],
   'require',
-  'deny',
-  if(number % 2 = 0, 'scope_unsatisfied', 'no_grants'),
-  arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3)),
-  arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3)),
+  -- Roughly one in three is refused: enough denials to be worth reading,
+  -- not so many that the org looks locked out of its own tools.
+  if(cityHash64('chal-outcome', number) % 3 = 0, 'deny', 'allow'),
+  -- reason is a closed enum on the wire: an allow that carries an empty
+  -- reason fails response validation and the client discards the whole page,
+  -- which reads in the UI as "no authorization checks recorded".
+  if(cityHash64('chal-outcome', number) % 3 <> 0, 'grant_matched',
+     if(number % 2 = 0, 'scope_unsatisfied', 'no_grants')),
+  arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
+  arrayElement(['toolset', 'project', 'environment',
+                'environment', 'mcp', 'skill', 'chat'],
+               1 + toUInt32(cityHash64('chal-scope', number) % 7)),
   arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                 'dec0de00-0000-4000-a000-000000000001',
                 'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3)),
   '{"project":"dec0de00-0000-4000-a000-000000000001"}',
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset:admin', 'project:admin', 'environment:read'], 1 + (number % 3))],
-  [arrayElement(['toolset', 'project', 'environment'], 1 + (number % 3))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset:admin', 'project:admin', 'environment:read',
+                 'environment:write', 'mcp:connect', 'skill:write', 'chat:read'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
+  [arrayElement(['toolset', 'project', 'environment',
+                 'environment', 'mcp', 'skill', 'chat'],
+                1 + toUInt32(cityHash64('chal-scope', number) % 7))],
   [arrayElement(['dec0de00-0000-4000-a000-000000005e01',
                  'dec0de00-0000-4000-a000-000000000001',
                  'dec0de00-0000-4000-a000-00000000ee01'], 1 + (number % 3))],
   ['{"project":"dec0de00-0000-4000-a000-000000000001"}'],
   [], [], [], [],
   toUInt32(3 + number % 5)
-FROM numbers(13);
+FROM numbers(64);
 
 -- Risk findings mirror (the ClickHouse read path behind the risk overview,
 -- the Risk Events listing and the Watchdog): one row per Postgres finding,
@@ -1008,6 +1270,128 @@ FROM (
   WHERE (number + 1) % 2 = 1
 );
 
+-- Gateway (meta MCP) traffic for the Acme Agent Gateway, which fronts the
+-- four mcp_servers seeded in postgres.sql. Ids reproduce
+-- demo.det_uuid('gram-demo-metamcp-1') / ('gram-demo-mcpserver-<member>') /
+-- ('gram-demo-remotemcp-<member>') so ClickHouse rows join the Postgres rows.
+--
+-- Discovery calls (list_servers / describe_server / describe_tools) land under
+-- gram.event.source = meta_discovery with a "metamcp:" urn: the runtime never
+-- gives them a "tools:" urn, so they cannot count as tool calls (the query
+-- layer's classifier), and the seed mirrors that. execute_tool writes no row
+-- of its own: the member call below IS the row, stamped with the gateway id.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Gateway discovery: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwdisc-', toString(i))))),
+  concat(
+    '{"gram.event.source":"meta_discovery"',
+    ',"gram.meta_mcp_server.id":"', gateway, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.tool.urn":"metamcp:', gateway, ':', tool_name, '"',
+    ',"http.response.status_code":200',
+    ',"http.server.request.duration":', toString(round(0.02 + (cityHash64('gwd', i) % 40) / 100, 3)),
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.external_user.id":"', email, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('metamcp:', gateway, ':', tool_name),
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
+    concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
+           substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
+    -- Funnel shape: every walk lists, most describe a server, fewer pull schemas.
+    multiIf(number % 10 < 5, 'list_servers', number % 10 < 8, 'describe_server', 'describe_tools') AS tool_name,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu', number) % 6)) AS email,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh', number) % 11))
+      + toIntervalMinute(cityHash64('gwm', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(150)
+);
+
+-- Member calls dispatched through the gateway: ordinary tool_call rows for the
+-- member (hosted members keep the "tools:http:acme:" urn + toolset slug the
+-- direct path emits; remote members the "tools:externalmcp:<remote id>:" urn
+-- the proxy emits), plus gram.meta_mcp_server.id. One row serves the member's
+-- own usage, the gateway Activity section, and the MCP listing marker alike,
+-- so call totals never double. Ops carries most of the failures.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwcall-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"', tool_urn, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    if(toolset_slug != '', concat(',"gram.toolset.slug":"', toolset_slug, '"'), ''),
+    ',"gram.event.source":"tool_call"',
+    ',"gram.mcp_server.id":"', member, '"',
+    if(toolset_slug = '', concat(',"gram.remote_mcp_server.id":"', remote, '"'), ''),
+    ',"gram.meta_mcp_server.id":"', gateway, '"',
+    ',"http.response.status_code":', toString(status),
+    ',"http.server.request.duration":', toString(round(0.05 + (cityHash64('gwc', i) % 300) / 100, 3)),
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.external_user.id":"', email, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  tool_urn,
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
+    concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
+           substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
+    -- Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
+    arrayElement(['support', 'support', 'support', 'support', 'support', 'ops', 'ops', 'ops', 'linear', 'slack'],
+                 1 + (cityHash64('gwmem', number) % 10)) AS mkey,
+    lower(hex(MD5(concat('gram-demo-mcpserver-', mkey)))) AS mh,
+    concat(substring(mh, 1, 8), '-', substring(mh, 9, 4), '-5', substring(mh, 14, 3), '-8',
+           substring(mh, 18, 3), '-', substring(mh, 21, 12)) AS member,
+    lower(hex(MD5(concat('gram-demo-remotemcp-', mkey)))) AS rh,
+    concat(substring(rh, 1, 8), '-', substring(rh, 9, 4), '-5', substring(rh, 14, 3), '-8',
+           substring(rh, 18, 3), '-', substring(rh, 21, 12)) AS remote,
+    multiIf(mkey = 'support', 'acme-support-tools', mkey = 'ops', 'acme-ops', '') AS toolset_slug,
+    multiIf(
+      mkey = 'support', arrayElement(['search_logs', 'get_customer', 'query_db', 'fetch_traces'], 1 + (cityHash64('gwt', number) % 4)),
+      mkey = 'ops', arrayElement(['list_deploys', 'check_health', 'get_metrics', 'process_refund'], 1 + (cityHash64('gwt', number) % 4)),
+      mkey = 'linear', arrayElement(['list_issues', 'create_issue', 'get_issue'], 1 + (cityHash64('gwt', number) % 3)),
+      arrayElement(['send_message', 'list_channels'], 1 + (cityHash64('gwt', number) % 2))) AS tool_name,
+    if(toolset_slug != '', concat('tools:http:acme:', tool_name), concat('tools:externalmcp:', remote, ':', tool_name)) AS tool_urn,
+    if((mkey = 'ops' AND cityHash64('gwerr', number) % 5 = 0) OR cityHash64('gwbg', number) % 40 = 0, 500, 200) AS status,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwu2', number) % 6)) AS email,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh2', number) % 11))
+      + toIntervalMinute(cityHash64('gwm2', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(240)
+);
+
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
 -- exit for the runner) when violated.
@@ -1018,10 +1402,51 @@ SELECT throwIf(
   'demo seed postflight: expected >= 1500 demo telemetry rows');
 
 SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND meta_mcp_server_id != ''
+     AND event_source = 'meta_discovery') < 150,
+  'demo seed postflight: gateway discovery rows missing');
+
+SELECT throwIf(
+  (SELECT uniqExact(mcp_server_id) FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND meta_mcp_server_id != ''
+     AND event_source = 'tool_call') < 4,
+  'demo seed postflight: gateway member calls do not cover every member');
+
+SELECT throwIf(
   (SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id IN
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 180,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
+
+-- Every request-shaped row carries gen_ai.response.id, the field the per-user
+-- summary counts chat requests by. Without it "Chat requests" reads 0 on every
+-- identity while the chat count beside it reads correctly, which looks like a
+-- broken panel rather than absent data.
+--
+-- Request-shaped means the row reports token usage: that is what separates an
+-- LLM request from the tool-call and hook rows seeded alongside it, and it
+-- stays true of request rows added later regardless of their body text. A
+-- global floor would not catch a new insert that forgot the field, so the
+-- assert is that no such row is missing it, with a floor beside it so an
+-- empty table cannot satisfy the first check vacuously.
+SELECT throwIf(
+  (SELECT countIf(toString(attributes.gen_ai.response.id) = '') FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) > 0,
+  'demo seed postflight: request rows missing gen_ai.response.id');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND (toString(attributes.input_tokens) != ''
+          OR toString(attributes.gen_ai.usage.input_tokens) != '')
+   ) < 180,
+  'demo seed postflight: too few request rows');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN
@@ -1045,6 +1470,16 @@ SELECT throwIf(
 SELECT throwIf(
   (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 90,
   'demo seed postflight: risk_findings mirror missing rows');
+
+SELECT throwIf(
+  (SELECT uniqExact(target_id) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') < 6,
+  'demo seed postflight: ai_detections missing targets');
+
+SELECT throwIf(
+  (SELECT count() FROM ai_scan_receipts
+   WHERE organization_id = 'org_gram_demo_workspace') < 25,
+  'demo seed postflight: ai_scan_receipts missing rows');
 
 -- The Watchdog groups by these three denormalized columns. A mirror that
 -- forgot them still lists signals, but every App/Team grouping and every

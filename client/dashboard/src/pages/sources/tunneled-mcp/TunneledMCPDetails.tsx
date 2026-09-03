@@ -42,8 +42,9 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Field, FieldError } from "@/components/ui/Field";
 import { Stack } from "@/components/ui/Stack";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
   KeyRound,
@@ -54,7 +55,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -62,6 +63,7 @@ import {
   useRotateTunneledMcpServerKey,
   type RotateTunneledMcpServerKeyData,
 } from "./hooks";
+import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { RemoveTunneledMcpDialogContent } from "./RemoveTunneledMcpDialog";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 
@@ -652,18 +654,12 @@ function SettingsTab({
   tunneledMcpServer: TunneledMcpServer;
   linkedMcpServers: McpServer[];
 }) {
-  // One mutation shared across the sections that write the same record. Its
-  // pending state serializes name and public-access edits so a concurrent
-  // update can't submit a stale display name and clobber the other change.
-  const update = useUpdateTunneledMcpServerMutation();
-
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <NameSection tunneledMcpServer={tunneledMcpServer} update={update} />
-      <PublicAccessSection
-        tunneledMcpServer={tunneledMcpServer}
-        update={update}
-      />
+      <NameSection tunneledMcpServer={tunneledMcpServer} />
+      <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
+      <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
+      <PublicRateLimitsSection tunneledMcpServer={tunneledMcpServer} />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
@@ -673,19 +669,21 @@ function SettingsTab({
   );
 }
 
-type UpdateTunneledMcpMutation = ReturnType<
-  typeof useUpdateTunneledMcpServerMutation
->;
+async function invalidateTunneledMcpServerViews(queryClient: QueryClient) {
+  await Promise.all([
+    invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
+    invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+  ]);
+}
 
 const PUBLIC_ACCESS_CONFIRM_PHRASE = "ALLOW PUBLIC ACCESS";
 
 function PublicAccessSection({
   tunneledMcpServer,
-  update,
 }: {
   tunneledMcpServer: TunneledMcpServer;
-  update: UpdateTunneledMcpMutation;
 }) {
+  const update = useUpdateTunneledMcpServerMutation();
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPhrase, setConfirmPhrase] = useState("");
@@ -700,15 +698,11 @@ function PublicAccessSection({
         request: {
           updateTunneledMcpServerForm: {
             id: tunneledMcpServer.id,
-            name: tunneledMcpServer.name,
             allowPublic: next,
           },
         },
       });
-      await Promise.all([
-        invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+      await invalidateTunneledMcpServerViews(queryClient);
       toast.success(
         next
           ? "Public anonymous access enabled"
@@ -738,7 +732,10 @@ function PublicAccessSection({
 
   const closeConfirm = (open: boolean) => {
     setConfirmOpen(open);
-    if (!open) setConfirmPhrase("");
+    if (!open) {
+      setConfirmPhrase("");
+      update.reset();
+    }
   };
 
   return (
@@ -859,67 +856,83 @@ function PublicAccessSection({
   );
 }
 
-function NameSection({
-  tunneledMcpServer,
-  update,
+// One bordered settings section editing a single text field of the tunneled
+// server, owning its own draft, error, and pending state so sibling sections
+// never reflect each other's activity.
+function EditableFieldSection({
+  id,
+  title,
+  description,
+  placeholder,
+  stored,
+  requireValue = false,
+  save,
+  toastMessage,
+  fallbackError,
 }: {
-  tunneledMcpServer: TunneledMcpServer;
-  update: UpdateTunneledMcpMutation;
+  id: string;
+  title: string;
+  description: ReactNode;
+  placeholder: string;
+  stored: string;
+  requireValue?: boolean;
+  // Persists the trimmed draft and returns the canonical stored value.
+  save: (value: string) => Promise<string>;
+  toastMessage: (cleared: boolean) => string;
+  fallbackError: string;
 }) {
-  const [draft, setDraft] = useState(tunneledMcpServer.name);
+  const [draft, setDraft] = useState(stored);
+  const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setDraft(tunneledMcpServer.name);
-  }, [tunneledMcpServer.name]);
+    setDraft(stored);
+  }, [stored]);
 
-  const queryClient = useQueryClient();
-
-  const dirty = draft.trim() !== tunneledMcpServer.name.trim();
-  const saveDisabled = !dirty || draft.trim() === "" || update.isPending;
+  const dirty = draft.trim() !== stored.trim();
+  const saveDisabled =
+    !dirty || (requireValue && draft.trim() === "") || saving;
 
   const handleSave = async () => {
+    const value = draft.trim();
+    setSaving(true);
+    setError(undefined);
     try {
-      await update.mutateAsync({
-        request: {
-          updateTunneledMcpServerForm: {
-            id: tunneledMcpServer.id,
-            name: draft.trim(),
-          },
-        },
-      });
-      await Promise.all([
-        invalidateAllGetTunneledMcpServer(queryClient, {
-          refetchType: "all",
-        }),
-        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
-      ]);
-      toast.success("Tunneled MCP name updated");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update name";
+      // Adopt the stored form the server normalized to. Refetching alone
+      // leaves the draft dirty whenever normalization is a no-op server-side.
+      setDraft(await save(value));
+      setError(undefined);
+      toast.success(toastMessage(value === ""));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : fallbackError;
+      setError(message);
       toast.error(message);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
     <div className="border p-6">
-      <Text variant="subheading" className="mb-1">
-        Display Name
+      <Text variant="subheading" id={`${id}-label`} className="mb-1">
+        {title}
       </Text>
-      <Text muted small className="mb-4">
-        Name shown in source listings, breadcrumbs, and linked MCP servers.
+      <Text muted small className="mb-4 max-w-3xl">
+        {description}
       </Text>
       <Stack gap={2}>
-        <Input
-          value={draft}
-          onChange={(value) => setDraft(value)}
-          placeholder="Internal MCP server"
-        />
-        {update.isError && (
-          <Alert variant="error" dismissible={false}>
-            {update.error.message}
-          </Alert>
-        )}
+        <Field data-invalid={error !== undefined ? true : undefined}>
+          <Input
+            id={id}
+            aria-labelledby={`${id}-label`}
+            value={draft}
+            onChange={(value) => setDraft(value)}
+            placeholder={placeholder}
+            disabled={saving}
+            aria-invalid={error !== undefined}
+          />
+          {error !== undefined && <FieldError>{error}</FieldError>}
+        </Field>
         <Stack direction="horizontal" gap={2}>
           <RequireScope scope="mcp:write" level="component">
             <Button
@@ -927,16 +940,302 @@ function NameSection({
               disabled={saveDisabled}
               onClick={() => void handleSave()}
             >
+              {saving ? (
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{saving ? "Saving" : "Save"}</Button.Text>
+            </Button>
+          </RequireScope>
+        </Stack>
+      </Stack>
+    </div>
+  );
+}
+
+function NameSection({
+  tunneledMcpServer,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+}) {
+  const update = useUpdateTunneledMcpServerMutation();
+  const queryClient = useQueryClient();
+
+  return (
+    <EditableFieldSection
+      id="tunneled-mcp-display-name"
+      title="Display Name"
+      description="Name shown in source listings, breadcrumbs, and linked MCP servers."
+      placeholder="Internal MCP server"
+      stored={tunneledMcpServer.name}
+      requireValue
+      save={async (value) => {
+        const saved = await update.mutateAsync({
+          request: {
+            updateTunneledMcpServerForm: {
+              id: tunneledMcpServer.id,
+              name: value,
+            },
+          },
+        });
+        await invalidateTunneledMcpServerViews(queryClient);
+        return saved.name;
+      }}
+      toastMessage={() => "Tunneled MCP name updated"}
+      fallbackError="Failed to update name"
+    />
+  );
+}
+
+function ResourceIdentifierSection({
+  tunneledMcpServer,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+}) {
+  const update = useUpdateTunneledMcpServerMutation();
+  const queryClient = useQueryClient();
+
+  return (
+    <EditableFieldSection
+      id="tunneled-mcp-resource-identifier"
+      title="Resource Identifier"
+      description={`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if the server has no OAuth of its own.`}
+      placeholder="https://mcp.internal.example.com/mcp"
+      stored={tunneledMcpServer.resourceIdentifier ?? ""}
+      save={async (value) => {
+        // An empty string clears the identifier back to unset.
+        const saved = await update.mutateAsync({
+          request: {
+            updateTunneledMcpServerForm: {
+              id: tunneledMcpServer.id,
+              resourceIdentifier: value,
+            },
+          },
+        });
+        await invalidateTunneledMcpServerViews(queryClient);
+        return saved.resourceIdentifier ?? "";
+      }}
+      toastMessage={(cleared) =>
+        cleared ? "Resource identifier cleared" : "Resource identifier updated"
+      }
+      fallbackError="Failed to update resource identifier"
+    />
+  );
+}
+
+type PublicRateLimitField = "publicRequestRatePerSecond" | "publicRequestBurst";
+
+const PUBLIC_RATE_LIMIT_FIELDS: ReadonlyArray<{
+  key: PublicRateLimitField;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: "publicRequestRatePerSecond",
+    label: "Requests per second",
+    hint: "Sustained rate. Blank uses the default of 50/s.",
+  },
+  {
+    key: "publicRequestBurst",
+    label: "Burst",
+    hint: "Requests admitted back-to-back from idle before the sustained rate applies. Blank means twice the rate (100 by default).",
+  },
+];
+
+function formatPublicRate(server: TunneledMcpServer) {
+  const stored = server.publicRequestRatePerSecond !== undefined;
+  return `${server.effectivePublicRequestRatePerSecond}/s, burst ${server.effectivePublicRequestBurst}${stored ? "" : " (default)"}`;
+}
+
+function toPublicRateDraft(
+  server: TunneledMcpServer,
+): Record<PublicRateLimitField, string> {
+  return Object.fromEntries(
+    PUBLIC_RATE_LIMIT_FIELDS.map(({ key }) => [
+      key,
+      server[key] === undefined ? "" : String(server[key]),
+    ]),
+  ) as Record<PublicRateLimitField, string>;
+}
+
+// Anonymous admission limit for this source. One bucket per tunnel is shared
+// by every anonymous caller, so it bounds the load reaching the upstream
+// server rather than fairness between callers. Unset fields keep the
+// deployment-wide defaults, which the API reports as the effective values.
+function PublicRateLimitsSection({
+  tunneledMcpServer,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+}) {
+  const update = useUpdateTunneledMcpServerMutation();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState(() =>
+    toPublicRateDraft(tunneledMcpServer),
+  );
+  const [error, setError] = useState<string>();
+  // The stored values the draft was last synced from, so a refetch that
+  // changes them only replaces an untouched draft and never clobbers edits.
+  const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
+
+  const { publicRequestRatePerSecond, publicRequestBurst } = tunneledMcpServer;
+  useEffect(() => {
+    const next = toPublicRateDraft(tunneledMcpServer);
+    setDraft((current) => {
+      const untouched = PUBLIC_RATE_LIMIT_FIELDS.every(
+        ({ key }) => current[key] === syncedFrom.current[key],
+      );
+      syncedFrom.current = next;
+      return untouched ? next : current;
+    });
+    // Resync only when a stored value changes, not on every refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicRequestRatePerSecond, publicRequestBurst]);
+
+  // Omitted fields leave the stored value alone; a cleared field sends 0,
+  // which the server treats as "back to the deployment default".
+  const changes = () => {
+    const form: Partial<Record<PublicRateLimitField, number>> = {};
+    for (const { key, label } of PUBLIC_RATE_LIMIT_FIELDS) {
+      const text = draft[key].trim();
+      const storedValue = tunneledMcpServer[key];
+      if (text === "") {
+        if (storedValue !== undefined) form[key] = 0;
+        continue;
+      }
+      const value = Number(text);
+      if (!Number.isInteger(value) || value < 1) {
+        throw new Error(`${label} must be a whole number of at least 1`);
+      }
+      if (value !== storedValue) form[key] = value;
+    }
+    return form;
+  };
+
+  let dirty = false;
+  try {
+    dirty = Object.keys(changes()).length > 0;
+  } catch {
+    dirty = true;
+  }
+
+  const handleSave = async () => {
+    setError(undefined);
+    let form: Partial<Record<PublicRateLimitField, number>>;
+    try {
+      form = changes();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid value";
+      setError(message);
+      return;
+    }
+    if (Object.keys(form).length === 0) return;
+    try {
+      await update.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledMcpServer.id,
+            ...form,
+          },
+        },
+      });
+      await invalidateTunneledMcpServerViews(queryClient);
+      toast.success("Anonymous rate limit updated");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update rate limits";
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="border p-6">
+      <Text
+        variant="subheading"
+        id="tunneled-mcp-public-rate-limits-label"
+        className="mb-1"
+      >
+        Anonymous Rate Limit
+      </Text>
+      <Text muted small className="mb-4 max-w-3xl">
+        Caps how many requests anonymous callers can send to MCP servers
+        fronting this source, across every MCP method. One token bucket is
+        shared by all callers, so it bounds the total load on your server rather
+        than fairness between callers. Requests over the limit get HTTP 429 with
+        a Retry-After header.
+        {tunneledMcpServer.allowPublic
+          ? null
+          : " Applies once Public Access is enabled."}
+      </Text>
+
+      <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+        <dt>
+          <Text muted small>
+            Effective limit
+          </Text>
+        </dt>
+        <dd>
+          <Text small data-testid="public-rate-limit-requests">
+            {formatPublicRate(tunneledMcpServer)}
+          </Text>
+        </dd>
+      </dl>
+
+      <RequireScope scope="mcp:write" level="component">
+        <Stack gap={3}>
+          <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+            {PUBLIC_RATE_LIMIT_FIELDS.map(({ key, label, hint }) => (
+              <Field key={key}>
+                <Text
+                  small
+                  className="mb-1"
+                  id={`public-rate-limit-${key}-label`}
+                >
+                  {label}
+                </Text>
+                <Input
+                  id={`public-rate-limit-${key}`}
+                  aria-labelledby={`public-rate-limit-${key}-label`}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={draft[key]}
+                  onChange={(value) =>
+                    setDraft((current) => ({ ...current, [key]: value }))
+                  }
+                  placeholder={String(
+                    key === "publicRequestRatePerSecond"
+                      ? tunneledMcpServer.effectivePublicRequestRatePerSecond
+                      : tunneledMcpServer.effectivePublicRequestBurst,
+                  )}
+                  disabled={update.isPending}
+                />
+                <Text muted small>
+                  {hint}
+                </Text>
+              </Field>
+            ))}
+          </div>
+          {error !== undefined && <FieldError>{error}</FieldError>}
+          <Stack direction="horizontal" gap={2}>
+            <Button
+              variant="primary"
+              disabled={!dirty || update.isPending}
+              onClick={() => void handleSave()}
+            >
               {update.isPending ? (
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
               ) : null}
-              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
+              <Button.Text>
+                {update.isPending ? "Saving" : "Save limit"}
+              </Button.Text>
             </Button>
-          </RequireScope>
+          </Stack>
         </Stack>
-      </Stack>
+      </RequireScope>
     </div>
   );
 }

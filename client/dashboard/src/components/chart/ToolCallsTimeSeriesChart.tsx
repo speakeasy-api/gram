@@ -3,6 +3,7 @@ import {
   formatChartLabel,
   smoothData,
   unixNanoToDate,
+  unixNanoToMs,
 } from "@/components/chart/chartUtils";
 import {
   ACCENT_RED,
@@ -10,6 +11,7 @@ import {
   TOOLTIP,
   withAlpha,
 } from "@/components/chart/palette";
+import { useChartZoom } from "@/components/chart/useChartZoom";
 import {
   useIsDarkTheme,
   useSeriesColors,
@@ -30,7 +32,8 @@ import {
   type ChartDataset,
   type ChartOptions,
 } from "chart.js";
-import { useMemo } from "react";
+import ZoomPlugin from "chartjs-plugin-zoom";
+import { useEffect, useMemo } from "react";
 import { Chart } from "react-chartjs-2";
 
 ChartJS.register(
@@ -42,6 +45,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 export interface ToolCallsTimeSeriesChartProps {
@@ -52,6 +56,11 @@ export interface ToolCallsTimeSeriesChartProps {
   timeRangeMs: number;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  // Drag-to-select on the x axis. Receives the bucket-aligned window; the
+  // caller applies it as the page's time range. Omit to leave the chart static.
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }
 
 /**
@@ -66,10 +75,44 @@ export function ToolCallsTimeSeriesChart({
   timeRangeMs,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: ToolCallsTimeSeriesChartProps): JSX.Element {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
   const hasData = timeSeries.some((b) => b.totalToolCalls > 0);
+
+  const timestamps = useMemo(
+    () => timeSeries.map((b) => unixNanoToMs(b.bucketTimeUnixNano)),
+    [timeSeries],
+  );
+  // Category axis: the plugin reports index bounds, not times.
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<
+    "bar" | "line",
+    number[],
+    string
+  >({
+    onRangeSelect,
+    resolveRange: (min, max) => {
+      if (timestamps.length === 0) return null;
+      const fromIndex = Math.max(0, Math.floor(min));
+      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
+      const from = timestamps[fromIndex];
+      const to = timestamps[toIndex];
+      if (from == null || to == null) return null;
+      const bucketMs =
+        timestamps.length > 1
+          ? timestamps[1]! - timestamps[0]!
+          : Math.max(timeRangeMs, 60_000);
+      // `to` is a bucket start; extend by the bucket width so the selection
+      // covers the last bucket's events.
+      return { from: new Date(from), to: new Date(to + bucketMs) };
+    },
+  });
+  useEffect(() => {
+    resetZoom();
+  }, [timeSeries, resetZoom]);
 
   const seriesColors = useSeriesColors();
   const chartData = useMemo<{
@@ -156,6 +199,7 @@ export function ToolCallsTimeSeriesChart({
               ` ${item.dataset.label}: ${formatCompact(Number(item.parsed.y ?? 0))}`,
           },
         },
+        zoom: zoomPluginOptions,
       },
       scales: {
         x: {
@@ -177,7 +221,7 @@ export function ToolCallsTimeSeriesChart({
         },
       },
     };
-  }, [isDark]);
+  }, [isDark, zoomPluginOptions]);
 
   return (
     <ChartCard
@@ -186,6 +230,8 @@ export function ToolCallsTimeSeriesChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {!hasData ? (
         <WidgetEmptyState
@@ -198,6 +244,7 @@ export function ToolCallsTimeSeriesChart({
               with a line trend overlay; the explicit generic widens the
               accepted dataset union. */}
           <Chart<"bar" | "line", number[], string>
+            ref={chartRef}
             type="bar"
             data={chartData}
             options={options}

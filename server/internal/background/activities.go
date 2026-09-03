@@ -11,7 +11,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
@@ -131,6 +129,7 @@ type Activities struct {
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap           *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
+	reconcileTrialConversionKeys    *activities.ReconcileEnterpriseTrialConversionKeys
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -162,8 +161,6 @@ type Activities struct {
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
-	outboxRelay                     *outbox_relay.Relay
-	outboxGC                        *outbox_relay.GC
 	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
@@ -220,7 +217,6 @@ func NewActivities(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
-	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
 	chatWriter *chat.ChatMessageWriter,
@@ -232,6 +228,7 @@ func NewActivities(
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
+	tumMeterStreamingEnabled bool,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -352,14 +349,21 @@ func NewActivities(
 		), features, auditLogger)
 	}
 
+	var skillSuggestionSignaler efficacy.SuggestionSignaler
+	if temporalEnv != nil {
+		skillSuggestionSignaler = &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
-	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
+	if db != nil && telemetryRepo != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
 		}
-		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
+		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, skillSuggestionSignaler)
 	}
+
+	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
 	return &Activities{
 		db:                              db,
@@ -388,12 +392,13 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
-		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient),
+		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient, !tumMeterStreamingEnabled),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:           activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
+		reconcileTrialConversionKeys:    activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
@@ -425,8 +430,6 @@ func NewActivities(
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
-		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
-		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
@@ -449,7 +452,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -568,6 +571,10 @@ func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities
 
 func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {
 	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
+}
+
+func (a *Activities) ReconcileEnterpriseTrialConversionKeys(ctx context.Context, input activities.ReconcileEnterpriseTrialConversionKeysArgs) error {
+	return a.reconcileTrialConversionKeys.Do(ctx, input)
 }
 
 func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
@@ -903,29 +910,6 @@ func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args acti
 	return a.cancelAssistantsSubscription.Do(ctx, args)
 }
 
-func (a *Activities) FetchPendingOutboxEvents(ctx context.Context, events outbox_relay.FetchEventArgs) (outbox_relay.FetchEventsResult, error) {
-	result, err := a.outboxRelay.FetchEvents(ctx, events)
-	if err != nil {
-		return outbox_relay.FetchEventsResult{}, fmt.Errorf("fetch pending outbox events: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) FilterNoopOutboxEvents(ctx context.Context, events []*outbox_relay.Event) ([]*outbox_relay.Event, error) {
-	result, err := a.outboxRelay.FilterNoopEvents(ctx, events)
-	if err != nil {
-		return nil, fmt.Errorf("mark outbox events noop: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay.Event) error {
-	if err := a.outboxRelay.RelayEvents(ctx, args); err != nil {
-		return fmt.Errorf("relay outbox events: %w", err)
-	}
-	return nil
-}
-
 // DrainPublishOutbox claims, publishes and settles one batch in a single
 // activity. Keeping it fused is deliberate: splitting claim from publish would
 // put message bodies into workflow history.
@@ -961,14 +945,6 @@ func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, bat
 	n, err := a.killswitchMaintenance.CleanupExpiredOperationsGlobal(ctx, batchSize)
 	if err != nil {
 		return n, fmt.Errorf("cleanup expired killswitch operations: %w", err)
-	}
-	return n, nil
-}
-
-func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
-	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
-	if err != nil {
-		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
 	}
 	return n, nil
 }

@@ -21,6 +21,8 @@ type Endpoints struct {
 	UpdateRemoteSessionClient goa.Endpoint
 	AttachUserSessionIssuer   goa.Endpoint
 	DetachUserSessionIssuer   goa.Endpoint
+	AttachKeySet              goa.Endpoint
+	DetachKeySet              goa.Endpoint
 	ListRemoteSessionClients  goa.Endpoint
 	GetRemoteSessionClient    goa.Endpoint
 	DeleteRemoteSessionClient goa.Endpoint
@@ -37,6 +39,8 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
 		AttachUserSessionIssuer:   NewAttachUserSessionIssuerEndpoint(s, a.APIKeyAuth),
 		DetachUserSessionIssuer:   NewDetachUserSessionIssuerEndpoint(s, a.APIKeyAuth),
+		AttachKeySet:              NewAttachKeySetEndpoint(s, a.APIKeyAuth),
+		DetachKeySet:              NewDetachKeySetEndpoint(s, a.APIKeyAuth),
 		ListRemoteSessionClients:  NewListRemoteSessionClientsEndpoint(s, a.APIKeyAuth),
 		GetRemoteSessionClient:    NewGetRemoteSessionClientEndpoint(s, a.APIKeyAuth),
 		DeleteRemoteSessionClient: NewDeleteRemoteSessionClientEndpoint(s, a.APIKeyAuth),
@@ -51,6 +55,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateRemoteSessionClient = m(e.UpdateRemoteSessionClient)
 	e.AttachUserSessionIssuer = m(e.AttachUserSessionIssuer)
 	e.DetachUserSessionIssuer = m(e.DetachUserSessionIssuer)
+	e.AttachKeySet = m(e.AttachKeySet)
+	e.DetachKeySet = m(e.DetachKeySet)
 	e.ListRemoteSessionClients = m(e.ListRemoteSessionClients)
 	e.GetRemoteSessionClient = m(e.GetRemoteSessionClient)
 	e.DeleteRemoteSessionClient = m(e.DeleteRemoteSessionClient)
@@ -348,6 +354,124 @@ func NewDetachUserSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		return s.DetachUserSessionIssuer(ctx, p)
+	}
+}
+
+// NewAttachKeySetEndpoint returns an endpoint function that calls the method
+// "attachKeySet" of service "remoteSessionClients".
+func NewAttachKeySetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AttachKeySetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AttachKeySet(ctx, p)
+	}
+}
+
+// NewDetachKeySetEndpoint returns an endpoint function that calls the method
+// "detachKeySet" of service "remoteSessionClients".
+func NewDetachKeySetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DetachKeySetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DetachKeySet(ctx, p)
 	}
 }
 

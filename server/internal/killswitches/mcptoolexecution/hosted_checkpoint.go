@@ -1,0 +1,131 @@
+package mcptoolexecution
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+)
+
+const hostedEvaluatorTimeout = 2 * time.Second
+
+// HostedCheckpoint authoritatively evaluates the M2 kill switch before hosted
+// tools/call configuration or execution work begins.
+type HostedCheckpoint struct {
+	principal     killswitches.PrincipalAdapter
+	resource      killswitches.ResourceAdapter
+	evaluator     *killswitches.Evaluator
+	transport     killswitches.TransportAdapter
+	failurePolicy killswitches.FailurePolicy
+	recorder      IdentityCoverageRecorder
+	logger        *slog.Logger
+}
+
+// NewHostedCheckpoint builds the production checkpoint from the registered M2
+// contracts and the authoritative PostgreSQL evaluator.
+func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *slog.Logger, recorder IdentityCoverageRecorder) (*HostedCheckpoint, error) {
+	registry, err := NewRegistry(db)
+	if err != nil {
+		return nil, err
+	}
+
+	coverage, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
+	if !ok {
+		return nil, errors.New("hosted tools/call coverage contract is not registered")
+	}
+	principal, ok := registry.PrincipalAdapter(PrincipalKindUser)
+	if !ok {
+		return nil, errors.New("authenticated user principal adapter is not registered")
+	}
+	resource, ok := registry.ResourceAdapter(ResourceKindMCPServer)
+	if !ok {
+		return nil, errors.New("mcp server resource adapter is not registered")
+	}
+	transport, ok := registry.TransportAdapter(coverage.TransportAdapter)
+	if !ok {
+		return nil, errors.New("hosted MCP JSON-RPC transport adapter is not registered")
+	}
+
+	eval, err := killswitches.NewEvaluator(db, registry, hostedEvaluatorTimeout, meterProvider, logger)
+	if err != nil {
+		return nil, fmt.Errorf("construct evaluator: %w", err)
+	}
+
+	return &HostedCheckpoint{
+		principal:     principal,
+		resource:      resource,
+		evaluator:     eval,
+		transport:     transport,
+		failurePolicy: coverage.FailurePolicy,
+		recorder:      recorder,
+		logger:        logger,
+	}, nil
+}
+
+// Evaluate revalidates principal membership and server ownership on every call.
+// Unsupported identities and resources remain outside M2 and continue unchanged.
+func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, resourceSource ServerSource) (killswitches.TransportDisposition, error) {
+	organization := killswitches.OrganizationID(organizationID)
+	evaluationCtx, cancel := context.WithTimeout(ctx, hostedEvaluatorTimeout)
+	defer cancel()
+
+	derivation := deriveCoverage(evaluationCtx, organization, c.principal, c.resource, resourceSource)
+	derivation.record(ctx, c.recorder, mcpmetrics.KillswitchSurfaceHosted)
+
+	if derivation.principalErr != nil {
+		return c.infrastructureRejection(ctx, derivation.principalErr)
+	}
+	if derivation.resourceErr != nil {
+		return c.infrastructureRejection(ctx, derivation.resourceErr)
+	}
+
+	resourceKey, supported, err := derivation.resourceResult.Key()
+	if err != nil {
+		return c.infrastructureRejection(ctx, err)
+	}
+	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
+		return c.noMatch(killswitches.NoMatchReasonUnsupportedIdentity)
+	}
+	if !supported {
+		return c.noMatch(killswitches.NoMatchReasonUnsupportedResource)
+	}
+
+	result := c.evaluator.Evaluate(evaluationCtx, killswitches.EvaluationRequest{
+		OrganizationID:      organization,
+		DefinitionKeys:      []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution},
+		PrincipalCandidates: derivation.principalResult.Candidates(),
+		ResourceKind:        ResourceKindMCPServer,
+		ResourceKey:         resourceKey,
+	})
+	if cause := result.InfrastructureError(); cause != nil && c.logger != nil {
+		c.logger.ErrorContext(ctx, "hosted MCP kill-switch evaluation unavailable", attr.SlogError(cause))
+	}
+	return c.transport(result, c.failurePolicy)
+}
+
+func (c *HostedCheckpoint) noMatch(reason killswitches.NoMatchReason) (killswitches.TransportDisposition, error) {
+	result, err := killswitches.NewNoMatchResult(reason)
+	if err != nil {
+		return killswitches.TransportDisposition{}, fmt.Errorf("construct no-match result: %w", err)
+	}
+	return c.transport(result, c.failurePolicy)
+}
+
+func (c *HostedCheckpoint) infrastructureRejection(ctx context.Context, cause error) (killswitches.TransportDisposition, error) {
+	if c.logger != nil {
+		c.logger.ErrorContext(ctx, "hosted MCP kill-switch checkpoint unavailable", attr.SlogError(cause))
+	}
+	result, err := killswitches.NewInfrastructureFailureResult(cause)
+	if err != nil {
+		return killswitches.TransportDisposition{}, fmt.Errorf("construct infrastructure-failure result: %w", err)
+	}
+	return c.transport(result, c.failurePolicy)
+}

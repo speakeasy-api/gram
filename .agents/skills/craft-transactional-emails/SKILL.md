@@ -326,8 +326,8 @@ visual direction.
 Run repository tooling, never bare `go`, `npm`, or `npx`:
 
 ```bash
-mise exec -- go run ./server/cmd/sync-loops-email-templates --validate-only
-mise run test:server ./internal/email/... ./cmd/sync-loops-email-templates
+./server/internal/email/loops/sync.sh --validate-only
+mise run test:server ./internal/email/...
 mise lint:server
 git diff --check
 ```

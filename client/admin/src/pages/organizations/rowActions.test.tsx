@@ -129,6 +129,8 @@ describe("audited organization lifecycle mutations", () => {
         defaultOptions: { queries: { retry: false } },
       });
       const activity = organizationActivityQuery(DEMOTED_ORG.id);
+      const detail = organizationQuery(DEMOTED_ORG.slug);
+      qc.setQueryData(detail.queryKey, DEMOTED_ORG);
       qc.setQueryData(activity.queryKey, {
         pages: [{ logs: [] }],
         pageParams: [undefined],
@@ -162,6 +164,7 @@ describe("audited organization lifecycle mutations", () => {
         expect(result.current[action].isSuccess).toBe(true);
       });
       expect(qc.getQueryState(activity.queryKey)?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(detail.queryKey)?.isInvalidated).toBe(true);
     },
   );
 });

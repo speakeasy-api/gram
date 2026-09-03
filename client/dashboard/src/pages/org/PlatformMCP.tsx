@@ -1139,24 +1139,26 @@ function PlatformMCPAgentPickerSheet({
           </SheetDescription>
         </SheetHeader>
         <PlatformMCPProgress step={1} />
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <p className="text-eyebrow">Step 1</p>
-          <h2 className="text-display-xs mt-1 font-thin">Choose an agent</h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Pick the coding agent you&apos;re setting up. The next step will
-            show the installation methods available for that agent.
-          </p>
-          <div className="mt-5 space-y-2">
-            {clients.map((client) => (
-              <AgentPlatformPickerItem
-                key={client.id}
-                platformId={client.id.replaceAll("_", "-")}
-                name={client.label}
-                description={client.description}
-                disabled={isMutating}
-                onClick={() => onSelect(client)}
-              />
-            ))}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 pt-6 pb-10">
+            <p className="text-eyebrow">Step 1</p>
+            <h2 className="text-display-xs mt-1 font-thin">Choose an agent</h2>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Pick the coding agent you&apos;re setting up. The next step will
+              show the installation methods available for that agent.
+            </p>
+            <div className="mt-5 space-y-2">
+              {clients.map((client) => (
+                <AgentPlatformPickerItem
+                  key={client.id}
+                  platformId={client.id.replaceAll("_", "-")}
+                  name={client.label}
+                  description={client.description}
+                  disabled={isMutating}
+                  onClick={() => onSelect(client)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </SheetContent>
@@ -1224,35 +1226,37 @@ function PlatformMCPInstallMethodSheet({
           </SheetDescription>
         </SheetHeader>
         <PlatformMCPProgress step={2} />
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <p className="text-eyebrow">Step 2</p>
-          <h2 className="text-display-xs mt-1 font-thin">
-            Choose an install method
-          </h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Install Platform MCP for your {client.label} account. Installation
-            never grants access by itself; you&apos;ll authorize in the
-            following step.
-          </p>
-          <div className="mt-5 space-y-2">
-            {methods.map((method) => (
-              <button
-                key={method.id}
-                type="button"
-                onClick={() => onSelect(method.id)}
-                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
-              >
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-foreground text-sm font-medium">
-                    {method.title}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {method.description}
-                  </p>
-                </div>
-                <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
-              </button>
-            ))}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 pt-6 pb-10">
+            <p className="text-eyebrow">Step 2</p>
+            <h2 className="text-display-xs mt-1 font-thin">
+              Choose an install method
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Install Platform MCP for your {client.label} account. Installation
+              never grants access by itself; you&apos;ll authorize in the
+              following step.
+            </p>
+            <div className="mt-5 space-y-2">
+              {methods.map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  onClick={() => onSelect(method.id)}
+                  className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-foreground text-sm font-medium">
+                      {method.title}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {method.description}
+                    </p>
+                  </div>
+                  <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <SheetFooter className="border-border border-t px-6 py-4">
@@ -1612,19 +1616,21 @@ function PlatformMCPSetupSheet({
             {SETUP_TOTAL_STEP_COUNT}
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <p className="text-eyebrow">
-            Step {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
-            {currentStep.complete && (
-              <Badge variant="success" size="sm">
-                Complete
-              </Badge>
-            )}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 pt-6 pb-10">
+            <p className="text-eyebrow">
+              Step {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
+              {currentStep.complete && (
+                <Badge variant="success" size="sm">
+                  Complete
+                </Badge>
+              )}
+            </div>
+            <div className="mt-5 space-y-5">{showStep()}</div>
           </div>
-          <div className="mt-5 space-y-5">{showStep()}</div>
         </div>
         <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
           <Button

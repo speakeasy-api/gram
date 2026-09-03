@@ -51,6 +51,16 @@ func isSkippedRequestHeader(name string) bool {
 		"proxy-authenticate",
 		"proxy-authorization",
 		"referer",
+		// Sec-Fetch-* describe the dashboard's own fetch, not the caller's
+		// intent toward the upstream, and are dropped for the same reason as
+		// Origin above. Forwarding them is doubly wrong now that Gram enforces
+		// the same protection inbound: "cross-site" 403s any upstream running
+		// net/http.CrossOriginProtection, while "same-origin" would falsely
+		// satisfy that upstream's check on Gram's behalf.
+		"sec-fetch-dest",
+		"sec-fetch-mode",
+		"sec-fetch-site",
+		"sec-fetch-user",
 		"te",
 		"trailer",
 		"transfer-encoding",

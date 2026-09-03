@@ -79,6 +79,7 @@ func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListU
 
 	rows, err := queries.ListUserSessionClientsByProjectID(ctx, repo.ListUserSessionClientsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerFilter,
 		Cursor:              cursor,
 		LimitValue:          limit,
@@ -133,8 +134,9 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 	queries := repo.New(s.db)
 
 	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -212,8 +214,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	// and audit entry need, through the same project-scoped read the get
 	// endpoint uses. The mutations below carry their own project guard too.
 	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -233,8 +236,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	// where de-listing a client stops new authorize flows without breaking
 	// its existing rows. An unrecognized stored mode fails closed.
 	issuer, err := queries.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:        row.UserSessionIssuerID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             row.UserSessionIssuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -273,8 +277,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	txRepo := repo.New(dbtx)
 
 	if _, err := txRepo.PurgeUserSessionClientCIMDCache(ctx, repo.PurgeUserSessionClientCIMDCacheParams{
-		ID:        row.ID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             row.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The row stopped being a live CIMD row between the read above and
@@ -343,6 +348,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
 		ID:                      row.ID,
 		ProjectID:               *authCtx.ProjectID,
+		OrganizationID:          authCtx.ActiveOrganizationID,
 		ClientName:              result.Document.ClientName,
 		RedirectUris:            result.Document.RedirectURIs,
 		CacheTtlSeconds:         result.TTL.Seconds(),
@@ -397,8 +403,9 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeUserSessionClient(ctx, repo.RevokeUserSessionClientParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

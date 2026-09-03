@@ -2,6 +2,7 @@
 
 #MISE description="Seed the local development organization (data + your user, API key)"
 #MISE dir="{{ config_root }}"
+#MISE depends=["ensure-stack"]
 
 set -euo pipefail
 

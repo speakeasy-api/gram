@@ -133,12 +133,31 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -323,8 +342,9 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	}
 }
 
-// ListMembers follows the original access API contract by returning WorkOS user
-// identifiers while decorating them with the role information the UI needs.
+// ListMembers returns the active organization's members. Organization readers
+// use it for access management; project readers use the same roster for the
+// Employee Enrollment surface.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -340,12 +360,31 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -774,6 +813,14 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: a caller that sends neither
+	// bound still gets the whole history, which is what every existing caller
+	// of this endpoint expects.
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		ChallengeFilters: chrepo.ChallengeFilters{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -783,6 +830,8 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			Scope:          payload.Scope,
 			MemberUserIDs:  memberIDs,
 		},
+		From:           from,
+		To:             to,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,

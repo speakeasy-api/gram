@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import {
   EvidenceGroup,
   EvidencePanel,
@@ -358,9 +359,12 @@ function Requesters({
           {requesters.map((requester) => (
             <li key={requester.userId} className="px-3 py-1.5 text-xs">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-medium">
+                <IdentityLink
+                  identifier={{ userId: requester.userId }}
+                  className="truncate font-medium"
+                >
                   {requester.userEmail ?? requester.userId}
-                </span>
+                </IdentityLink>
                 <span className="text-muted-foreground shrink-0 text-xs">
                   <HumanizeDateTime
                     date={requester.requestedAt}

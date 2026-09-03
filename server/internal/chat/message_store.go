@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
@@ -29,6 +30,63 @@ import (
 
 // ErrChatNotInProject indicates that a chat is absent or owned by another project.
 var ErrChatNotInProject = errors.New("chat does not belong to project")
+
+// MessageWrite pairs persisted native message parameters with producer-only provenance.
+type MessageWrite struct {
+	// Params contains the SQLc parameters persisted for the message.
+	Params repo.CreateChatMessageParams
+
+	// BillingUserID is the Gram user to whom this feature explicitly allocates usage.
+	BillingUserID string
+
+	// AssistantID identifies the assistant responsible for this workload when applicable.
+	AssistantID uuid.UUID
+
+	// WorkloadSource identifies the product path responsible for this workload.
+	WorkloadSource metering.WorkloadSource
+
+	// UserEmail is the email explicitly observed for the message actor.
+	UserEmail string
+
+	// Provider is the AI provider explicitly reported by ingestion.
+	Provider string
+
+	// HookHostname is the device hostname explicitly reported by hook ingestion.
+	HookHostname string
+
+	// AccountType is the AI account classification reported for the session.
+	AccountType string
+
+	// BillingMode is the AI account billing mode resolved for the session.
+	BillingMode string
+}
+
+// ExternalMessageWrite pairs persisted imported message parameters with producer-only provenance.
+type ExternalMessageWrite struct {
+	// Params contains the SQLc parameters persisted for the imported message.
+	Params repo.CreateExternalChatMessageParams
+
+	// BillingUserID is the Gram user to whom this import explicitly allocates usage.
+	BillingUserID string
+
+	// WorkloadSource identifies the product path responsible for this imported workload.
+	WorkloadSource metering.WorkloadSource
+
+	// UserEmail is the email explicitly observed for the imported message actor.
+	UserEmail string
+
+	// Provider is the AI provider explicitly reported by ingestion.
+	Provider string
+
+	// HookHostname is the device hostname explicitly reported by hook ingestion.
+	HookHostname string
+
+	// AccountType is the AI account classification reported for the imported session.
+	AccountType string
+
+	// BillingMode is the AI account billing mode declared for the import.
+	BillingMode string
+}
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and notifies observers after a successful
@@ -152,18 +210,19 @@ func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectI
 // The batch insert uses COPY FROM, which cannot return database-generated ids.
 // It also assigns a shared write-time created_at when the caller provides no
 // source timestamp; explicit timestamps preserve source-event ordering.
-func stampMessageFields(params []repo.CreateChatMessageParams, writeTime time.Time) error {
+func stampMessageFields(writes []MessageWrite, writeTime time.Time) error {
 	createdAt := conv.ToPGTimestamptz(writeTime)
-	for i := range params {
-		if params[i].ID == uuid.Nil {
+	for i := range writes {
+		param := &writes[i].Params
+		if param.ID == uuid.Nil {
 			id, err := uuid.NewV7()
 			if err != nil {
 				return fmt.Errorf("generate chat message id: %w", err)
 			}
-			params[i].ID = id
+			param.ID = id
 		}
-		if !params[i].CreatedAt.Valid {
-			params[i].CreatedAt = createdAt
+		if !param.CreatedAt.Valid {
+			param.CreatedAt = createdAt
 		}
 	}
 	return nil
@@ -208,18 +267,42 @@ func extractMeteredContent(content string, toolCalls []byte) ([]string, error) {
 	return parts, nil
 }
 
+type meterMessageInput struct {
+	organizationID        string
+	projectID             uuid.UUID
+	messageID             uuid.UUID
+	chatID                uuid.UUID
+	content               string
+	toolCalls             []byte
+	model                 pgtype.Text
+	provider              string
+	source                pgtype.Text
+	hookHostname          string
+	accountType           string
+	billingMode           string
+	billingUserID         string
+	assistantID           uuid.UUID
+	workloadSource        metering.WorkloadSource
+	messageUserID         pgtype.Text
+	messageExternalUserID pgtype.Text
+	messageUserEmail      string
+	occurredAt            time.Time
+}
+
+func setReadingAttribute(attributes *map[string]string, key string, value string) {
+	if value == "" {
+		return
+	}
+	if *attributes == nil {
+		*attributes = make(map[string]string)
+	}
+	(*attributes)[key] = value
+}
+
 // meterMessage measures one durable message and returns its project-scoped
 // storage usage keyed by the message UUID. A zero-token message emits no reading.
-func (w *ChatMessageWriter) meterMessage(
-	ctx context.Context,
-	organizationID string,
-	projectID uuid.UUID,
-	messageID uuid.UUID,
-	content string,
-	toolCalls []byte,
-	occurredAt time.Time,
-) ([]metering.Reading, error) {
-	contentParts, err := extractMeteredContent(content, toolCalls)
+func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessageInput) ([]metering.Reading, error) {
+	contentParts, err := extractMeteredContent(input.content, input.toolCalls)
 	if err != nil {
 		return nil, fmt.Errorf("extract stored chat message content: %w", err)
 	}
@@ -231,15 +314,42 @@ func (w *ChatMessageWriter) meterMessage(
 		return nil, nil
 	}
 
+	var attributes map[string]string
+	if input.chatID != uuid.Nil {
+		setReadingAttribute(&attributes, metering.AttributeChatID, input.chatID.String())
+	}
+	if input.model.Valid {
+		setReadingAttribute(&attributes, metering.AttributeModel, input.model.String)
+	}
+	setReadingAttribute(&attributes, metering.AttributeProvider, input.provider)
+	if input.source.Valid {
+		setReadingAttribute(&attributes, metering.AttributeHookSource, CanonicalSource(input.source.String))
+	}
+	setReadingAttribute(&attributes, metering.AttributeHookHostname, input.hookHostname)
+	setReadingAttribute(&attributes, metering.AttributeAccountType, input.accountType)
+	setReadingAttribute(&attributes, metering.AttributeBillingMode, input.billingMode)
+	if input.assistantID != uuid.Nil {
+		setReadingAttribute(&attributes, metering.AttributeAssistantID, input.assistantID.String())
+	}
+	setReadingAttribute(&attributes, metering.AttributeWorkloadSource, string(input.workloadSource))
+	setReadingAttribute(&attributes, metering.AttributeBillingUserID, input.billingUserID)
+	if input.messageUserID.Valid {
+		setReadingAttribute(&attributes, metering.AttributeMessageUserID, input.messageUserID.String)
+	}
+	if input.messageExternalUserID.Valid {
+		setReadingAttribute(&attributes, metering.AttributeMessageExternalUserID, input.messageExternalUserID.String)
+	}
+	setReadingAttribute(&attributes, metering.AttributeMessageUserEmail, input.messageUserEmail)
+
 	reading, err := metering.NewUsage(metering.UsageInput{
 		Meter:       metering.AgentSessionStorage(),
-		Scope:       metering.ProjectScope(organizationID, projectID),
-		OperationID: "chat_message:" + messageID.String(),
+		Scope:       metering.ProjectScope(input.organizationID, input.projectID),
+		OperationID: "chat_message:" + input.messageID.String(),
 		Value:       int64(count),
-		OccurredAt:  occurredAt,
-		ProducedAt:  occurredAt,
+		OccurredAt:  input.occurredAt,
+		ProducedAt:  input.occurredAt,
 		Source:      "chat_message_writer",
-		Attributes:  nil,
+		Attributes:  attributes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create chat storage reading: %w", err)
@@ -254,23 +364,36 @@ func (w *ChatMessageWriter) meterMessages(
 	logger *slog.Logger,
 	organizationID string,
 	projectID uuid.UUID,
-	params []repo.CreateChatMessageParams,
+	writes []MessageWrite,
 	occurredAt time.Time,
 ) ([]metering.Reading, error) {
-	readings := make([]metering.Reading, 0, len(params))
-	for _, param := range params {
+	readings := make([]metering.Reading, 0, len(writes))
+	for _, write := range writes {
+		param := write.Params
 		if param.ProjectID != projectID {
 			return nil, fmt.Errorf("chat message project id does not match writer project")
 		}
-		rowReadings, err := w.meterMessage(
-			ctx,
-			organizationID,
-			projectID,
-			param.ID,
-			param.Content,
-			param.ToolCalls,
-			occurredAt,
-		)
+		rowReadings, err := w.meterMessage(ctx, meterMessageInput{
+			organizationID:        organizationID,
+			projectID:             projectID,
+			messageID:             param.ID,
+			chatID:                param.ChatID,
+			content:               param.Content,
+			toolCalls:             param.ToolCalls,
+			model:                 param.Model,
+			provider:              write.Provider,
+			source:                param.Source,
+			hookHostname:          write.HookHostname,
+			accountType:           write.AccountType,
+			billingMode:           write.BillingMode,
+			billingUserID:         write.BillingUserID,
+			assistantID:           write.AssistantID,
+			workloadSource:        write.WorkloadSource,
+			messageUserID:         param.UserID,
+			messageExternalUserID: param.ExternalUserID,
+			messageUserEmail:      write.UserEmail,
+			occurredAt:            occurredAt,
+		})
 		if err != nil {
 			logger.ErrorContext(ctx, "generate chat message storage reading",
 				attr.SlogError(err),
@@ -304,6 +427,14 @@ func requireChatProject(ctx context.Context, db repo.DBTX, chatID uuid.UUID, pro
 	return nil
 }
 
+func messageWriteParams(writes []MessageWrite) []repo.CreateChatMessageParams {
+	params := make([]repo.CreateChatMessageParams, len(writes))
+	for i := range writes {
+		params[i] = writes[i].Params
+	}
+	return params
+}
+
 func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
 	if len(params) == 0 {
 		return 0, nil
@@ -329,46 +460,47 @@ func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateC
 	return n, nil
 }
 
-func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
-	if len(params) == 0 {
-		return 0, nil
+func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) (int64, []repo.CreateChatMessageParams, error) {
+	if len(writes) == 0 {
+		return 0, nil, nil
 	}
 
 	occurredAt := time.Now().UTC()
-	if err := stampMessageFields(params, occurredAt); err != nil {
-		return 0, err
+	if err := stampMessageFields(writes, occurredAt); err != nil {
+		return 0, nil, err
 	}
 	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
 	if err != nil {
-		return 0, fmt.Errorf("get project organization id: %w", err)
+		return 0, nil, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
+	params := messageWriteParams(writes)
 
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("begin chat message transaction: %w", err)
+		return 0, nil, fmt.Errorf("begin chat message transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	n, err := insertChatMessages(ctx, tx, params)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
-		return 0, fmt.Errorf("enqueue chat message readings: %w", err)
+		return 0, nil, fmt.Errorf("enqueue chat message readings: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit chat message transaction: %w", err)
+		return 0, nil, fmt.Errorf("commit chat message transaction: %w", err)
 	}
-	return n, nil
+	return n, params, nil
 }
 
 // Write inserts messages via the pool and notifies observers on success.
-func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
-	n, err := w.writeMessages(ctx, projectID, params)
+func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) (int64, error) {
+	n, params, err := w.writeMessages(ctx, projectID, writes)
 	if err != nil {
 		return 0, err
 	}
@@ -381,21 +513,18 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 
 // WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
 // observation of the same turn to the authoritative native-hook source.
-func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, param repo.CreateChatMessageParams, externalMessageID string) (int64, error) {
+func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, write MessageWrite, externalMessageID string) (int64, error) {
 	occurredAt := time.Now().UTC()
-	params := []repo.CreateChatMessageParams{param}
-	if err := stampMessageFields(params, occurredAt); err != nil {
+	writes := []MessageWrite{write}
+	if err := stampMessageFields(writes, occurredAt); err != nil {
 		return 0, err
 	}
-	param = params[0]
+	write = writes[0]
+	param := write.Params
 
 	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
-	}
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
-	if err != nil {
-		return 0, err
 	}
 
 	tx, err := w.db.Begin(ctx)
@@ -408,7 +537,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, err
 	}
 
-	storedID, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
+	stored, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
 		Role:              param.Role,
@@ -443,10 +572,19 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
-	if storedID == param.ID {
-		if err := metering.Enqueue(ctx, tx, readings); err != nil {
-			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
-		}
+	writes[0].Params.ID = stored.ID
+	writes[0].Params.Content = stored.Content
+	writes[0].Params.ToolCalls = stored.ToolCalls
+	writes[0].Params.Model = stored.Model
+	writes[0].Params.UserID = stored.UserID
+	writes[0].Params.ExternalUserID = stored.ExternalUserID
+	writes[0].Params.Source = stored.Source
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
+	if err != nil {
+		return 0, err
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)
@@ -458,8 +596,8 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 
 // WriteExternal inserts imported provider messages idempotently and notifies
 // observers when at least one new row is stored.
-func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, params []repo.CreateExternalChatMessageParams) (int64, error) {
-	if len(params) == 0 {
+func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite) (int64, error) {
+	if len(writes) == 0 {
 		return 0, nil
 	}
 
@@ -471,8 +609,9 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 	createdAt := conv.ToPGTimestamptz(occurredAt)
 
 	var total int64
-	for i := range params {
-		param := &params[i]
+	for i := range writes {
+		write := &writes[i]
+		param := &write.Params
 		if param.ProjectID != projectID {
 			return total, fmt.Errorf("external chat message project id does not match writer project")
 		}
@@ -485,15 +624,27 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
-		readings, err := w.meterMessage(
-			ctx,
-			organizationID,
-			projectID,
-			param.ID,
-			param.Content,
-			param.ToolCalls,
-			occurredAt,
-		)
+		readings, err := w.meterMessage(ctx, meterMessageInput{
+			organizationID:        organizationID,
+			projectID:             projectID,
+			messageID:             param.ID,
+			chatID:                param.ChatID,
+			content:               param.Content,
+			toolCalls:             param.ToolCalls,
+			model:                 param.Model,
+			provider:              write.Provider,
+			source:                param.Source,
+			hookHostname:          write.HookHostname,
+			accountType:           write.AccountType,
+			billingMode:           write.BillingMode,
+			billingUserID:         write.BillingUserID,
+			assistantID:           uuid.Nil,
+			workloadSource:        write.WorkloadSource,
+			messageUserID:         param.UserID,
+			messageExternalUserID: param.ExternalUserID,
+			messageUserEmail:      write.UserEmail,
+			occurredAt:            occurredAt,
+		})
 		if err != nil {
 			w.logger.ErrorContext(ctx, "generate external chat message storage reading",
 				attr.SlogError(err),
@@ -544,26 +695,26 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 // commit so observers never see a write that ended up rolled back. Use when the
 // write must be atomic with surrounding DB operations (e.g. a row-level lock
 // for generation serialisation).
-func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
-	if len(params) == 0 {
+func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes []MessageWrite) (int64, error) {
+	if len(writes) == 0 {
 		return 0, nil
 	}
 
 	occurredAt := time.Now().UTC()
-	if err := stampMessageFields(params, occurredAt); err != nil {
+	if err := stampMessageFields(writes, occurredAt); err != nil {
 		return 0, err
 	}
-	projectID := params[0].ProjectID
+	projectID := writes[0].Params.ProjectID
 	organizationID, err := repo.New(tx).GetProjectOrganizationID(ctx, projectID)
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
 	if err != nil {
 		return 0, err
 	}
 
-	n, err := insertChatMessages(ctx, tx, params)
+	n, err := insertChatMessages(ctx, tx, messageWriteParams(writes))
 	if err != nil {
 		return 0, err
 	}
@@ -580,8 +731,8 @@ func (w *ChatMessageWriter) NotifyStored(ctx context.Context, projectID uuid.UUI
 }
 
 // NotifyStoredRows publishes rows inserted through WriteInTx after commit.
-func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) {
-	w.publishTurnFrames(ctx, nil, params)
+func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) {
+	w.publishTurnFrames(ctx, nil, messageWriteParams(writes))
 	w.notifyMessagesStored(ctx, projectID)
 }
 
@@ -590,17 +741,17 @@ func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid
 // Observers are notified after commit if anything was stored. A partial write
 // would orphan the assistant row and force divergence detection to open a new
 // generation on the next turn, so atomicity is required.
-func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []MessageWrite) error {
 	if len(pending) == 0 && len(assistants) == 0 {
 		return nil
 	}
 
-	pendingParams, err := prepareMessages(ctx, w.logger, w.assetStorage, pending)
+	pendingWrites, err := prepareMessages(ctx, w.logger, w.assetStorage, pending)
 	if err != nil {
 		return fmt.Errorf("prepare pending chat messages: %w", err)
 	}
 	occurredAt := time.Now().UTC()
-	if err := stampMessageFields(pendingParams, occurredAt); err != nil {
+	if err := stampMessageFields(pendingWrites, occurredAt); err != nil {
 		return err
 	}
 	if err := stampMessageFields(assistants, occurredAt); err != nil {
@@ -610,7 +761,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("get project organization id: %w", err)
 	}
-	pendingReadings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, pendingParams, occurredAt)
+	pendingReadings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, pendingWrites, occurredAt)
 	if err != nil {
 		return err
 	}
@@ -620,6 +771,8 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 	readings := pendingReadings
 	readings = append(readings, assistantReadings...)
+	pendingParams := messageWriteParams(pendingWrites)
+	assistantParams := messageWriteParams(assistants)
 
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
@@ -631,7 +784,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("store pending chat messages: %w", err)
 	}
-	assistantCount, err := insertChatMessages(ctx, tx, assistants)
+	assistantCount, err := insertChatMessages(ctx, tx, assistantParams)
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)
 	}
@@ -645,7 +798,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if pendingCount+assistantCount > 0 {
 		// After commit: a frame announces a row that exists, so a rolled-back
 		// turn never announces itself.
-		w.publishTurnFrames(ctx, pending, assistants)
+		w.publishTurnFrames(ctx, pending, assistantParams)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil
@@ -659,11 +812,11 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if len(rows) == 0 {
 		return nil
 	}
-	params, err := prepareMessages(ctx, w.logger, w.assetStorage, rows)
+	writes, err := prepareMessages(ctx, w.logger, w.assetStorage, rows)
 	if err != nil {
 		return err
 	}
-	n, err := w.writeMessages(ctx, projectID, params)
+	n, _, err := w.writeMessages(ctx, projectID, writes)
 	if err != nil {
 		return err
 	}

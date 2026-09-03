@@ -58,6 +58,14 @@ type Service interface {
 	// be able to report moves. Fire-and-forget from the agent's perspective: the
 	// daemon must never fail a move because this call failed.
 	ReportSessionMoved(context.Context, *ReportSessionMovedPayload) (err error)
+	// Report the result of a device-agent AI scan: which AI tools from the agent's
+	// compiled-in target list were found installed or running on the device. A
+	// scan with zero matches still reports, so organizations can prove a device
+	// was scanned and came back clean. Accepts both the per-user key and the org
+	// install key (with a vouched email), mirroring getPlugins, because fleet
+	// devices must be able to report scans. Fire-and-forget from the agent's
+	// perspective: the daemon must never block on this call.
+	ReportAIScan(context.Context, *ReportAIScanPayload) (err error)
 	// Mint a short-lived capability URL for a rendered session-handoff document
 	// (session portability). The device agent uploads the handoff it rendered from
 	// the local transcript; the returned URL serves the markdown exactly once
@@ -90,7 +98,24 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "createSessionHandoff"}
+var MethodNames = [8]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+
+// One AI detection target a device-agent scan matched.
+type AIScanMatch struct {
+	// Identifier of the matched target from the agent's compiled-in list (e.g.
+	// claude-code, ollama). Stored as reported: an agent binary can ship a newer
+	// target list than the server catalog knows.
+	TargetID string
+	// Target category the agent scanned under: harness or local_model. The server
+	// catalog's category wins for targets it knows; this is what gets stored for
+	// the rest.
+	Category string
+	// What the scan observed: installed or running.
+	Signal string
+	// Installed version, when the scan could read one statically (e.g. from the
+	// app bundle's Info.plist).
+	Version *string
+}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -253,6 +278,32 @@ type ListSyncedUsersResult struct {
 	Users []*SyncedAgentUser
 }
 
+// ReportAIScanPayload is the payload type of the agent service reportAIScan
+// method.
+type ReportAIScanPayload struct {
+	ApikeyToken *string
+	// When the agent started the scan.
+	ScanStartedAt string
+	// When the agent completed the scan.
+	ScanCompletedAt string
+	// Version of the target list compiled into the agent binary that ran the scan.
+	// Echoed into the scan receipt as reported.
+	TargetListVersion int
+	// Detection targets the scan matched. Empty when the device came back clean;
+	// the report still lands as a scan receipt.
+	Matches []*AIScanMatch
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key (the
+	// MDM zero-touch path); ignored for a per-user key, whose owner is the
+	// enrolled user.
+	Email *string
+	// Hardware serial number of the machine that was scanned, when the agent can
+	// read it.
+	SerialNumber *string
+	// Hostname of the machine that was scanned, when the agent can read it.
+	Hostname *string
+}
+
 // ReportSessionMovedPayload is the payload type of the agent service
 // reportSessionMoved method.
 type ReportSessionMovedPayload struct {
@@ -297,10 +348,10 @@ type SyncedAgentUser struct {
 type UpdateConfigurationPayload struct {
 	SessionToken *string
 	// Shareable device-agent settings. Supported keys include platforms,
-	// update_channel, auto_update, pinned_target, blocked_versions, and
-	// sync_interval_seconds. update_channel and blocked_versions can only be set
-	// by Speakeasy platform administrators; per-device identity and secret keys
-	// are forbidden.
+	// update_channel, auto_update, pinned_target, blocked_versions,
+	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
+	// blocked_versions can only be set by Speakeasy platform administrators;
+	// per-device identity and secret keys are forbidden.
 	Config map[string]any
 }
 

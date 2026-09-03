@@ -26,7 +26,7 @@ import (
 // organization.
 
 func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.UploadOrganizationImageForm, reader io.ReadCloser) (*orggen.UploadImageResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close organization image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -54,7 +54,7 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up organization image upload", func() error {
 		return result.cleanup()
 	})
 

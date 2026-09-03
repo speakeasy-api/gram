@@ -27,6 +27,12 @@ interface FilterSheetProps {
   optionsById: OptionsById;
   onChange: (id: string, value: FilterValue) => void;
   onClearAll: () => void;
+  /**
+   * Dimension id -> accent color, the same map the chip row uses. Each control
+   * is labeled with its dimension's square so the sheet and the chips read as
+   * the same set of filters.
+   */
+  accents?: Record<string, string>;
   projectSlug?: string;
   /** Arbitrary attribute filters + a page-supplied builder (e.g. LogFilterBar). */
   customFilters?: ActiveLogFilter[];
@@ -48,6 +54,7 @@ export function FilterSheet({
   optionsById,
   onChange,
   onClearAll,
+  accents,
   projectSlug,
   customFilters,
   onEditCustomFilter,
@@ -99,7 +106,15 @@ export function FilterSheet({
         <div className="flex flex-col gap-4 px-4">
           {schema.map((dim) => (
             <div key={dim.id} className="flex flex-col gap-1.5">
-              <label className="text-foreground text-sm font-medium">
+              <label className="text-foreground flex items-center gap-2 text-sm font-medium">
+                <span
+                  aria-hidden="true"
+                  className="size-2 shrink-0"
+                  style={{
+                    backgroundColor:
+                      accents?.[dim.id] ?? "var(--color-muted-foreground)",
+                  }}
+                />
                 {dim.label}
               </label>
               {dim.description && (

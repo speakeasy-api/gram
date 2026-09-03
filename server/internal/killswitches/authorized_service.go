@@ -56,15 +56,20 @@ type organizationAuthorizer interface {
 // authenticates and authorizes every call before deriving trusted tenancy and
 // actor data. It deliberately has no evaluator dependency.
 type AuthorizedService struct {
-	generic    GenericService
-	authorizer organizationAuthorizer
+	generic        GenericService
+	customerReader customerReadService
+	authorizer     organizationAuthorizer
 }
 
 func NewAuthorizedService(generic GenericService, authorizer organizationAuthorizer) (*AuthorizedService, error) {
 	if isNilInterface(generic) || isNilInterface(authorizer) {
 		return nil, ErrInvalidArgument
 	}
-	return &AuthorizedService{generic: generic, authorizer: authorizer}, nil
+	reader, ok := generic.(customerReadService)
+	if !ok || isNilInterface(reader) {
+		return nil, ErrInvalidArgument
+	}
+	return &AuthorizedService{generic: generic, customerReader: reader, authorizer: authorizer}, nil
 }
 
 func (s *AuthorizedService) ListDefinitions(ctx context.Context) ([]Definition, error) {
@@ -154,10 +159,36 @@ func (s *AuthorizedService) ListPrescriptions(ctx context.Context, request Autho
 	return result, nil
 }
 
+func (s *AuthorizedService) ListCustomerPrescriptions(ctx context.Context, request AuthorizedListCustomerPrescriptionsRequest) (ListCustomerPrescriptionsResult, error) {
+	principal, err := s.requireCustomerAdmin(ctx)
+	if err != nil {
+		return ListCustomerPrescriptionsResult{}, err
+	}
+	result, err := s.customerReader.ListCustomerPrescriptions(ctx, ListCustomerPrescriptionsRequest{
+		OrganizationID: principal.organizationID, Definition: request.Definition, PrincipalKind: request.PrincipalKind,
+		ResourceKind: request.ResourceKind, PrincipalKey: request.PrincipalKey, Status: request.Status,
+		Limit: request.Limit, Cursor: request.Cursor,
+	})
+	if err != nil {
+		return ListCustomerPrescriptionsResult{}, fmt.Errorf("list authorized customer killswitches: %w", err)
+	}
+	return result, nil
+}
+
 type customerPrincipal struct {
 	organizationID OrganizationID
 	userID         string
 	email          string
+}
+
+// CustomerOrganization returns the active organization only after applying
+// the complete ordinary-session organization-admin policy.
+func (s *AuthorizedService) CustomerOrganization(ctx context.Context) (OrganizationID, error) {
+	principal, err := s.requireCustomerAdmin(ctx)
+	if err != nil {
+		return "", err
+	}
+	return principal.organizationID, nil
 }
 
 func (s *AuthorizedService) requireCustomerAdmin(ctx context.Context) (customerPrincipal, error) {

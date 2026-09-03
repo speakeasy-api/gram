@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
     billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
-    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).'
+    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).',
+    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -96,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs 
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry_logs (hook_block_reason) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_meta_mcp_server_id ON telemetry_logs (meta_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
@@ -220,14 +222,16 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- telemetry_logs from attributes.gram.account_type. Only a subset of a
     -- trace's rows carry it (e.g. usage/tool rows), so max() lets a non-empty
     -- value win over empty siblings across part merges, mirroring user_id.
-    -- Kept last so an ALTER ADD COLUMN (which appends) stays positionally aligned
-    -- with this schema and the MV's projection.
     account_type SimpleAggregateFunction(max, String),
     -- AI provider for the account ('anthropic' | 'openai' | 'cursor'),
     -- materialized on telemetry_logs from attributes.gram.provider. Carried (not
     -- a sort key) — a trace is a single session = single account, so provider is
     -- constant within a trace_id; max() keeps a non-empty value over empties.
-    provider SimpleAggregateFunction(max, String)
+    provider SimpleAggregateFunction(max, String),
+    -- Meta MCP server (Gateway Endpoint) the trace was dispatched through,
+    -- materialized on telemetry_logs from attributes.gram.meta_mcp_server.id.
+    -- Carried, not a sort key; max() keeps the non-empty value over empties.
+    meta_mcp_server_id SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -277,7 +281,8 @@ SELECT
     max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block,
     anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
     anyIf(account_type, account_type != '') AS account_type,
-    anyIf(provider, provider != '') AS provider
+    anyIf(provider, provider != '') AS provider,
+    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -299,6 +304,38 @@ COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
 CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
 ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
 TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS ai_detections (
+    organization_id String COMMENT 'Organization the reporting device agent is enrolled in.',
+    target_id LowCardinality(String) COMMENT 'Id of the detected AI tool as reported by the agent. Usually a server/internal/agent/aitargets catalog id, but stored as-is: agent binaries can ship newer target lists than the catalog knows.',
+    device_serial String COMMENT 'Normalized hardware serial of the reporting device. Empty when the agent cannot read one.',
+    user_email String COMMENT 'Normalized email of the enrolled user the scan is attributed to.',
+    signal LowCardinality(String) COMMENT 'Scan observation value validated by application code. Currently installed or running.',
+    category LowCardinality(String) COMMENT 'Detection category validated by application code. Currently harness or local_model. Known targets use the server catalog, while unknown ids keep a supported reported category.',
+    version String COMMENT 'Installed version when the scan could extract one statically. Empty otherwise.',
+    first_seen DateTime64(9, 'UTC') COMMENT 'When this signal was first reported for this org, target, device, user. Preserved across upserts via read-merge-write.',
+    last_seen DateTime64(9, 'UTC') COMMENT 'When this signal was most recently reported.',
+    updated_at DateTime64(9, 'UTC') COMMENT 'Replacing-merge version column. The newest row per key wins.'
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (organization_id, target_id, device_serial, user_email, signal)
+SETTINGS index_granularity = 8192
+COMMENT 'Org-scoped AI tool detections reported by device-agent AI scans - one row per organization, target, device, user, signal';
+
+CREATE TABLE IF NOT EXISTS ai_scan_receipts (
+    organization_id String COMMENT 'Organization the reporting device agent is enrolled in.',
+    device_serial String COMMENT 'Normalized hardware serial of the reporting device. Empty when the agent cannot read one.',
+    user_email String COMMENT 'Normalized email of the enrolled user the scan is attributed to.',
+    scan_started_at DateTime64(9, 'UTC') COMMENT 'When the agent started the scan, as reported.',
+    scan_completed_at DateTime64(9, 'UTC') COMMENT 'When the agent completed the scan, as reported.',
+    target_list_version Int32 COMMENT 'Version of the target list compiled into the agent binary that ran the scan, echoed as reported.',
+    match_count UInt32 COMMENT 'Number of matches reported by the agent. Zero-match scans still post a receipt so coverage is provable.',
+    received_at DateTime64(9, 'UTC') COMMENT 'When the server received the report.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(received_at)
+ORDER BY (organization_id, device_serial, received_at)
+TTL toDateTime(received_at) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Append-only receipts for device-agent AI scans, proving a device scanned even when nothing matched';
 
 CREATE TABLE IF NOT EXISTS metrics_summaries (
     -- Key columns
@@ -582,8 +619,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- admitted. Claude Code and Codex data comes exclusively from their raw OTEL
 -- log streams (Claude api_request / Codex response.completed rows for usage,
 -- Claude tool_result rows for tool calls); Cursor comes from its
--- usage-metrics rows; LiteLLM comes from its normalized model spans; opencode comes from its unified-ingest
--- assistant.responded rows; Codex/Cursor/opencode tool calls arrive as
+-- usage-metrics rows; LiteLLM comes from its normalized model spans; opencode/openclaw come from their unified-ingest
+-- assistant.responded rows; Codex/Cursor/opencode/openclaw tool calls arrive as
 -- completed tool-call hook rows; Claude Chat (web/desktop) usage and cost
 -- arrive as claude_chat:usage / claude_chat:cost rows polled from the Admin
 -- Analytics API. Everything else —
@@ -651,20 +688,24 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode reports per-turn tokens and cost on its unified-ingest
-    -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
-    -- every fallback branch below already reads. It has no OTEL stream and the
-    -- unified ingest path stamps no gram_urn, so provenance anchors on
-    -- hook_source instead. The AfterAgentResponse event guard scopes this to the
-    -- turn-closing row: a session's other opencode rows (thoughts,
-    -- usage.reported, tool calls, session lifecycle) are excluded even if they
-    -- carry gen_ai.usage.* fields, so usage is counted once per turn. Cost is
-    -- part of the guard so a cost-only turn (no token fields) still counts.
+    -- opencode and openclaw report per-turn tokens and cost on their
+    -- unified-ingest assistant.responded rows, under the canonical
+    -- gen_ai.usage.* keys that every fallback branch below already reads.
+    -- Neither has an OTEL stream and the unified ingest path stamps no
+    -- gram_urn, so provenance anchors on hook_source instead. The
+    -- AfterAgentResponse event guard scopes this to the turn-closing row: a
+    -- session's other rows (thoughts, usage.reported, tool calls, session
+    -- lifecycle) are excluded even if they carry gen_ai.usage.* fields, so
+    -- usage is counted once per turn. Cost is part of the guard so a cost-only
+    -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
+    -- KindStop, with usage spliced from the cached llm_output frame; it has no
+    -- raw-vocabulary parser, so it resolves through the canonical event map to
+    -- the same AfterAgentResponse name.
     (
-        toString(attributes.gram.hook.source) = 'opencode'
+        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_opencode_usage_row,
+    ) AS is_hook_turn_usage_row,
     -- LiteLLM usage is authoritative only on normalized client model spans.
     -- The resource URN anchors provenance and the closed event-URN set excludes
     -- guardrail, auth, cache, database, metric, and other operational rows.
@@ -677,15 +718,15 @@ WITH
         )
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    -- Codex/Cursor/opencode tool calls arrive as hook rows, one
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    -- Codex/Cursor/opencode/openclaw tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -797,11 +838,11 @@ SELECT
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed and LiteLLM model-span usage rows, Cursor/Claude-Chat usage
--- and cost rows, opencode unified-ingest usage rows, and
--- Codex/Cursor/opencode completed tool-call hook rows. Tool rows carry no
+-- and cost rows, opencode/openclaw unified-ingest usage rows, and
+-- Codex/Cursor/opencode/openclaw completed tool-call hook rows. Tool rows carry no
 -- token/cost fields, so they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_work_units_score)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -1001,7 +1042,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session
 -- Claude OTEL api_request rows and Codex OTEL response.completed rows for
 -- usage, Claude tool_result rows for tool calls, LiteLLM model-span usage,
 -- Cursor/Claude-Chat usage
--- rows, opencode unified-ingest usage rows, and Codex/Cursor/opencode
+-- rows, opencode/openclaw unified-ingest usage rows, and Codex/Cursor/opencode/openclaw
 -- completed tool-call hook rows. Keep the predicates
 -- in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go and with
@@ -1046,15 +1087,16 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode usage rides on its unified-ingest assistant.responded rows,
-    -- anchored on hook_source because that path stamps no gram_urn, and gated on
-    -- the AfterAgentResponse event so thoughts/usage.reported/tool-call rows are
-    -- not double-counted as usage turns; see attribute_metrics_summaries_mv above.
+    -- opencode and openclaw usage rides on their unified-ingest
+    -- assistant.responded rows, anchored on hook_source because that path
+    -- stamps no gram_urn, and gated on the AfterAgentResponse event so
+    -- thoughts/usage.reported/tool-call rows are not double-counted as usage
+    -- turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source = 'opencode'
+        hook_source IN ('opencode', 'openclaw')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_opencode_usage_row,
+    ) AS is_hook_turn_usage_row,
     (
         gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
@@ -1064,13 +1106,13 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode')
+        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -1092,7 +1134,7 @@ WITH
         is_claude_api_request, toString(attributes.prompt.id),
         is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
         is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
-        is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+        is_codex_api_request OR is_hook_turn_usage_row OR is_litellm_usage_row, toString(id),
         toString(attributes.gen_ai.response.id)
     ) AS session_message_id,
     -- Per-row effective model: Claude api_request rows put it on
@@ -1152,11 +1194,11 @@ SELECT
     groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))) AS groups,
     -- Attribution values only exist meaningfully on api_request rows; the If
     -- guard keeps other rows from contributing an all-empty tuple.
-    groupUniqArrayIf(tuple(toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
+    groupUniqArrayIf((toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
@@ -1181,9 +1223,12 @@ GROUP BY gram_project_id, attribute_key;
 
 -- Raw usage ledger only. Meter definitions, pricing, billability, aggregation,
 -- finalized billing-cycle records, and reconciliation live in transactional models.
--- Outbox and Pub/Sub delivery is at least once. Producers keep each deterministic
--- id's payload stable. Readers must use FINAL or equivalent id deduplication
--- before summing. Adjustments use distinct ids and never update originals.
+-- Outbox and Pub/Sub delivery is at least once and may reorder variants sharing
+-- a deterministic id. produced_at is the replacement version, so newer producer
+-- state wins across delivery batches. Equal producer times deliberately use
+-- ClickHouse latest-insert tie-breaking to refresh mutable enrichment. Readers
+-- must use FINAL or equivalent id deduplication before summing. Adjustments use
+-- distinct ids and never update originals.
 CREATE TABLE IF NOT EXISTS billing_meter_readings (
     id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
     organization_id String COMMENT 'Organization that owns the workload.',
@@ -1192,23 +1237,24 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     operation_id String COMMENT 'Domain operation that produced the reading.',
     unit LowCardinality(String) COMMENT 'Measurement unit, currently stokens.',
     value Int64 COMMENT 'Signed workload value where usage is positive and adjustments may be positive or negative.',
-    occurred_at DateTime64(9, 'UTC') COMMENT 'Usage-effective UTC time when the metered work executed.',
-    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'ClickHouse ingestion time and ReplacingMergeTree version.',
+    occurred_at DateTime64(9, 'UTC') COMMENT 'Usage-effective UTC time when the metered work executed and the timestamp used for billing periods.',
+    produced_at DateTime64(9, 'UTC') COMMENT 'UTC time when the producer created this reading variant and the ReplacingMergeTree version.',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'UTC time when ClickHouse received the row for delivery-lag diagnostics.',
     corrects_reading_id Nullable(UUID) COMMENT 'Original reading corrected by this immutable adjustment.',
-    reading_kind LowCardinality(String) MATERIALIZED if(isNull(corrects_reading_id), 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
+    reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions.',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (isNull(corrects_reading_id) AND value > 0) OR (isNotNull(corrects_reading_id) AND value != 0),
-    CONSTRAINT correction_id_valid CHECK isNull(corrects_reading_id) OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
+    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
+    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
     CONSTRAINT measurement_valid CHECK unit = 'stokens' AND tokenizer_codec = 'tiktoken_o200k_base',
     INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
-) ENGINE = ReplacingMergeTree(inserted_at)
+) ENGINE = ReplacingMergeTree(produced_at)
 PARTITION BY cityHash64(toString(id)) % 64
 PRIMARY KEY (organization_id, meter_id, project_id)
 ORDER BY (organization_id, meter_id, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Raw immutable s-token usage ledger with stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
+COMMENT 'Raw s-token usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity

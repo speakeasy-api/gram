@@ -396,7 +396,7 @@ function MCPOverview() {
       invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
     ]);
     toast.success(`Gateway "${gateway.name}" created`);
-    routes.mcp.gateway.members.goTo(gateway.id);
+    routes.mcp.gateway.overview.goTo(gateway.id);
   };
 
   const newMcpServerButton = (
@@ -538,6 +538,8 @@ function MCPOverview() {
           Sources exposed as MCP servers. These include all types of sources
           such as OpenAPI, functions, third-party servers from the catalog, and
           custom remote MCPs imported by URL.
+          {gatewaysEnabled &&
+            " Gateways front a set of these servers behind a single URL."}
         </Page.Section.Description>
         <Page.Section.Body>
           {showFilters && (
@@ -587,6 +589,11 @@ function MCPOverview() {
                       key={gateway.id}
                       gateway={gateway}
                       url={gatewayUrlById.get(gateway.id)}
+                      activityStatus={activityStatusFor(
+                        "meta_mcp_server",
+                        gateway.id,
+                      )}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                   {filteredToolsets.map((toolset) => (
@@ -623,7 +630,9 @@ function MCPOverview() {
                 { label: "Name" },
                 { label: "Visibility" },
                 { label: "URL" },
-                { label: "Tools" },
+                // Kind-dependent cargo: tool chips for toolsets, the kind badge
+                // for mcp_servers, member count for gateways.
+                { label: "Contents" },
               ]}
             >
               {isLoading ? (

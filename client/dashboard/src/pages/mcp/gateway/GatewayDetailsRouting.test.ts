@@ -12,7 +12,6 @@ const BASE = `/acme/projects/demo/mcp/gateway/${ID}`;
 // tab fails here instead of quietly shrinking the expectations.
 const TABS = [
   "overview",
-  "members",
   "inspect",
   "team-access",
   "sessions",
@@ -31,6 +30,8 @@ describe("activeTabFromPath", () => {
   it("returns undefined for the bare detail path and unknown tabs", () => {
     expect(activeTabFromPath(BASE, ID)).toBeUndefined();
     expect(activeTabFromPath(`${BASE}/performance`, ID)).toBeUndefined();
+    // The legacy members URL redirects to overview via the unknown-tab path.
+    expect(activeTabFromPath(`${BASE}/members`, ID)).toBeUndefined();
   });
 
   it("requires the mcp/gateway prefix, so a lookalike path misses", () => {
@@ -42,10 +43,10 @@ describe("activeTabFromPath", () => {
   it("matches a url-encoded id segment", () => {
     expect(
       activeTabFromPath(
-        `/acme/projects/demo/mcp/gateway/${encodeURIComponent("a b")}/members`,
+        `/acme/projects/demo/mcp/gateway/${encodeURIComponent("a b")}/inspect`,
         "a b",
       ),
-    ).toBe("members");
+    ).toBe("inspect");
   });
 
   it("returns undefined without an id", () => {

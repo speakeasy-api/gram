@@ -155,7 +155,7 @@ func (s *LifecycleService) ActivatePrescription(ctx context.Context, request Act
 		if err := createVersion(ctx, queries.repo, repo.CreateKillswitchPrescriptionVersionParams{
 			OrganizationID: string(request.OrganizationID), PrescriptionID: headerID, Version: 1,
 			State: string(PrescriptionStateActive), ResourceScope: string(desired.resourceScope),
-			StartsAt: conv.ToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(desired.expiresAt),
+			StartsAt: conv.PtrToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(desired.expiresAt),
 			ActivatedAt: conv.ToPGTimestamptz(transitionTime), InternalNote: desired.internalNote, ExternalNote: desired.externalNote,
 		}, versionResourceSnapshot{keys: desired.resourceKeys}); err != nil {
 			return MutationResult{}, err
@@ -248,7 +248,7 @@ func (s *LifecycleService) DeactivatePrescription(ctx context.Context, request D
 		if activatedAt == nil {
 			return MutationResult{}, errors.New("active killswitch version has no activation time")
 		}
-		return transitionExisting(ctx, queries.repo, current, ResourceScope(current.ResourceScope), versionResourceSnapshot{copyFromVersion: current.CurrentVersion}, PrescriptionStateInactive, current.StartsAt.Time, optionalTime(current.ExpiresAt), *activatedAt, current.InternalNote, current.ExternalNote, transitionTime)
+		return transitionExisting(ctx, queries.repo, current, ResourceScope(current.ResourceScope), versionResourceSnapshot{copyFromVersion: current.CurrentVersion}, PrescriptionStateInactive, optionalTime(current.StartsAt), optionalTime(current.ExpiresAt), *activatedAt, current.InternalNote, current.ExternalNote, transitionTime)
 	})
 }
 
@@ -381,7 +381,7 @@ func replayOperation(receipt operationReceipt, actorUserID string, operation Mut
 	return MutationResult{PrescriptionID: response.PrescriptionID, Version: response.PrescriptionVersion, State: response.State, Replayed: true}, nil
 }
 
-func transitionExisting(ctx context.Context, queries *repo.Queries, current lockedCurrent, scope ResourceScope, snapshot versionResourceSnapshot, state PrescriptionState, startsAt time.Time, expiresAt *time.Time, activatedAt time.Time, internalNote, externalNote string, transitionTime time.Time) (MutationResult, error) {
+func transitionExisting(ctx context.Context, queries *repo.Queries, current lockedCurrent, scope ResourceScope, snapshot versionResourceSnapshot, state PrescriptionState, startsAt, expiresAt *time.Time, activatedAt time.Time, internalNote, externalNote string, transitionTime time.Time) (MutationResult, error) {
 	if current.SupersededAt.Valid {
 		return MutationResult{}, errors.New("current killswitch version is already superseded")
 	}
@@ -393,7 +393,7 @@ func transitionExisting(ctx context.Context, queries *repo.Queries, current lock
 		return MutationResult{}, errors.New("supersede killswitch prescription version: expected one updated row")
 	}
 	newVersion := current.CurrentVersion + 1
-	if err := createVersion(ctx, queries, repo.CreateKillswitchPrescriptionVersionParams{OrganizationID: current.OrganizationID, PrescriptionID: current.ID, Version: newVersion, State: string(state), ResourceScope: string(scope), StartsAt: conv.ToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(expiresAt), ActivatedAt: conv.ToPGTimestamptz(activatedAt), InternalNote: internalNote, ExternalNote: externalNote}, snapshot); err != nil {
+	if err := createVersion(ctx, queries, repo.CreateKillswitchPrescriptionVersionParams{OrganizationID: current.OrganizationID, PrescriptionID: current.ID, Version: newVersion, State: string(state), ResourceScope: string(scope), StartsAt: conv.PtrToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(expiresAt), ActivatedAt: conv.ToPGTimestamptz(activatedAt), InternalNote: internalNote, ExternalNote: externalNote}, snapshot); err != nil {
 		return MutationResult{}, err
 	}
 	rows, err = queries.AdvanceKillswitchPrescriptionCurrentVersion(ctx, repo.AdvanceKillswitchPrescriptionCurrentVersionParams{NewVersion: newVersion, UpdatedAt: conv.ToPGTimestamptz(transitionTime), OrganizationID: current.OrganizationID, PrescriptionID: current.ID, ExpectedVersion: current.CurrentVersion})
@@ -571,21 +571,25 @@ func canonicalDesiredMutationFields(desired canonicalDesiredVersion) CanonicalMu
 	return CanonicalMutationV1{ResourceScope: &scope, SelectedResourceKeys: desired.resourceKeys, StartMode: &mode, StartsAt: clonePostgresTime(desired.startsAt), ExpiresAt: clonePostgresTime(desired.expiresAt), ExternalNote: &externalNote, InternalNote: &internalNote}
 }
 
-func (d canonicalDesiredVersion) resolvedStartsAt(databaseNow time.Time) (time.Time, error) {
-	var startsAt time.Time
+func (d canonicalDesiredVersion) resolvedStartsAt(databaseNow time.Time) (*time.Time, error) {
+	effectiveStart := databaseNow
+	var startsAt *time.Time
 	switch d.startMode {
 	case StartModeNow:
-		startsAt = databaseNow
 	case StartModeAt:
 		if d.startsAt == nil {
-			return time.Time{}, fmt.Errorf("%w: scheduled start requires a timestamp", ErrInvalidArgument)
+			return nil, fmt.Errorf("%w: scheduled start requires a timestamp", ErrInvalidArgument)
 		}
-		startsAt = *d.startsAt
+		startsAt = clonePostgresTime(d.startsAt)
+		effectiveStart = *startsAt
+		if !effectiveStart.After(databaseNow) {
+			return nil, fmt.Errorf("%w: scheduled start must be after database time", ErrInvalidArgument)
+		}
 	default:
-		return time.Time{}, fmt.Errorf("%w: invalid start mode %q", ErrInvalidArgument, d.startMode)
+		return nil, fmt.Errorf("%w: invalid start mode %q", ErrInvalidArgument, d.startMode)
 	}
-	if d.expiresAt != nil && !startsAt.Before(*d.expiresAt) {
-		return time.Time{}, fmt.Errorf("%w: expiry must be after the resolved start time", ErrInvalidArgument)
+	if d.expiresAt != nil && !effectiveStart.Before(*d.expiresAt) {
+		return nil, fmt.Errorf("%w: expiry must be after the resolved start time", ErrInvalidArgument)
 	}
 	return startsAt, nil
 }

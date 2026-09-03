@@ -119,7 +119,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				if err != nil {
 					return fmt.Errorf("refresh openrouter key snapshot: %w", err)
 				}
-				if currentKey.Disabled {
+				if openrouter.EffectiveDisabled(currentKey.Disabled, currentKey.DisableCauses) {
 					return nil
 				}
 

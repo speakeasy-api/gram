@@ -905,8 +905,9 @@ func (s *Service) mintSession(
 		// ever see those here, raw SQL bypassed the writer and the conversion
 		// is calendar-dependent — fail rather than silently approximate.
 		issuer, err := queries.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-			ID:        endpoint.UserSessionIssuerID,
-			ProjectID: endpoint.ProjectID,
+			ID:             endpoint.UserSessionIssuerID,
+			ProjectID:      endpoint.ProjectID,
+			OrganizationID: endpoint.OrganizationID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

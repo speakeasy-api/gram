@@ -221,3 +221,18 @@ func TestGetUserSessionClient_ReportsCredentialKind(t *testing.T) {
 	require.NotNil(t, got.TokenEndpointAuthMethod)
 	require.Equal(t, "private_key_jwt", *got.TokenEndpointAuthMethod)
 }
+
+func TestGetUserSessionClient_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "get-cli-sibling")
+
+	_, err := ti.service.GetUserSessionClient(ctx, &gen.GetUserSessionClientPayload{
+		ID:               sp.clientID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}

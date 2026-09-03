@@ -289,10 +289,10 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
   ).then(() => undefined);
 }
 
-// Every admin write answers with the organization in its new state, so the
-// caches that hold that record are written from the response. A refetch would
-// be the alternative, and the list is cursor-paged and filtered: refetching it
-// can move the row out from under the operator who just acted on it.
+// Every admin write answers with the organization in its new state, so paged
+// list caches are written from the response. Refetching a filtered list can
+// move the row out from under the operator who just acted on it; the detail
+// cache is separately invalidated after this immediate repaint.
 //
 // One consequence, accepted rather than overlooked: the default list request
 // sends no disabled_states, which asks for active organizations only, so a row
@@ -337,6 +337,25 @@ export function writeOrganizationToCache(
   // Refetched, not written: the response holds one record and these are counts
   // over all of them.
   invalidateOrganizationStats(qc);
+}
+
+// Keep the mutation response in paged lists so an acted-on row stays put, but
+// ask the canonical detail endpoint for the record again. Both route addresses
+// are invalidated because the active page may have been opened by id or slug.
+export function invalidateOrganizationDetails(
+  qc: QueryClient,
+  org: AdminOrganization,
+): void {
+  void qc.invalidateQueries({
+    queryKey: organizationQuery(org.id).queryKey,
+    exact: true,
+  });
+  if (org.slug) {
+    void qc.invalidateQueries({
+      queryKey: organizationQuery(org.slug).queryKey,
+      exact: true,
+    });
+  }
 }
 
 /**

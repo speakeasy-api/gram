@@ -236,12 +236,13 @@ func TestListToolFilters_RBAC_DeniedWithoutGrant(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	// No grants: the mcp:read project-scope check rejects the caller before any
-	// server lookup, so a random id still yields forbidden.
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac denied tool filters")
+
+	// No grants: the per-server mcp:read check rejects the caller after the
+	// project-scoped row lookup.
 	deniedCtx := withExactAuthzGrants(t, ctx, ti.conn)
-	id := uuid.New().String()
 	_, err := ti.service.ListToolFilters(deniedCtx, &gen.ListToolFiltersPayload{
-		ID:               &id,
+		ID:               &fixture.server.ID,
 		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -271,9 +272,13 @@ func TestListToolFilters_RBAC_AllowedWithProjectGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Canonical project-wide grant shape: wildcard resource narrowed by the
+	// project_id dimension.
+	projectSelector := authz.NewSelector(authz.ScopeMCPRead, "*")
+	projectSelector[authz.SelectorKeyProjectID] = authCtx.ProjectID.String()
 	grantedCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.Grant{
 		Scope:    authz.ScopeMCPRead,
-		Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String()),
+		Selector: projectSelector,
 	})
 	res, err := ti.service.ListToolFilters(grantedCtx, &gen.ListToolFiltersPayload{
 		ID:               &created.ID,

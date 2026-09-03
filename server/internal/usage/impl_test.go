@@ -164,6 +164,14 @@ func (p *recordingOpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Co
 	return p.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
 }
 
+func (*recordingOpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*recordingOpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (*recordingOpenRouterProvisioner) DisableAPIKey(context.Context, string, openrouter.KeyType) error {
 	return fmt.Errorf("not implemented")
 }

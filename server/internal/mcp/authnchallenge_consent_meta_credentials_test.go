@@ -166,9 +166,9 @@ func TestMetaMCPCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	require.NotContains(t, resources, "https://aim87-select-unknown.example.com/mcp")
 }
 
-// The same meta MCP unstamped records unqualified grants, and routeUpstreamToken
-// — untouched by this change — then serves no member at all. The negative that
-// gives the positive above its meaning, and the pre-backfill state.
+// The same meta MCP unstamped records unqualified grants, which the routers
+// then serve to no remote member at all. The negative that gives the positive
+// above its meaning, and the pre-backfill state.
 func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
 	t.Parallel()
 
@@ -182,18 +182,19 @@ func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 3)
 
-	// Several credentials, all unqualified: the selection rule (exact match,
-	// lone-token fallback only for a single credential) serves none of them.
+	// Several credentials, all unqualified: exact-match selection serves none
+	// of them to a remote member, however few there are.
 	for _, member := range gw.members {
 		require.Empty(t, tokenFor(t, tokens, member.clientID).Resource,
 			"member %s must not hold a qualified credential", member.upstreamURL)
 	}
 }
 
-// The complement, and pre-existing routeUpstreamToken behaviour this change
-// leaves alone: a lone credential is forwarded even to a member it was not
-// minted for. Why qualification matters once a meta MCP holds a second member.
-func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
+// A member without a stamped issuer mints an unqualified grant. The routers
+// refuse to forward it to any member — there is no lone-token fallback — so
+// the credential resolves but spends nowhere until re-consent qualifies it;
+// the selection rules are pinned by the router unit tables.
+func TestMetaMCPCredentials_LoneCredentialStaysUnqualified(t *testing.T) {
 	t.Parallel()
 
 	ctx, gw := connectMeta(t, "aim87-lone", 1, false)
@@ -201,8 +202,6 @@ func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 1)
 
-	// One credential, no resource: exactly the state the selection rule's
-	// deliberate lone-token pass-through forwards to any backend.
 	token := tokenFor(t, tokens, gw.members[0].clientID)
 	require.Equal(t, gw.members[0].accessToken, token.Token)
 	require.Empty(t, token.Resource)

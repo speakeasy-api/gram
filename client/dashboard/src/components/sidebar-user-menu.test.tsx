@@ -7,9 +7,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const orgSlug = vi.hoisted(() => ({ current: "acme" }));
+const exploreDemoGoTo = vi.hoisted(() => vi.fn());
+
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
   useSession: () => ({ organizations: [{ id: "o1" }] }),
+  useOrganization: () => ({ slug: orgSlug.current }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "proj" }),
@@ -19,7 +23,10 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true }),
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ settings: { goTo: vi.fn() } }),
+  useRoutes: () => ({
+    settings: { goTo: vi.fn() },
+    exploreDemo: { goTo: exploreDemoGoTo },
+  }),
   useOrgRoutes: () => ({
     billing: { goTo: vi.fn() },
   }),
@@ -69,6 +76,7 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { isPylonChatOpen, togglePylonChat } from "@/lib/pylon";
 import { installMockPylon } from "@/lib/pylon-test-mock";
 
@@ -80,6 +88,8 @@ afterEach(() => {
   }
   cleanup();
   Reflect.deleteProperty(window, "Pylon");
+  orgSlug.current = "acme";
+  exploreDemoGoTo.mockReset();
 });
 
 describe("SidebarUserMenu", () => {
@@ -130,5 +140,21 @@ describe("SidebarUserMenu", () => {
 
     expect(screen.getByText("Get Support")).toBeTruthy();
     expect(screen.queryByText("Close Support")).toBeNull();
+  });
+
+  it("always offers Explore demo org outside the demo org", () => {
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+
+    fireEvent.click(screen.getByText("Explore demo org"));
+    expect(exploreDemoGoTo).toHaveBeenCalledOnce();
+  });
+
+  it("hides Explore demo org while already in the demo org", () => {
+    orgSlug.current = DEMO_ORG_SLUG;
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+
+    expect(screen.queryByText("Explore demo org")).toBeNull();
   });
 });

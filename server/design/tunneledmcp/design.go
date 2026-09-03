@@ -209,6 +209,7 @@ var TunneledMcpCreateServerForm = Type("CreateTunneledMcpServerForm", func() {
 	Description("Form for creating a new tunneled MCP server source")
 
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.")
 	Required("name")
 })
 
@@ -220,10 +221,19 @@ var TunneledMcpUpdateServerForm = Type("UpdateTunneledMcpServerForm", func() {
 	Attribute("id", String, "The ID of the tunneled MCP server to update", func() {
 		Format(FormatUUID)
 	})
-	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
+	Attribute("name", String, "Human-readable display name for the tunneled MCP server. Omit to leave unchanged.")
 	Attribute("allow_public", Boolean, "Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.")
+	Attribute("public_request_rate_per_second", Int, "Sustained anonymous MCP requests per second admitted when this source is served through a public MCP endpoint. Applies to every MCP interaction; one bucket is shared by every caller. Omit to leave unchanged, 0 to clear back to the deployment default.", func() {
+		Minimum(0)
+		Maximum(100000)
+	})
+	Attribute("public_request_burst", Int, "Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Each request takes one token; tokens refill at the sustained rate up to this cap. Omit to leave unchanged, 0 to clear (twice the sustained rate applies).", func() {
+		Minimum(0)
+		Maximum(1000000)
+	})
 
-	Required("id", "name")
+	Required("id")
 })
 
 var TunneledMcpRotateServerKeyForm = Type("RotateTunneledMcpServerKeyForm", func() {
@@ -289,6 +299,11 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	Attribute("connection_status", TunneledMcpConnectionStatus, "Derived connection status")
 	Attribute("allow_public", Boolean, "Whether the owner has consented to serving this source through a public, anonymous MCP endpoint")
 	Attribute("agent_version", String, "Most recent agent version reported by the tunnel")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
+	Attribute("public_request_rate_per_second", Int, "Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.")
+	Attribute("public_request_burst", Int, "Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.")
+	Attribute("effective_public_request_rate_per_second", Int, "The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.")
+	Attribute("effective_public_request_burst", Int, "The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).")
 	Attribute("last_seen_at", String, func() {
 		Description("Most recent persisted heartbeat timestamp")
 		Format(FormatDateTime)
@@ -304,7 +319,7 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "allow_public", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at")
+	Required("id", "project_id", "name", "key_prefix", "status", "connection_status", "allow_public", "active_connection_count", "active_consumer_session_count", "created_at", "updated_at", "effective_public_request_rate_per_second", "effective_public_request_burst")
 })
 
 var TunneledMcpServerConnections = Type("TunneledMcpServerConnections", func() {

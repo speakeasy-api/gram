@@ -75,6 +75,20 @@ func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	}
 }
 
+// endpointAcceptsToolSelectionResource reports whether a stored consent
+// selection belongs to this endpoint. A toolset-backed wrapper additionally
+// accepts the legacy "toolset:<id>" form: selections consented while the
+// server was still resolved through toolsets.mcp_slug were stored against the
+// toolset resource and must keep authorizing the same server for one
+// access-token lifetime after the backfill (AIS-633; removed with the legacy
+// audience acceptance by AIS-646).
+func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resource string) bool {
+	if resource == endpointToolSelectionResource(endpoint) {
+		return true
+	}
+	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
+}
+
 // loadSessionToolSelection resolves the tool policy for a validated session
 // jti. Returns nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh

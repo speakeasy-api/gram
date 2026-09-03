@@ -18,16 +18,31 @@ export type UpdateTunneledMcpServerForm = {
    */
   id: string;
   /**
-   * Human-readable display name for the tunneled MCP server
+   * Human-readable display name for the tunneled MCP server. Omit to leave unchanged.
    */
-  name: string;
+  name?: string | undefined;
+  /**
+   * Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Each request takes one token; tokens refill at the sustained rate up to this cap. Omit to leave unchanged, 0 to clear (twice the sustained rate applies).
+   */
+  publicRequestBurst?: number | undefined;
+  /**
+   * Sustained anonymous MCP requests per second admitted when this source is served through a public MCP endpoint. Applies to every MCP interaction; one bucket is shared by every caller. Omit to leave unchanged, 0 to clear back to the deployment default.
+   */
+  publicRequestRatePerSecond?: number | undefined;
+  /**
+   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.
+   */
+  resourceIdentifier?: string | undefined;
 };
 
 /** @internal */
 export type UpdateTunneledMcpServerForm$Outbound = {
   allow_public?: boolean | undefined;
   id: string;
-  name: string;
+  name?: string | undefined;
+  public_request_burst?: number | undefined;
+  public_request_rate_per_second?: number | undefined;
+  resource_identifier?: string | undefined;
 };
 
 /** @internal */
@@ -38,11 +53,17 @@ export const UpdateTunneledMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     allowPublic: z.optional(z.boolean()),
     id: z.string(),
-    name: z.string(),
+    name: z.optional(z.string()),
+    publicRequestBurst: z.optional(z.int()),
+    publicRequestRatePerSecond: z.optional(z.int()),
+    resourceIdentifier: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       allowPublic: "allow_public",
+      publicRequestBurst: "public_request_burst",
+      publicRequestRatePerSecond: "public_request_rate_per_second",
+      resourceIdentifier: "resource_identifier",
     });
   }),
 );

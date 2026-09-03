@@ -324,14 +324,41 @@ func vendorFaviconURL(scheme, host string) string {
 	)
 }
 
+// grantResourceID is the RBAC resource id for an mcp_servers row: the backing
+// toolset id when toolset-backed, else the row id. These are the ids the
+// serving path checks and the ids role-grant selectors name, so keying
+// management checks on them makes server-scoped grants effective here too.
+func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
+	if toolsetID.Valid {
+		return toolsetID.UUID.String()
+	}
+	return id.String()
+}
+
+// requireServerWriteUnlocked rejects a caller lacking mcp:write on the server
+// before the mutation transaction takes any FOR UPDATE locks, so an
+// unauthorized member cannot contend server-lifecycle locks. It keys on a
+// non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
+// locked row, which is authoritative if the backing changes concurrently.
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) error {
+	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        serverID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+	}
+
+	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String()))
+}
+
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
 	}
 
 	idProvided := payload.ID != nil && *payload.ID != ""
@@ -367,6 +394,10 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	return mv.BuildMcpServerView(server), nil
@@ -378,10 +409,6 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
 	if !idProvided && !slugProvided {
@@ -415,6 +442,10 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	// Only toolset-backed servers expose a tool list to filter. Remote-backed
@@ -471,10 +502,6 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
@@ -508,7 +535,26 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	checks := make([]authz.Check, len(servers))
+	for i, server := range servers {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+	allowedSet := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedSet[id] = struct{}{}
+	}
+	allowed := make([]repo.McpServer, 0, len(allowedIDs))
+	for _, server := range servers {
+		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+			allowed = append(allowed, server)
+		}
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowed)}, nil
 }
 
 func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcpServersForOrgPayload) (*gen.ListMcpServersResult, error) {
@@ -537,10 +583,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -561,6 +603,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	if err := validateServerBackendExclusivity(ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -585,6 +631,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+	}
+
+	// Authorization keys on the row as it exists, not the backing the payload
+	// may switch it to.
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	// Only gate on staff when the unproxied backend reference is actually
@@ -686,9 +738,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// remote MCP flow pre-stages an endpoint while the server is parked
 	// disabled for auth configuration, so enabling is what completes
 	// publishability there).
-	pluginCreated := false
+	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
 		if err != nil {
 			return nil, err
 		}
@@ -698,7 +750,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	// A server that was already enabled is already a Default-plugin member, so
+	// renaming it (its display name is generated into the package) or disabling
+	// it (it drops out of the package) has to publish too — not just the
+	// enable transition this block attaches. A server disabled before and
+	// after contributes nothing either way and stays silent.
+	s.triggerPluginPublish(ctx, authCtx, attached || existing.Visibility != VisibilityDisabled, pluginCreated)
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
@@ -712,20 +769,22 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // publishability check: a server with no live endpoint isn't publishable and
 // is skipped (mcpendpoints.CreateMcpEndpoint attaches it later when it gets
 // its first endpoint while enabled). Already-attached servers are an
-// idempotent no-op. Returns pluginCreated=true if this call lazily created
-// the Default plugin (project predates the feature) — callers should enqueue
-// an initial publish for it, but only after their own transaction commits,
-// since this runs pre-commit and the DB writes could still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, error) {
+// idempotent no-op. Returns attached=true when the server is now a member of
+// the Default plugin (so a publish is worth enqueuing) and pluginCreated=true
+// if this call lazily created that plugin (project predates the feature) —
+// callers should enqueue the publish for it, but only after their own
+// transaction commits, since this runs pre-commit and the DB writes could
+// still roll back.
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
+		return false, false, oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
 	}
 	if len(endpoints) == 0 {
-		return false, nil
+		return false, false, nil
 	}
 
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
@@ -736,32 +795,25 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		DisplayName:    ServerDisplayName(server),
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
+		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
-	return pluginCreated, nil
+	return true, pluginCreated, nil
 }
 
-// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
-// publish for a project whose Default plugin was just lazily created. Must
-// only be called after the triggering transaction has committed — enqueuing
-// before commit risks Temporal running against state that a later failure
-// in the same transaction rolls back. Best-effort: a non-cancelable ctx
-// since the request returning shouldn't drop the enqueue.
-func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
-	if !pluginCreated || !s.pluginsGitHubEnabled {
+// triggerPluginPublish enqueues the marketplace publish for the project whose
+// Default plugin membership just changed. attached is false when the mutation
+// could not have changed generated plugin output (a Meta-MCP endpoint, a
+// non-MCP toolset, a disabled or endpointless server): those paths must not
+// enqueue at all, since a project with no GitHub connection yet treats any
+// publish as its first and would get a marketplace repo it has no packages
+// for.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, attached, pluginCreated bool) {
+	if !attached || !s.pluginsGitHubEnabled {
 		return
 	}
 
-	enqueueCtx := context.WithoutCancel(ctx)
-	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
-	}
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
 }
 
 // ServerDisplayName derives a default plugin-server display name from an
@@ -782,15 +834,15 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
+	}
+
+	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+		return err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -818,14 +870,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
 	}
-	if _, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
+	locked, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return err
 	}
 	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
 	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
@@ -949,8 +1006,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		// issuer must not block server deletion, so ErrNoRows skips the
 		// cascade entirely.
 		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
-			ID:        deleted.UserSessionIssuerID.UUID,
-			ProjectID: *authCtx.ProjectID,
+			ID:             deleted.UserSessionIssuerID.UUID,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
@@ -958,6 +1016,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
+			OrganizationID:      authCtx.ActiveOrganizationID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
 		})
 		if err != nil {
@@ -966,8 +1025,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-				ID:        deleted.UserSessionIssuerID.UUID,
-				ProjectID: *authCtx.ProjectID,
+				ID:             deleted.UserSessionIssuerID.UUID,
+				ProjectID:      *authCtx.ProjectID,
+				OrganizationID: authCtx.ActiveOrganizationID,
 			})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):

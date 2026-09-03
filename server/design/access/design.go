@@ -385,6 +385,12 @@ var _ = Service("access", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("from", String, "Inclusive start of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -400,6 +406,8 @@ var _ = Service("access", func() {
 			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
 			Param("user_keys")
+			Param("from")
+			Param("to")
 			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -430,6 +438,64 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-name-override", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
+	})
+
+	Method("listAIDetections", func() {
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("category", String, "Filter to detection targets of one category.", func() {
+				Enum("harness", "local_model")
+			})
+			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetections")
+			Param("category")
+			Param("directory_group_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
+	Method("listEmployeeAIDetections", func() {
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("user_email", String, "Canonical enrolled-employee email to list detections for.", func() {
+				Format(FormatEmail)
+				MaxLength(320)
+			})
+			Required("user_email")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listEmployeeAIDetections")
+			Param("user_email")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
 	Method("requestAccess", func() {
@@ -476,6 +542,12 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
+			Attribute("from", String, "Inclusive start of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -501,6 +573,8 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()
@@ -739,6 +813,11 @@ var MemberModel = Type("AccessMember", func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
 	})
+	// Directory profile, from the org's synced identity provider. Every field
+	// is absent when no directory is connected, when the member has no profile
+	// in it, or when the provider does not report that attribute.
+	Attribute("department", String, "Department name as reported by the identity provider.")
+	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
@@ -867,6 +946,38 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Required("users")
 	Attribute("users", ArrayOf(ShadowMCPInventoryUserModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var AIDetectionModel = Type("AIDetection", func() {
+	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
+	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "local_model")
+	})
+	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this target.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected anywhere in the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
+	Required("detections")
+	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {

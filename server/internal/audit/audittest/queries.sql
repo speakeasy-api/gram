@@ -41,3 +41,12 @@ WHERE organization_id = @organization_id
   AND attributes->>'event_type' = @event_type::text
 ORDER BY id DESC
 LIMIT 1;
+
+-- name: BackdateAuditLog :exec
+-- Test-only: stamps one audit row at a chosen instant so a test can build a
+-- window over rows it wrote. Production never sets created_at — it defaults to
+-- clock_timestamp() — but a test asserting on a time range needs the rows to
+-- sit at known, distinct points rather than microseconds apart.
+UPDATE audit_logs
+SET created_at = @created_at
+WHERE id = @id;

@@ -5,8 +5,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-
-	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 )
 
 var mcpOpenAccessControlRoutes = []string{
@@ -17,7 +15,7 @@ var mcpOpenAccessControlRoutes = []string{
 	"/openapi.yaml",
 }
 
-func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {
+func CORSMiddleware(env string, serverURL string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
@@ -59,7 +57,7 @@ func CORSMiddleware(env string, serverURL string, chatSessionsManager *chatsessi
 			if slices.ContainsFunc(chatSessionsAllowedRoutes, func(route string) bool {
 				return strings.HasPrefix(r.URL.Path, route)
 			}) {
-				chatSessionsCORS(chatSessionsManager)(next).ServeHTTP(w, r)
+				chatSessionsCORS(chatSessionValidator)(next).ServeHTTP(w, r)
 				return
 			}
 

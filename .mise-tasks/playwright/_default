@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
 #MISE description="Run Playwright CLI, installing its browser on first use"
+# Browser automation always targets the local dashboard, so wake a paused stack
+# first -- otherwise the run screenshots the parker's "Resuming stack" page.
+#MISE depends=["ensure-stack"]
 
 set -e
 

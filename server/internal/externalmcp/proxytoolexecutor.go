@@ -162,7 +162,7 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, e.logger, client.Close)
+	defer o11y.LogDefer(ctx, e.logger, "failed to close external mcp client", client.Close)
 
 	return client.ListTools(ctx)
 }

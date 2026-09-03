@@ -48,6 +48,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// withPlatformAdmin marks the test session as a platform admin (users.admin
+// bit), which staff-only feature toggles require in addition to org:admin.
+// The auth context is copied so the admin bit cannot leak into other contexts
+// derived from ctx, which share the underlying pointer.
+func withPlatformAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context not found")
+	clone := *authCtx
+	clone.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
 func requestedOrganizationID(ctx context.Context) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

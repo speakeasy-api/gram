@@ -76,18 +76,29 @@ beforeEach(() => {
       credits_used: 42.75,
       monthly_credits: 100,
       disabled: false,
+      disable_causes: [],
+      disable_causes_classified: true,
     },
     {
       key_type: "internal",
       credits_used: 12.5,
       monthly_credits: 0,
       disabled: true,
+      disable_causes: [
+        "admin_lock",
+        "billing_inactive",
+        "future_policy",
+        "constructor",
+      ],
+      disable_causes_classified: true,
     },
     {
       key_type: "future-purpose",
       credits_used: 1.25,
       monthly_credits: 25,
       disabled: false,
+      disable_causes: null,
+      disable_causes_classified: false,
     },
   ]);
   mocks.getInferenceSpendHistory.mockImplementation((organizationID: string) =>
@@ -180,6 +191,13 @@ describe("Billing", () => {
     );
     expect(screen.getAllByText("Enabled")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeTruthy();
+    expect(screen.getByText("No disable causes")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Admin lock, Billing inactive, future_policy, constructor",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Unclassified (legacy)")).toBeTruthy();
     expect(screen.getByText(/This is an estimate, not a bill/)).toBeTruthy();
     expect(screen.getByLabelText("Monthly inference spend graph")).toBeTruthy();
     expect(screen.getByText("$3.25")).toBeTruthy();

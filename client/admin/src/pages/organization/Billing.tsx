@@ -88,6 +88,27 @@ function inferenceKeyPurpose(keyType: AdminInferenceKey["key_type"]): string {
   }
 }
 
+function inferenceKeyDisableCauseLabel(cause: string): string {
+  switch (cause) {
+    case "admin_lock":
+      return "Admin lock";
+    case "trial_demotion":
+      return "Trial demotion";
+    case "billing_inactive":
+      return "Billing inactive";
+    default:
+      return cause;
+  }
+}
+
+function inferenceKeyDisableCauses(key: AdminInferenceKey): string {
+  if (!key.disable_causes_classified) return "Unclassified (legacy)";
+  if (key.disable_causes === null || key.disable_causes.length === 0)
+    return "No disable causes";
+
+  return key.disable_causes.map(inferenceKeyDisableCauseLabel).join(", ");
+}
+
 function formatCredits(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -286,6 +307,7 @@ function InferenceKeys({
               : formatCredits(key.monthly_credits)}
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
+          <Row label="Disable causes">{inferenceKeyDisableCauses(key)}</Row>
           {isWritableInferenceKey(key) && (
             <InferenceKeyLimitEditor
               organizationID={organizationID}
