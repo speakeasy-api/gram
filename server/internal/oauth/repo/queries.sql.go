@@ -21,7 +21,7 @@ INSERT INTO external_oauth_server_metadata (
     $1,
     $2,
     $3
-) RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
+) RETURNING id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateExternalOAuthServerMetadataParams struct {
@@ -39,6 +39,7 @@ func (q *Queries) CreateExternalOAuthServerMetadata(ctx context.Context, arg Cre
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.AuthorizationServerIssuer,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -73,7 +74,7 @@ func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg Del
 }
 
 const getExternalOAuthServerMetadata = `-- name: GetExternalOAuthServerMetadata :one
-SELECT id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
+SELECT id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
 WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
 `
 
@@ -90,6 +91,7 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.AuthorizationServerIssuer,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
