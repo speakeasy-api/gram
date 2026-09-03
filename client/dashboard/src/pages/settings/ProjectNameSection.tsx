@@ -5,7 +5,7 @@ import {
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { invalidateAllListProjects } from "@gram/client/react-query/listProjects";
 import { useUpdateProjectMutation } from "@gram/client/react-query/updateProject";
@@ -51,6 +51,7 @@ function ProjectNameForm({
   project: ReturnType<typeof useProject>;
 }): React.ReactNode {
   const organization = useOrganization();
+  const session = useSession();
   const queryClient = useQueryClient();
 
   const update = useUpdateProjectMutation({
@@ -93,6 +94,10 @@ function ProjectNameForm({
       update.mutate({
         request: {
           updateProjectForm: { name: projectNameSchema.parse(value.name) },
+        },
+        security: {
+          projectSlugHeaderGramProject: project.slug,
+          sessionHeaderGramSession: session.session,
         },
       });
     },
