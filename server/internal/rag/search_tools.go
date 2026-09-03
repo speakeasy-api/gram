@@ -189,10 +189,18 @@ type SearchToolsOptions struct {
 	Limit     int
 }
 
-// ToolSearchResult represents a search result with tool name and similarity score.
+// ToolSearchResult represents a search result with stable tool identity and ranking metadata.
 type ToolSearchResult struct {
-	ToolName        string
-	Tags            []string
+	// ToolURN identifies the source tool independently of runtime variations.
+	ToolURN string
+
+	// ToolName is the name stored in the embedding payload.
+	ToolName string
+
+	// Tags are the indexed tags associated with the tool.
+	Tags []string
+
+	// SimilarityScore is the vector similarity between the query and tool.
 	SimilarityScore float64
 }
 
@@ -338,9 +346,10 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		}
 
 		matches = append(matches, &ToolSearchResult{
+			ToolURN:         row.EntryKey,
 			ToolName:        entry.Name,
-			SimilarityScore: float64(row.Similarity),
 			Tags:            row.Tags,
+			SimilarityScore: float64(row.Similarity),
 		})
 	}
 
