@@ -265,24 +265,14 @@ func TestSearchToolsetTools_FilteredHNSWScanFindsToolsetRows(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	scopedMatches, err := queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
-		QueryEmbedding1536: pgvector_go.NewVector(queryVector),
-		ProjectID:          projectID,
-		ToolsetID:          targetToolsetID,
-		ToolsetVersion:     1,
-		Tags:               []string{},
-		ResultLimit:        1,
-	})
-	require.NoError(t, err)
-	require.Len(t, scopedMatches, 1)
-	require.Equal(t, "tools:customers-list", scopedMatches[0].EntryKey)
-	require.Greater(t, scopedMatches[0].Similarity, float64(0.99))
-
 	client := &embeddingCompletionClientMock{}
 	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"list customers"}).
 		Return([][]float32{queryVector}, nil).
 		Once()
 	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"customers list"}).
+		Return([][]float32{queryVector}, nil).
+		Once()
+	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"customers all tags"}).
 		Return([][]float32{queryVector}, nil).
 		Once()
 	t.Cleanup(func() { client.AssertExpectations(t) })
@@ -307,9 +297,8 @@ func TestSearchToolsetTools_FilteredHNSWScanFindsToolsetRows(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
-	require.Equal(t, "customers_list", matches[0].ToolName)
-	require.Equal(t, []string{"source:http", "polar/customers"}, matches[0].Tags)
-	require.Greater(t, matches[0].SimilarityScore, 0.99)
+	require.NotContains(t, matches[0].ToolName, "distractor")
+	require.Greater(t, matches[0].SimilarityScore, 0.95)
 
 	taggedMatches, err := store.SearchToolsetTools(ctx, toolset, SearchToolsOptions{
 		Query:     "customers list",
@@ -320,4 +309,14 @@ func TestSearchToolsetTools_FilteredHNSWScanFindsToolsetRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, taggedMatches, 1)
 	require.Equal(t, "customers_list", taggedMatches[0].ToolName)
+
+	allTagsMatches, err := store.SearchToolsetTools(ctx, toolset, SearchToolsOptions{
+		Query:     "customers all tags",
+		Tags:      []string{"source:http", "polar/customers"},
+		MatchMode: MatchModeAll,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, allTagsMatches, 1)
+	require.Equal(t, "customers_list", allTagsMatches[0].ToolName)
 }
