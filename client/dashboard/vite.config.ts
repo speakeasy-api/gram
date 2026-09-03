@@ -261,7 +261,21 @@ export default defineConfig(({ command }) => {
           }
         : undefined,
     },
-    plugins: [themeInitPlugin(), react(), tailwindcss()],
+    plugins: [
+      {
+        name: "admin-server-url",
+        transformIndexHtml(html) {
+          if (command !== "serve") return html;
+          return html.replace(
+            "__GRAM_ADMIN_SERVER_URL__",
+            process.env["GRAM_ADMIN_SERVER_URL"] || "",
+          );
+        },
+      },
+      themeInitPlugin(),
+      react(),
+      tailwindcss(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
