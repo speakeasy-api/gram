@@ -6,10 +6,8 @@ import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { OnboardingHeader } from "./onboarding-header";
-import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
-import { SetupViewToggle } from "./setup-view-toggle";
+import { SetupShell } from "./setup-shell";
 import {
   ConnectIdpStep,
   DirectorySyncStep,
@@ -218,10 +216,6 @@ export function SetupWizard(): JSX.Element {
     );
   }, [setSearchParams]);
 
-  const handleLeave = () => {
-    void navigate(`/${orgSlug}`);
-  };
-
   // While we're still figuring out where to resume (no slug + queries in
   // flight), keep the page shell visible with skeletons rather than briefly
   // mounting step 0. The resume-step useEffect above will set the slug as soon
@@ -318,16 +312,13 @@ export function SetupWizard(): JSX.Element {
   };
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
-      <OnboardingHeader onLeave={handleLeave}>
-        {setupBoardFlag.status === "enabled" ? (
-          <SetupViewToggle view="wizard" />
-        ) : null}
-      </OnboardingHeader>
-
+    <SetupShell
+      view="wizard"
+      showViewToggle={setupBoardFlag.status === "enabled"}
+    >
       <main className="flex flex-1 items-start justify-center px-4 py-8 md:px-8 md:py-16">
         <div className="flex w-full max-w-5xl gap-24">
-          <div className="hidden w-64 flex-shrink-0 md:block">
+          <div className="order-first hidden w-64 flex-shrink-0 md:block">
             {resolvingResume ? (
               <Skeleton>
                 {steps.map((step) => (
@@ -345,7 +336,7 @@ export function SetupWizard(): JSX.Element {
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="order-last min-w-0 flex-1">
             {resolvingResume ? (
               <Skeleton>
                 <div className="h-12 w-2/3" />
@@ -358,8 +349,6 @@ export function SetupWizard(): JSX.Element {
           </div>
         </div>
       </main>
-
-      <OnboardingFooter />
-    </div>
+    </SetupShell>
   );
 }

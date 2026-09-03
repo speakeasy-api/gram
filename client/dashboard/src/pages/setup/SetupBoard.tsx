@@ -28,39 +28,30 @@ import { useOrgRoutes } from "@/routes";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupTaskDialog } from "./components/setup-task-dialog";
-import { SetupViewToggle } from "./components/setup-view-toggle";
+import { SetupShell } from "./components/setup-shell";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 
 type FailedInvite = { email: string; roleId: string };
 
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body
-        fullWidth
-        fullHeight
-        overflowHidden
-        className="pb-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1"
-      >
-        <Page.Section>
-          <Page.Section.Title stage="preview">
-            Organization setup
-          </Page.Section.Title>
-          <Page.Section.Description>
-            Assign and track the work required to prepare your organization.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <SetupViewToggle view="board" />
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+    <SetupShell view="board">
+      <main className="flex min-h-0 flex-1 overflow-y-auto">
+        <div className="@container/main mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pb-24">
+          <Page.Section>
+            <Page.Section.Title area="" stage="preview">
+              Organization setup
+            </Page.Section.Title>
+            <Page.Section.Description>
+              Assign and track the work required to prepare your organization.
+            </Page.Section.Description>
+            <Page.Section.Body>
+              <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+            </Page.Section.Body>
+          </Page.Section>
+        </div>
+      </main>
+    </SetupShell>
   );
 }
 

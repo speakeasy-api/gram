@@ -56,6 +56,10 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("./components/setup-shell", () => ({
+  SetupShell: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("@/components/ui/MoreActions", () => ({
   MoreActions: ({
     actions,
