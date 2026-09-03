@@ -51,6 +51,7 @@ it("keyboard navigation focuses and activates the real Platform admin menu item"
     name: "Platform admin",
   });
   expect(document.activeElement).toBe(adminLink);
+  expect(adminLink.getAttribute("href")).toBe("https://admin.example.invalid");
   expect(adminLink.className).toContain("focus-visible:ring-2");
   expect(adminLink.className).toContain("focus-visible:ring-ring");
 
