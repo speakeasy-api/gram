@@ -3,14 +3,20 @@ package tunnelrouting
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
@@ -242,4 +248,68 @@ func headerValue(t *testing.T, headers []proxy.ConfiguredHeader, name string) st
 func expectedAffinity(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "auth:" + hex.EncodeToString(sum[:])
+}
+
+func deadDialError() error {
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
+	return fmt.Errorf("proxy post: %w", &url.Error{Op: "Post", URL: "http://127.0.0.1:1001", Err: dialErr})
+}
+
+func TestDeadDialRetryerEvictsRouteAndFailsOver(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+
+	retryer := DeadDialRetryer(testenv.NewLogger(t), routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")
+	retry, err := retryer(ctx, deadDialError())
+	require.NoError(t, err)
+	require.NotNil(t, retry)
+	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
+	require.Equal(t, "tunnel-1", headerValue(t, retry.Headers, wire.HeaderTunnelID))
+	require.Equal(t, "forward-token", headerValue(t, retry.Headers, wire.HeaderTunnelForwardToken))
+	require.Equal(t, "auth:stable", headerValue(t, retry.Headers, wire.HeaderTunnelConsumerSession))
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
+}
+
+func TestDeadDialRetryerLastRouteEvictsAndReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+
+	retryer := DeadDialRetryer(testenv.NewLogger(t), routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")
+	retry, err := retryer(ctx, deadDialError())
+	require.Nil(t, retry)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
+
+func TestDeadDialRetryerIgnoresNonDialErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+
+	readErr := fmt.Errorf("proxy post: %w", &url.Error{Op: "Post", URL: "http://127.0.0.1:1001", Err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}})
+	retryer := DeadDialRetryer(testenv.NewLogger(t), routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")
+	retry, err := retryer(ctx, readErr)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
 }
