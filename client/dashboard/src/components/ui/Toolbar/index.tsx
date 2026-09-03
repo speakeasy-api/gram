@@ -329,11 +329,17 @@ function ToolbarFilters({
     <div className="flex flex-wrap items-center gap-2">
       {pillDims.map((dim) => {
         const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
+        const ariaLabel =
+          dim.kind === "select" ||
+          dim.kind === "multiselect" ||
+          dim.kind === "daterange"
+            ? `${dim.label} filter: ${label}`
+            : label;
         return (
           <FilterChip
             key={dim.id}
             label={label}
-            ariaLabel={`${dim.label} filter: ${label}`}
+            ariaLabel={ariaLabel}
             color={accents[dim.id]}
             active={!isDimensionAtDefault(dim, values[dim.id]!)}
             onClick={() => setSheetOpen(true)}

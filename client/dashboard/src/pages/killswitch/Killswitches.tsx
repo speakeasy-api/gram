@@ -375,7 +375,7 @@ export default function Killswitches(): JSX.Element {
             data={items}
             rowKey={(item) => item.id}
             cellPadding="spacious"
-            className="min-w-[840px]"
+            className="min-w-max"
             noResultsMessage={
               <div className="py-4 text-center">
                 <h2 className="text-foreground font-medium">
