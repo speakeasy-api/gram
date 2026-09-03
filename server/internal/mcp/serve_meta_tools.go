@@ -510,6 +510,10 @@ func (s *Service) loadMemberToolset(
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
+	// Matches loadToolset: a toolset with MCP turned off is not servable.
+	if !toolset.McpEnabled {
+		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+	}
 	if !toolset.McpIsPublic && !gate.authenticated {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
