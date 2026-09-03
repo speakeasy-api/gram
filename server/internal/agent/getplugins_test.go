@@ -779,3 +779,54 @@ func TestGetPlugins_EnvironmentsCoexistForOneIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, userRows, 1, "the laptop poll still records normally")
 }
+
+// device_agent_device_syncs backs DEVICE-level coverage, which matches an MDM
+// device's serial. A shared server or an ephemeral box that happens to report a
+// serial is not a managed endpoint, so letting its heartbeat land there would
+// reopen the same hole through the serial match that the environment split
+// closes through the email one.
+func TestGetPlugins_NonEndpointEnvironmentSkipsTheDeviceHeartbeat(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"ephemeral", "server"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAgentService(t)
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+			_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+				Email:        new(mockidp.MockUserEmail),
+				SerialNumber: new("C02XK1ABCDEF"),
+				Hostname:     new("build-host"),
+				Environment:  new(environment),
+			})
+			require.NoError(t, err)
+
+			deviceRows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Empty(t, deviceRows,
+				"a non-endpoint heartbeat must not reach device_agent_device_syncs: that table backs device-level coverage, which attests a specific managed machine")
+
+			envRows, err := testrepo.New(ti.conn).ListDeviceAgentEnvironmentSyncsFixture(ctx, ti.orgID)
+			require.NoError(t, err)
+			require.Len(t, envRows, 1, "it is recorded as an environment instead")
+		})
+	}
+}
+
+// The endpoint path is unchanged: a serial still records a per-device heartbeat.
+func TestGetPlugins_EndpointWithSerialStillRecordsTheDeviceHeartbeat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        new(mockidp.MockUserEmail),
+		SerialNumber: new("C02XK1ABCDEF"),
+		Environment:  new("endpoint"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "an endpoint's device heartbeat must be unaffected by the environment split")
+}

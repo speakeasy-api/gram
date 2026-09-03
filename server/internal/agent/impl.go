@@ -258,7 +258,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// Cloud environments enroll with one shared identity, so using a real
 	// person's address is an easy accident, and a false coverage claim is worse
 	// than an absent one because nothing prompts anyone to look.
-	if environment := normalizeEnvironment(payload.Environment); environment != "" {
+	environment := normalizeEnvironment(payload.Environment)
+	if environment != "" {
 		if err := s.repo.UpsertDeviceAgentEnvironmentSync(ctx, repo.UpsertDeviceAgentEnvironmentSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			Email:          email,
@@ -291,7 +292,15 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// email: the dedup key and every reader compare LOWER(serial_number), so
 	// storing the vendor's casing verbatim would leave the stored value and
 	// its own key disagreeing.
-	if serial := normalizeSerial(payload.SerialNumber); serial != "" {
+	//
+	// Endpoints only, for the same reason the sibling above splits: this table
+	// backs DEVICE-level coverage, which matches an MDM device's serial. A
+	// shared server or an ephemeral box that happens to report a serial is not
+	// a managed endpoint, and letting its heartbeat land here would reopen the
+	// hole the environment split closes — just through the serial match instead
+	// of the email one. Those boxes are counted as environments; nothing about
+	// them belongs in a per-device count.
+	if serial := normalizeSerial(payload.SerialNumber); serial != "" && environment == "" {
 		if err := s.repo.UpsertDeviceAgentDeviceSync(ctx, repo.UpsertDeviceAgentDeviceSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			SerialNumber:   serial,
