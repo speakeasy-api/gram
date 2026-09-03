@@ -4,13 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/google/uuid"
+	pgvector_go "github.com/pgvector/pgvector-go"
+	"github.com/stretchr/testify/mock"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/rag/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func TestBuildEmbeddableContent_SummarizesSchemaDeterministically(t *testing.T) {
@@ -182,4 +190,144 @@ func TestEmitEmbeddingFallbackLogs_IncludesCustomerAndToolContext(t *testing.T) 
 	require.Equal(t, "urn:gram:tool:tool-id", record[string(attr.ToolURNKey)])
 	require.Equal(t, defaultEmbeddingModel, record[string(attr.GenAIRequestModelKey)])
 	require.Equal(t, embeddingFallbackStrategyNameDescription, record[string(attr.EmbeddingFallbackStrategyKey)])
+}
+
+type embeddingCompletionClientMock struct {
+	mock.Mock
+	openrouter.CompletionClient
+}
+
+func (m *embeddingCompletionClientMock) CreateEmbeddings(
+	ctx context.Context,
+	orgID string,
+	model string,
+	inputs []string,
+	_ ...openrouter.EmbeddingOption,
+) ([][]float32, error) {
+	args := m.Called(ctx, orgID, model, inputs)
+	vectors, _ := args.Get(0).([][]float32)
+	return vectors, args.Error(1)
+}
+
+func TestSearchToolsetTools_FilteredHNSWScanFindsToolsetRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, projectID, organizationID := newVectorSearchTestDatabase(t)
+	queries := repo.New(conn)
+
+	queryVector := make([]float32, 1536)
+	queryVector[0] = 1
+	distractorToolsetID := uuid.New()
+	for i := range 50 {
+		_, err := queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
+			ProjectID:      projectID,
+			ToolsetID:      distractorToolsetID,
+			ToolsetVersion: 1,
+			EntryKey:       fmt.Sprintf("tools:distractor-%d", i),
+			EmbeddingModel: defaultEmbeddingModel,
+			Embedding1536:  pgvector_go.NewVector(queryVector),
+			Payload:        []byte(fmt.Sprintf(`{"name":"distractor_%d"}`, i)),
+			Tags:           []string{"source:http"},
+		})
+		require.NoError(t, err)
+	}
+
+	targetToolsetID := uuid.New()
+	targetVector := make([]float32, 1536)
+	targetVector[0] = 0.9
+	targetVector[1] = 0.1
+	_, err := queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
+		ProjectID:      projectID,
+		ToolsetID:      targetToolsetID,
+		ToolsetVersion: 1,
+		EntryKey:       "tools:customers-list",
+		EmbeddingModel: defaultEmbeddingModel,
+		Embedding1536:  pgvector_go.NewVector(targetVector),
+		Payload:        []byte(`{"name":"customers_list","description":"List customers."}`),
+		Tags:           []string{"source:http", "polar/customers"},
+	})
+	require.NoError(t, err)
+	for i := range 500 {
+		otherTargetVector := make([]float32, 1536)
+		otherTargetVector[0] = 0.8
+		otherTargetVector[1] = 0.2
+		_, err := queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
+			ProjectID:      projectID,
+			ToolsetID:      targetToolsetID,
+			ToolsetVersion: 1,
+			EntryKey:       fmt.Sprintf("tools:target-%d", i),
+			EmbeddingModel: defaultEmbeddingModel,
+			Embedding1536:  pgvector_go.NewVector(otherTargetVector),
+			Payload:        []byte(fmt.Sprintf(`{"name":"target_%d"}`, i)),
+			Tags:           []string{"source:http"},
+		})
+		require.NoError(t, err)
+	}
+
+	approximateMatches, err := queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
+		QueryEmbedding1536: pgvector_go.NewVector(queryVector),
+		ProjectID:          projectID,
+		ToolsetID:          targetToolsetID,
+		ToolsetVersion:     1,
+		Tags:               []string{},
+		ResultLimit:        1,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, approximateMatches)
+
+	client := &embeddingCompletionClientMock{}
+	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"list customers"}).
+		Return([][]float32{queryVector}, nil).
+		Once()
+	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"customers list"}).
+		Return([][]float32{queryVector}, nil).
+		Once()
+	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"customers all tags"}).
+		Return([][]float32{queryVector}, nil).
+		Once()
+	t.Cleanup(func() { client.AssertExpectations(t) })
+
+	store := NewToolsetVectorStore(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		conn,
+		client,
+	)
+	toolset := types.Toolset{
+		ID:             targetToolsetID.String(),
+		ProjectID:      projectID.String(),
+		OrganizationID: organizationID,
+		ToolsetVersion: 1,
+	}
+	matches, err := store.SearchToolsetTools(ctx, toolset, SearchToolsOptions{
+		Query:     "list customers",
+		Tags:      nil,
+		MatchMode: MatchModeAny,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	require.NotContains(t, matches[0].ToolName, "distractor")
+	require.Greater(t, matches[0].SimilarityScore, 0.95)
+
+	taggedMatches, err := store.SearchToolsetTools(ctx, toolset, SearchToolsOptions{
+		Query:     "customers list",
+		Tags:      []string{"polar/customers"},
+		MatchMode: MatchModeAny,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, taggedMatches, 1)
+	require.Equal(t, "customers_list", taggedMatches[0].ToolName)
+
+	allTagsMatches, err := store.SearchToolsetTools(ctx, toolset, SearchToolsOptions{
+		Query:     "customers all tags",
+		Tags:      []string{"source:http", "polar/customers"},
+		MatchMode: MatchModeAll,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.Len(t, allTagsMatches, 1)
+	require.Equal(t, "customers_list", allTagsMatches[0].ToolName)
 }

@@ -177,6 +177,107 @@ func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatch(ctx context.Context, a
 	return items, nil
 }
 
+const searchToolsetToolEmbeddingsAllTagsMatchExact = `-- name: SearchToolsetToolEmbeddingsAllTagsMatchExact :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags @> $6)
+    AND deleted IS FALSE
+)
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
+FROM candidates
+ORDER BY embedding_1536 <=> $1
+LIMIT $2
+`
+
+type SearchToolsetToolEmbeddingsAllTagsMatchExactParams struct {
+	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
+	ProjectID          uuid.UUID
+	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
+	Tags               []string
+}
+
+type SearchToolsetToolEmbeddingsAllTagsMatchExactRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	EntryKey       string
+	EmbeddingModel string
+	Payload        []byte
+	Tags           []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Similarity     float64
+}
+
+func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatchExact(ctx context.Context, arg SearchToolsetToolEmbeddingsAllTagsMatchExactParams) ([]SearchToolsetToolEmbeddingsAllTagsMatchExactRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAllTagsMatchExact,
+		arg.QueryEmbedding1536,
+		arg.ResultLimit,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ToolsetVersion,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchToolsetToolEmbeddingsAllTagsMatchExactRow
+	for rows.Next() {
+		var i SearchToolsetToolEmbeddingsAllTagsMatchExactRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.ToolsetVersion,
+			&i.EntryKey,
+			&i.EmbeddingModel,
+			&i.Payload,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchToolsetToolEmbeddingsAnyTagsMatch = `-- name: SearchToolsetToolEmbeddingsAnyTagsMatch :many
 SELECT
     id,
@@ -240,6 +341,107 @@ func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatch(ctx context.Context, a
 	var items []SearchToolsetToolEmbeddingsAnyTagsMatchRow
 	for rows.Next() {
 		var i SearchToolsetToolEmbeddingsAnyTagsMatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.ToolsetVersion,
+			&i.EntryKey,
+			&i.EmbeddingModel,
+			&i.Payload,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchToolsetToolEmbeddingsAnyTagsMatchExact = `-- name: SearchToolsetToolEmbeddingsAnyTagsMatchExact :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags && $6::text[])
+    AND deleted IS FALSE
+)
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
+FROM candidates
+ORDER BY embedding_1536 <=> $1
+LIMIT $2
+`
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchExactParams struct {
+	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
+	ProjectID          uuid.UUID
+	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
+	Tags               []string
+}
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchExactRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	EntryKey       string
+	EmbeddingModel string
+	Payload        []byte
+	Tags           []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Similarity     float64
+}
+
+func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatchExact(ctx context.Context, arg SearchToolsetToolEmbeddingsAnyTagsMatchExactParams) ([]SearchToolsetToolEmbeddingsAnyTagsMatchExactRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAnyTagsMatchExact,
+		arg.QueryEmbedding1536,
+		arg.ResultLimit,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ToolsetVersion,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchToolsetToolEmbeddingsAnyTagsMatchExactRow
+	for rows.Next() {
+		var i SearchToolsetToolEmbeddingsAnyTagsMatchExactRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
