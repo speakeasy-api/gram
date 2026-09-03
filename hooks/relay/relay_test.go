@@ -210,8 +210,8 @@ func TestVSCodeCopilotObserveEventsRelay(t *testing.T) {
 		t.Run(tt.eventName, func(t *testing.T) {
 			fs := newFakeServer(t, nil)
 			cfg := authedConfig(t, fs.URL)
-			sessionStart := []byte(`{"hook_event_name":"SessionStart","session_id":"` + tt.sessionID + `","cwd":"/work/repo"}`)
-			agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, sessionStart)
+			prompt := []byte(`{"hook_event_name":"UserPromptSubmit","session_id":"` + tt.sessionID + `","prompt_id":"prompt-1","prompt":"hello","cwd":"/work/repo"}`)
+			agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, prompt)
 			requestsBefore := fs.count()
 
 			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, []byte(tt.payload))
