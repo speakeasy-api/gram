@@ -64,7 +64,7 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
 function saveButtonLabel(isSaving: boolean, isDistributed: boolean): string {
   if (isSaving) return "Saving";
   if (isDistributed) return "Update";
-  return "Distribute";
+  return "MCP Gateway";
 }
 
 /**

@@ -374,7 +374,7 @@ export default function RiskEvents(): JSX.Element {
   return (
     <RevealAllProvider>
       <LogWorkbench
-        eyebrow="Secure"
+        eyebrow="Security and Policy"
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."

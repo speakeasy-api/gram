@@ -214,9 +214,9 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observe group */}
+          {/* Observability group */}
           <ScopeGatedNavGroup
-            label="Observe"
+            label="Observability"
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
               // First in the group: an identity is the subject the rest of
@@ -235,31 +235,9 @@ export function AppSidebar({
             ]}
           />
 
-          {/* Secure group */}
+          {/* MCP Gateway group */}
           <ScopeGatedNavGroup
-            label="Secure"
-            Icon={(p) => <Icon {...p} name="shield" />}
-            items={[
-              // Watchdog supersedes Risk Overview: exactly one of the two
-              // shows, mirroring useProjectNavRoutes. Risk Events sits below
-              // the landing surface in both modes.
-              ...(isRiskWatchdogEnabled
-                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
-                : [
-                    {
-                      item: routes.riskOverview,
-                      ...accessFor(routes.riskOverview),
-                    },
-                  ]),
-              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
-              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-            ]}
-          />
-
-          {/* Distribute group */}
-          <ScopeGatedNavGroup
-            label="Distribute"
+            label="MCP Gateway"
             Icon={(p) => <Icon {...p} name="hammer" />}
             items={[
               { item: routes.mcp, ...accessFor(routes.mcp) },
@@ -278,6 +256,28 @@ export function AppSidebar({
                     },
                   ]
                 : []),
+            ]}
+          />
+
+          {/* Security and Policy group */}
+          <ScopeGatedNavGroup
+            label="Security and Policy"
+            Icon={(p) => <Icon {...p} name="shield" />}
+            items={[
+              // Watchdog supersedes Risk Overview: exactly one of the two
+              // shows, mirroring useProjectNavRoutes. Risk Events sits below
+              // the landing surface in both modes.
+              ...(isRiskWatchdogEnabled
+                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+                : [
+                    {
+                      item: routes.riskOverview,
+                      ...accessFor(routes.riskOverview),
+                    },
+                  ]),
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
+              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
             ]}
           />
 
