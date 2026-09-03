@@ -127,9 +127,12 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		SupportOrganizationID: "",
 	}
 
-	// Chat-session tokens predate principal-backed credentials and carry only
-	// legacy API-key provenance. M2 must reject principal-backed keys at token
-	// issuance or add an explicit versioned profile before they can reach here.
+	// API-key-minted chat sessions intentionally delegate the legacy key's
+	// authorization profile so MCP calls retain their existing permissions. They
+	// carry no direct key scopes, which lets chat access distinguish them from a
+	// direct key and enforce project and owner boundaries. M2 must reject
+	// principal-backed keys at token issuance or add an explicit versioned profile
+	// before they can reach here.
 	switch {
 	case authCtx.APIKeyID != "":
 		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil

@@ -55,6 +55,33 @@ func TestRecordAuthorizationDecisionEmitsBoundedAttribution(t *testing.T) {
 	require.NotContains(t, attrs, "gram.authorization.policy")
 }
 
+func TestRecordAuthorizationDecisionOmitsSessionCredentials(t *testing.T) {
+	t.Parallel()
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+
+	sessionToken := "must-not-appear-in-telemetry"
+	ctx := contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_123",
+		UserID:               "user_123",
+		SessionID:            &sessionToken,
+	}, false)
+	ctx, span := provider.Tracer("test").Start(ctx, "request")
+	RecordAuthorizationDecision(ctx, repo.OperationRequire, repo.OutcomeAllow, repo.ReasonGrantMatched)
+	span.End()
+
+	spans := exporter.GetSpans()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Events, 1)
+	attrs := decisionAttributeMap(spans[0].Events[0].Attributes)
+	require.NotContains(t, attrs, "gram.authorization.session_id")
+	for _, value := range attrs {
+		require.NotEqual(t, sessionToken, value)
+	}
+}
+
 func TestRecordAuthorizationDecisionBoundsUnknownValues(t *testing.T) {
 	t.Parallel()
 

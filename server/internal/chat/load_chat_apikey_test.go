@@ -134,6 +134,12 @@ func TestLoadChat_ChatSessionTokenStillOwnerMatched(t *testing.T) {
 	got, err := ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Len(t, got.Messages, 2)
+
+	// Delegated API-key authorization must not let the token reach a dashboard
+	// chat owned by a different user in the same project.
+	dashboardChatID := seedChat(t, seedCtx, ti, "different-dashboard-user", "", "dashboard chat")
+	_, err = ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(dashboardChatID.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 // createProjectInSameOrg adds a second project to ti's organization so a single
