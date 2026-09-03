@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
+  buildAddCandidates,
   buildMemberRows,
   classifyMemberServer,
   memberBackendKind,
@@ -195,5 +197,72 @@ describe("memberBackendKind", () => {
         server({ tunneledMcpServerId: "t-1", remoteMcpServerId: "r-1" }),
       ),
     ).toBe("tunneled");
+  });
+});
+
+describe("buildAddCandidates", () => {
+  const toolset = (overrides: Partial<ToolsetEntry> = {}): ToolsetEntry =>
+    ({
+      id: "ts-1",
+      name: "Linear",
+      slug: "linear",
+      mcpEnabled: true,
+      ...overrides,
+    }) as ToolsetEntry;
+
+  it("offers toolsets that have no mcp_servers wrapper yet", () => {
+    const candidates = buildAddCandidates(
+      [server({ id: "s-1", name: "Linear David", slug: "linear-david" })],
+      [toolset()],
+      new Set(),
+      "linear",
+    );
+    expect(candidates.map((c) => c.kind)).toEqual(["toolset", "server"]);
+  });
+
+  it("hides toolsets already represented by a wrapper row", () => {
+    const candidates = buildAddCandidates(
+      [server({ id: "s-1", name: "Linear", toolsetId: "ts-1" })],
+      [toolset()],
+      new Set(),
+      "",
+    );
+    expect(candidates).toEqual([
+      { kind: "server", server: expect.objectContaining({ id: "s-1" }) },
+    ]);
+  });
+
+  it("drops servers that are already members and trims the search", () => {
+    const candidates = buildAddCandidates(
+      [server({ id: "s-1", name: "Linear" })],
+      [toolset(), toolset({ id: "ts-2", name: "Other", slug: "other" })],
+      new Set(["s-1"]),
+      "  LINEAR ",
+    );
+    expect(candidates).toEqual([
+      { kind: "toolset", toolset: expect.objectContaining({ id: "ts-1" }) },
+    ]);
+  });
+
+  it("interleaves kinds by display name, treating a nameless server as empty", () => {
+    const candidates = buildAddCandidates(
+      [
+        server({ id: "s-1", name: "Zulu" }),
+        server({ id: "s-2", name: undefined, slug: "nameless" }),
+      ],
+      [
+        toolset({ id: "ts-1", name: "Alpha" }),
+        toolset({ id: "ts-2", name: "Mike" }),
+      ],
+      new Set(),
+      "",
+    );
+    expect(
+      candidates.map((c) =>
+        c.kind === "server"
+          ? `server:${c.server.id}`
+          : `toolset:${c.toolset.id}`,
+      ),
+    ).toEqual(["server:s-2", "toolset:ts-1", "toolset:ts-2", "server:s-1"]);
   });
 });
