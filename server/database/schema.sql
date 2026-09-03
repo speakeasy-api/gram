@@ -3695,6 +3695,10 @@ CREATE TABLE IF NOT EXISTS organization_setup_tasks (
   CONSTRAINT organization_setup_tasks_assignee_check CHECK (assignee_user_id IS NULL OR assignee_email IS NULL)
 );
 
+CREATE INDEX IF NOT EXISTS organization_setup_tasks_assignee_user_id_idx
+ON organization_setup_tasks (assignee_user_id)
+WHERE assignee_user_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
