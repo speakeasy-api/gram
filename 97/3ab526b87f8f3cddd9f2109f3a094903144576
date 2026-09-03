@@ -1,0 +1,14 @@
+server/internal/otel/handler_risk_finding_relay_test.go
+  h_2620cc60cfd1e9 98-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "973ab526b87f8f3cddd9f2109f3a094903144576",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
