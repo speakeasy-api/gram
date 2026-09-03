@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -138,7 +137,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	return s.mutator.SetFeature(ctx, orgID, feature, payload.Enabled, MutationActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		DisplayName: authCtx.Email,
-		Slug:        conv.PtrEmpty(authCtx.OrganizationSlug),
+		Slug:        nil,
 	})
 }
 

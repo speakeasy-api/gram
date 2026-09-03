@@ -38,6 +38,7 @@ func TestSetProductFeatureEnableRecordsGenericAudit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "organization", record.SubjectType)
 	require.Equal(t, authCtx.ActiveOrganizationID, record.OrganizationID)
+	require.Empty(t, record.ActorSlug, "user actor must carry no organization slug")
 	require.False(t, record.ProjectID.Valid, "org-scoped event must carry no project")
 
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
