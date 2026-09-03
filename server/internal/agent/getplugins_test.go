@@ -720,15 +720,15 @@ func TestGetPlugins_NonLaptopEnvironmentRecordsSeparately(t *testing.T) {
 	}
 }
 
-// Absent, laptop, and unrecognized all mean the same thing, and none of them
+// Absent, endpoint, and unrecognized all mean the same thing, and none of them
 // may change what a deployed agent's poll does today.
-func TestGetPlugins_LaptopAndUnknownEnvironmentsKeepTheUserHeartbeat(t *testing.T) {
+func TestGetPlugins_EndpointAndUnknownEnvironmentsKeepTheUserHeartbeat(t *testing.T) {
 	t.Parallel()
 	for name, environment := range map[string]*string{
 		"absent":       nil,
 		"empty":        new(""),
-		"laptop":       new("laptop"),
-		"padded":       new("  LAPTOP  "),
+		"endpoint":     new("endpoint"),
+		"padded":       new("  ENDPOINT  "),
 		"unrecognized": new("toaster"),
 	} {
 		t.Run(name, func(t *testing.T) {

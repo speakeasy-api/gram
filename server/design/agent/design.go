@@ -61,8 +61,8 @@ var _ = Service("agent", func() {
 			// the same reason as the two above: agents predating the header omit
 			// it, and Goa rejects a request missing a Required attribute.
 			//
-			// Absent means "laptop", which is why the agent does not send that
-			// value — an absent header and a laptop header describe the same
+			// Absent means "endpoint", which is why the agent does not send that
+			// value — an absent header and an endpoint header describe the same
 			// device, so every deployed agent's poll is unchanged.
 			//
 			// Not cosmetic. A cloud sandbox reports no serial, so its heartbeat
@@ -70,12 +70,13 @@ var _ = Service("agent", func() {
 			// reads; without this, a session polling under a real person's
 			// address marks that person's laptop covered whether or not the
 			// laptop runs the agent.
+			//
 			// Deliberately NOT an Enum. Goa rejects an out-of-set value with a
 			// 400, and a rejected poll means that device syncs no plugins at
 			// all — an outage caused by an attribution hint. The value is
 			// normalized in the handler instead, where an unrecognized one
-			// degrades to "laptop" and the sync proceeds.
-			Attribute("environment", String, "What kind of machine the agent runs on: `laptop` (the default when omitted), `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `laptop`.", func() {
+			// degrades to "endpoint" and the sync proceeds.
+			Attribute("environment", String, "What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.", func() {
 				Example("ephemeral")
 			})
 		})

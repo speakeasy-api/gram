@@ -181,23 +181,25 @@ func normalizeSerial(reported *string) string {
 	return serial
 }
 
-// Environment kinds an agent may declare. "laptop" is the default and is never
-// stored as such: those heartbeats go to device_agent_syncs, whose email match
-// device coverage reads.
+// Environment kinds an agent may declare. "endpoint" — an end-user device of
+// any form factor, named so it does not expire the way "laptop" would on a
+// desktop or a phone — is the default and is never stored as such: those
+// heartbeats go to device_agent_syncs, whose email match device coverage reads.
 const (
-	environmentLaptop    = "laptop"
+	environmentEndpoint  = "endpoint"
 	environmentEphemeral = "ephemeral"
 	environmentServer    = "server"
 )
 
 // normalizeEnvironment maps the declared kind onto the closed set, returning
-// "" for a laptop and for anything unrecognized.
+// "" for an ordinary endpoint and for anything unrecognized.
 //
 // Unrecognized degrades rather than erroring, deliberately. The alternative is
 // rejecting the poll, which would stop that device syncing plugins at all —
 // an outage caused by an attribution hint. A new agent inventing a kind an
 // older server has not heard of should keep working, and the worst case is
-// that its heartbeat is counted as a laptop, which is where it lands today.
+// that its heartbeat is counted as an ordinary endpoint, which is where it
+// lands today.
 func normalizeEnvironment(reported *string) string {
 	switch strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, ""))) {
 	case environmentEphemeral:
