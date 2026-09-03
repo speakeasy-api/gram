@@ -14,6 +14,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -155,16 +156,11 @@ func TestValidatePrincipal(t *testing.T) {
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, rolePrincipal))
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
 
-	_, err = conn.Exec(ctx, `UPDATE agents SET suspended_at = clock_timestamp() WHERE id = $1`, agent.ID)
+	err = testrepo.New(conn).SetAgentSuspendedFixture(ctx, agent.ID)
 	require.NoError(t, err)
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
 
-	_, err = conn.Exec(ctx, `
-		UPDATE agents
-		SET suspended_at = NULL, revoked_at = clock_timestamp(),
-		    owner_reassignment_required_at = clock_timestamp(),
-		    owner_reassignment_reason = 'owner unavailable'
-		WHERE id = $1`, agent.ID)
+	err = testrepo.New(conn).SetAgentRevokedAndOwnerLatchFixture(ctx, agent.ID)
 	require.NoError(t, err)
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
 
@@ -175,7 +171,7 @@ func TestValidatePrincipal(t *testing.T) {
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, "not-a-uuid"))
 	require.ErrorIs(t, err, ErrPrincipalInvalid)
 
-	_, err = conn.Exec(ctx, `UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1`, agent.ID)
+	err = testrepo.New(conn).SoftDeleteAgentFixture(ctx, agent.ID)
 	require.NoError(t, err)
 	err = ValidatePrincipal(ctx, conn, organizationID, agentPrincipal)
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
