@@ -4658,6 +4658,7 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		Email:        v.Email,
 		PhotoURL:     v.PhotoURL,
 		JoinedAt:     v.JoinedAt,
+		Department:   v.Department,
 	}
 	if v.RoleIds != nil {
 		res.RoleIds = make([]string, len(v.RoleIds))
@@ -4666,6 +4667,12 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		}
 	} else {
 		res.RoleIds = []string{}
+	}
+	if v.Groups != nil {
+		res.Groups = make([]string, len(v.Groups))
+		for i, val := range v.Groups {
+			res.Groups[i] = val
+		}
 	}
 
 	return res

@@ -141,6 +141,10 @@ type AccessMember struct {
 	RoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
+	// Department name as reported by the identity provider.
+	Department *string
+	// Names of the directory groups the member belongs to.
+	Groups []string
 }
 
 type AuthzChallenge struct {

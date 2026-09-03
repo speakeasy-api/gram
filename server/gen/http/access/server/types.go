@@ -218,6 +218,10 @@ type UpdateMemberRolesResponseBody struct {
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
+	// Department name as reported by the identity provider.
+	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
+	// Names of the directory groups the member belongs to.
+	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
 }
 
 // ListShadowMCPInventoryResponseBody is the type of the "access" service
@@ -4101,6 +4105,10 @@ type AccessMemberResponseBody struct {
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
+	// Department name as reported by the identity provider.
+	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
+	// Names of the directory groups the member belongs to.
+	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
 }
 
 // ListRoleGrantResponseBody is used to define fields on response body types.
@@ -4574,6 +4582,7 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		Email:        res.Email,
 		PhotoURL:     res.PhotoURL,
 		JoinedAt:     res.JoinedAt,
+		Department:   res.Department,
 	}
 	if res.RoleIds != nil {
 		body.RoleIds = make([]string, len(res.RoleIds))
@@ -4582,6 +4591,12 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		}
 	} else {
 		body.RoleIds = []string{}
+	}
+	if res.Groups != nil {
+		body.Groups = make([]string, len(res.Groups))
+		for i, val := range res.Groups {
+			body.Groups[i] = val
+		}
 	}
 	return body
 }

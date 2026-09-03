@@ -53,6 +53,12 @@ import {
   IDENTITY_KIND_LABELS,
   type IdentityKind,
 } from "./identityKind";
+import {
+  coverageForIdentity,
+  deviceCoverageQueryKey,
+  fetchDeviceCoverage,
+  NO_DEVICE_BUCKET,
+} from "./identityDeviceCoverage";
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 
 export function IdentitiesRoot(): JSX.Element {
@@ -100,11 +106,59 @@ const IDENTITY_FILTERS = defineFilters([
     description: "People and agents.",
   },
   {
+    id: "enrollment",
+    label: "Enrollment",
+    kind: "select",
+    allLabel: "All",
+    description: "Whether the platform has seen this identity work at all.",
+  },
+  {
+    id: "activity",
+    label: "Last activity",
+    kind: "select",
+    allLabel: "Any time",
+    description: "How recently the identity was last seen working.",
+  },
+  {
+    id: "device_status",
+    label: "Device agent",
+    kind: "multiselect",
+    description:
+      "Agent coverage on the identity's managed devices, as the MDM inventory reports it. An identity with several machines is described by its best one.",
+  },
+  {
+    id: "role",
+    label: "Roles",
+    kind: "multiselect",
+    description: "Roles assigned in this organization.",
+  },
+  {
+    id: "department",
+    label: "Department",
+    kind: "multiselect",
+    description: "Department as reported by the connected identity provider.",
+  },
+  {
+    id: "team",
+    label: "Team",
+    kind: "multiselect",
+    description:
+      "Directory groups the identity belongs to, from the connected identity provider.",
+  },
+  {
     id: "account_type",
     label: "Account type",
     kind: "select",
     allLabel: "All",
     description: "Usage on personal accounts versus team-managed ones.",
+  },
+  {
+    id: "personal_account",
+    label: "Uses personal account",
+    kind: "select",
+    allLabel: "All",
+    description:
+      "Identities holding at least one personal account, or none at all.",
   },
 ]);
 
@@ -112,6 +166,53 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "personal", label: "Personal" },
   { value: "team", label: "Team" },
 ];
+
+const PERSONAL_ACCOUNT_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
+
+const ENROLLMENT_OPTIONS = [
+  { value: "enrolled", label: "Enrolled" },
+  { value: "not_enrolled", label: "Not enrolled" },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Activity buckets, each the window it names — "Last 30 days" includes the
+ * last week rather than excluding it, because a reader narrowing to a month
+ * means "this month's people", not "the ones who went quiet mid-month".
+ */
+const ACTIVITY_OPTIONS = [
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "older", label: "Over 30 days ago" },
+  { value: "never", label: "Never" },
+];
+
+function matchesActivity(identity: Employee, bucket: string): boolean {
+  const timestamp = identity.lastActivityTimestamp;
+  if (bucket === "never") return timestamp === null;
+  if (timestamp === null) return false;
+  const age = Date.now() - timestamp;
+  if (bucket === "7d") return age <= 7 * DAY_MS;
+  if (bucket === "30d") return age <= 30 * DAY_MS;
+  if (bucket === "older") return age > 30 * DAY_MS;
+  return true;
+}
+
+/** How each device-coverage bucket reads in the filter. */
+const DEVICE_STATUS_LABELS: Record<string, string> = {
+  agent_active: "Agent active",
+  agent_stale: "Agent stale",
+  agent_other_device: "Agent on another device",
+  no_agent: "No agent",
+  no_email: "No assigned email",
+  unresolved_email: "Email unresolved",
+  missing: "Missing from MDM",
+  [NO_DEVICE_BUCKET]: "No managed device",
+};
 
 const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
   value: kind,
@@ -122,6 +223,15 @@ const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
 // person with no account has none yet, and the roster reports an absent role
 // as a bare "-" or "Unknown" depending on which source answered. Three
 // spellings of nothing in one column read as three different states.
+/** The distinct non-empty values in a column, as sorted filter options. */
+function sortedValueOptions(
+  values: string[],
+): { value: string; label: string }[] {
+  return [...new Set(values.filter((value) => value !== ""))]
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: value }));
+}
+
 function roleLabel(identity: Employee): string {
   if (identityKindOf(identity) !== "person") return "\u2014";
   const role = identity.role.trim();
@@ -271,6 +381,16 @@ function IdentitiesIndexContent(): JSX.Element {
     queryFn: () => fetchIdentityRoster(client, projectSlug),
     throwOnError: false,
   });
+  // The MDM fleet, read once and folded to a bucket per identity. It is not
+  // part of the roster: an org with no device integration connected simply
+  // has no fleet, and the device filter drops out rather than offering a
+  // dimension where every identity answers the same.
+  const deviceCoverageQuery = useQuery({
+    queryKey: deviceCoverageQueryKey(organization.id),
+    queryFn: () => fetchDeviceCoverage(client),
+    throwOnError: false,
+  });
+  const deviceCoverage = deviceCoverageQuery.data;
 
   // The list is the join of all three reads, so until they land there is no
   // roster to report on — and "0 identities" or "No identities match these
@@ -313,17 +433,115 @@ function IdentitiesIndexContent(): JSX.Element {
     return tally;
   }, [identities]);
 
+  // Option lists the data decides: a role the org never assigned, a department
+  // nobody is in, or a device bucket no machine falls into is a filter that can
+  // only empty the table, so each dimension offers what the roster actually
+  // holds and drops out entirely when it holds nothing.
+  const roleOptions = useMemo(() => {
+    const assigned = new Set(
+      identities.flatMap((identity) => identity.roleIds),
+    );
+    return (rolesQuery.data?.roles ?? [])
+      .filter((role) => assigned.has(role.id))
+      .map((role) => ({ value: role.id, label: role.name }));
+  }, [identities, rolesQuery.data]);
+
+  const departmentOptions = useMemo(
+    () => sortedValueOptions(identities.map((identity) => identity.department)),
+    [identities],
+  );
+  const teamOptions = useMemo(
+    () => sortedValueOptions(identities.flatMap((identity) => identity.teams)),
+    [identities],
+  );
+  const deviceStatusOptions = useMemo(() => {
+    if (!deviceCoverage || deviceCoverage.deviceCount === 0) return [];
+    const present = new Set(
+      identities.map((identity) =>
+        coverageForIdentity(deviceCoverage, identity),
+      ),
+    );
+    return [...present]
+      .map((bucket) => ({
+        value: bucket,
+        label: DEVICE_STATUS_LABELS[bucket] ?? bucket,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [identities, deviceCoverage]);
+
+  // A dimension with nothing to offer would render an empty control; leave it
+  // out of the schema rather than show a filter that cannot filter.
+  const filterSchema = useMemo(
+    () =>
+      IDENTITY_FILTERS.filter((dimension) => {
+        if (dimension.id === "role") return roleOptions.length > 0;
+        if (dimension.id === "department") return departmentOptions.length > 0;
+        if (dimension.id === "team") return teamOptions.length > 0;
+        if (dimension.id === "device_status") {
+          return deviceStatusOptions.length > 0;
+        }
+        return true;
+      }),
+    [
+      roleOptions.length,
+      departmentOptions.length,
+      teamOptions.length,
+      deviceStatusOptions.length,
+    ],
+  );
+
   // Joined rather than held as an array: the filter state hands back a fresh
   // array each render, which would defeat the memo below.
   const kindKey = (values.kind ?? []).join(",");
   const accountType = (values.account_type as string | undefined) ?? "";
+  const personalAccount = (values.personal_account as string | undefined) ?? "";
+  const enrollment = (values.enrollment as string | undefined) ?? "";
+  const activity = (values.activity as string | undefined) ?? "";
+  const deviceStatusKey = (values.device_status ?? []).join(",");
+  const roleKey = (values.role ?? []).join(",");
+  const departmentKey = (values.department ?? []).join(",");
+  const teamKey = (values.team ?? []).join(",");
   const rows = useMemo(() => {
     const selectedKinds = kindKey ? kindKey.split(",") : [];
+    const selectedDeviceStatuses = deviceStatusKey
+      ? deviceStatusKey.split(",")
+      : [];
+    const selectedRoles = roleKey ? roleKey.split(",") : [];
+    const selectedDepartments = departmentKey ? departmentKey.split(",") : [];
+    const selectedTeams = teamKey ? teamKey.split(",") : [];
     const query = search.trim().toLowerCase();
     return identities.filter((identity) => {
       if (
         selectedKinds.length > 0 &&
         !selectedKinds.includes(identityKindOf(identity))
+      ) {
+        return false;
+      }
+      if (enrollment && identity.status !== enrollment) return false;
+      if (activity && !matchesActivity(identity, activity)) return false;
+      if (
+        selectedDeviceStatuses.length > 0 &&
+        !selectedDeviceStatuses.includes(
+          coverageForIdentity(deviceCoverage, identity),
+        )
+      ) {
+        return false;
+      }
+      if (
+        selectedRoles.length > 0 &&
+        !identity.roleIds.some((id) => selectedRoles.includes(id))
+      ) {
+        return false;
+      }
+      if (
+        selectedDepartments.length > 0 &&
+        !selectedDepartments.includes(identity.department)
+      ) {
+        return false;
+      }
+      if (
+        selectedTeams.length > 0 &&
+        !identity.teams.some((team) => selectedTeams.includes(team))
       ) {
         return false;
       }
@@ -336,13 +554,32 @@ function IdentitiesIndexContent(): JSX.Element {
       ) {
         return false;
       }
+      if (
+        personalAccount &&
+        identity.hasPersonalAccount !== (personalAccount === "yes")
+      ) {
+        return false;
+      }
       if (!query) return true;
       return (
         identity.name.toLowerCase().includes(query) ||
         identity.email.toLowerCase().includes(query)
       );
     });
-  }, [identities, search, kindKey, accountType]);
+  }, [
+    identities,
+    search,
+    kindKey,
+    accountType,
+    personalAccount,
+    enrollment,
+    activity,
+    deviceStatusKey,
+    deviceCoverage,
+    roleKey,
+    departmentKey,
+    teamKey,
+  ]);
 
   const sortedRows = useMemo(
     () => sortTableData(rows, IDENTITY_COLUMNS, sort) as Employee[],
@@ -353,7 +590,19 @@ function IdentitiesIndexContent(): JSX.Element {
   // something they have not seen page one of.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, kindKey, accountType, sort]);
+  }, [
+    search,
+    kindKey,
+    accountType,
+    personalAccount,
+    enrollment,
+    activity,
+    deviceStatusKey,
+    roleKey,
+    departmentKey,
+    teamKey,
+    sort,
+  ]);
 
   return (
     <Page.Section>
@@ -423,11 +672,18 @@ function IdentitiesIndexContent(): JSX.Element {
             debounceMs={200}
           />
           <Page.Toolbar.Filters
-            schema={IDENTITY_FILTERS}
+            schema={filterSchema}
             values={values}
             optionsById={{
               kind: KIND_OPTIONS,
+              enrollment: ENROLLMENT_OPTIONS,
+              activity: ACTIVITY_OPTIONS,
+              device_status: deviceStatusOptions,
+              role: roleOptions,
+              department: departmentOptions,
+              team: teamOptions,
               account_type: ACCOUNT_TYPE_OPTIONS,
+              personal_account: PERSONAL_ACCOUNT_OPTIONS,
             }}
             onChange={setValue as (id: string, value: unknown) => void}
             onClear={clearValue as (id: string) => void}
