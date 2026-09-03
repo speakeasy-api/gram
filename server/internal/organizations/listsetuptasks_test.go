@@ -27,6 +27,8 @@ func TestService_ListSetupTasksProjectsCatalogAndDependencies(t *testing.T) {
 	require.Equal(t, "platform-mcp", result.Tasks[8].Key)
 	require.Equal(t, []string{"instrument-agents"}, setupTask(result.Tasks, "confirm-traffic").BlockedBy)
 	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
+	require.False(t, setupTask(result.Tasks, "connect-idp").CompletedByFact)
+	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
@@ -50,13 +52,42 @@ func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Equal(t, "done", setupTask(result.Tasks, "connect-idp").Status)
+	require.True(t, setupTask(result.Tasks, "connect-idp").CompletedByFact)
 	require.Equal(t, "done", setupTask(result.Tasks, "directory-sync").Status)
+	require.True(t, setupTask(result.Tasks, "directory-sync").CompletedByFact)
 	require.Equal(t, "done", setupTask(result.Tasks, "create-marketplace").Status)
+	require.True(t, setupTask(result.Tasks, "create-marketplace").CompletedByFact)
+	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
 	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy)
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationSetupTasks(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, rows, "completion projection must not persist catalog defaults or facts")
+}
+
+func TestService_ListSetupTasksReopenedPrerequisiteBlocksProgressedDependent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	done := "done"
+	_, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "instrument-agents", Status: &done})
+	require.NoError(t, err)
+
+	inProgress := "in_progress"
+	dependent, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "confirm-traffic", Status: &inProgress})
+	require.NoError(t, err)
+	require.Equal(t, "in_progress", dependent.Status)
+	require.Empty(t, dependent.BlockedBy)
+
+	todo := "todo"
+	_, err = ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "instrument-agents", Status: &todo})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	dependent = setupTask(result.Tasks, "confirm-traffic")
+	require.Equal(t, "todo", dependent.Status)
+	require.Equal(t, []string{"instrument-agents"}, dependent.BlockedBy)
 }
 
 func TestService_ListSetupTasksResolvesEmailAssigneeAndScopesOrganization(t *testing.T) {

@@ -10267,7 +10267,7 @@ examples:
         application/json: {"task_key": "<value>"}
       responses:
         "200":
-          application/json: {"blocked_by": [], "description": "ecliptic woot quarrelsomely destock wisely", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
+          application/json: {"blocked_by": [], "completed_by_fact": true, "description": "ecliptic woot quarrelsomely destock wisely", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

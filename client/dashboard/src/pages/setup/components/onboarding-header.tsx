@@ -52,9 +52,10 @@ export function OnboardingHeader({
             variant="tertiary"
             size="sm"
             onClick={onLeave}
-            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
+            aria-label="Go to dashboard"
+            className="text-muted-foreground hover:text-foreground inline-flex gap-1.5"
           >
-            Go to dashboard
+            <span className="hidden lg:inline">Go to dashboard</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
           {children}

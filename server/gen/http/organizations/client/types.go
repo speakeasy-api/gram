@@ -65,9 +65,9 @@ type UpdateSetupTaskRequestBody struct {
 	TaskKey string `form:"task_key" json:"task_key" xml:"task_key"`
 	// Setup task status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Replacement task assignee.
+	// Replacement task assignee. Must not be set when clear_assignee=true.
 	Assignee *SetupTaskAssigneeInputRequestBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
-	// Clear the current task assignee.
+	// Clear the current task assignee. Must not be true when assignee is set.
 	ClearAssignee *bool `form:"clear_assignee,omitempty" json:"clear_assignee,omitempty" xml:"clear_assignee,omitempty"`
 	// Hide or restore the task.
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
@@ -221,6 +221,9 @@ type UpdateSetupTaskResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Effective task status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact *bool `form:"completed_by_fact,omitempty" json:"completed_by_fact,omitempty" xml:"completed_by_fact,omitempty"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3331,6 +3334,9 @@ type SetupTaskResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Effective task status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact *bool `form:"completed_by_fact,omitempty" json:"completed_by_fact,omitempty" xml:"completed_by_fact,omitempty"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3355,9 +3361,10 @@ type SetupTaskAssigneeResponseBody struct {
 // SetupTaskAssigneeInputRequestBody is used to define fields on request body
 // types.
 type SetupTaskAssigneeInputRequestBody struct {
-	// Active organization member to assign.
+	// Active organization member to assign. Mutually exclusive with email.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Email address to assign before membership exists.
+	// Email address to assign before membership exists. Mutually exclusive with
+	// user_id.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
@@ -5850,11 +5857,12 @@ func NewListSetupTasksGatewayError(body *ListSetupTasksGatewayErrorResponseBody)
 // "updateSetupTask" endpoint result from a HTTP "OK" response.
 func NewUpdateSetupTaskSetupTaskOK(body *UpdateSetupTaskResponseBody) *organizations.SetupTask {
 	v := &organizations.SetupTask{
-		Key:         *body.Key,
-		Title:       *body.Title,
-		Description: *body.Description,
-		Status:      *body.Status,
-		Hidden:      *body.Hidden,
+		Key:             *body.Key,
+		Title:           *body.Title,
+		Description:     *body.Description,
+		Status:          *body.Status,
+		CompletedByFact: *body.CompletedByFact,
+		Hidden:          *body.Hidden,
 	}
 	if body.Assignee != nil {
 		v.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(body.Assignee)
@@ -6271,6 +6279,9 @@ func ValidateUpdateSetupTaskResponseBody(body *UpdateSetupTaskResponseBody) (err
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CompletedByFact == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("completed_by_fact", "body"))
 	}
 	if body.BlockedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_by", "body"))
@@ -10254,6 +10265,9 @@ func ValidateSetupTaskResponseBody(body *SetupTaskResponseBody) (err error) {
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CompletedByFact == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("completed_by_fact", "body"))
 	}
 	if body.BlockedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_by", "body"))

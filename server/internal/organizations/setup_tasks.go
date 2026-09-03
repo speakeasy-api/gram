@@ -132,6 +132,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	if payload.Status != nil && adminErr != nil && !setupTaskAssignedTo(before, ac) {
 		return nil, adminErr
 	}
+	if payload.Status != nil && *payload.Status != setupTaskStatusTodo && len(before.BlockedBy) > 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "blocked setup tasks must remain todo").LogError(ctx, s.logger)
+	}
 
 	emptyText := pgtype.Text{String: "", Valid: false}
 	emptyTime := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
@@ -162,7 +165,7 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		}
 		stored.AssigneeUserID = userID
 		stored.AssigneeEmail = email
-		if payload.Status == nil && before.Status == setupTaskStatusTodo {
+		if payload.Status == nil && before.Status == setupTaskStatusTodo && len(before.BlockedBy) == 0 {
 			stored.Status = setupTaskStatusInProgress
 		}
 	} else if clearAssignee {
@@ -267,12 +270,13 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		if (definition.Key == "connect-idp" && facts.SsoConfigured) ||
+		completedByFact := (definition.Key == "connect-idp" && facts.SsoConfigured) ||
 			(definition.Key == "directory-sync" && facts.DsyncConfigured) ||
-			(definition.Key == "create-marketplace" && facts.MarketplacePublished) {
+			(definition.Key == "create-marketplace" && facts.MarketplacePublished)
+		if completedByFact {
 			status = setupTaskStatusDone
 		}
-		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
+		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
 	}
 
 	for index, definition := range setupTaskCatalog {
@@ -280,6 +284,7 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			prerequisiteTask := setupTaskByKey(tasks, prerequisite)
 			if prerequisiteTask != nil && !prerequisiteTask.Hidden && prerequisiteTask.Status != setupTaskStatusDone {
 				tasks[index].BlockedBy = append(tasks[index].BlockedBy, prerequisite)
+				tasks[index].Status = setupTaskStatusTodo
 			}
 		}
 	}

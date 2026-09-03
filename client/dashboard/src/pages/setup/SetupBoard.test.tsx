@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   canAdmin: true,
   setupQuery: vi.fn(),
   update: vi.fn(),
+  updatePending: false,
   invite: vi.fn(),
   invalidate: vi.fn(),
   toastInfo: vi.fn(),
@@ -124,7 +125,7 @@ vi.mock("@gram/client/react-query/listSetupTasks.js", () => ({
 vi.mock("@gram/client/react-query/updateSetupTask.js", () => ({
   useUpdateSetupTaskMutation: () => ({
     mutateAsync: mocks.update,
-    isPending: false,
+    isPending: mocks.updatePending,
   }),
 }));
 
@@ -202,6 +203,7 @@ const tasks: SetupTask[] = [
     title: "Connect identity provider",
     description: "Connect SSO",
     status: "todo",
+    completedByFact: false,
     blockedBy: [],
     hidden: false,
   },
@@ -210,6 +212,7 @@ const tasks: SetupTask[] = [
     title: "Instrument agents",
     description: "Install hooks",
     status: "in_progress",
+    completedByFact: false,
     blockedBy: [],
     hidden: false,
     assignee: {
@@ -223,6 +226,7 @@ const tasks: SetupTask[] = [
     title: "Confirm traffic",
     description: "See hook traffic",
     status: "awaiting_support",
+    completedByFact: false,
     blockedBy: ["instrument-agents"],
     hidden: false,
   },
@@ -231,6 +235,7 @@ const tasks: SetupTask[] = [
     title: "Configure policies",
     description: "Set policy defaults",
     status: "done",
+    completedByFact: false,
     blockedBy: [],
     hidden: false,
   },
@@ -241,6 +246,7 @@ const hiddenTask: SetupTask = {
   title: "Set up Platform MCP",
   description: "Connect Platform MCP",
   status: "todo",
+  completedByFact: false,
   blockedBy: [],
   hidden: true,
 };
@@ -258,6 +264,7 @@ beforeEach(() => {
   });
   mocks.update.mockReset();
   mocks.update.mockResolvedValue(tasks[0]);
+  mocks.updatePending = false;
   mocks.invite.mockReset();
   mocks.invite.mockResolvedValue({});
   mocks.invalidate.mockReset();
@@ -279,11 +286,12 @@ describe("SetupBoard", () => {
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
     }
+    expect(screen.getByRole("region", { name: "Setup board" })).toBeTruthy();
     expect(screen.getByText("Blocked by Instrument agents")).toBeTruthy();
     expect(
       within(screen.getByTestId("setup-task-confirm-traffic"))
-        .getByRole("button", { name: /Confirm traffic/ })
-        .hasAttribute("disabled"),
+        .getAllByRole("button", { name: /Confirm traffic/ })
+        .every((button) => button.hasAttribute("disabled")),
     ).toBe(true);
     expect(screen.getByText("1 of 4 complete")).toBeTruthy();
     expect(
@@ -294,7 +302,7 @@ describe("SetupBoard", () => {
 
     fireEvent.click(
       within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: /Connect identity provider/,
+        name: "Start: Connect identity provider",
       }),
     );
     expect(
@@ -307,7 +315,7 @@ describe("SetupBoard", () => {
 
     fireEvent.click(
       within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: /Connect identity provider/,
+        name: "Start: Connect identity provider",
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
@@ -322,6 +330,41 @@ describe("SetupBoard", () => {
       }),
     );
     expect(mocks.invalidate).toHaveBeenCalled();
+  });
+
+  it("disables task openers without status permission", () => {
+    mocks.canAdmin = false;
+    render(<SetupBoard />);
+
+    const unassignedTask = screen.getByTestId("setup-task-connect-idp");
+    expect(
+      within(unassignedTask)
+        .getAllByRole("button", { name: /Connect identity provider/ })
+        .every((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+  });
+
+  it("disables task openers while an update is pending", () => {
+    mocks.updatePending = true;
+    render(<SetupBoard />);
+
+    const task = screen.getByTestId("setup-task-connect-idp");
+    expect(
+      within(task)
+        .getAllByRole("button", { name: /Connect identity provider/ })
+        .every((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+  });
+
+  it("hides manual status moves for fact-completed tasks", () => {
+    mocks.setupQuery.mockReturnValue({
+      data: { tasks: [{ ...tasks[0], completedByFact: true }] },
+      isPending: false,
+      isError: false,
+    });
+    render(<SetupBoard />);
+
+    expect(screen.queryByRole("button", { name: /Move to/ })).toBeNull();
   });
 
   it.each(["disabled", "missing", "error"] as const)(

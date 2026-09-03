@@ -64,10 +64,18 @@ export function SetupTaskAssignmentDialog({
     <Dialog
       open={task !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !pending) onClose();
       }}
     >
-      <Dialog.Content closeable={!pending}>
+      <Dialog.Content
+        closeable={!pending}
+        onEscapeKeyDown={(event) => {
+          if (pending) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (pending) event.preventDefault();
+        }}
+      >
         <Dialog.Header>
           <Dialog.Title>Assign {task?.title}</Dialog.Title>
           <Dialog.Description>

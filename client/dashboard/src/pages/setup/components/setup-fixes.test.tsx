@@ -1,0 +1,138 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+import { OnboardingHeader } from "./onboarding-header";
+import { SetupTaskAssignmentDialog } from "./setup-task-assignment-dialog";
+import { SetupTaskDialog } from "./setup-task-dialog";
+import { SetupViewToggle } from "./setup-view-toggle";
+
+const routes = vi.hoisted(() => ({
+  wizard: vi.fn(),
+  board: vi.fn(),
+}));
+
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setup: { goTo: routes.wizard },
+    setupBoard: { goTo: routes.board },
+  }),
+}));
+
+vi.mock("./setup-task-content", () => ({
+  SetupTaskContent: ({
+    onComplete,
+    onSkip,
+    onBack,
+  }: {
+    onComplete: () => void;
+    onSkip: () => void;
+    onBack: () => void;
+  }) => (
+    <>
+      <button onClick={onComplete}>Complete</button>
+      <button onClick={onSkip}>Skip</button>
+      <button onClick={onBack}>Back</button>
+    </>
+  ),
+}));
+
+const task: SetupTask = {
+  key: "connect-idp",
+  title: "Connect identity provider",
+  description: "Connect SSO",
+  status: "todo",
+  completedByFact: false,
+  blockedBy: [],
+  hidden: false,
+};
+
+afterEach(cleanup);
+
+beforeEach(() => {
+  routes.wizard.mockReset();
+  routes.board.mockReset();
+});
+
+describe("setup interaction fixes", () => {
+  it("does not navigate when the active setup view is selected", () => {
+    render(<SetupViewToggle view="board" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Board" }));
+
+    expect(routes.board).not.toHaveBeenCalled();
+    expect(routes.wizard).not.toHaveBeenCalled();
+  });
+
+  it("exposes the compact dashboard action by name", () => {
+    render(<OnboardingHeader onLeave={() => {}} />);
+
+    expect(
+      screen.getByRole("button", { name: "Go to dashboard" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps skip separate from task completion", () => {
+    const onComplete = vi.fn();
+    const onSkip = vi.fn();
+    render(
+      <SetupTaskDialog
+        task={task}
+        pending={false}
+        onClose={() => {}}
+        onComplete={() => void onComplete()}
+        onSkip={() => void onSkip()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    expect(onSkip).toHaveBeenCalledOnce();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("does not dismiss or repeat task actions while pending", () => {
+    const onClose = vi.fn();
+    const onComplete = vi.fn();
+    const onSkip = vi.fn();
+    render(
+      <SetupTaskDialog
+        task={task}
+        pending
+        onClose={() => void onClose()}
+        onComplete={() => void onComplete()}
+        onSkip={() => void onSkip()}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onSkip).not.toHaveBeenCalled();
+  });
+
+  it("does not dismiss the assignment dialog while pending", () => {
+    const onClose = vi.fn();
+    render(
+      <SetupTaskAssignmentDialog
+        task={task}
+        members={[]}
+        roles={[]}
+        pending
+        onClose={() => void onClose()}
+        onAssignMember={() => {}}
+        onAssignEmail={() => {}}
+        onUnassign={() => {}}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerDown(document.body);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

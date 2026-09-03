@@ -34,6 +34,10 @@ export type SetupTask = {
    */
   blockedBy: Array<string>;
   /**
+   * Whether current organization facts force the effective status to done. This field is read-only.
+   */
+  completedByFact: boolean;
+  /**
    * Task description.
    */
   description: string;
@@ -66,6 +70,7 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
     z.object({
       assignee: z.optional(SetupTaskAssignee$inboundSchema),
       blocked_by: z.array(z.string()),
+      completed_by_fact: z.boolean(),
       description: z.string(),
       hidden: z.boolean(),
       key: z.string(),
@@ -75,6 +80,7 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "blocked_by": "blockedBy",
+        "completed_by_fact": "completedByFact",
       });
     }),
   );

@@ -83,6 +83,7 @@ export function SetupBoardColumns({
         ]}
       />
       <div
+        role="region"
         className="grid h-full min-h-80 grid-cols-1 gap-4 md:min-w-[1120px] md:grid-cols-4"
         aria-label="Setup board"
       >
@@ -120,6 +121,9 @@ export function SetupBoardColumns({
                     task.assignee?.userId === currentUserId ||
                     task.assignee?.email.toLowerCase() ===
                       currentUserEmail.toLowerCase();
+                  const canChangeStatus =
+                    task.blockedBy.length === 0 &&
+                    (canAdmin || assignedToCurrentUser);
                   return (
                     <SetupTaskCard
                       key={task.key}
@@ -127,10 +131,8 @@ export function SetupBoardColumns({
                       blockedTitles={task.blockedBy.map(
                         (key) => taskTitles.get(key) ?? key,
                       )}
-                      canChangeStatus={
-                        task.blockedBy.length === 0 &&
-                        (canAdmin || assignedToCurrentUser)
-                      }
+                      canChangeStatus={canChangeStatus}
+                      canOpen={canChangeStatus}
                       canAssign={canAdmin}
                       isPlatformAdmin={isPlatformAdmin}
                       pending={pending}

@@ -34182,7 +34182,7 @@ paths:
                 name: UpdateInviteRole
     /rpc/organizations.updateSetupTask:
         post:
-            description: Update status, ownership, or visibility for one fixed setup task.
+            description: 'Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.'
             operationId: updateSetupTask
             parameters:
                 - allowEmptyValue: true
@@ -84024,6 +84024,9 @@ components:
                     items:
                         type: string
                     description: Incomplete prerequisite task keys.
+                completed_by_fact:
+                    type: boolean
+                    description: Whether current organization facts force the effective status to done. This field is read-only.
                 description:
                     type: string
                     description: Task description.
@@ -84049,6 +84052,7 @@ components:
                 - title
                 - description
                 - status
+                - completed_by_fact
                 - blocked_by
                 - hidden
         SetupTaskAssignee:
@@ -84073,11 +84077,12 @@ components:
             properties:
                 email:
                     type: string
-                    description: Email address to assign before membership exists.
+                    description: Email address to assign before membership exists. Mutually exclusive with user_id.
                     format: email
                 user_id:
                     type: string
-                    description: Active organization member to assign.
+                    description: Active organization member to assign. Mutually exclusive with email.
+            description: Assignee selector. Exactly one of user_id or email must be present and non-empty.
         ShadowMCPAccessSummary:
             type: object
             properties:
@@ -89606,7 +89611,7 @@ components:
                     $ref: '#/components/schemas/SetupTaskAssigneeInput'
                 clear_assignee:
                     type: boolean
-                    description: Clear the current task assignee.
+                    description: Clear the current task assignee. Must not be true when assignee is set.
                 hidden:
                     type: boolean
                     description: Hide or restore the task.

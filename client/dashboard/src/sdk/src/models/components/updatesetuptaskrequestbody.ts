@@ -28,9 +28,12 @@ export type UpdateSetupTaskRequestBodyStatus = ClosedEnum<
 >;
 
 export type UpdateSetupTaskRequestBody = {
+  /**
+   * Assignee selector. Exactly one of user_id or email must be present and non-empty.
+   */
   assignee?: SetupTaskAssigneeInput | undefined;
   /**
-   * Clear the current task assignee.
+   * Clear the current task assignee. Must not be true when assignee is set.
    */
   clearAssignee?: boolean | undefined;
   /**

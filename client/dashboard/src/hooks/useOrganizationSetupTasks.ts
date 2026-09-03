@@ -13,16 +13,22 @@ export function buildOrganizationSetupTasksQuery(
   organizationId: string,
   includeHidden: boolean,
   options?: QueryHookOptions<ListSetupTasksQueryData, ListSetupTasksQueryError>,
-): ReturnType<typeof buildListSetupTasksQuery> {
+): ReturnType<typeof buildListSetupTasksQuery> &
+  Pick<
+    QueryHookOptions<ListSetupTasksQueryData, ListSetupTasksQueryError>,
+    "throwOnError"
+  > {
+  const queryOptions = { throwOnError: false, ...options };
   const query = buildListSetupTasksQuery(
     client,
     { includeHidden, gramSession: "" },
     { sessionHeaderGramSession: "" },
-    options,
+    queryOptions,
   );
 
   return {
     ...query,
+    ...queryOptions,
     queryKey: [...query.queryKey, { organizationId }],
   };
 }
@@ -40,6 +46,7 @@ export function useOrganizationSetupTasks(
       includeHidden,
       options,
     ),
+    throwOnError: false,
     ...options,
   });
 }

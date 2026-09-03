@@ -55,7 +55,9 @@ type Service interface {
 	// List the fixed setup task catalog projected with organization state and
 	// completion evidence.
 	ListSetupTasks(context.Context, *ListSetupTasksPayload) (res *ListSetupTasksResult, err error)
-	// Update status, ownership, or visibility for one fixed setup task.
+	// Update one fixed setup task. The request must include at least one effective
+	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
+	// mutually exclusive with clear_assignee=true.
 	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
 }
 
@@ -334,6 +336,9 @@ type SetupTask struct {
 	Description string
 	// Effective task status.
 	Status string
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact bool
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssignee
 	// Incomplete prerequisite task keys.
@@ -353,10 +358,13 @@ type SetupTaskAssignee struct {
 	PhotoURL *string
 }
 
+// Assignee selector. Exactly one of user_id or email must be present and
+// non-empty.
 type SetupTaskAssigneeInput struct {
-	// Active organization member to assign.
+	// Active organization member to assign. Mutually exclusive with email.
 	UserID *string
-	// Email address to assign before membership exists.
+	// Email address to assign before membership exists. Mutually exclusive with
+	// user_id.
 	Email *string
 }
 
@@ -377,9 +385,9 @@ type UpdateSetupTaskPayload struct {
 	TaskKey string
 	// Setup task status.
 	Status *string
-	// Replacement task assignee.
+	// Replacement task assignee. Must not be set when clear_assignee=true.
 	Assignee *SetupTaskAssigneeInput
-	// Clear the current task assignee.
+	// Clear the current task assignee. Must not be true when assignee is set.
 	ClearAssignee *bool
 	// Hide or restore the task.
 	Hidden       *bool

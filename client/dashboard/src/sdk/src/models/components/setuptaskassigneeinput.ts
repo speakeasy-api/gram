@@ -5,13 +5,16 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
+/**
+ * Assignee selector. Exactly one of user_id or email must be present and non-empty.
+ */
 export type SetupTaskAssigneeInput = {
   /**
-   * Email address to assign before membership exists.
+   * Email address to assign before membership exists. Mutually exclusive with user_id.
    */
   email?: string | undefined;
   /**
-   * Active organization member to assign.
+   * Active organization member to assign. Mutually exclusive with email.
    */
   userId?: string | undefined;
 };

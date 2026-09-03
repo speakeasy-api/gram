@@ -54,7 +54,7 @@ export type UpdateSetupTaskMutationError =
  * updateSetupTask organizations
  *
  * @remarks
- * Update status, ownership, or visibility for one fixed setup task.
+ * Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.
  */
 export function useUpdateSetupTaskMutation(
   options?: MutationHookOptions<

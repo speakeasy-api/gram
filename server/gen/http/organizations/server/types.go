@@ -62,9 +62,9 @@ type UpdateSetupTaskRequestBody struct {
 	TaskKey *string `form:"task_key,omitempty" json:"task_key,omitempty" xml:"task_key,omitempty"`
 	// Setup task status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Replacement task assignee.
+	// Replacement task assignee. Must not be set when clear_assignee=true.
 	Assignee *SetupTaskAssigneeInputRequestBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
-	// Clear the current task assignee.
+	// Clear the current task assignee. Must not be true when assignee is set.
 	ClearAssignee *bool `form:"clear_assignee,omitempty" json:"clear_assignee,omitempty" xml:"clear_assignee,omitempty"`
 	// Hide or restore the task.
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
@@ -218,6 +218,9 @@ type UpdateSetupTaskResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Effective task status.
 	Status string `form:"status" json:"status" xml:"status"`
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3302,6 +3305,9 @@ type SetupTaskResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Effective task status.
 	Status string `form:"status" json:"status" xml:"status"`
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3352,9 +3358,10 @@ type WorkOSDomainVerificationIntentOptionsRequestBody struct {
 // SetupTaskAssigneeInputRequestBody is used to define fields on request body
 // types.
 type SetupTaskAssigneeInputRequestBody struct {
-	// Active organization member to assign.
+	// Active organization member to assign. Mutually exclusive with email.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Email address to assign before membership exists.
+	// Email address to assign before membership exists. Mutually exclusive with
+	// user_id.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
@@ -3535,11 +3542,12 @@ func NewListSetupTasksResponseBody(res *organizations.ListSetupTasksResult) *Lis
 // of the "updateSetupTask" endpoint of the "organizations" service.
 func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTaskResponseBody {
 	body := &UpdateSetupTaskResponseBody{
-		Key:         res.Key,
-		Title:       res.Title,
-		Description: res.Description,
-		Status:      res.Status,
-		Hidden:      res.Hidden,
+		Key:             res.Key,
+		Title:           res.Title,
+		Description:     res.Description,
+		Status:          res.Status,
+		CompletedByFact: res.CompletedByFact,
+		Hidden:          res.Hidden,
 	}
 	if res.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(res.Assignee)

@@ -365,6 +365,7 @@ function SetupBoardInner(): JSX.Element {
         pending={pending}
         onClose={() => setSelectedTask(null)}
         onComplete={() => void completeSelectedTask()}
+        onSkip={() => setSelectedTask(null)}
       />
       <SetupTaskAssignmentDialog
         key={assignmentTask?.key ?? "closed"}

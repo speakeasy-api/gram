@@ -15,6 +15,12 @@ describe("buildOrganizationSetupTasksQuery", () => {
 
     expect(first.queryKey).not.toEqual(second.queryKey);
     expect(first.queryKey).not.toEqual(hidden.queryKey);
+    expect(first.throwOnError).toBe(false);
+    expect(
+      buildOrganizationSetupTasksQuery(client, "org-first", false, {
+        throwOnError: true,
+      }).throwOnError,
+    ).toBe(true);
     expect(first.queryKey).toEqual([
       "@gram/client",
       "organizations",

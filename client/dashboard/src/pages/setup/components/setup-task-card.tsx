@@ -20,6 +20,7 @@ type SetupTaskCardProps = {
   task: SetupTask;
   blockedTitles: string[];
   canChangeStatus: boolean;
+  canOpen: boolean;
   canAssign: boolean;
   isPlatformAdmin: boolean;
   pending: boolean;
@@ -51,6 +52,7 @@ export function SetupTaskCard({
   task,
   blockedTitles,
   canChangeStatus,
+  canOpen,
   canAssign,
   isPlatformAdmin,
   pending,
@@ -62,6 +64,8 @@ export function SetupTaskCard({
   onHiddenChange,
 }: SetupTaskCardProps): JSX.Element {
   const blocked = task.blockedBy.length > 0;
+  const completedByFact =
+    "completedByFact" in task && task.completedByFact === true;
   const ownerLabel = task.assignee?.name ?? task.assignee?.email;
   const descriptionId = `setup-task-${task.key}-description`;
   const actions: Action[] = [];
@@ -86,7 +90,7 @@ export function SetupTaskCard({
       disabled: pending,
     });
   }
-  if (canChangeStatus) {
+  if (canChangeStatus && !completedByFact) {
     for (const [status, label] of Object.entries(SETUP_TASK_STATUS_LABELS)) {
       if (status === task.status) continue;
       actions.push({
@@ -117,7 +121,7 @@ export function SetupTaskCard({
         type="button"
         className="w-full flex-1 space-y-3 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
         onClick={onOpen}
-        disabled={blocked || task.hidden}
+        disabled={pending || blocked || task.hidden || !canOpen}
         aria-describedby={descriptionId}
       >
         <h3 className="font-medium text-foreground">{task.title}</h3>
@@ -151,7 +155,8 @@ export function SetupTaskCard({
           variant="secondary"
           className="min-w-0 flex-1"
           onClick={onOpen}
-          disabled={pending || blocked || task.hidden}
+          disabled={pending || blocked || task.hidden || !canOpen}
+          aria-label={`${taskActionLabel(task.status, blocked)}: ${task.title}`}
         >
           {taskActionLabel(task.status, blocked)}
         </Button>

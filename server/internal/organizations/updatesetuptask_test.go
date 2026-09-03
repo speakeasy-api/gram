@@ -1,7 +1,10 @@
 package organizations_test
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -48,11 +51,20 @@ func TestService_UpdateSetupTaskValidatesTaskStatusAndMembership(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	invalidStatus := "queued"
+	clearAssignee := true
 	tests := []*gen.UpdateSetupTaskPayload{
 		{TaskKey: "unknown-task", Status: conv.PtrEmpty("done")},
 		{TaskKey: "instrument-agents", Status: &invalidStatus},
-		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{UserID: conv.PtrEmpty("user_outside_org"), Email: nil}},
+		{TaskKey: "instrument-agents"},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{}},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{UserID: conv.PtrEmpty("   ")}},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID, Email: conv.PtrEmpty("both@example.test")}},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID}, ClearAssignee: &clearAssignee},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{UserID: conv.PtrEmpty("user_outside_org")}},
+		{TaskKey: "instrument-agents", Assignee: &gen.SetupTaskAssigneeInput{Email: conv.PtrEmpty("not-an-email")}},
 	}
 	for _, payload := range tests {
 		result, err := ti.service.UpdateSetupTask(ctx, payload)
@@ -94,6 +106,33 @@ func TestService_UpdateSetupTaskEnforcesFieldAuthorization(t *testing.T) {
 	})
 	require.Nil(t, result)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_UpdateSetupTaskKeepsBlockedAssignmentsTodoAndRejectsActiveStatuses(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
+		TaskKey:  "confirm-traffic",
+		Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "todo", result.Status)
+	require.Equal(t, []string{"instrument-agents"}, result.BlockedBy)
+	require.NotNil(t, result.Assignee)
+
+	for _, status := range []string{"in_progress", "awaiting_support", "done"} {
+		result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "confirm-traffic", Status: &status})
+		require.Nil(t, result)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+
+	todo := "todo"
+	result, err = ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "confirm-traffic", Status: &todo})
+	require.NoError(t, err)
+	require.Equal(t, "todo", result.Status)
 }
 
 func TestService_UpdateSetupTaskRestrictsHideToPlatformAdmin(t *testing.T) {
@@ -149,6 +188,33 @@ func TestService_UpdateSetupTaskWritesBoundedAuditSnapshotsAtomically(t *testing
 	stored, err := orgrepo.New(ti.conn).GetOrganizationSetupTask(ctx, orgrepo.GetOrganizationSetupTaskParams{OrganizationID: authCtx.ActiveOrganizationID, TaskKey: "instrument-agents"})
 	require.NoError(t, err)
 	require.Equal(t, "in_progress", stored.Status)
+}
+
+func TestService_UpdateSetupTaskAuditFailureRollsBackTaskAndAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	require.NoError(t, audittest.RejectAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated))
+
+	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
+		TaskKey:  "instrument-agents",
+		Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID},
+	})
+	require.Nil(t, result)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	_, err = orgrepo.New(ti.conn).GetOrganizationSetupTask(ctx, orgrepo.GetOrganizationSetupTaskParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		TaskKey:        "instrument-agents",
+	})
+	require.True(t, errors.Is(err, pgx.ErrNoRows))
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -7,6 +7,7 @@ type SetupTaskDialogProps = {
   pending: boolean;
   onClose: () => void;
   onComplete: () => void;
+  onSkip: () => void;
 };
 
 export function SetupTaskDialog({
@@ -14,16 +15,23 @@ export function SetupTaskDialog({
   pending,
   onClose,
   onComplete,
+  onSkip,
 }: SetupTaskDialogProps): JSX.Element {
   return (
     <Dialog
       open={task !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !pending) onClose();
       }}
     >
       <Dialog.Content
         closeable={!pending}
+        onEscapeKeyDown={(event) => {
+          if (pending) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (pending) event.preventDefault();
+        }}
         className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto bg-card"
       >
         <Dialog.Title className="sr-only">{task?.title}</Dialog.Title>
@@ -34,9 +42,15 @@ export function SetupTaskDialog({
           <SetupTaskContent
             taskKey={task.key}
             projectSlug="default"
-            onComplete={onComplete}
-            onSkip={onComplete}
-            onBack={onClose}
+            onComplete={() => {
+              if (!pending) onComplete();
+            }}
+            onSkip={() => {
+              if (!pending) onSkip();
+            }}
+            onBack={() => {
+              if (!pending) onClose();
+            }}
           />
         ) : null}
       </Dialog.Content>

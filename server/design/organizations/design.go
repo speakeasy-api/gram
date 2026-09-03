@@ -338,15 +338,15 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("updateSetupTask", func() {
-		Description("Update status, ownership, or visibility for one fixed setup task.")
+		Description("Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.")
 
 		Payload(func() {
 			Attribute("task_key", String, "Stable setup task key.")
 			Attribute("status", String, "Setup task status.", func() {
 				Enum("todo", "in_progress", "awaiting_support", "done")
 			})
-			Attribute("assignee", SetupTaskAssigneeInput, "Replacement task assignee.")
-			Attribute("clear_assignee", Boolean, "Clear the current task assignee.")
+			Attribute("assignee", SetupTaskAssigneeInput, "Replacement task assignee. Must not be set when clear_assignee=true.")
+			Attribute("clear_assignee", Boolean, "Clear the current task assignee. Must not be true when assignee is set.")
 			Attribute("hidden", Boolean, "Hide or restore the task.")
 			Required("task_key")
 			security.SessionPayload()
@@ -501,8 +501,9 @@ var VerifyOnboardingHooksSetupResult = Type("VerifyOnboardingHooksSetupResult", 
 })
 
 var SetupTaskAssigneeInput = Type("SetupTaskAssigneeInput", func() {
-	Attribute("user_id", String, "Active organization member to assign.")
-	Attribute("email", String, "Email address to assign before membership exists.", func() {
+	Description("Assignee selector. Exactly one of user_id or email must be present and non-empty.")
+	Attribute("user_id", String, "Active organization member to assign. Mutually exclusive with email.")
+	Attribute("email", String, "Email address to assign before membership exists. Mutually exclusive with user_id.", func() {
 		Format(FormatEmail)
 	})
 })
@@ -522,10 +523,11 @@ var SetupTask = Type("SetupTask", func() {
 	Attribute("status", String, "Effective task status.", func() {
 		Enum("todo", "in_progress", "awaiting_support", "done")
 	})
+	Attribute("completed_by_fact", Boolean, "Whether current organization facts force the effective status to done. This field is read-only.")
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "blocked_by", "hidden")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {

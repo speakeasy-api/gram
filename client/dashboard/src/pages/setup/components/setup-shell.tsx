@@ -17,7 +17,7 @@ export function SetupShell({
   const { orgSlug } = useParams();
 
   return (
-    <div className="bg-background flex h-screen flex-col overflow-hidden">
+    <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
       <OnboardingHeader onLeave={() => void navigate(`/${orgSlug}`)}>
         {showViewToggle ? <SetupViewToggle view={view} /> : null}
       </OnboardingHeader>

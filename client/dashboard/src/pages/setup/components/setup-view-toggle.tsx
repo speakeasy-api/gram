@@ -11,6 +11,7 @@ export function SetupViewToggle({ view }: { view: SetupView }): JSX.Element {
       <SegmentedControl
         value={view}
         onChange={(nextView) => {
+          if (nextView === view) return;
           if (nextView === "board") routes.setupBoard.goTo();
           else routes.setup.goTo();
         }}
