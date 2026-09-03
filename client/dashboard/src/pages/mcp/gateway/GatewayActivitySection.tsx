@@ -188,13 +188,18 @@ export function GatewayActivitySection({
   );
   // The stat tiles, time series and member table count execute_tool
   // dispatches only; the funnel chart also counts discovery. Say so when the
-  // two disagree, or an empty chart above a busy funnel reads as a bug.
-  const stoppedAtDiscovery = discoveredWithoutExecuting(usage.data?.funnel);
+  // two disagree, or an empty chart above a busy funnel reads as a bug. Both
+  // queries keep previous data across a range change, so only trust the
+  // funnel once neither side is still showing the previous range.
+  const stoppedAtDiscovery =
+    !usage.isPlaceholderData &&
+    !overview.isPlaceholderData &&
+    discoveredWithoutExecuting(usage.data?.funnel);
   const noDispatchMessage = stoppedAtDiscovery
-    ? "Agents discovered tools through this gateway but didn't execute any. Gateway tool usage below shows the discovery steps."
+    ? "Agents used the discovery tools in this range, but no execute_tool calls were observed. Gateway tool usage below shows the discovery steps."
     : "No dispatched calls for the selected time range";
   const noMemberCallsMessage = stoppedAtDiscovery
-    ? "No member received a call; agents stopped at discovery."
+    ? "No execute_tool calls were observed in the selected range; agents only used the discovery tools."
     : "No member calls in the selected range.";
 
   return (
