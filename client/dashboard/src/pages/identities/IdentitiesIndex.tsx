@@ -458,7 +458,11 @@ function IdentitiesIndexContent(): JSX.Element {
     [identities],
   );
   const deviceStatusOptions = useMemo(() => {
-    if (!deviceCoverage || deviceCoverage.deviceCount === 0) return [];
+    // A capped walk leaves every identity past the cap looking like it owns no
+    // machine, which the filter would report as fact. Offer nothing rather than
+    // a dimension that misfiles the fleet's tail.
+    if (!deviceCoverage || deviceCoverage.truncated) return [];
+    if (deviceCoverage.deviceCount === 0) return [];
     const present = new Set(
       identities.map((identity) =>
         coverageForIdentity(deviceCoverage, identity),
@@ -473,10 +477,15 @@ function IdentitiesIndexContent(): JSX.Element {
   }, [identities, deviceCoverage]);
 
   // A dimension with nothing to offer would render an empty control; leave it
-  // out of the schema rather than show a filter that cannot filter.
+  // out of the schema rather than show a filter that cannot filter. One the URL
+  // still holds a value for stays, whatever its options say: the rows are being
+  // filtered by it, and taking the control away would leave no way to undo that.
   const filterSchema = useMemo(
     () =>
       IDENTITY_FILTERS.filter((dimension) => {
+        const selected = (values[dimension.id as keyof typeof values] ??
+          []) as string[];
+        if (selected.length > 0) return true;
         if (dimension.id === "role") return roleOptions.length > 0;
         if (dimension.id === "department") return departmentOptions.length > 0;
         if (dimension.id === "team") return teamOptions.length > 0;
@@ -486,6 +495,7 @@ function IdentitiesIndexContent(): JSX.Element {
         return true;
       }),
     [
+      values,
       roleOptions.length,
       departmentOptions.length,
       teamOptions.length,
@@ -500,18 +510,19 @@ function IdentitiesIndexContent(): JSX.Element {
   const personalAccount = (values.personal_account as string | undefined) ?? "";
   const enrollment = (values.enrollment as string | undefined) ?? "";
   const activity = (values.activity as string | undefined) ?? "";
-  const deviceStatusKey = (values.device_status ?? []).join(",");
-  const roleKey = (values.role ?? []).join(",");
-  const departmentKey = (values.department ?? []).join(",");
-  const teamKey = (values.team ?? []).join(",");
+  // Department and team hold whatever the directory calls them, so these keys
+  // are JSON rather than a comma join: a department named "Sales, EMEA" would
+  // split back into two values that match nobody.
+  const deviceStatusKey = JSON.stringify(values.device_status ?? []);
+  const roleKey = JSON.stringify(values.role ?? []);
+  const departmentKey = JSON.stringify(values.department ?? []);
+  const teamKey = JSON.stringify(values.team ?? []);
   const rows = useMemo(() => {
     const selectedKinds = kindKey ? kindKey.split(",") : [];
-    const selectedDeviceStatuses = deviceStatusKey
-      ? deviceStatusKey.split(",")
-      : [];
-    const selectedRoles = roleKey ? roleKey.split(",") : [];
-    const selectedDepartments = departmentKey ? departmentKey.split(",") : [];
-    const selectedTeams = teamKey ? teamKey.split(",") : [];
+    const selectedDeviceStatuses = JSON.parse(deviceStatusKey) as string[];
+    const selectedRoles = JSON.parse(roleKey) as string[];
+    const selectedDepartments = JSON.parse(departmentKey) as string[];
+    const selectedTeams = JSON.parse(teamKey) as string[];
     const query = search.trim().toLowerCase();
     return identities.filter((identity) => {
       if (

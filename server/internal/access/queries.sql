@@ -520,14 +520,17 @@ JOIN users
   ON users.id = our.user_id
 LEFT JOIN LATERAL (
   -- The member's directory profile, preferring an explicit user link over an
-  -- email match so a stale email row cannot shadow the linked profile.
+  -- email match so a stale email row cannot shadow the linked profile. An
+  -- email-matched row has a NULL user_id, and NULLs sort first under DESC, so
+  -- the link test needs NULLS LAST to actually win; among equals the profile
+  -- the directory updated most recently is the current one.
   SELECT d.id, d.attributes
   FROM directory_users d
   WHERE d.organization_id = our.organization_id
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
     AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
-  ORDER BY (d.user_id = users.id) DESC, d.created_at
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (

@@ -121,9 +121,9 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
 				RoleIds:      nil,
 				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
-				// An attribute the directory does not report reads as an empty
-				// string from the query; leave it unset rather than send "" so
-				// clients can tell "not reported" from a real blank value.
+				// Null when no directory row was matched, or when the row
+				// reports no non-empty department — the query collapses both
+				// to an empty string, so the two cannot be told apart here.
 				Department: conv.PtrEmpty(row.Department),
 				Groups:     row.GroupNames,
 			}
