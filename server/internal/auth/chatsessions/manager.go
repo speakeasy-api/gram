@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Manager handles chat session token lifecycle
@@ -126,5 +127,17 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		SupportOrganizationID: "",
 	}
 
-	return contextvalues.SetAuthContext(ctx, authCtx), nil
+	// Chat-session tokens predate principal-backed credentials and carry only
+	// legacy API-key provenance. M2 must reject principal-backed keys at token
+	// issuance or add an explicit versioned profile before they can reach here.
+	switch {
+	case authCtx.APIKeyID != "":
+		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
+	case authCtx.UserID != "":
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		), nil
+	default:
+		return contextvalues.SetAuthContext(ctx, authCtx), nil
+	}
 }
