@@ -16,14 +16,17 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
-	"sync"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -40,21 +43,8 @@ const (
 	// minutes would, and keep a configuration change close to immediate.
 	workloadIssuerMissTTL = 30 * time.Second
 
-	// workloadIssuerMissEntries bounds how many misses are remembered per
-	// replica.
-	//
-	// The bound is the point, not a detail. Entries are keyed partly by a
-	// value that arrives in an unauthenticated request, so an unbounded cache
-	// would be a memory amplifier reachable by anyone: vary the iss each time
-	// and every rejection costs a permanent allocation. The cap makes the
-	// worst case a fixed, small ceiling, and turns a flood of distinct
-	// issuers into eviction churn instead of growth. Sized to cover the
-	// realistic working set — an organization trusts tens of issuers, not
-	// thousands — with headroom.
-	workloadIssuerMissEntries = 4096
-
-	// workloadIssuerLookupTimeout bounds one admission lookup, the budget
-	// charge included.
+	// workloadIssuerLookupTimeout bounds one admission lookup: the budget
+	// charge, the query, and the write that records a miss.
 	//
 	// The lookup runs detached from the caller's context, so nothing else
 	// bounds it. Generous for a single indexed read, and deliberately far
@@ -81,7 +71,7 @@ const (
 //
 // Sized for what an endpoint legitimately resolves: an organization trusts
 // tens of issuers, not thousands, and repeats inside the miss TTL never reach
-// here at all. The burst absorbs a cold replica resolving several distinct
+// here at all. The burst absorbs a cold cache resolving several distinct
 // issuers at once; the sustained rate is deliberately far above steady-state
 // need and far below what an attacker would want.
 var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
@@ -215,7 +205,7 @@ func newWorkloadIssuerLookup(db remotesessions_repo.DBTX) workloadIssuerLookup {
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
 // describes it, remembering recent rejections so a repeated unknown issuer
-// costs nothing beyond a map read.
+// costs a cache read rather than a query.
 //
 // Safe for concurrent use; build one at wiring time.
 type workloadIssuerAdmission struct {
@@ -242,10 +232,10 @@ type workloadIssuerAdmission struct {
 	charge workloadIssuerBudget
 }
 
-func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssuerBudget) *workloadIssuerAdmission {
+func newWorkloadIssuerAdmission(logger *slog.Logger, cacheImpl cache.Cache, lookup workloadIssuerLookup, charge workloadIssuerBudget) *workloadIssuerAdmission {
 	return &workloadIssuerAdmission{
 		lookup:   lookup,
-		misses:   newWorkloadIssuerMissCache(workloadIssuerMissEntries, workloadIssuerMissTTL),
+		misses:   newWorkloadIssuerMissCache(logger, cacheImpl),
 		inflight: singleflight.Group{},
 		charge:   charge,
 	}
@@ -289,19 +279,11 @@ type workloadIssuerResolution struct {
 // spelling from spending the budget at all.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, error) {
 	key := workloadIssuerMissKey(endpoint, issuerURL)
-	if reason, ok := a.misses.seen(key); ok {
+	if reason, ok := a.misses.seen(ctx, key); ok {
 		return nil, reason.err()
 	}
 
 	ch := a.inflight.DoChan(key, func() (any, error) {
-		// Re-check under the flight. A caller that read the cache before a
-		// flight recorded its miss arrives here after that flight has ended,
-		// and without this would start a redundant lookup — the same
-		// double-check botFrameworkAuthenticator.remoteKeySet carries.
-		if reason, ok := a.misses.seen(key); ok {
-			return nil, reason.err()
-		}
-
 		// Detached from the caller that opened the flight: values carry
 		// through, cancellation does not. The flight runs under whichever
 		// caller happened to open it, so tying its lifetime to that one would
@@ -315,6 +297,18 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		// bounds the flight is the timeout here and the slot below.
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadIssuerLookupTimeout)
 		defer cancel()
+
+		// Re-check under the flight. A caller that read the cache before a
+		// flight recorded its miss arrives here after that flight has ended,
+		// and without this would start a redundant lookup — the same
+		// double-check botFrameworkAuthenticator.remoteKeySet carries.
+		//
+		// Read on lookupCtx rather than the opening caller's ctx, for the same
+		// reason the lookup is: the answer is shared by everyone in the
+		// flight, so it must not be abandoned when one of them goes away.
+		if reason, ok := a.misses.seen(lookupCtx, key); ok {
+			return nil, reason.err()
+		}
 
 		// Charged before the query, so a refusal costs nothing but the bucket
 		// read. Neither outcome below is ever remembered as a miss: a spent
@@ -339,7 +333,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			// Not an issuer identifier at all, so no row could ever describe
 			// it. Remembered like any other miss: a malformed iss is the
 			// cheapest thing for a flood to carry.
-			a.misses.remember(key, workloadIssuerMissMalformed)
+			a.misses.remember(lookupCtx, key, workloadIssuerMissMalformed)
 			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, lookupErr)
 		case lookupErr != nil:
 			// A database failure is not evidence about this issuer. Never
@@ -347,7 +341,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			// legitimate workload after the store recovered.
 			return nil, fmt.Errorf("resolve workload issuer: %w", lookupErr)
 		case !found:
-			a.misses.remember(key, workloadIssuerMissUnknown)
+			a.misses.remember(lookupCtx, key, workloadIssuerMissUnknown)
 			return nil, errWorkloadIssuerUntrusted
 		}
 		return workloadIssuerResolution{row: row}, nil
@@ -412,103 +406,97 @@ func workloadIssuerMissKey(endpoint *ResolvedMcpEndpoint, issuerURL string) stri
 	return base64.RawURLEncoding.EncodeToString(sum.Sum(nil))
 }
 
-// workloadIssuerMissEntry is one remembered rejection: when it lapses, and
-// what it was. Both fields are fixed size, so an entry costs the same whatever
-// issuer produced it.
-type workloadIssuerMissEntry struct {
-	expiry time.Time
-	reason workloadIssuerMissReason
+// workloadIssuerMiss is one remembered rejection.
+type workloadIssuerMiss struct {
+	// Key addresses the entry: the tenancy and spelling digest from
+	// workloadIssuerMissKey. Not serialized — it is where the entry lives,
+	// not part of what it says.
+	Key string `json:"-"`
+
+	// Reason is the rejection this entry answers with.
+	Reason workloadIssuerMissReason `json:"reason"`
 }
 
-// workloadIssuerMissCache remembers recently rejected issuers, bounded in both
-// entries and age.
+// workloadIssuerMissCacheKey namespaces a miss digest so it cannot collide
+// with anything else sharing the store.
+func workloadIssuerMissCacheKey(key string) string {
+	return "workload_issuer_miss:" + key
+}
+
+// CacheKey implements [cache.CacheableObject].
+func (m workloadIssuerMiss) CacheKey() string {
+	return workloadIssuerMissCacheKey(m.Key)
+}
+
+// TTL is how long the rejection stands. See workloadIssuerMissTTL.
+func (m workloadIssuerMiss) TTL() time.Duration {
+	return workloadIssuerMissTTL
+}
+
+// workloadIssuerMissCache remembers recently rejected issuers in the shared
+// cache, so a repeat costs a cache read rather than a query.
+//
+// Shared rather than per-replica, matching the limiter next door and for the
+// same reason: a per-replica cache multiplies the cost of an unknown issuer by
+// the replica count, since every replica must miss once before any of them
+// holds the answer. The limiter is already fleet-wide precisely so that a
+// budget is not multiplied that way, and a cache sitting on top of it should
+// not reintroduce the multiplier it exists to avoid.
+//
+// What bounds it. Entries are keyed partly by a value arriving in an
+// unauthenticated request, and the store caps nothing on its own, so the bound
+// is upstream: a miss is only ever recorded after a lookup that a budget
+// charge admitted, which makes the limiter bounding queries bound writes here
+// by exactly the same amount. At workloadIssuerLookupRate and
+// workloadIssuerMissTTL that is a small resident set per endpoint, of
+// fixed-size entries — the digest keeps a long issuer URL from occupying more
+// than a short one, so the count is a true bound on memory rather than a count
+// of unbounded strings.
 type workloadIssuerMissCache struct {
-	mu sync.Mutex
-	// entries maps a key to the rejection it holds.
-	entries map[string]workloadIssuerMissEntry
-	// order records insertion order so a full cache can evict its oldest
-	// entry. Insertion order rather than recency: an entry is worth keeping
-	// for as long as the flood that created it lasts, and refreshing on every
-	// hit would let a caller pin one indefinitely.
-	order      []string
-	maxEntries int
-	ttl        time.Duration
+	entries cache.TypedCacheObject[workloadIssuerMiss]
+	logger  *slog.Logger
 }
 
-func newWorkloadIssuerMissCache(maxEntries int, ttl time.Duration) *workloadIssuerMissCache {
+func newWorkloadIssuerMissCache(logger *slog.Logger, cacheImpl cache.Cache) *workloadIssuerMissCache {
+	logger = logger.With(attr.SlogCacheNamespace("workload_issuer_miss"))
 	return &workloadIssuerMissCache{
-		mu:         sync.Mutex{},
-		entries:    make(map[string]workloadIssuerMissEntry),
-		order:      make([]string, 0, maxEntries),
-		maxEntries: maxEntries,
-		ttl:        ttl,
+		entries: cache.NewTypedObjectCache[workloadIssuerMiss](logger, cacheImpl, cache.SuffixNone),
+		logger:  logger,
 	}
 }
 
-// seen reports the rejection held for key, if one was recorded recently
-// enough for the answer to still stand. A lapsed entry is dropped rather than
-// reported, so an issuer added since is looked up again.
-func (c *workloadIssuerMissCache) seen(key string) (workloadIssuerMissReason, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	entry, ok := c.entries[key]
-	if !ok {
+// seen reports the rejection held for key, if one is still live.
+//
+// A store that cannot answer is reported as "not seen", so the lookup runs.
+// That costs a query the cache would have saved; answering a rejection from a
+// failed read would deny a legitimate workload instead, which is the worse of
+// the two, and the limiter still bounds what the fallthrough can cost.
+func (c *workloadIssuerMissCache) seen(ctx context.Context, key string) (workloadIssuerMissReason, bool) {
+	miss, err := c.entries.Get(ctx, workloadIssuerMissCacheKey(key))
+	switch {
+	case err == nil:
+		return miss.Reason, true
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		return workloadIssuerMissUnknown, false
+	default:
+		c.logger.WarnContext(ctx, "workload issuer miss cache read failed", attr.SlogError(err))
 		return workloadIssuerMissUnknown, false
 	}
-	if !time.Now().Before(entry.expiry) {
-		c.drop(key)
-		return workloadIssuerMissUnknown, false
-	}
-	return entry.reason, true
 }
 
-// remember records key as rejected for reason, evicting to stay within the
-// entry bound.
-func (c *workloadIssuerMissCache) remember(key string, reason workloadIssuerMissReason) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if existing, exists := c.entries[key]; exists && time.Now().Before(existing.expiry) {
-		// Held and still live: refreshing the expiry would let a caller keep
-		// one entry alive forever by repeating it, which is the pinning the
-		// insertion-ordered eviction avoids. A lapsed entry is not held in
-		// this sense — it is a fresh miss that happens to collide with a
-		// corpse, and falls through to be recorded as one.
-		return
-	}
-
-	c.evictExpiredLocked()
-	for len(c.entries) >= c.maxEntries && len(c.order) > 0 {
-		c.drop(c.order[0])
-	}
-
-	c.entries[key] = workloadIssuerMissEntry{expiry: time.Now().Add(c.ttl), reason: reason}
-	c.order = append(c.order, key)
-}
-
-// evictExpiredLocked drops every lapsed entry. Called before making room, so
-// a cache full of stale entries evicts those rather than live ones.
-func (c *workloadIssuerMissCache) evictExpiredLocked() {
-	now := time.Now()
-	live := c.order[:0]
-	for _, key := range c.order {
-		if entry, ok := c.entries[key]; ok && now.Before(entry.expiry) {
-			live = append(live, key)
-			continue
-		}
-		delete(c.entries, key)
-	}
-	c.order = live
-}
-
-// drop removes one key from both the map and the insertion order.
-func (c *workloadIssuerMissCache) drop(key string) {
-	delete(c.entries, key)
-	for i, held := range c.order {
-		if held == key {
-			c.order = append(c.order[:i], c.order[i+1:]...)
-			break
-		}
+// remember records key as rejected for reason.
+//
+// Set-if-absent rather than set: an entry already held keeps the expiry it was
+// created with, so repeating a miss cannot extend it. Without that a caller
+// could pin one rejection indefinitely and hold an issuer rejected past the
+// configuration change that added it. Redis applies the condition and the TTL
+// in one command, so concurrent writers cannot interleave into a refresh.
+//
+// A failed write is not an admission failure: the rejection has already been
+// decided and is returned regardless. Losing the entry costs the next repeat a
+// query, which is what the cache was saving, not correctness.
+func (c *workloadIssuerMissCache) remember(ctx context.Context, key string, reason workloadIssuerMissReason) {
+	if _, err := c.entries.StoreIfAbsent(ctx, workloadIssuerMiss{Key: key, Reason: reason}); err != nil {
+		c.logger.WarnContext(ctx, "workload issuer miss cache write failed", attr.SlogError(err))
 	}
 }
