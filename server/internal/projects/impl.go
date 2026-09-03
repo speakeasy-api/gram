@@ -244,7 +244,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	// the request returning (or its caller disconnecting) right after commit
 	// can't drop the enqueue.
 	if s.pluginsGitHubEnabled {
-		background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, prj.ID, authCtx.UserID, true)
+		background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, prj.ID, authCtx.UserID, true, true)
 	}
 
 	project := &gen.CreateProjectResult{

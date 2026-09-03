@@ -813,7 +813,7 @@ func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalu
 		return
 	}
 
-	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, true, pluginCreated)
 }
 
 // ServerDisplayName derives a default plugin-server display name from an

@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -103,12 +105,13 @@ func TestPluginsService_PublishProjectSkipsUnpublishedProject(t *testing.T) {
 		CreatedByUserID:   authCtx.UserID,
 		CommitMessage:     "Update plugin packages",
 		SkipIfUnchanged:   true,
-		SkipIfUnpublished: true,
+		AllowFirstPublish: false,
 	})
 	require.NoError(t, err)
 	require.True(t, result.Skipped)
 	require.False(t, mock.createRepoCalled, "a change signal must not create the first marketplace repo")
 	require.False(t, mock.pushFilesCalled)
+	require.Zero(t, countPluginAPIKeys(t, ctx, ti), "a skipped publish must not mint an API key")
 
 	// The same project, published by a path that means it, still gets its repo.
 	forced, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
@@ -116,9 +119,22 @@ func TestPluginsService_PublishProjectSkipsUnpublishedProject(t *testing.T) {
 		CreatedByUserID:   authCtx.UserID,
 		CommitMessage:     "Initial marketplace publish",
 		SkipIfUnchanged:   false,
-		SkipIfUnpublished: false,
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 	require.False(t, forced.Skipped)
 	require.True(t, mock.createRepoCalled)
+	require.NotZero(t, countPluginAPIKeys(t, ctx, ti), "the publish that creates the repo mints its keys")
+}
+
+// countPluginAPIKeys reports how many API keys the project holds, so a skipped
+// publish can be shown to have minted none.
+func countPluginAPIKeys(t *testing.T, ctx context.Context, ti *testInstance) int {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	return len(keys)
 }

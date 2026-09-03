@@ -159,7 +159,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					// enqueue, so unlike a change signal it may create the repo.
 					// Its candidate list is already scoped to projects with a
 					// Default plugin or a previous publish.
-					SkipIfUnpublished: false,
+					AllowFirstPublish: true,
 				}))
 			}
 
