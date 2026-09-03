@@ -95,7 +95,9 @@ func TestRiskFindingRelayExportsSafeOTLPLog(t *testing.T) {
 
 	wire, err := proto.Marshal(request)
 	require.NoError(t, err)
-	require.NotContains(t, string(wire), finding.GetMatch(), "raw matches must never enter the customer payload")
+	payload := string(wire)
+	require.NotContains(t, payload, finding.GetMatch(), "raw matches must never enter the customer payload")
+	require.NotContains(t, payload, finding.GetDescription(), "finding descriptions must never enter the customer payload")
 }
 
 func TestRiskFindingRelayEligibility(t *testing.T) {
