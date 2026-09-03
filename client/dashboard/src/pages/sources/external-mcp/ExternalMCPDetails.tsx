@@ -104,7 +104,7 @@ export default function ExternalMCPDetails(): JSX.Element {
       });
       await refetch();
       toast.success("External MCP source deleted successfully");
-      void navigate(routes.sources.href());
+      void navigate(routes.mcp.sources.href());
     } catch (error) {
       console.error("Failed to delete external MCP source:", error);
       toast.error("Failed to delete external MCP source. Please try again.");
@@ -113,7 +113,7 @@ export default function ExternalMCPDetails(): JSX.Element {
 
   // If source not found, redirect to sources index
   if (!isLoadingDeployment && !source) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   // Create asset object for delete dialog

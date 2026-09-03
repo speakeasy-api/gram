@@ -74,7 +74,7 @@ export function SourceSettingsTab({
       await Promise.all([refetch(), refetchAssets()]);
       const typeLabel = type === "openapi" ? "API" : "Function";
       toast.success(`${typeLabel} source deleted successfully`);
-      void navigate(routes.sources.href());
+      void navigate(routes.mcp.sources.href());
     } catch (error) {
       console.error(`Failed to delete ${type} source:`, error);
       const typeLabel = type === "openapi" ? "API" : "function";

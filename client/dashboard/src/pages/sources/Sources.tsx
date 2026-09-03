@@ -7,15 +7,6 @@ export function SourcesRoot(): JSX.Element {
   return <Outlet />;
 }
 
-/** Gates the shared Catalog behind project:write when accessed via sources/add-from-catalog. */
-export function AddFromCatalogGate(): JSX.Element {
-  return (
-    <RequireScope scope="project:write" level="page">
-      <Outlet />
-    </RequireScope>
-  );
-}
-
 export function SourcesPage(): JSX.Element {
   return (
     <Page>

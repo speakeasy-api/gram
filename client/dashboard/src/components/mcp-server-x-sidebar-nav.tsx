@@ -130,22 +130,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   }
 
   let sourceDescription = "Connect an MCP server as this server's source.";
-  let sourceHref = routes.sources.href();
+  let sourceHref = routes.mcp.sources.href();
   if (mcpServer?.remoteMcpServerId) {
     sourceDescription = "Backed by a remote MCP server.";
-    sourceHref = routes.sources.source.href(
+    sourceHref = routes.mcp.sources.source.href(
       "remotemcp",
       remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
     );
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = "Backed by a tunneled MCP server.";
-    sourceHref = routes.sources.source.href(
+    sourceHref = routes.mcp.sources.source.href(
       "tunneledmcp",
       tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
     );
   } else if (mcpServer?.unproxiedMcpServerId) {
     sourceDescription = "Backed by an unproxied MCP server.";
-    sourceHref = routes.sources.source.href(
+    sourceHref = routes.mcp.sources.source.href(
       "unproxiedmcp",
       unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
     );

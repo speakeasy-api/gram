@@ -411,7 +411,7 @@ export default function Sources(): JSX.Element {
                 {!disabled && (
                   <DropdownMenuContent align="end" className="w-[320px] p-1">
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addOpenAPI.goTo()}
+                      onSelect={() => routes.mcp.add.openapi.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
@@ -426,7 +426,7 @@ export default function Sources(): JSX.Element {
                     </DropdownMenuItem>
                     {isFunctionsEnabled && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addFunction.goTo()}
+                        onSelect={() => routes.mcp.add.function.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
@@ -441,7 +441,7 @@ export default function Sources(): JSX.Element {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addFromCatalog.goTo()}
+                      onSelect={() => routes.mcp.add.catalog.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
@@ -455,7 +455,7 @@ export default function Sources(): JSX.Element {
                       </div>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addRemoteMcp.goTo()}
+                      onSelect={() => routes.mcp.add.remote.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
@@ -472,7 +472,7 @@ export default function Sources(): JSX.Element {
                     </DropdownMenuItem>
                     {isTunneledMcpEnabled && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addTunneledMcp.goTo()}
+                        onSelect={() => routes.mcp.add.tunneled.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
@@ -490,7 +490,7 @@ export default function Sources(): JSX.Element {
                     )}
                     {isSpeakeasyStaff && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
+                        onSelect={() => routes.mcp.add.unproxied.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">

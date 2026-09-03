@@ -131,7 +131,7 @@ export default function RemoteMCPDetails(): JSX.Element {
   }, [endpointsResult]);
 
   if (isError || (!isLoading && !remoteMcpServer)) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   return (
@@ -654,7 +654,7 @@ function UrlSection({
       // to the Sources index. Replace (not push) avoids a dead history entry
       // pointing at the now-stale slug.
       const nextParam = remoteMcpRouteParam(updated);
-      void navigate(routes.sources.source.href("remotemcp", nextParam), {
+      void navigate(routes.mcp.sources.source.href("remotemcp", nextParam), {
         replace: true,
       });
       // Invalidate every consumer of the remote MCP server: the per-id detail
@@ -785,7 +785,7 @@ function DangerZoneSection({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              void navigate(routes.sources.href());
+              void navigate(routes.mcp.sources.href());
             }}
           />
         </Dialog.Content>

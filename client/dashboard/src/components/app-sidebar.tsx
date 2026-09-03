@@ -137,6 +137,11 @@ export function AppSidebar({
         className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
       />
     );
+  } else if (routes.mcp.add.active) {
+    // Adding a server is a focused flow: leave the rail empty so nothing
+    // competes with picking an option. It keeps the standard width, so
+    // arriving from the MCP index doesn't shift the page.
+    sidebarContent = null;
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
@@ -231,25 +236,6 @@ export function AppSidebar({
             ]}
           />
 
-          {/* Connect group */}
-          <ScopeGatedNavGroup
-            label="Connect"
-            Icon={(p) => <Icon {...p} name="plug" />}
-            items={[
-              { item: routes.sources, ...accessFor(routes.sources) },
-              { item: routes.catalog, ...accessFor(routes.catalog) },
-              { item: routes.playground, ...accessFor(routes.playground) },
-              ...(isDeploymentsPageEnabled
-                ? [
-                    {
-                      item: routes.deployments,
-                      ...accessFor(routes.deployments),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-
           {/* Distribute group */}
           <ScopeGatedNavGroup
             label="Distribute"
@@ -262,6 +248,15 @@ export function AppSidebar({
               { item: routes.skills, ...accessFor(routes.skills) },
               { item: routes.plugins, ...accessFor(routes.plugins) },
               { item: routes.environments, ...accessFor(routes.environments) },
+              { item: routes.playground, ...accessFor(routes.playground) },
+              ...(isDeploymentsPageEnabled
+                ? [
+                    {
+                      item: routes.deployments,
+                      ...accessFor(routes.deployments),
+                    },
+                  ]
+                : []),
             ]}
           />
 

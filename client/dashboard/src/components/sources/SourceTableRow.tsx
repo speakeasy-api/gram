@@ -149,7 +149,7 @@ export function SourceTableRow({
     <TableRowContextMenu actions={actions}>
       <DotRow
         icon={iconContent}
-        href={routes.sources.source.href(sourceKind, asset.slug)}
+        href={routes.mcp.sources.source.href(sourceKind, asset.slug)}
         ariaLabel={`View source ${displayName}`}
       >
         {/* Name */}

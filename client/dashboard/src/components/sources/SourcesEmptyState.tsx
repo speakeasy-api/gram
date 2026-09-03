@@ -101,7 +101,7 @@ export function SourcesEmptyState({
                 {!disabled && (
                   <DropdownMenuContent align="center" className="w-[320px] p-1">
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addOpenAPI.goTo()}
+                      onSelect={() => routes.mcp.add.openapi.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-blue-500/10 dark:bg-blue-500/20">
@@ -116,7 +116,7 @@ export function SourcesEmptyState({
                     </DropdownMenuItem>
                     {isFunctionsEnabled && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addFunction.goTo()}
+                        onSelect={() => routes.mcp.add.function.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20">
@@ -131,7 +131,7 @@ export function SourcesEmptyState({
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addFromCatalog.goTo()}
+                      onSelect={() => routes.mcp.add.catalog.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
@@ -145,7 +145,7 @@ export function SourcesEmptyState({
                       </div>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onSelect={() => routes.sources.addRemoteMcp.goTo()}
+                      onSelect={() => routes.mcp.add.remote.goTo()}
                       className="flex cursor-pointer items-start gap-3 p-2"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
@@ -162,7 +162,7 @@ export function SourcesEmptyState({
                     </DropdownMenuItem>
                     {isTunneledMcpEnabled && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addTunneledMcp.goTo()}
+                        onSelect={() => routes.mcp.add.tunneled.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/10 dark:bg-cyan-500/20">
@@ -180,7 +180,7 @@ export function SourcesEmptyState({
                     )}
                     {isSpeakeasyStaff && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
+                        onSelect={() => routes.mcp.add.unproxied.goTo()}
                         className="flex cursor-pointer items-start gap-3 p-2"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-amber-500/10 dark:bg-amber-500/20">

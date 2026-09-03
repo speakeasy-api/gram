@@ -19,7 +19,8 @@ export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
             No MCP servers yet
           </Text>
           <Text small muted className="mb-4 max-w-md text-center">
-            Create an MCP server to expose tools generated from your sources.
+            Add a server to bring it under the gateway — pick one from the
+            catalog, or connect one you already run.
           </Text>
           {cta}
         </div>

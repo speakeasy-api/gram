@@ -562,9 +562,9 @@ export function DistributeServersStep({
               are shown here — Speakeasy can configure these automatically. More
               servers, including those that need manual OAuth or API key setup,
               are available in the{" "}
-              <routes.catalog.Link className="underline underline-offset-2 hover:text-foreground">
+              <routes.mcp.add.catalog.Link className="underline underline-offset-2 hover:text-foreground">
                 catalog
-              </routes.catalog.Link>
+              </routes.mcp.add.catalog.Link>
               .
             </p>
           )}

@@ -1,11 +1,6 @@
 import { useLocation } from "react-router";
 
-export type NavArea =
-  | "Observe"
-  | "Secure"
-  | "Connect"
-  | "Distribute"
-  | "Organization";
+export type NavArea = "Observe" | "Secure" | "Distribute" | "Organization";
 
 // First path segment after /projects/:slug/ → sidebar area. Kept as a plain
 // slug map (rather than deriving from useRoutes) so consumers stay light —
@@ -27,13 +22,10 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "shadow-mcp": "Secure",
   "request-access": "Secure",
   "detection-rules": "Secure",
-  // Connect
-  sources: "Connect",
-  catalog: "Connect",
-  playground: "Connect",
-  deployments: "Connect",
   // Distribute
   mcp: "Distribute",
+  playground: "Distribute",
+  deployments: "Distribute",
   skills: "Distribute",
   plugins: "Distribute",
   environments: "Distribute",

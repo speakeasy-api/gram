@@ -481,7 +481,7 @@ export function GatewayMembersSection({
         onAddToolset={(toolset) => void handleAddToolset(toolset)}
         onAddFromCatalog={() =>
           void navigate(
-            routes.sources.addFromCatalog.href() +
+            routes.mcp.add.catalog.href() +
               "?attachToGateway=" +
               metaMcpServer.id,
           )

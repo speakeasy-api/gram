@@ -241,7 +241,7 @@ function CatalogInner() {
                 <ServerCard
                   key={serverKey}
                   server={server}
-                  detailHref={routes.catalog.detail.href(
+                  detailHref={routes.mcp.add.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
                   isAdded={isServerAdded(server)}
@@ -269,7 +269,7 @@ function CatalogInner() {
                   <ServerTableRow
                     key={serverKey}
                     server={server}
-                    detailHref={routes.catalog.detail.href(
+                    detailHref={routes.mcp.add.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
                     isAdded={isServerAdded(server)}

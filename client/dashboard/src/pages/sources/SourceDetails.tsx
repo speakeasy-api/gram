@@ -244,7 +244,7 @@ export default function SourceDetails(): JSX.Element {
   }
 
   if (!isLoadingDeployment && !source) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   return (

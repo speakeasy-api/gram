@@ -56,7 +56,7 @@ export default function UnproxiedMCPDetails(): JSX.Element {
   const [isRemoveOpen, setIsRemoveOpen] = useState(false);
 
   if (isError || (!isLoading && !server)) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   return (
@@ -146,7 +146,7 @@ export default function UnproxiedMCPDetails(): JSX.Element {
               url={server.url}
               linkedMcpServers={linkedMcpServers}
               onClose={() => setIsRemoveOpen(false)}
-              onSuccess={() => routes.sources.goTo()}
+              onSuccess={() => routes.mcp.sources.goTo()}
             />
           )}
         </Dialog.Content>

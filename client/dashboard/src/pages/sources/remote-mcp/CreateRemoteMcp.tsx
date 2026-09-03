@@ -166,7 +166,7 @@ function CreateRemoteMcpForm() {
               type="button"
               variant="secondary"
               disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              onClick={() => routes.mcp.add.goTo()}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

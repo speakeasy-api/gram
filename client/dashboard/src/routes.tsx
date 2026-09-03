@@ -49,6 +49,7 @@ import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -141,11 +142,7 @@ import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
 import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
-import {
-  AddFromCatalogGate,
-  SourcesPage,
-  SourcesRoot,
-} from "./pages/sources/Sources";
+import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -330,66 +327,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  sources: {
-    title: "Sources",
-    url: "sources",
-    icon: "file-code",
-    component: SourcesRoot,
-    indexComponent: SourcesPage,
-    subPages: {
-      source: {
-        title: "Source Details",
-        url: ":sourceKind/:sourceSlug",
-        component: SourceDetails,
-      },
-      addOpenAPI: {
-        title: "Add OpenAPI",
-        url: "add-openapi",
-        component: UploadOpenAPI,
-      },
-      addFunction: {
-        title: "Add Function",
-        url: "add-function",
-        component: FunctionsOnboarding,
-      },
-      addFromCatalog: {
-        title: "Add from Catalog",
-        url: "add-from-catalog",
-        component: AddFromCatalogGate,
-        indexComponent: Catalog,
-      },
-      addRemoteMcp: {
-        title: "Add Custom Remote MCP Server",
-        url: "add-remote-mcp",
-        component: CreateRemoteMcp,
-      },
-      addTunneledMcp: {
-        title: "Add Tunneled MCP Server",
-        url: "add-tunneled-mcp",
-        component: CreateTunneledMcp,
-      },
-      addUnproxiedMcp: {
-        title: "Add Unproxied MCP Server",
-        url: "add-unproxied-mcp",
-        component: CreateUnproxiedMcp,
-      },
-    },
-  },
-  catalog: {
-    title: "Catalog",
-    url: "catalog",
-    icon: "store",
-    component: CatalogRoot,
-    indexComponent: Catalog,
-    subPages: {
-      detail: {
-        title: "Server Details",
-        url: ":serverSpecifier",
-        component: CatalogDetailRoot,
-        indexComponent: CatalogDetail,
-      },
-    },
-  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -475,6 +412,85 @@ const ROUTE_STRUCTURE = {
     component: MCPRoot,
     indexComponent: MCPPage,
     subPages: {
+      // S-853: MCP is the inventory, so every way of adding a server starts
+      // here. Options are named for how the server is reached rather than for
+      // the backend that stores it, and OpenAPI and functions sit under
+      // "advanced" on the same page instead of in the navigation.
+      //
+      // `add` and `sources` are static segments under `mcp`, so they rank above
+      // the `details` `:toolsetSlug` route and are not swallowed by it. The
+      // cost is that a toolset slugged "add" or "sources" becomes unreachable
+      // in the dashboard. Nothing reserves those slugs server-side, so this is
+      // the same latent collision the sibling `built-in`, `x` and `gateway`
+      // segments already carry.
+      add: {
+        title: "Add MCP Server",
+        url: "add",
+        component: AddMcpServerRoot,
+        indexComponent: AddMcpServer,
+        subPages: {
+          remote: {
+            title: "Add Remote MCP Server",
+            url: "remote",
+            component: CreateRemoteMcp,
+          },
+          tunneled: {
+            title: "Add Tunneled MCP Server",
+            url: "tunneled",
+            component: CreateTunneledMcp,
+          },
+          unproxied: {
+            title: "Add Unproxied MCP Server",
+            url: "unproxied",
+            component: CreateUnproxiedMcp,
+          },
+          // The single catalog entry point. It previously rendered from both
+          // `/catalog` and `/sources/add-from-catalog`; both now redirect here.
+          catalog: {
+            title: "Catalog",
+            url: "catalog",
+            component: CatalogRoot,
+            indexComponent: Catalog,
+            subPages: {
+              detail: {
+                title: "Server Details",
+                url: ":serverSpecifier",
+                component: CatalogDetailRoot,
+                indexComponent: CatalogDetail,
+              },
+            },
+          },
+          openapi: {
+            title: "Add OpenAPI",
+            url: "openapi",
+            component: UploadOpenAPI,
+          },
+          function: {
+            title: "Add Function",
+            url: "function",
+            component: FunctionsOnboarding,
+          },
+        },
+      },
+      // Sources are demoted to a sub-concept of MCP: reachable from the
+      // "advanced" entry on the add page and from the server detail pages they
+      // back, but no longer a peer navigation item. Whether the reusable-source
+      // model earns its own surface at all is still open — remote, tunneled and
+      // unproxied sources are 1:1 with their mcp_servers row, while OpenAPI
+      // documents and functions genuinely fan out across servers.
+      sources: {
+        title: "Sources",
+        url: "sources",
+        component: SourcesRoot,
+        indexComponent: SourcesPage,
+        subPages: {
+          source: {
+            title: "Source Details",
+            url: ":sourceKind/:sourceSlug",
+            component: SourceDetails,
+          },
+        },
+      },
       builtIn: {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
@@ -973,6 +989,7 @@ export const useRoutes = (overrides?: {
   const addRouteUtilities = (
     route: AppRouteBasic,
     parent?: string,
+    staticSiblings?: Set<string>,
   ): AppRoute => {
     if (parent === undefined && !route.url.startsWith("/")) {
       parent = `/:orgSlug/projects/:projectSlug`;
@@ -1047,8 +1064,22 @@ export const useRoutes = (overrides?: {
       ? addGoToToRoutes(route.subPages, urlWithParent)
       : undefined;
 
+    // A dynamic route must not claim the current URL when a static sibling
+    // owns it. `/mcp/:toolsetSlug` and `/mcp/add` have the same segment count
+    // and matchesCurrent treats `:param` as a wildcard, so without this the
+    // detail route reads as active on `/mcp/add` — which is what selects the
+    // sidebar variant. The router already ranks static above dynamic; this
+    // makes `active` agree with where the user actually landed.
+    const shadowedByStaticSibling =
+      route.url.startsWith(":") &&
+      !!staticSiblings?.has(
+        location.pathname.split("/").filter(Boolean)[
+          (parent ?? "").split("/").filter(Boolean).length
+        ] ?? "",
+      );
+
     const active =
-      matchesCurrent(urlWithParent) ||
+      (matchesCurrent(urlWithParent) && !shadowedByStaticSibling) ||
       !!Object.values(subPages ?? {}).some((subPage) => subPage.active);
 
     const newRoute: AppRoute = {
@@ -1071,10 +1102,15 @@ export const useRoutes = (overrides?: {
     routes: T,
     parent?: string,
   ): TransformRouteToGoTo<T> => {
+    const staticSiblings = new Set(
+      Object.values(routes)
+        .map((route) => route.url.split("/")[0] ?? "")
+        .filter((segment) => segment !== "" && !segment.startsWith(":")),
+    );
     return Object.fromEntries(
       Object.entries(routes).map(([key, route]) => [
         key,
-        addRouteUtilities(route, parent),
+        addRouteUtilities(route, parent, staticSiblings),
       ]),
     ) as TransformRouteToGoTo<T>;
   };

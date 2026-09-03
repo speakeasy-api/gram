@@ -27,7 +27,7 @@ export default function CreateUnproxiedMcp(): JSX.Element {
         description="Unproxied MCP servers are restricted to Speakeasy staff while we validate this workflow."
       >
         <div>
-          <Button variant="secondary" onClick={() => routes.sources.goTo()}>
+          <Button variant="secondary" onClick={() => routes.mcp.add.goTo()}>
             <Button.Text>Back to Sources</Button.Text>
           </Button>
         </div>
@@ -181,7 +181,7 @@ function CreateUnproxiedMcpForm() {
               type="button"
               variant="secondary"
               disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              onClick={() => routes.mcp.add.goTo()}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

@@ -252,7 +252,7 @@ export function SourceCard({
 
   return (
     <CardContextMenu actions={actions}>
-      <routes.sources.source.Link
+      <routes.mcp.sources.source.Link
         key={asset.id}
         params={[sourceKind, asset.slug]}
         className="block h-full hover:no-underline"
@@ -300,7 +300,7 @@ export function SourceCard({
             </div>
           </div>
         </Card.Entity>
-      </routes.sources.source.Link>
+      </routes.mcp.sources.source.Link>
     </CardContextMenu>
   );
 }

@@ -86,7 +86,7 @@ export default function TunneledMCPDetails(): JSX.Element | null {
   }
 
   if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   return <TunneledMCPDetailsContent />;
@@ -156,7 +156,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
   }, [endpointsResult]);
 
   if (isError || (!isLoading && !tunneledMcpServer)) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.sources.href()} replace />;
   }
 
   return (
@@ -1427,7 +1427,7 @@ function DangerZoneSection({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              void navigate(routes.sources.href());
+              void navigate(routes.mcp.sources.href());
             }}
           />
         </Dialog.Content>
