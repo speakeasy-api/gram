@@ -63156,10 +63156,6 @@ components:
           type: string
           description: The display name for the external MCP server.
           example: My Slack Integration
-        organization_mcp_collection_registry_id:
-          type: string
-          description: The ID of the internal collection registry the server is from.
-          format: uuid
         registry_id:
           type: string
           description: The ID of the external MCP registry the server is from.
@@ -68232,9 +68228,6 @@ components:
         name:
           type: string
           description: The display name for the external MCP server.
-        organization_mcp_collection_registry_id:
-          type: string
-          description: The ID of the internal collection registry the server is from.
         registry_id:
           type: string
           description: The ID of the external MCP registry the server is from.
@@ -69548,14 +69541,10 @@ components:
           format: uri
         mcp_server_id:
           type: string
-          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          description: ID of the attached MCP server backing this server
           format: uuid
         meta:
           description: Opaque metadata from the registry
-        organization_mcp_collection_registry_id:
-          type: string
-          description: ID of the internal collection registry this server came from
-          format: uuid
         registry_id:
           type: string
           description: ID of the external MCP registry this server came from
@@ -69579,7 +69568,7 @@ components:
           description: Tools available on the server
         toolset_id:
           type: string
-          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+          description: ID of the attached toolset backing this server
           format: uuid
         version:
           type: string
@@ -69605,14 +69594,10 @@ components:
           description: Whether every tool on the server is read-only
         mcp_server_id:
           type: string
-          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          description: ID of the attached MCP server backing this server
           format: uuid
         meta:
           description: Opaque metadata from the registry
-        organization_mcp_collection_registry_id:
-          type: string
-          description: ID of the internal collection registry this server came from
-          format: uuid
         packages:
           type: array
           items:
@@ -69645,7 +69630,7 @@ components:
           format: int64
         toolset_id:
           type: string
-          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+          description: ID of the attached toolset backing this server
           format: uuid
         version:
           type: string

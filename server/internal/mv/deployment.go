@@ -117,11 +117,12 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		externalMCPID := r.ExternalMcpID.UUID
 		if externalMCPID != uuid.Nil && !seenExternalMCPs[externalMCPID] {
 			registryIDPtr := conv.FromNullableUUID(r.ExternalMcpRegistryID)
-			collectionRegistryIDPtr := conv.FromNullableUUID(r.ExternalMcpCollectionRegistryID)
 
+			// Attachments published from a collection carried no registry id.
+			// Collections are gone, but their rows outlive them, so a missing
+			// registry id describes an existing deployment rather than a bug.
 			if err := inv.Check(
 				"describe deployment external mcp",
-				"valid registry id", registryIDPtr != nil || collectionRegistryIDPtr != nil,
 				"valid name", r.ExternalMcpName.Valid && r.ExternalMcpName.String != "",
 				"valid slug", r.ExternalMcpSlug.Valid && r.ExternalMcpSlug.String != "",
 				"valid registry server specifier", r.ExternalMcpRegistryServerSpecifier.Valid && r.ExternalMcpRegistryServerSpecifier.String != "",
@@ -130,12 +131,11 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			}
 
 			mcp := &types.DeploymentExternalMCP{
-				ID:                                  externalMCPID.String(),
-				RegistryID:                          registryIDPtr,
-				OrganizationMcpCollectionRegistryID: collectionRegistryIDPtr,
-				Name:                                r.ExternalMcpName.String,
-				Slug:                                types.Slug(r.ExternalMcpSlug.String),
-				RegistryServerSpecifier:             r.ExternalMcpRegistryServerSpecifier.String,
+				ID:                      externalMCPID.String(),
+				RegistryID:              registryIDPtr,
+				Name:                    r.ExternalMcpName.String,
+				Slug:                    types.Slug(r.ExternalMcpSlug.String),
+				RegistryServerSpecifier: r.ExternalMcpRegistryServerSpecifier.String,
 			}
 			attachedExternalMCPs = append(attachedExternalMCPs, mcp)
 			seenExternalMCPs[externalMCPID] = true
