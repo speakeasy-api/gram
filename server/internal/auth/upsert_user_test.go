@@ -2,11 +2,17 @@ package auth_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -124,4 +130,117 @@ func TestUpsertUserFromIDP_PreservesAdminStatus(t *testing.T) {
 	dbUser, err := usersQueries.GetUser(ctx, legacyUUID)
 	require.NoError(t, err)
 	require.True(t, dbUser.Admin, "admin flag must survive the ID migration")
+}
+
+func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate@example.com"
+		oldWorkosID    = "user_01DELETED_WORKOS"
+		newWorkosID    = "user_01RECREATED_WORKOS"
+		organizationID = "org_reactivate_deleted_user"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Reactivate Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01REACTIVATE"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01REACTIVATE"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosID:        conv.ToPGText(oldWorkosID),
+	}))
+
+	deleted, err := usersQueries.GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.True(t, deleted.DeletedAt.Valid)
+	require.True(t, deleted.WorkosDeletedAt.Valid)
+
+	isMember, err := orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
+		UserID:         gramUserID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.False(t, isMember, "soft-deleted users must stay RBAC-inactive until they sign up again")
+
+	principals, err := authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	require.Equal(t, []urn.Principal{authz.AllUsersPrincipal()}, principals)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	require.Equal(t, newWorkosID, idpUser.Sub)
+
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+	require.Equal(t, gramUserID, returnedID)
+
+	reactivated, err := usersQueries.GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.False(t, reactivated.DeletedAt.Valid, "login must clear users.deleted_at")
+	require.False(t, reactivated.WorkosDeletedAt.Valid, "login must clear users.workos_deleted_at")
+	require.True(t, reactivated.WorkosID.Valid)
+	require.Equal(t, newWorkosID, reactivated.WorkosID.String)
+
+	isMember, err = orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
+		UserID:         gramUserID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, isMember)
+
+	memberRole, err := accessrepo.New(instance.conn).GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err)
+	principals, err = authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
+	}
+	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, gramUserID).String())
+	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
 }
