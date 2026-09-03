@@ -254,11 +254,9 @@ func BuildTriggerOrganizationChatAnalysisPayload(adminTriggerOrganizationChatAna
 // BuildOpenOrganizationInDashboardPayload builds the payload for the admin
 // openOrganizationInDashboard endpoint from CLI flags.
 func BuildOpenOrganizationInDashboardPayload(adminOpenOrganizationInDashboardOrganizationID string, adminOpenOrganizationInDashboardAdminSessionToken string) (*admin.OpenOrganizationInDashboardPayload, error) {
-	var organizationID *string
+	var organizationID string
 	{
-		if adminOpenOrganizationInDashboardOrganizationID != "" {
-			organizationID = &adminOpenOrganizationInDashboardOrganizationID
-		}
+		organizationID = adminOpenOrganizationInDashboardOrganizationID
 	}
 	var adminSessionToken *string
 	{

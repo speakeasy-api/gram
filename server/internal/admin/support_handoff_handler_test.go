@@ -59,12 +59,12 @@ func TestOpenOrganizationInDashboard_HTTPContract(t *testing.T) {
 		require.Equal(t, "/target-slug", destination.Query().Get("redirect"))
 	})
 
-	t.Run("preserves invalid status for empty organization input", func(t *testing.T) {
+	t.Run("rejects empty required organization input at the transport boundary", func(t *testing.T) {
 		t.Parallel()
 
 		svc, sessionID, issuer := newOpenOrganizationService(t)
 		rec := callOpenOrganization(t, svc, "", sessionID)
-		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
 		require.Empty(t, issuer.organizationID)
 	})
 

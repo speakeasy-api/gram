@@ -672,7 +672,7 @@ type MarkEnterpriseTrialConvertedResult struct {
 // openOrganizationInDashboard method.
 type OpenOrganizationInDashboardPayload struct {
 	AdminSessionToken *string
-	OrganizationID    *string
+	OrganizationID    string
 }
 
 type ProductFeatureName string

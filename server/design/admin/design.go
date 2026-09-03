@@ -410,7 +410,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("openOrganizationInDashboard", func() {
-		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String) })
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
 		Result(AdminDashboardRedirect)
 		HTTP(func() {
 			POST("/admin/organization.open-dashboard")

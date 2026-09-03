@@ -1886,16 +1886,20 @@ func DecodeOpenOrganizationInDashboardRequest(mux goahttp.Muxer, decoder func(*h
 	return func(r *http.Request) (*admin.OpenOrganizationInDashboardPayload, error) {
 		var payload *admin.OpenOrganizationInDashboardPayload
 		var (
-			organizationID    *string
+			organizationID    string
 			adminSessionToken *string
+			err               error
 		)
-		organizationIDRaw := r.URL.Query().Get("organization_id")
-		if organizationIDRaw != "" {
-			organizationID = &organizationIDRaw
+		organizationID = r.URL.Query().Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
 		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
 		}
 		payload = NewOpenOrganizationInDashboardPayload(organizationID, adminSessionToken)
 		if payload.AdminSessionToken != nil {

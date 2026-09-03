@@ -207,6 +207,8 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
+	cacheCtx, cancel := mutationCacheContext(ctx)
+	defer cancel()
 	for _, state := range []struct {
 		feature Feature
 		enabled bool
@@ -214,7 +216,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		{feature: FeatureRemoteSessionAutoRefresh, enabled: visible},
 		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
-		_ = s.featureClient.storeFeatureCache(ctx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
+		_ = s.featureClient.storeFeatureCache(cacheCtx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
 	}
 
 	return nil

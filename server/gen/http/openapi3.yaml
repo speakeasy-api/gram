@@ -1380,6 +1380,7 @@ paths:
                 - name: organization_id
                   in: query
                   allowEmptyValue: true
+                  required: true
                   schema:
                     type: string
             responses:

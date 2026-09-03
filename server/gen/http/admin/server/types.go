@@ -12063,7 +12063,7 @@ func NewTriggerOrganizationChatAnalysisPayload(body *TriggerOrganizationChatAnal
 
 // NewOpenOrganizationInDashboardPayload builds a admin service
 // openOrganizationInDashboard endpoint payload.
-func NewOpenOrganizationInDashboardPayload(organizationID *string, adminSessionToken *string) *admin.OpenOrganizationInDashboardPayload {
+func NewOpenOrganizationInDashboardPayload(organizationID string, adminSessionToken *string) *admin.OpenOrganizationInDashboardPayload {
 	v := &admin.OpenOrganizationInDashboardPayload{}
 	v.OrganizationID = organizationID
 	v.AdminSessionToken = adminSessionToken

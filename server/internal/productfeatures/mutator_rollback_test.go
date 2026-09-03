@@ -3,9 +3,24 @@ package productfeatures
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestMutationCacheContextIgnoresRequestCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	cacheCtx, cacheCancel := mutationCacheContext(ctx)
+	defer cacheCancel()
+	require.NoError(t, cacheCtx.Err())
+	deadline, ok := cacheCtx.Deadline()
+	require.True(t, ok)
+	require.LessOrEqual(t, time.Until(deadline), mutationCacheTimeout)
+}
 
 func TestRollbackTransactionIgnoresRequestCancellation(t *testing.T) {
 	t.Parallel()

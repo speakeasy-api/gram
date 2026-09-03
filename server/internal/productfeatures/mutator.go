@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -31,11 +32,21 @@ func NewMutator(client *Client, auditLogger *audit.Logger) *Mutator {
 	return &Mutator{client: client, audit: auditLogger}
 }
 
+const mutationCacheTimeout = 5 * time.Second
+
+func mutationCacheContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), mutationCacheTimeout)
+}
+
 func rollbackTransaction(ctx context.Context, rollback func(context.Context) error) error {
 	return rollback(context.WithoutCancel(ctx))
 }
 
 func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature Feature, enabled bool, actor MutationActor) error {
+	if feature == FeatureRemoteSessionAutoRefreshEnforced {
+		return oops.E(oops.CodeInvalid, nil, "remote session auto-refresh enforcement must be changed through the policy setter")
+	}
+
 	// Skills is always on, so disabling it remains a silent no-op.
 	if feature == FeatureSkills && !enabled {
 		return nil
@@ -97,7 +108,9 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 	}
 
-	_ = m.client.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
+	cacheCtx, cancel := mutationCacheContext(ctx)
+	defer cancel()
+	_ = m.client.storeFeatureCache(cacheCtx, organizationID, feature, enabled, "failed to cache feature flag state")
 	return nil
 }
 
@@ -161,7 +174,9 @@ func (m *Mutator) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organi
 		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh change").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 	}
 
-	_ = m.client.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to cache remote session refresh policy")
-	_ = m.client.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to cache remote session refresh policy")
+	cacheCtx, cancel := mutationCacheContext(ctx)
+	defer cancel()
+	_ = m.client.storeFeatureCache(cacheCtx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to cache remote session refresh policy")
+	_ = m.client.storeFeatureCache(cacheCtx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to cache remote session refresh policy")
 	return nil
 }

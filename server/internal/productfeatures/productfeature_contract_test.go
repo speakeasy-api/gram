@@ -1,9 +1,11 @@
 package productfeatures_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -13,15 +15,20 @@ import (
 func TestProductFeatureNameContract(t *testing.T) {
 	t.Parallel()
 
+	openAPI, err := os.ReadFile("../../gen/http/openapi3.yaml")
+	require.NoError(t, err)
+	var document struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					Enum []productfeatures.Feature `yaml:"enum"`
+				} `yaml:"properties"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(openAPI, &document))
+
 	require.Equal(t, []productfeatures.Feature{
-		"logs", "tool_io_logs", "session_capture",
-		"authz_challenge_logging", "sso", "scim",
-		"hooks_browser_login", "hooks_fail_open", "custom_model_keys",
-		"skills", "skill_capture_metadata_only", "ai_platform_push_integrations",
-		"platform_mcp", "customer_managed_encryption_keys",
-		"remote_session_auto_refresh", "remote_session_auto_refresh_enforced",
-		"consent_tool_filtering", "session_portability",
-	}, []productfeatures.Feature{
 		productfeatures.FeatureLogs, productfeatures.FeatureToolIOLogs, productfeatures.FeatureSessionCapture,
 		productfeatures.FeatureAuthzChallengeLogging, productfeatures.FeatureSSO, productfeatures.FeatureSCIM,
 		productfeatures.FeatureHooksBrowserLogin, productfeatures.FeatureHooksFailOpen, productfeatures.FeatureCustomModelKeys,
@@ -29,7 +36,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeaturePlatformMCP, productfeatures.FeatureCustomerManagedEncryptionKeys,
 		productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
 		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
-	})
+	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 
 func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {

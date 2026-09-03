@@ -324,7 +324,7 @@ func (s *Service) TriggerOrganizationChatAnalysis(ctx context.Context, payload *
 }
 
 func (s *Service) OpenOrganizationInDashboard(ctx context.Context, payload *gen.OpenOrganizationInDashboardPayload) (*gen.AdminDashboardRedirect, error) {
-	organizationID := strings.TrimSpace(conv.PtrValOr(payload.OrganizationID, ""))
+	organizationID := strings.TrimSpace(payload.OrganizationID)
 	if organizationID == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "organization_id is required")
 	}

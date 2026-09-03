@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
@@ -12,6 +13,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+type cancelOnRedisSetHook struct {
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (h *cancelOnRedisSetHook) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *cancelOnRedisSetHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		if cmd.Name() == "set" {
+			h.once.Do(h.cancel)
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func (h *cancelOnRedisSetHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
 
 type failRedisSetHook struct{}
 

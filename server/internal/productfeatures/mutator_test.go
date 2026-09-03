@@ -1,6 +1,7 @@
 package productfeatures_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,6 +44,47 @@ func TestMutatorSetFeature_ChangesStateAndRecordsActor(t *testing.T) {
 	require.Equal(t, "user", record.ActorType)
 	require.Equal(t, displayName, record.ActorDisplay)
 	require.Equal(t, slug, record.ActorSlug)
+}
+
+func TestMutatorSetFeature_RejectsRemoteSessionAutoRefreshEnforced(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	actor := productfeatures.MutationActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "actor")}
+
+	err := productfeatures.NewMutator(ti.client, audit.NewLogger()).SetFeature(
+		ctx, organizationID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced, true, actor,
+	)
+	require.Error(t, err)
+
+	enabled, queryErr := featurerepo.New(ti.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
+	})
+	require.NoError(t, queryErr)
+	require.False(t, enabled)
+}
+
+func TestMutatorSetFeature_RefreshesCacheAfterRequestCancellation(t *testing.T) {
+	t.Parallel()
+	baseCtx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, baseCtx)
+	ctx, cancel := context.WithCancel(baseCtx)
+	ti.redisClient.AddHook(&cancelOnRedisSetHook{cancel: cancel})
+	actor := productfeatures.MutationActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "actor")}
+
+	require.NoError(t, productfeatures.NewMutator(ti.client, audit.NewLogger()).SetFeature(
+		ctx, organizationID, productfeatures.FeatureLogs, true, actor,
+	))
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+
+	_, err := featurerepo.New(ti.conn).DeleteFeature(baseCtx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs),
+	})
+	require.NoError(t, err)
+	reader := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, ti.redisClient)
+	enabled, err := reader.IsFeatureEnabled(baseCtx, organizationID, productfeatures.FeatureLogs)
+	require.NoError(t, err)
+	require.True(t, enabled)
 }
 
 func TestMutatorSetFeature_NoOpDoesNotAudit(t *testing.T) {
