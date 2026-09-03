@@ -20,6 +20,8 @@ import {
 } from "./machine-types";
 import {
   type AddExternalOAuthInput,
+  type DiscoverExternalOAuthInput,
+  type DiscoverExternalOAuthOutput,
   type ProvisionUserSessionInput,
   type RegisterClientInput,
   type RegisterClientOutput,
@@ -60,6 +62,19 @@ const baseInput: Input = {
 function happyServices() {
   return {
     addExternalOAuth: fromPromise<void, AddExternalOAuthInput>(async () => {}),
+    discoverExternalOAuth: fromPromise<
+      DiscoverExternalOAuthOutput,
+      DiscoverExternalOAuthInput
+    >(async ({ input }) => ({
+      issuer: input.issuer,
+      authorizationEndpoint: `${input.issuer}/authorize`,
+      tokenEndpoint: `${input.issuer}/token`,
+      authorizationResponseIssParameterSupported: true,
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    })),
     provisionUserSession: fromPromise<void, ProvisionUserSessionInput>(
       async () => {},
     ),
@@ -155,8 +170,8 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     discovered: null,
     external: {
       issuerUrl: "https://example.com",
-      slug: "ok",
       metadataJson: VALID_EXTERNAL_METADATA_JSON,
+      verifiedMetadata: null,
       jsonError: null,
       prefilled: false,
       ...over,
@@ -207,11 +222,8 @@ describe("checkExternal", () => {
     expect(checkExternal(withExternal())).toEqual({ ok: true });
   });
 
-  it("rejects empty slug", () => {
-    expect(checkExternal(withExternal({ slug: "  " }))).toMatchObject({
-      ok: false,
-      reason: expect.stringContaining("slug"),
-    });
+  it("does not require a dashboard-entered slug", () => {
+    expect(checkExternal(withExternal())).toEqual({ ok: true });
   });
 
   it("rejects malformed JSON", () => {
@@ -314,7 +326,7 @@ describe("checkCreds", () => {
 describe("guard boolean wrappers", () => {
   it("validExternal mirrors checkExternal", () => {
     expect(validExternal(withExternal())).toBe(true);
-    expect(validExternal(withExternal({ slug: "" }))).toBe(false);
+    expect(validExternal(withExternal())).toBe(true);
   });
 
   it("validProxyMeta mirrors checkProxyMeta", () => {
@@ -345,7 +357,7 @@ describe("oauthWizardMachine — initial state", () => {
     const ctx = actor.getSnapshot().context;
     expect(ctx.toolsetName).toBe("MyTool");
     expect(ctx.proxy.slug).toBe("");
-    expect(ctx.external.slug).toBe("");
+    expect(ctx.external).not.toHaveProperty("slug");
   });
 });
 
@@ -370,11 +382,11 @@ describe("oauthWizardMachine — path selection", () => {
     expect(proxy.prefilled).toBe(true);
   });
 
-  it("SELECT_EXTERNAL moves to external.editing", () => {
+  it("SELECT_EXTERNAL moves to external.source", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
-    expect(actor.getSnapshot().matches({ external: "editing" })).toBe(true);
+    expect(actor.getSnapshot().matches({ external: "source" })).toBe(true);
   });
 
   it("SELECT_EXTERNAL prefills metadata JSON when discovered version is 2.1", () => {
@@ -382,7 +394,7 @@ describe("oauthWizardMachine — path selection", () => {
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
     const { external } = actor.getSnapshot().context;
-    expect(external.slug).toBe("discovered-slug");
+    expect(external).not.toHaveProperty("slug");
     expect(external.prefilled).toBe(true);
     expect(JSON.parse(external.metadataJson)).toEqual(VALID_PROXY_METADATA);
   });
@@ -395,7 +407,7 @@ describe("oauthWizardMachine — path selection", () => {
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
     const { external } = actor.getSnapshot().context;
-    expect(external.slug).toBe("");
+    expect(external).not.toHaveProperty("slug");
     expect(external.prefilled).toBe(false);
   });
 });
@@ -502,64 +514,139 @@ describe("oauthWizardMachine — provisioning failure", () => {
 // Machine — external happy path and APPLY_DISCOVERED
 // ---------------------------------------------------------------------------
 
-describe("oauthWizardMachine — external happy path", () => {
-  it("walks editing → submitting → result.success", async () => {
-    const actor = makeActor(baseInput);
+describe("oauthWizardMachine - external happy path", () => {
+  it("walks source to provider issuer to verifying to review to submitting", async () => {
+    let submitted: AddExternalOAuthInput | undefined;
+    const services = {
+      ...happyServices(),
+      addExternalOAuth: fromPromise<void, AddExternalOAuthInput>(
+        async ({ input }) => {
+          submitted = input;
+        },
+      ),
+    };
+    const actor = makeActor(baseInput, services);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    expect(actor.getSnapshot().matches({ external: "source" })).toBe(true);
+    actor.send({ type: "SELECT_PROVIDER_ISSUER" });
     actor.send({
       type: "FIELD_EXTERNAL",
       key: "issuerUrl",
       value: "https://example.com",
     });
-    actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
+    actor.send({ type: "NEXT" });
+    expect(actor.getSnapshot().matches({ external: "verifying" })).toBe(true);
+    await waitFor(actor, (s) => s.matches({ external: "review" }));
+    actor.send({ type: "SUBMIT" });
+    await waitFor(actor, (s) => s.matches({ result: "success" }));
+    expect(submitted).toEqual({
+      toolsetSlug: "ts",
+      authorizationServerIssuer: "https://example.com",
+    });
+  });
+
+  it("walks source to Gram-hosted to submitting without a slug", async () => {
+    let submitted: AddExternalOAuthInput | undefined;
+    const services = {
+      ...happyServices(),
+      addExternalOAuth: fromPromise<void, AddExternalOAuthInput>(
+        async ({ input }) => {
+          submitted = input;
+        },
+      ),
+    };
+    const actor = makeActor(baseInput, services);
+    actor.start();
+    actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({ type: "SELECT_GRAM_HOSTED" });
     actor.send({
       type: "FIELD_EXTERNAL",
       key: "metadataJson",
       value: VALID_EXTERNAL_METADATA_JSON,
     });
     actor.send({ type: "SUBMIT" });
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
+    await waitFor(actor, (s) => s.matches({ result: "success" }));
+    expect(submitted).toEqual({
+      toolsetSlug: "ts",
+      metadata: VALID_PROXY_METADATA,
     });
-
-    expect(actor.getSnapshot().context.result?.success).toBe(true);
   });
 
-  it("SUBMIT with invalid JSON stays in editing with jsonError set", () => {
+  it("invalidates verified discovery when the issuer changes", async () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({ type: "SELECT_PROVIDER_ISSUER" });
     actor.send({
       type: "FIELD_EXTERNAL",
       key: "issuerUrl",
       value: "https://example.com",
     });
-    actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
+    actor.send({ type: "NEXT" });
+    await waitFor(actor, (s) => s.matches({ external: "review" }));
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://other.example.com",
+    });
+    expect(actor.getSnapshot().matches({ external: "providerIssuer" })).toBe(
+      true,
+    );
+    expect(actor.getSnapshot().context.external.verifiedMetadata).toBeNull();
+    actor.send({ type: "SUBMIT" });
+    expect(actor.getSnapshot().matches({ external: "providerIssuer" })).toBe(
+      true,
+    );
+  });
+
+  it("failed discovery cannot submit", async () => {
+    const services = {
+      ...happyServices(),
+      discoverExternalOAuth: fromPromise<
+        DiscoverExternalOAuthOutput,
+        DiscoverExternalOAuthInput
+      >(async () => {
+        throw new Error("Discovery failed");
+      }),
+    };
+    const actor = makeActor(baseInput, services);
+    actor.start();
+    actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({ type: "SELECT_PROVIDER_ISSUER" });
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://example.com",
+    });
+    actor.send({ type: "NEXT" });
+    await waitFor(
+      actor,
+      (s) => s.matches({ external: "providerIssuer" }) && !!s.context.error,
+    );
+    actor.send({ type: "SUBMIT" });
+    expect(actor.getSnapshot().matches({ external: "providerIssuer" })).toBe(
+      true,
+    );
+  });
+
+  it("keeps invalid manual JSON in the Gram-hosted editor", () => {
+    const actor = makeActor(baseInput);
+    actor.start();
+    actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({ type: "SELECT_GRAM_HOSTED" });
     actor.send({
       type: "FIELD_EXTERNAL",
       key: "metadataJson",
       value: "{not-json",
     });
     actor.send({ type: "SUBMIT" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ external: "editing" })).toBe(true);
-    expect(snap.context.external.jsonError).toBe("Invalid JSON format");
-  });
-
-  it("APPLY_DISCOVERED applies discovery to external form", () => {
-    const actor = makeActor({ ...baseInput, discovered: DISCOVERED_2_1 });
-    actor.start();
-    actor.send({ type: "SELECT_EXTERNAL" });
-    // SELECT_EXTERNAL already applied discovery; clear and re-apply
-    actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "" });
-    actor.send({ type: "APPLY_DISCOVERED" });
-    expect(actor.getSnapshot().context.external.slug).toBe("discovered-slug");
+    expect(actor.getSnapshot().matches({ external: "gramHosted" })).toBe(true);
+    expect(actor.getSnapshot().context.external.jsonError).toBe(
+      "Invalid JSON format",
+    );
   });
 });
-
-// ---------------------------------------------------------------------------
 // Machine — manual proxy path always prompts for credentials
 // ---------------------------------------------------------------------------
 

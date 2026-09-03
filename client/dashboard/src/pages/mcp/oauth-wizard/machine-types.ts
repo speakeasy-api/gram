@@ -1,3 +1,5 @@
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+
 export type DiscoveredOAuth = {
   slug: string;
   name: string;
@@ -5,7 +7,7 @@ export type DiscoveredOAuth = {
   metadata: Record<string, unknown>;
 };
 
-type ExternalFormKey = "issuerUrl" | "slug" | "metadataJson";
+type ExternalFormKey = "issuerUrl" | "metadataJson";
 
 export type ProxyFormKey =
   | "slug"
@@ -23,8 +25,8 @@ export type Context = {
   initialPath?: "external";
   external: {
     issuerUrl: string;
-    slug: string;
     metadataJson: string;
+    verifiedMetadata: RemoteSessionIssuerDraft | null;
     jsonError: string | null;
     prefilled: boolean;
   };
@@ -65,6 +67,8 @@ export type WizardEvent =
   | { type: "SELECT_EXTERNAL" }
   | { type: "SELECT_PROXY" }
   | { type: "SELECT_PROXY_AUTO" }
+  | { type: "SELECT_PROVIDER_ISSUER" }
+  | { type: "SELECT_GRAM_HOSTED" }
   | { type: "APPLY_DISCOVERED" }
   | { type: "FIELD_EXTERNAL"; key: ExternalFormKey; value: string }
   | { type: "FIELD_PROXY"; key: ProxyFormKey; value: string }

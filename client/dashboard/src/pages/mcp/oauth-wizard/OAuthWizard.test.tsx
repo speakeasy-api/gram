@@ -240,6 +240,32 @@ describe("OAuthWizard — rendering", () => {
   });
 });
 
+describe("OAuthWizard - external OAuth sources", () => {
+  it("shows an explicit metadata source choice without a slug field", () => {
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+
+    expect(
+      screen.getByRole("button", { name: /Provider-hosted metadata/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Gram-hosted metadata/ }),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("OAuth Server Slug")).toBeNull();
+  });
+
+  it("warns that Gram-hosted metadata is for multi-origin compatibility", () => {
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Gram-hosted metadata/ }),
+    );
+
+    expect(screen.getByText(/multiple origins/i)).toBeTruthy();
+    expect(screen.getByLabelText("OAuth Metadata JSON")).toBeTruthy();
+  });
+});
+
 describe("OAuthWizard — happy proxy create", () => {
   it("walks path selection → metadata → credentials → success", async () => {
     const onClose = vi.fn();

@@ -1,6 +1,7 @@
 import { createActorContext } from "@xstate/react";
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
+import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
 import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
 import {
   authServerOrigin,
@@ -12,6 +13,8 @@ import {
 } from "./machine-types";
 import {
   type AddExternalOAuthInput,
+  type DiscoverExternalOAuthInput,
+  type DiscoverExternalOAuthOutput,
   type ProvisionUserSessionInput,
   type RegisterClientInput,
   type RegisterClientOutput,
@@ -38,8 +41,8 @@ function initialContext(input: Input): Context {
     initialPath: input.initialPath,
     external: {
       issuerUrl: "",
-      slug: "",
       metadataJson: "",
+      verifiedMetadata: null,
       jsonError: null,
       prefilled: false,
     },
@@ -58,12 +61,12 @@ function externalFromDiscovered(
   d: DiscoveredOAuth,
 ): Pick<
   Context["external"],
-  "issuerUrl" | "slug" | "metadataJson" | "jsonError" | "prefilled"
+  "issuerUrl" | "metadataJson" | "verifiedMetadata" | "jsonError" | "prefilled"
 > {
   return {
     issuerUrl: typeof d.metadata.issuer === "string" ? d.metadata.issuer : "",
-    slug: d.slug,
     metadataJson: JSON.stringify(d.metadata, null, 2),
+    verifiedMetadata: null,
     jsonError: null,
     prefilled: true,
   };
@@ -138,6 +141,10 @@ export const oauthWizardMachine = setup({
   },
   actors: {
     addExternalOAuth: placeholder<AddExternalOAuthInput>("addExternalOAuth"),
+    discoverExternalOAuth: placeholder<
+      DiscoverExternalOAuthInput,
+      DiscoverExternalOAuthOutput
+    >("discoverExternalOAuth"),
     provisionUserSession: placeholder<ProvisionUserSessionInput>(
       "provisionUserSession",
     ),
@@ -167,7 +174,7 @@ export const oauthWizardMachine = setup({
       always: [
         {
           guard: ({ context }) => context.initialPath === "external",
-          target: "external.editing",
+          target: "external.source",
           actions: assign({
             external: ({ context }) =>
               context.discovered && context.discovered.version === "2.1"
@@ -183,7 +190,7 @@ export const oauthWizardMachine = setup({
       meta: { title: "Connect OAuth" },
       on: {
         SELECT_EXTERNAL: {
-          target: "external.editing",
+          target: "external.source",
           actions: assign({
             external: ({ context }) =>
               context.discovered && context.discovered.version === "2.1"
@@ -226,30 +233,131 @@ export const oauthWizardMachine = setup({
     },
 
     external: {
-      initial: "editing",
+      initial: "source",
       states: {
-        editing: {
+        source: {
           meta: { title: "Configure External OAuth" },
+          on: {
+            SELECT_PROVIDER_ISSUER: "providerIssuer",
+            SELECT_GRAM_HOSTED: {
+              target: "gramHosted",
+              actions: assign({
+                external: ({ context }) => ({
+                  ...context.external,
+                  verifiedMetadata: null,
+                }),
+                error: () => null,
+              }),
+            },
+            BACK: "#oauthWizard.pathSelection",
+          },
+        },
+        providerIssuer: {
+          meta: { title: "Provider-hosted metadata" },
           on: {
             FIELD_EXTERNAL: {
               actions: assign({
                 external: ({ context, event }) => ({
                   ...context.external,
                   [event.key]: event.value,
-                  jsonError:
-                    event.key === "metadataJson"
-                      ? null
-                      : context.external.jsonError,
+                  verifiedMetadata: null,
+                }),
+                error: () => null,
+              }),
+            },
+            NEXT: [
+              {
+                guard: ({ context }) =>
+                  validateProviderIssuerUrl(context.external.issuerUrl) ===
+                  null,
+                target: "verifying",
+                actions: assign({
+                  external: ({ context }) => ({
+                    ...context.external,
+                    verifiedMetadata: null,
+                  }),
+                  error: () => null,
+                }),
+              },
+              {
+                actions: assign({
+                  error: ({ context }) =>
+                    validateProviderIssuerUrl(context.external.issuerUrl),
+                }),
+              },
+            ],
+            BACK: "source",
+          },
+        },
+        verifying: {
+          meta: { title: "Verifying provider metadata" },
+          invoke: {
+            src: "discoverExternalOAuth",
+            input: ({ context }): DiscoverExternalOAuthInput => ({
+              issuer: context.external.issuerUrl.trim(),
+            }),
+            onDone: {
+              target: "review",
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  verifiedMetadata: event.output,
+                }),
+                error: () => null,
+              }),
+            },
+            onError: {
+              target: "providerIssuer",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(
+                    event.error,
+                    "Could not verify provider metadata",
+                  ),
+              }),
+            },
+          },
+          on: {
+            FIELD_EXTERNAL: {
+              target: "providerIssuer",
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  verifiedMetadata: null,
                 }),
               }),
             },
-            APPLY_DISCOVERED: {
-              guard: ({ context }) => context.discovered != null,
+            BACK: "providerIssuer",
+          },
+        },
+        review: {
+          meta: { title: "Review provider metadata" },
+          on: {
+            FIELD_EXTERNAL: {
+              target: "providerIssuer",
               actions: assign({
-                external: ({ context }) =>
-                  context.discovered
-                    ? externalFromDiscovered(context.discovered)
-                    : context.external,
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  verifiedMetadata: null,
+                }),
+              }),
+            },
+            SUBMIT: { target: "submitting" },
+            BACK: "providerIssuer",
+          },
+        },
+        gramHosted: {
+          meta: { title: "Gram-hosted metadata" },
+          on: {
+            FIELD_EXTERNAL: {
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  jsonError: null,
+                }),
               }),
             },
             SUBMIT: [
@@ -266,30 +374,35 @@ export const oauthWizardMachine = setup({
               {
                 actions: assign({
                   external: ({ context }) => {
-                    const r = checkExternal(context);
+                    const result = checkExternal(context);
                     return {
                       ...context.external,
-                      jsonError: r.ok ? null : r.reason,
+                      jsonError: result.ok ? null : result.reason,
                     };
                   },
                 }),
               },
             ],
-            BACK: "#oauthWizard.pathSelection",
+            BACK: "source",
           },
         },
         submitting: {
           meta: { title: "Configure External OAuth" },
           invoke: {
             src: "addExternalOAuth",
-            input: ({ context }): AddExternalOAuthInput => ({
-              toolsetSlug: context.toolsetSlug,
-              slug: context.external.slug,
-              metadata: JSON.parse(context.external.metadataJson) as Record<
-                string,
-                unknown
-              >,
-            }),
+            input: ({ context }): AddExternalOAuthInput =>
+              context.external.verifiedMetadata
+                ? {
+                    toolsetSlug: context.toolsetSlug,
+                    authorizationServerIssuer:
+                      context.external.verifiedMetadata.issuer,
+                  }
+                : {
+                    toolsetSlug: context.toolsetSlug,
+                    metadata: JSON.parse(
+                      context.external.metadataJson,
+                    ) as Record<string, unknown>,
+                  },
             onDone: {
               target: "#oauthWizard.result.success",
               actions: [
@@ -304,23 +417,36 @@ export const oauthWizardMachine = setup({
                 "invalidateOnExternalSuccess",
               ],
             },
-            onError: {
-              target: "editing",
-              actions: assign({
-                external: ({ context, event }) => ({
-                  ...context.external,
-                  jsonError: errorMessage(
-                    event.error,
-                    "Failed to configure OAuth",
-                  ),
+            onError: [
+              {
+                guard: ({ context }) =>
+                  context.external.verifiedMetadata !== null,
+                target: "review",
+                actions: assign({
+                  error: ({ event }) =>
+                    errorMessage(
+                      event.error,
+                      "Failed to configure external OAuth",
+                    ),
                 }),
-              }),
-            },
+              },
+              {
+                target: "gramHosted",
+                actions: assign({
+                  external: ({ context, event }) => ({
+                    ...context.external,
+                    jsonError: errorMessage(
+                      event.error,
+                      "Failed to configure external OAuth",
+                    ),
+                  }),
+                }),
+              },
+            ],
           },
         },
       },
     },
-
     proxy: {
       initial: "metadata",
       states: {
