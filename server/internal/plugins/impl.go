@@ -1890,6 +1890,8 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
 		SkipIfUnchanged: false,
+		// A human clicking Publish is exactly how a project gets its first repo.
+		SkipIfUnpublished: false,
 	})
 	if err != nil {
 		return nil, err
@@ -1913,6 +1915,16 @@ type PublishProjectInput struct {
 	// rollout hasn't cleared. The only lever to advance hooks is the
 	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary).
 	SkipIfUnchanged bool
+	// SkipIfUnpublished short-circuits the publish when the project has never
+	// published (no github connection row), so a publish can update a
+	// marketplace but never bring one into existence. Set by the change-driven
+	// signals: a mutation that merely *could* have moved generated output must
+	// not hand a project its first repo — a project with nothing attachable
+	// would get an empty one. Creating the repo stays with the paths that mean
+	// it (project creation and a first Default-plugin attach, both forced) and
+	// the rollout sweep, whose candidates are already scoped to projects with a
+	// Default plugin or a previous publish.
+	SkipIfUnpublished bool
 }
 
 type PublishProjectResult struct {
@@ -1948,9 +1960,10 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames: nil,
-		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged: input.SkipIfUnchanged,
+		GitHubUsernames:   nil,
+		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:   input.SkipIfUnchanged,
+		SkipIfUnpublished: input.SkipIfUnpublished,
 	})
 	if err != nil {
 		return nil, err
@@ -1976,6 +1989,9 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// SkipIfUnpublished refuses to create the project's first marketplace repo;
+	// see PublishProjectInput.SkipIfUnpublished.
+	SkipIfUnpublished bool
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2084,6 +2100,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
 	}
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	// A change-driven signal updates an existing marketplace but never creates
+	// one: the mutation that triggered it only means the generated output may
+	// have moved, which is no reason to hand a project a repo (and a fresh API
+	// key) it has never had. RepoURL is still reported so callers can log it.
+	if input.SkipIfUnpublished && firstPublish {
+		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: false}, nil
+	}
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
 	// Package admission is available before the first Platform MCP connection,
@@ -2481,6 +2504,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				},
 				GitHubUsernames: nil,
 				CommitMessage:   "Update marketplace name",
+				// Only reached when a connection already exists (see the switch
+				// above), so this never creates a repo either way.
+				SkipIfUnpublished: false,
 				// A human changed the marketplace name: always republish so the
 				// new name propagates to installed copies (MCP + marketplace.json).
 				// The hooks component is gated by the rollout inside publishProject:

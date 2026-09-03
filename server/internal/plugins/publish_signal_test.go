@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -80,4 +81,44 @@ func TestPluginsService_LazyDefaultPluginSignalsRepublish(t *testing.T) {
 	_, err = ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, ti.publisher.captured(), 1, "a read that creates nothing must not enqueue")
+}
+
+// A change-driven publish may update an existing marketplace but must never
+// create one: the mutation behind it only means the generated output *may*
+// have moved, and a project with nothing attachable would get an empty repo
+// and a fresh API key for it. Creating the repo belongs to the forced paths
+// and the rollout sweep.
+func TestPluginsService_PublishProjectSkipsUnpublishedProject(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	publisher := newTestPluginPublisher(t, ti, mock, nil)
+
+	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:         *authCtx.ProjectID,
+		CreatedByUserID:   authCtx.UserID,
+		CommitMessage:     "Update plugin packages",
+		SkipIfUnchanged:   true,
+		SkipIfUnpublished: true,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.False(t, mock.createRepoCalled, "a change signal must not create the first marketplace repo")
+	require.False(t, mock.pushFilesCalled)
+
+	// The same project, published by a path that means it, still gets its repo.
+	forced, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:         *authCtx.ProjectID,
+		CreatedByUserID:   authCtx.UserID,
+		CommitMessage:     "Initial marketplace publish",
+		SkipIfUnchanged:   false,
+		SkipIfUnpublished: false,
+	})
+	require.NoError(t, err)
+	require.False(t, forced.Skipped)
+	require.True(t, mock.createRepoCalled)
 }
