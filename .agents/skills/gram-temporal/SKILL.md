@@ -1,6 +1,7 @@
 ---
 name: gram-temporal
-description: Use when adding or changing background work in gram — a Temporal workflow, activity, schedule, signal, or ContinueAsNew loop; anything reacting to chat messages, tool calls, MCP requests, telemetry rows, or DB writes; anything that fans out per project/org/user, polls, sweeps, or runs on a timer; when estimating or reviewing Temporal Cloud cost. Triggers: "workflow", "activity", "schedule", "cron", "poll", "sweep", "coordinator", "SignalWithStart", "ThrottledSignaler", "MessageObserver", "per message", "per tool call", "hot path", "registerSchedules".
+description: >-
+  Use when adding or changing background work in gram — a Temporal workflow, activity, schedule, signal, or ContinueAsNew loop; anything reacting to chat messages, tool calls, MCP requests, telemetry rows, or DB writes; anything that fans out per project/org/user, polls, sweeps, or runs on a timer; when estimating or reviewing Temporal Cloud cost. Triggers: "workflow", "activity", "schedule", "cron", "poll", "sweep", "coordinator", "SignalWithStart", "ThrottledSignaler", "MessageObserver", "per message", "per tool call", "hot path", "registerSchedules".
 metadata:
   relevant_files:
     - "server/internal/background/**/*.go"
