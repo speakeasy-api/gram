@@ -122,6 +122,10 @@ export type ToolsetEntry = {
    */
   tools: Array<ToolEntry>;
   /**
+   * Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
+   */
+  topLevelToolUrns: Array<string>;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -161,6 +165,7 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
       tool_selection_mode: z.string(),
       tool_urns: z.array(z.string()),
       tools: z.array(ToolEntry$inboundSchema),
+      top_level_tool_urns: z.array(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -184,6 +189,7 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
         "server_variables": "serverVariables",
         "tool_selection_mode": "toolSelectionMode",
         "tool_urns": "toolUrns",
+        "top_level_tool_urns": "topLevelToolUrns",
         "updated_at": "updatedAt",
       });
     }),

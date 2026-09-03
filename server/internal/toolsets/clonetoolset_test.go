@@ -85,6 +85,55 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	require.Equal(t, beforeCount+2, afterCount)
 }
 
+func TestToolsetsService_CloneToolset_CopiesTopLevelToolUrns(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createPetstoreDeployment(t, ctx, ti)
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.GreaterOrEqual(t, len(tools), 1, "expected at least 1 tool from petstore")
+
+	original, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Pinned Original",
+		Description:            nil,
+		ToolUrns:               []string{tools[0].ToolUrn.String()},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   original.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       []string{tools[0].ToolUrn.String()},
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	cloned, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		Slug:             original.Slug,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{tools[0].ToolUrn.String()}, cloned.TopLevelToolUrns)
+}
+
 func TestToolsetsService_CloneToolset_MultipleClones(t *testing.T) {
 	t.Parallel()
 

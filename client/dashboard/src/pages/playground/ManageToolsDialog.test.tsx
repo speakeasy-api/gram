@@ -68,6 +68,7 @@ const toolset = {
   resources: [],
   slug: "weather-tools",
   toolSelectionMode: "manual",
+  topLevelToolUrns: [],
   toolUrns: [],
   tools: [],
   toolsetVersion: 1,

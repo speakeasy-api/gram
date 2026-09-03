@@ -104,6 +104,18 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
+-- name: SetToolsetTopLevelToolUrns :one
+-- Narrow setter: UpdateToolset's COALESCE pattern can't distinguish an
+-- omitted list from an intentional empty list.
+UPDATE toolsets
+SET
+    top_level_tool_urns = @top_level_tool_urns
+  , updated_at = clock_timestamp()
+WHERE slug = @slug
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()

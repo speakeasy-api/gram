@@ -1,12 +1,14 @@
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Heading } from "@/components/ui/Heading";
+import { Label } from "@/components/ui/Label";
+import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Toolset } from "@/lib/toolTypes";
+import { Tool, Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ListOrdered, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -91,16 +93,22 @@ export function MCPPerformanceTab({
   const telemetry = useTelemetry();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void invalidateAllToolset(queryClient);
-      toast.success("Tool selection mode updated");
+      if (variables.request.updateToolsetRequestBody.topLevelToolUrns) {
+        toast.success("Always-available tools updated");
+      } else {
+        toast.success("Tool selection mode updated");
+      }
       telemetry.capture("mcp_event", {
-        action: "tool_selection_mode_changed",
+        action: variables.request.updateToolsetRequestBody.topLevelToolUrns
+          ? "top_level_tools_changed"
+          : "tool_selection_mode_changed",
         slug: toolset.slug,
       });
     },
     onError: () => {
-      toast.error("Failed to update tool selection mode");
+      toast.error("Failed to update toolset");
     },
   });
 
@@ -115,6 +123,26 @@ export function MCPPerformanceTab({
       },
     });
   };
+
+  const topLevelToolUrns = toolset.topLevelToolUrns ?? [];
+  const pinned = new Set(topLevelToolUrns);
+
+  const onToggleTopLevelTool = (toolUrn: string, nextChecked: boolean) => {
+    if (!canWrite) return;
+    const next = nextChecked
+      ? [...topLevelToolUrns.filter((urn) => urn !== toolUrn), toolUrn]
+      : topLevelToolUrns.filter((urn) => urn !== toolUrn);
+    updateToolsetMutation.mutate({
+      request: {
+        slug: toolset.slug,
+        updateToolsetRequestBody: { topLevelToolUrns: next },
+      },
+    });
+  };
+
+  const selectableTools = toolset.tools.toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   return (
     <Stack gap={4}>
@@ -153,6 +181,37 @@ export function MCPPerformanceTab({
         />
       </div>
 
+      {toolSelectionMode === "dynamic" ? (
+        <Stack gap={3} className="border-border border p-5">
+          <Stack gap={1}>
+            <Heading variant="h4">Always-available tools</Heading>
+            <Text muted className="max-w-2xl text-sm">
+              These tools appear next to search_tools, describe_tools, and
+              execute_tool so the model can call them without searching first.
+            </Text>
+          </Stack>
+          {selectableTools.length === 0 ? (
+            <Text muted className="text-sm">
+              Add tools to this server to pin them as always available.
+            </Text>
+          ) : (
+            <ul className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+              {selectableTools.map((tool) => (
+                <TopLevelToolRow
+                  key={tool.toolUrn}
+                  tool={tool}
+                  checked={pinned.has(tool.toolUrn)}
+                  disabled={!canWrite || updateToolsetMutation.isPending}
+                  onCheckedChange={(next) =>
+                    onToggleTopLevelTool(tool.toolUrn, next)
+                  }
+                />
+              ))}
+            </ul>
+          )}
+        </Stack>
+      ) : null}
+
       <a
         href="https://www.speakeasy.com/docs/mcp/build/toolsets/dynamic-toolsets"
         target="_blank"
@@ -163,5 +222,44 @@ export function MCPPerformanceTab({
         <ExternalLink className="h-3.5 w-3.5" />
       </a>
     </Stack>
+  );
+}
+
+function TopLevelToolRow({
+  tool,
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  tool: Tool;
+  checked: boolean;
+  disabled: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}): JSX.Element {
+  const checkboxId = `top-level-tool-${tool.toolUrn}`;
+
+  return (
+    <li className="flex items-start gap-3">
+      <Checkbox
+        id={checkboxId}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        className="mt-0.5"
+      />
+      <Label
+        htmlFor={checkboxId}
+        className="min-w-0 cursor-pointer font-normal"
+      >
+        <span className="text-foreground block truncate text-sm">
+          {tool.name}
+        </span>
+        {tool.description ? (
+          <span className="text-muted-foreground line-clamp-2 text-xs">
+            {tool.description}
+          </span>
+        ) : null}
+      </Label>
+    </li>
   );
 }

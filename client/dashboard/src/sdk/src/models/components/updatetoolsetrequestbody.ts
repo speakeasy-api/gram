@@ -50,6 +50,10 @@ export type UpdateToolsetRequestBody = {
    * List of tool URNs to include in the toolset
    */
   toolUrns?: Array<string> | undefined;
+  /**
+   * Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
+   */
+  topLevelToolUrns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -65,6 +69,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   resource_urns?: Array<string> | undefined;
   tool_selection_mode?: string | undefined;
   tool_urns?: Array<string> | undefined;
+  top_level_tool_urns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -84,6 +89,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     resourceUrns: z.optional(z.array(z.string())),
     toolSelectionMode: z.optional(z.string()),
     toolUrns: z.optional(z.array(z.string())),
+    topLevelToolUrns: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -96,6 +102,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
       resourceUrns: "resource_urns",
       toolSelectionMode: "tool_selection_mode",
       toolUrns: "tool_urns",
+      topLevelToolUrns: "top_level_tool_urns",
     });
   }),
 );

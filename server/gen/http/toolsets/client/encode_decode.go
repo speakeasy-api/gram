@@ -4044,6 +4044,10 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		}
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
 	}
+	res.TopLevelToolUrns = make([]string, len(v.TopLevelToolUrns))
+	for i, val := range v.TopLevelToolUrns {
+		res.TopLevelToolUrns[i] = val
+	}
 	if v.Origin != nil {
 		res.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v.Origin)
 	}

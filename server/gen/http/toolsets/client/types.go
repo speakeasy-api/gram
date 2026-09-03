@@ -58,6 +58,9 @@ type UpdateToolsetRequestBody struct {
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 }
 
 // AddExternalOAuthServerRequestBody is the type of the "toolsets" service
@@ -131,6 +134,9 @@ type CreateToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -217,6 +223,9 @@ type UpdateToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -289,6 +298,9 @@ type GetToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -389,6 +401,9 @@ type CloneToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -461,6 +476,9 @@ type AddExternalOAuthServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -533,6 +551,9 @@ type RemoveOAuthServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -605,6 +626,9 @@ type SetUserSessionIssuerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -677,6 +701,9 @@ type SetToolVariationsGroupResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -3852,6 +3879,9 @@ type ToolsetEntryResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string `form:"top_level_tool_urns,omitempty" json:"top_level_tool_urns,omitempty" xml:"top_level_tool_urns,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -4047,6 +4077,12 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 			body.ResourceUrns[i] = val
 		}
 	}
+	if p.TopLevelToolUrns != nil {
+		body.TopLevelToolUrns = make([]string, len(p.TopLevelToolUrns))
+		for i, val := range p.TopLevelToolUrns {
+			body.TopLevelToolUrns[i] = val
+		}
+	}
 	return body
 }
 
@@ -4183,6 +4219,10 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
 	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
@@ -4782,6 +4822,10 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
+	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
@@ -5197,6 +5241,10 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
 	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
@@ -5958,6 +6006,10 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
+	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
@@ -6223,6 +6275,10 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
 	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
@@ -6490,6 +6546,10 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
+	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
@@ -6755,6 +6815,10 @@ func NewSetUserSessionIssuerToolsetOK(body *SetUserSessionIssuerResponseBody) *t
 			continue
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
 	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
@@ -7022,6 +7086,10 @@ func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody
 		}
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	v.TopLevelToolUrns = make([]string, len(body.TopLevelToolUrns))
+	for i, val := range body.TopLevelToolUrns {
+		v.TopLevelToolUrns[i] = val
+	}
 	if body.Origin != nil {
 		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
 	}
@@ -7208,6 +7276,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -7397,6 +7468,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -7552,6 +7626,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -7757,6 +7834,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -7912,6 +7992,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -8069,6 +8152,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -8225,6 +8311,9 @@ func ValidateSetUserSessionIssuerResponseBody(body *SetUserSessionIssuerResponse
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
 	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
+	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
@@ -8380,6 +8469,9 @@ func ValidateSetToolVariationsGroupResponseBody(body *SetToolVariationsGroupResp
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
@@ -12507,6 +12599,9 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	}
 	if body.ToolSelectionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.TopLevelToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_level_tool_urns", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))

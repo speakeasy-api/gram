@@ -2517,6 +2517,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
   mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   tool_selection_mode TEXT NOT NULL DEFAULT 'static',
+  -- Tool URNs listed next to search_tools/describe_tools/execute_tool when
+  -- the toolset is served in dynamic mode. Must be a subset of the toolset's
+  -- current tool_urns; empty means only the three facade tools are listed.
+  top_level_tool_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   custom_domain_id uuid,
 
   -- OAuth configuration - mutually exclusive
