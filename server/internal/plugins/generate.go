@@ -2131,7 +2131,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 
 // GenerateCodexInstallScript produces a bash install script that:
 //   - Registers the Gram marketplace with the Codex CLI
-//   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP log export
+//   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
 // When marketplaceURL is empty the script uses the directory it was run from as
@@ -2146,15 +2146,15 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
 
-	otelEndpoint := ""
+	otelEndpointBase := ""
 	if cfg.HooksAPIKey != "" {
-		otelEndpoint = strings.TrimRight(cfg.ServerURL, "/") + "/rpc/hooks.otel/v1/logs"
+		otelEndpointBase = strings.TrimRight(cfg.ServerURL, "/") + "/otel/v1"
 	}
 
-	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpoint, cfg.ProjectSlug, cfg.HooksAPIKey, approvals), nil
+	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, cfg.ProjectSlug, cfg.HooksAPIKey, approvals), nil
 }
 
-func renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpoint, projectSlug, hooksAPIKey string, approvals []codexHookApproval) []byte {
+func renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, projectSlug, hooksAPIKey string, approvals []codexHookApproval) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
@@ -2313,7 +2313,7 @@ def has_table_header(text, header):
 	// Python literals — embedded at generation time, not expanded by bash.
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
 	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n", marketplace)
-	fmt.Fprintf(&b, "OTEL_ENDPOINT = %q\n", otelEndpoint)
+	fmt.Fprintf(&b, "OTEL_ENDPOINT_BASE = %q\n", otelEndpointBase)
 	fmt.Fprintf(&b, "OTEL_PROJECT = %q\n", projectSlug)
 	fmt.Fprintf(&b, "OTEL_API_KEY = %q\n\n", hooksAPIKey)
 
@@ -2322,16 +2322,24 @@ content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
-if OTEL_ENDPOINT and OTEL_API_KEY:
-    exporter_table = "[otel.exporter.otlp-http]"
-    has_inline_exporter = table_has_entry(content, "[otel]", "exporter")
-    has_other_exporter_table = re.search(r'(?m)^[ \t]*\[otel\.exporter\.', content) and not has_table_header(content, exporter_table)
-    if has_inline_exporter or has_other_exporter_table:
-        print("  ⚠  Existing Codex OTEL log exporter preserved; configure Speakeasy telemetry manually.")
-    else:
-        content = set_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT))
+if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
+    headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+    for exporter_key, signal in [
+        ("exporter", "logs"),
+        ("trace_exporter", "traces"),
+        ("metrics_exporter", "metrics"),
+    ]:
+        exporter_table = f"[otel.{exporter_key}.otlp-http]"
+        has_inline_exporter = table_has_entry(content, "[otel]", exporter_key)
+        has_other_exporter_table = (
+            re.search(r'(?m)^[ \t]*\[otel\.' + re.escape(exporter_key) + r'\.', content) is not None
+            and not has_table_header(content, exporter_table)
+        )
+        if has_inline_exporter or has_other_exporter_table:
+            print(f"  ⚠  Existing Codex OTEL {signal} exporter preserved; configure Speakeasy telemetry manually.")
+            continue
+        content = set_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT_BASE + "/" + signal))
         content = set_table_entry(content, exporter_table, "protocol", '"json"')
-        headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
         content = set_table_entry(content, exporter_table, "headers", headers)
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.

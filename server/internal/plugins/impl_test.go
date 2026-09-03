@@ -955,7 +955,7 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
-func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELLogs(t *testing.T) {
+func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -985,7 +985,7 @@ func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELLogs(t *testing.
 	require.NoError(t, body.Close())
 
 	scriptText := string(script)
-	require.Contains(t, scriptText, `OTEL_ENDPOINT = "https://app.getgram.ai/rpc/hooks.otel/v1/logs"`)
+	require.Contains(t, scriptText, `OTEL_ENDPOINT_BASE = "https://app.getgram.ai/otel/v1"`)
 	require.Contains(t, scriptText, fmt.Sprintf("OTEL_PROJECT = %q", *authCtx.ProjectSlug))
 	require.Contains(t, scriptText, `OTEL_API_KEY = "gram_local_`)
 }

@@ -2009,7 +2009,13 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
-func TestGenerateCodexInstallScriptConfiguresOTELLogs(t *testing.T) {
+type codexOTLPHTTPExporter struct {
+	Endpoint string            `toml:"endpoint"`
+	Protocol string            `toml:"protocol"`
+	Headers  map[string]string `toml:"headers"`
+}
+
+func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	t.Parallel()
 
 	cfg := GenerateConfig{
@@ -2026,24 +2032,29 @@ func TestGenerateCodexInstallScriptConfiguresOTELLogs(t *testing.T) {
 
 	var decoded struct {
 		OTel struct {
-			Exporter map[string]struct {
-				Endpoint string            `toml:"endpoint"`
-				Protocol string            `toml:"protocol"`
-				Headers  map[string]string `toml:"headers"`
-			} `toml:"exporter"`
+			Exporter        map[string]codexOTLPHTTPExporter `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
 		} `toml:"otel"`
 	}
 	_, err = toml.Decode(patched, &decoded)
 	require.NoError(t, err)
 
-	exporter, ok := decoded.OTel.Exporter["otlp-http"]
-	require.True(t, ok)
-	require.Equal(t, "https://app.getgram.ai/rpc/hooks.otel/v1/logs", exporter.Endpoint)
-	require.Equal(t, "json", exporter.Protocol)
-	require.Equal(t, map[string]string{
-		"Gram-Key":     cfg.HooksAPIKey,
-		"Gram-Project": cfg.ProjectSlug,
-	}, exporter.Headers)
+	exporters := map[string]map[string]codexOTLPHTTPExporter{
+		"logs":    decoded.OTel.Exporter,
+		"traces":  decoded.OTel.TraceExporter,
+		"metrics": decoded.OTel.MetricsExporter,
+	}
+	for signal, signalExporters := range exporters {
+		exporter, ok := signalExporters["otlp-http"]
+		require.True(t, ok, "%s exporter missing", signal)
+		require.Equal(t, "https://app.getgram.ai/otel/v1/"+signal, exporter.Endpoint)
+		require.Equal(t, "json", exporter.Protocol)
+		require.Equal(t, map[string]string{
+			"Gram-Key":     cfg.HooksAPIKey,
+			"Gram-Project": cfg.ProjectSlug,
+		}, exporter.Headers)
+	}
 }
 
 func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
@@ -2063,13 +2074,17 @@ func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
 
 	var decoded struct {
 		OTel struct {
-			Exporter string `toml:"exporter"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
 		} `toml:"otel"`
 	}
 	_, err = toml.Decode(patched, &decoded)
 	require.NoError(t, err)
 	require.Equal(t, "none", decoded.OTel.Exporter)
 	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
@@ -2290,10 +2305,16 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
 	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
 	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
-	require.Equal(t, 1, countTableHeaderLines(patched, "[otel.exporter.otlp-http]"))
-	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "endpoint"))
-	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "protocol"))
-	require.Equal(t, 1, countTableKeyLines(patched, "[otel.exporter.otlp-http]", "headers"))
+	for _, table := range []string{
+		"[otel.exporter.otlp-http]",
+		"[otel.trace_exporter.otlp-http]",
+		"[otel.metrics_exporter.otlp-http]",
+	} {
+		require.Equal(t, 1, countTableHeaderLines(patched, table))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "endpoint"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "protocol"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "headers"))
+	}
 
 	for _, approval := range approvals {
 		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)
