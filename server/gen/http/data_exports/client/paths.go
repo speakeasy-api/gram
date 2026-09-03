@@ -12,6 +12,11 @@ func ListDestinationsDataExportsPath() string {
 	return "/rpc/dataExports.listDestinations"
 }
 
+// ListForOrgDataExportsPath returns the URL path to the dataExports service listForOrg HTTP endpoint.
+func ListForOrgDataExportsPath() string {
+	return "/rpc/dataExports.listForOrg"
+}
+
 // CreateDestinationDataExportsPath returns the URL path to the dataExports service createDestination HTTP endpoint.
 func CreateDestinationDataExportsPath() string {
 	return "/rpc/dataExports.createDestination"

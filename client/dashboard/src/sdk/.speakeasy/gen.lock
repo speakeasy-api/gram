@@ -158,6 +158,7 @@ trackedFiles:
   src/funcs/dataExportsDeleteDestination.ts: {}
   src/funcs/dataExportsDeleteRoute.ts: {}
   src/funcs/dataExportsListDestinations.ts: {}
+  src/funcs/dataExportsListForOrg.ts: {}
   src/funcs/dataExportsListRoutes.ts: {}
   src/funcs/dataExportsUpdateDestination.ts: {}
   src/funcs/dataExportsUpdateRoute.ts: {}
@@ -1036,6 +1037,7 @@ trackedFiles:
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
   src/models/components/listcustomdomainsresult.ts: {}
   src/models/components/listdataexportroutesresult.ts: {}
+  src/models/components/listdataexportsfororgresult.ts: {}
   src/models/components/listdefinitionsresponsebody.ts: {}
   src/models/components/listdeploymentresult.ts: {}
   src/models/components/listdestinationsresult.ts: {}
@@ -1916,6 +1918,7 @@ trackedFiles:
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
   src/models/operations/listdataexportdestinations.ts: {}
   src/models/operations/listdataexportroutes.ts: {}
+  src/models/operations/listdataexportsfororg.ts: {}
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
@@ -2606,6 +2609,8 @@ trackedFiles:
   src/react-query/listChatSources.ts: {}
   src/react-query/listChats.core.ts: {}
   src/react-query/listChats.ts: {}
+  src/react-query/listDataExportsForOrg.core.ts: {}
+  src/react-query/listDataExportsForOrg.ts: {}
   src/react-query/listDeployments.core.ts: {}
   src/react-query/listDeployments.ts: {}
   src/react-query/listDomains.core.ts: {}
@@ -7139,6 +7144,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listDataExportsForOrg:
+    speakeasy-default-list-data-exports-for-org:
+      responses:
+        "200":
+          application/json: {"destinations": [{"created_at": "2025-06-25T01:17:58.719Z", "destination_type": "otel", "id": "df560376-b7ec-40f2-999a-a3555f6e1158", "name": "<value>", "project_id": "a2296f60-5eaa-4949-8376-d1ac6f897379", "sensitive_data": "exclude", "updated_at": "2025-12-07T03:29:38.678Z"}], "routes": [{"created_at": "2024-01-18T23:03:07.178Z", "data_source": "product_telemetry", "enabled": true, "id": "f4622946-0175-4e10-b744-7b3de7599985", "project_id": "f0f56f97-356b-4187-9610-c958a7ab419b", "updated_at": "2026-05-06T07:00:58.583Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listDeployments:
     speakeasy-default-list-deployments:
       responses:
