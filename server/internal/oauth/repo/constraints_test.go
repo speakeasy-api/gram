@@ -70,7 +70,10 @@ func TestExternalOAuthServerMetadataSourceConstraint(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := conn.Exec(ctx, `
+			t.Parallel()
+
+			_, err := conn.Exec( //nolint:glint // notestingrawsql: directly exercises schema-invalid source combinations unavailable through current SQLc methods
+				ctx, `
 				INSERT INTO external_oauth_server_metadata
 				  (project_id, slug, metadata, authorization_server_issuer)
 				VALUES ($1, $2, $3::jsonb, $4::text)
