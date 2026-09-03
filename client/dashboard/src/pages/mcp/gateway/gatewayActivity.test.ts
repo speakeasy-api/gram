@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MemberRow } from "./memberRows";
-import { memberUsageRows, metaToolUsageItems } from "./gatewayActivity";
+import {
+  discoveredWithoutExecuting,
+  memberUsageRows,
+  metaToolUsageItems,
+} from "./gatewayActivity";
 
 function row(
   mcpServerId: string,
@@ -71,5 +75,38 @@ describe("memberUsageRows", () => {
     );
     expect(rows[0]?.errorRate).toBe(25);
     expect(rows[1]?.errorRate).toBe(0);
+  });
+});
+
+describe("discoveredWithoutExecuting", () => {
+  it("is true when discovery ran but execute_tool never did", () => {
+    expect(
+      discoveredWithoutExecuting({
+        listServers: 1,
+        describeServer: 3,
+        describeTools: 0,
+        executeTool: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("is false with no activity, with executions, or without data", () => {
+    expect(
+      discoveredWithoutExecuting({
+        listServers: 0,
+        describeServer: 0,
+        describeTools: 0,
+        executeTool: 0,
+      }),
+    ).toBe(false);
+    expect(
+      discoveredWithoutExecuting({
+        listServers: 1,
+        describeServer: 1,
+        describeTools: 1,
+        executeTool: 2,
+      }),
+    ).toBe(false);
+    expect(discoveredWithoutExecuting(undefined)).toBe(false);
   });
 });

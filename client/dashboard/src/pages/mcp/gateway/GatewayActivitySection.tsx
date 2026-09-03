@@ -20,6 +20,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
   memberUsageRows,
+  discoveredWithoutExecuting,
   metaToolUsageItems,
   type MemberUsageRow,
 } from "./gatewayActivity";
@@ -185,6 +186,16 @@ export function GatewayActivitySection({
     () => memberUsageRows(usage.data?.members ?? [], memberRows),
     [usage.data, memberRows],
   );
+  // The stat tiles, time series and member table count execute_tool
+  // dispatches only; the funnel chart also counts discovery. Say so when the
+  // two disagree, or an empty chart above a busy funnel reads as a bug.
+  const stoppedAtDiscovery = discoveredWithoutExecuting(usage.data?.funnel);
+  const noDispatchMessage = stoppedAtDiscovery
+    ? "Agents discovered tools through this gateway but didn't execute any. Gateway tool usage below shows the discovery steps."
+    : "No dispatched calls for the selected time range";
+  const noMemberCallsMessage = stoppedAtDiscovery
+    ? "No member received a call; agents stopped at discovery."
+    : "No member calls in the selected range.";
 
   return (
     <Page.Section>
@@ -194,8 +205,8 @@ export function GatewayActivitySection({
         Activity
       </Page.Section.Title>
       <Page.Section.Description>
-        Calls dispatched through this gateway, the discovery steps agents took
-        to reach them, and how the load spread across members.
+        Calls dispatched to members through execute_tool, the discovery steps
+        agents took to reach them, and how the load spread across members.
       </Page.Section.Description>
       <Page.Section.CTA>
         <TimeRangePicker
@@ -231,7 +242,7 @@ export function GatewayActivitySection({
                   ) : (
                     <>
                       <StatTile
-                        title="Tool calls"
+                        title="Dispatched calls"
                         value={summary?.totalToolCalls ?? 0}
                         tone="information"
                         previousValue={comparison?.totalToolCalls}
@@ -276,8 +287,9 @@ export function GatewayActivitySection({
                 </StatTileGroup>
 
                 <ToolCallsTimeSeriesChart
-                  title="Tool calls over time"
+                  title="Dispatched calls over time"
                   chartId="gateway-overview-tool-calls"
+                  emptyMessage={noDispatchMessage}
                   timeSeries={timeSeries}
                   timeRangeMs={timeRangeMs}
                   expandedChart={expandedChart}
@@ -312,7 +324,7 @@ export function GatewayActivitySection({
                       data={members}
                       rowKey={(row) => row.mcpServerId}
                       noResultsMessage={
-                        <WidgetEmptyState message="No member calls in the selected range." />
+                        <WidgetEmptyState message={noMemberCallsMessage} />
                       }
                     />
                   )}
