@@ -60,7 +60,7 @@ func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
 		UserID:                "user_123",
 		ExternalUserID:        "",

@@ -19,13 +19,14 @@ import (
 func apiKeyCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(),
 		APIKeyName:           "test-key",
 		APIKeyScopes:         []string{"producer"},
 		ProjectID:            &ti.projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_APIKey_ReadsAnyProjectChat proves a project API key can load a
@@ -102,13 +103,14 @@ func TestLoadChat_ExternalUserMismatchStillBlocked(t *testing.T) {
 func chatSessionTokenCtx(t *testing.T, ti *chatTestInstance, externalUserID string) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(), // restored from the JWT claims
 		APIKeyScopes:         nil,              // chat-session tokens never carry scopes
 		ExternalUserID:       externalUserID,
 		ProjectID:            &ti.projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_ChatSessionTokenStillOwnerMatched is the regression guard for the
@@ -176,13 +178,14 @@ func seedChatInProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID, 
 func apiKeyCtxForProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(),
 		APIKeyName:           "test-key",
 		APIKeyScopes:         []string{"producer"},
 		ProjectID:            &projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_OrgWideAPIKey_ReadsChatsInAnyProject covers the org-wide key case
