@@ -8,9 +8,6 @@
 package types
 
 type RiskPolicyModelConfig struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64

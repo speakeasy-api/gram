@@ -13,6 +13,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -29,13 +30,17 @@ const (
 	// judgeTimeout bounds a single judge call on both the realtime and batch
 	// paths.
 	judgeTimeout = 10 * time.Second
-	// defaultJudgeModel is used when a policy's model_config does not pin a
-	// model. It is a fast, cheap, high-recall classifier chosen by the
-	// server/cmd/riskjudgebench benchmark - see that tool's README. Without it,
-	// an empty model falls through to the openrouter client's general
-	// DefaultChatModel (a large, expensive chat model), which is a poor fit for
-	// a high-volume per-message guardrail.
-	defaultJudgeModel = "google/gemini-3.1-flash-lite"
+	// judgeModel is the single model every prompt-policy judge call uses. It is
+	// a fast, cheap, high-recall classifier chosen by the
+	// server/cmd/riskjudgebench benchmark - see that tool's README. Policies
+	// cannot pin their own model: one model keeps verdicts comparable across
+	// policies and keeps the benchmark an honest measure of production.
+	judgeModel = "google/gemini-3.5-flash-lite"
+	// judgeReasoningEffort must stay non-empty. The object-completion path
+	// defaults a nil Reasoning to effort "none", which the Gemini 3.5
+	// generation rejects with a 400 ("Reasoning is mandatory for this
+	// endpoint") - every evaluation would fail into the policy's error mode.
+	judgeReasoningEffort = "low"
 	// defaultJudgeTemperature keeps verdicts deterministic when a policy does
 	// not pin its own temperature.
 	defaultJudgeTemperature = 0.0
@@ -119,11 +124,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	))
 	defer span.End()
 
-	model := in.Config.Model
-	if model == "" {
-		model = defaultJudgeModel
-	}
-	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, model)
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, judgeModel)
 	// A throttled call is treated like a judge error: the policy's fail-mode
 	// decides. A Store outage is not a throttle - proceed rather than let limiter
 	// infra disable the guardrail.
@@ -136,6 +137,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
+		span.SetStatus(codes.Error, "llm judge rate limited")
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
 		)
@@ -148,6 +150,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "llm judge call failed")
 		span.SetAttributes(attr.Outcome(outcome))
 		j.logger.WarnContext(ctx, "llm judge call failed",
 			attr.SlogError(err),
@@ -198,11 +201,6 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		temperature = *in.Config.Temperature
 	}
 
-	model := in.Config.Model
-	if model == "" {
-		model = defaultJudgeModel
-	}
-
 	judgePrompt := BuildJudgePrompt(in)
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
@@ -211,7 +209,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
-		Model:                  model,
+		Model:                  judgeModel,
 		SystemPrompt:           SystemPrompt,
 		Prompt:                 judgePrompt,
 		Temperature:            &temperature,
@@ -223,7 +221,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		UserEmail:              "",
 		HTTPMetadata:           nil,
 		JSONSchema:             &jsonSchema,
-		Reasoning:              nil,
+		Reasoning:              &openrouter.Reasoning{Effort: judgeReasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		DisableResponseHealing: false,
 	})
 	if err != nil {

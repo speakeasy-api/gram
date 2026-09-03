@@ -14,10 +14,6 @@ export type RiskPolicyModelConfig = {
    */
   failOpen?: boolean | undefined;
   /**
-   * OpenRouter model id the judge should use. Empty selects the default judge model.
-   */
-  model?: string | undefined;
-  /**
    * Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
    */
   temperature?: number | undefined;
@@ -30,7 +26,6 @@ export const RiskPolicyModelConfig$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     fail_open: z.optional(z.boolean()),
-    model: z.optional(z.string()),
     temperature: z.optional(z.number()),
   }),
   z.transform((v) => {
@@ -42,7 +37,6 @@ export const RiskPolicyModelConfig$inboundSchema: z.ZodMiniType<
 /** @internal */
 export type RiskPolicyModelConfig$Outbound = {
   fail_open?: boolean | undefined;
-  model?: string | undefined;
   temperature?: number | undefined;
 };
 
@@ -53,7 +47,6 @@ export const RiskPolicyModelConfig$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     failOpen: z.optional(z.boolean()),
-    model: z.optional(z.string()),
     temperature: z.optional(z.number()),
   }),
   z.transform((v) => {

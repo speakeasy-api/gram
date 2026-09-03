@@ -71,8 +71,10 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	require.Equal(t, createdAt, got.CreatedAt)
 	require.Equal(t, updatedAt, got.UpdatedAt)
 	require.NotNil(t, got.ModelConfig)
-	require.NotNil(t, got.ModelConfig.Model)
-	require.Equal(t, "model", *got.ModelConfig.Model)
+	require.NotNil(t, got.ModelConfig.Temperature)
+	require.InDelta(t, 0.2, *got.ModelConfig.Temperature, 0)
+	require.NotNil(t, got.ModelConfig.FailOpen)
+	require.False(t, *got.ModelConfig.FailOpen)
 }
 
 func TestAuditSnapshotRemovesPrompt(t *testing.T) {

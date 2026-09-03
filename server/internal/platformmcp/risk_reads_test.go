@@ -145,13 +145,13 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	prompt := "authorized prompt content"
-	model := "private-model"
+	judgeTemperature := 0.42
 	scope := `kind == "user_message"`
 	policy := policycore.Policy{
 		ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "legacy", PolicyType: "prompt_based",
 		Sources: []string{"gitleaks", "unknown"}, PresidioEntities: []string{"EMAIL_ADDRESS"}, DisabledRules: []string{"secret.aws_secret_access_key"}, CustomRuleIDs: []string{"custom.rule"},
 		MessageTypes: []string{"user_message"}, ScopeInclude: &scope, Enabled: true, Action: "quarantine", AudienceType: "targeted", AudiencePrincipalURNs: []string{"user:<USER_ID>"},
-		Prompt: &prompt, ModelConfig: &policycore.ModelConfig{Model: &model}, Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		Prompt: &prompt, ModelConfig: &policycore.ModelConfig{Temperature: &judgeTemperature}, Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
 	output, err := service.GetPolicy(t.Context(), testRiskPrincipal("user"), GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
@@ -166,7 +166,8 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
 	text := string(encoded)
-	require.NotContains(t, text, model)
+	require.NotContains(t, text, "temperature")
+	require.NotContains(t, text, "0.42")
 	require.NotContains(t, text, "user:<USER_ID>")
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")

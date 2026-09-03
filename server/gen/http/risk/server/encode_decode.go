@@ -11537,7 +11537,6 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 		return nil
 	}
 	res := &types.RiskPolicyModelConfig{
-		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
 	}
@@ -11569,7 +11568,6 @@ func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v *typ
 		return nil
 	}
 	res := &RiskPolicyModelConfigResponseBody{
-		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
 	}

@@ -57,7 +57,6 @@ type DetectionScope struct {
 
 // ModelConfig is the persisted prompt-policy model configuration.
 type ModelConfig struct {
-	Model       *string  `json:"model,omitempty"`
 	Temperature *float64 `json:"temperature,omitempty"`
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
