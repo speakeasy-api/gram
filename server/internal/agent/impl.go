@@ -181,33 +181,48 @@ func normalizeSerial(reported *string) string {
 	return serial
 }
 
-// Environment kinds an agent may declare. "endpoint" — an end-user device of
-// any form factor, named so it does not expire the way "laptop" would on a
-// desktop or a phone — is the default and is never stored as such: those
+// Environment kinds an agent may declare.
+//
+// "endpoint" — an end-user device of any form factor, named so it does not
+// expire the way "laptop" would on a desktop or a phone — is the default, and
+// is the one kind never written to device_agent_environment_syncs: those
 // heartbeats go to device_agent_syncs, whose email match device coverage reads.
+// It is still a real value rather than an absence, so normalizeEnvironment
+// returns it and the call sites compare against it by name.
 const (
 	environmentEndpoint  = "endpoint"
 	environmentEphemeral = "ephemeral"
 	environmentServer    = "server"
 )
 
-// normalizeEnvironment maps the declared kind onto the closed set, returning
-// "" for an ordinary endpoint and for anything unrecognized.
+// normalizeEnvironment maps the declared kind onto the closed set. Total: every
+// input resolves to one of the three constants, never to "".
 //
-// Unrecognized degrades rather than erroring, deliberately. The alternative is
-// rejecting the poll, which would stop that device syncing plugins at all —
-// an outage caused by an attribution hint. A new agent inventing a kind an
-// older server has not heard of should keep working, and the worst case is
-// that its heartbeat is counted as an ordinary endpoint, which is where it
-// lands today.
+// Three things collapse onto environmentEndpoint, and they are the same thing
+// as far as this server is concerned — "an ordinary device, recorded the way it
+// always was":
+//
+//   - an explicit "endpoint"
+//   - an absent header, which every agent predating this field sends
+//   - an unrecognized value
+//
+// The last of those degrades rather than erroring, deliberately. Rejecting the
+// poll would stop that device syncing plugins at all — an outage caused by an
+// attribution hint. A newer agent inventing a kind this server has not heard of
+// keeps working, and lands where it would have landed anyway.
 func normalizeEnvironment(reported *string) string {
 	switch strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, ""))) {
 	case environmentEphemeral:
 		return environmentEphemeral
 	case environmentServer:
 		return environmentServer
+	case environmentEndpoint:
+		// Listed rather than folded into the default so the closed set is
+		// visibly exhaustive here, and so the constant is not a declaration
+		// nothing reads.
+		return environmentEndpoint
 	default:
-		return ""
+		return environmentEndpoint
 	}
 }
 
@@ -259,7 +274,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// person's address is an easy accident, and a false coverage claim is worse
 	// than an absent one because nothing prompts anyone to look.
 	environment := normalizeEnvironment(payload.Environment)
-	if environment != "" {
+	if environment != environmentEndpoint {
 		if err := s.repo.UpsertDeviceAgentEnvironmentSync(ctx, repo.UpsertDeviceAgentEnvironmentSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			Email:          email,
@@ -300,7 +315,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// hole the environment split closes — just through the serial match instead
 	// of the email one. Those boxes are counted as environments; nothing about
 	// them belongs in a per-device count.
-	if serial := normalizeSerial(payload.SerialNumber); serial != "" && environment == "" {
+	if serial := normalizeSerial(payload.SerialNumber); serial != "" && environment == environmentEndpoint {
 		if err := s.repo.UpsertDeviceAgentDeviceSync(ctx, repo.UpsertDeviceAgentDeviceSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			SerialNumber:   serial,
