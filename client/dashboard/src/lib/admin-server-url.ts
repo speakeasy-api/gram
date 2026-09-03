@@ -20,5 +20,10 @@ export function getAdminServerUrl(
 }
 
 export function replaceAdminServerUrl(html: string, value: string): string {
-  return html.replace("${GRAM_ADMIN_SERVER_URL}", () => value);
+  const escaped = value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return html.replace("${GRAM_ADMIN_SERVER_URL}", () => escaped);
 }
