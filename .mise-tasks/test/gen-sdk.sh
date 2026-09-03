@@ -44,14 +44,8 @@ if [[ "$1" == "run" ]]; then
   exit
 fi
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --schema) schema=$2; shift 2 ;;
-    --out) out=$2; shift 2 ;;
-    *) shift ;;
-  esac
-done
-cp "$schema" "$out"
+echo "unexpected speakeasy invocation: $*" >&2
+exit 1
 EOF
 chmod +x "$tmpdir/bin/speakeasy"
 
