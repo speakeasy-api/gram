@@ -46,7 +46,7 @@ describe("logoutToLogin", () => {
 
   it("still replaces the page with /login when logout rejects", async () => {
     const replace = stubLocationReplace();
-    const logout = vi.fn().mockRejectedValue(new Error("aborted"));
+    const logout = vi.fn().mockRejectedValue(new Error("network"));
 
     await logoutToLogin({ auth: { logout } });
 
