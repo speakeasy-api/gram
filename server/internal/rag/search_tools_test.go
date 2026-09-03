@@ -265,6 +265,17 @@ func TestSearchToolsetTools_FilteredHNSWScanFindsToolsetRows(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	approximateMatches, err := queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
+		QueryEmbedding1536: pgvector_go.NewVector(queryVector),
+		ProjectID:          projectID,
+		ToolsetID:          targetToolsetID,
+		ToolsetVersion:     1,
+		Tags:               []string{},
+		ResultLimit:        1,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, approximateMatches)
+
 	client := &embeddingCompletionClientMock{}
 	client.On("CreateEmbeddings", mock.Anything, organizationID, defaultEmbeddingModel, []string{"list customers"}).
 		Return([][]float32{queryVector}, nil).
