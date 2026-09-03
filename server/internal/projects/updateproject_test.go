@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestUpdateProjectRenamesDisplayName(t *testing.T) {
@@ -63,12 +64,10 @@ func TestUpdateProjectWaitsForConcurrentDeleteAndReturnsNotFound(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	lockTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = lockTx.Rollback(ctx) }()
+	lockTx := testenv.BeginTx(t, ctx, ti.conn)
 
 	projectRepo := repo.New(lockTx)
-	_, err = projectRepo.GetProjectByIDForUpdate(ctx, *authCtx.ProjectID)
+	_, err := projectRepo.GetProjectByIDForUpdate(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 
 	renameErr := make(chan error, 1)
@@ -77,18 +76,7 @@ func TestUpdateProjectWaitsForConcurrentDeleteAndReturnsNotFound(t *testing.T) {
 		renameErr <- err
 	}()
 
-	require.Eventually(t, func() bool {
-		var waiting bool
-		err := ti.conn.QueryRow(ctx, `
-SELECT EXISTS (
-  SELECT 1
-  FROM pg_stat_activity
-  WHERE datname = current_database()
-    AND wait_event_type = 'Lock'
-    AND query LIKE '%GetProjectByIDForUpdate%'
-)`).Scan(&waiting)
-		return err == nil && waiting
-	}, 2*time.Second, 10*time.Millisecond, "rename did not wait while locking the project snapshot")
+	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
 
 	_, err = projectRepo.DeleteProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
