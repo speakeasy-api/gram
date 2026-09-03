@@ -91,7 +91,10 @@ describe("DistributeServersStep secondary action", () => {
   it("skips without completing before a server is distributed", () => {
     const onComplete = vi.fn();
     const onSkip = vi.fn();
-    renderStep(onComplete, onSkip);
+    renderStep(
+      () => void onComplete(),
+      () => void onSkip(),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
 
@@ -110,7 +113,10 @@ describe("DistributeServersStep secondary action", () => {
     ];
     const onComplete = vi.fn();
     const onSkip = vi.fn();
-    renderStep(onComplete, onSkip);
+    renderStep(
+      () => void onComplete(),
+      () => void onSkip(),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
