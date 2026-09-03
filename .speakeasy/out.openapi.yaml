@@ -81483,6 +81483,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
             - '*'
         server_url:
           type: string
