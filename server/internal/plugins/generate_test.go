@@ -2085,9 +2085,11 @@ func TestGenerateCodexInstallScriptRejectsUnsafeOTLPServerURLs(t *testing.T) {
 	for _, serverURL := range []string{
 		"http://app.getgram.ai",
 		"https://user:password@app.getgram.ai",
+		"https://user:password%zz@app.getgram.ai",
 		"https://app.getgram.ai/#fragment",
 		"://malformed",
 		"https://%zz",
+		"https://:443",
 		"https://app.getgram.ai?tenant=example",
 		"https://app.getgram.ai?",
 	} {
@@ -2173,6 +2175,87 @@ func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporter(t *testing.T)
 	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
 }
 
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `targets = [
+  [1, 2],
+  [3]
+]
+otel . "exporter" = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Targets [][]int `toml:"targets"`
+		OTel    struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{1, 2}, {3}}, decoded.Targets)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+resource_attributes = [
+  ["region", "us-east"],
+  ["service"]
+]
+exporter = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment        string                           `toml:"environment"`
+			ResourceAttributes [][]string                       `toml:"resource_attributes"`
+			Exporter           string                           `toml:"exporter"`
+			TraceExporter      map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter    map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, [][]string{{"region", "us-east"}, {"service"}}, decoded.OTel.ResourceAttributes)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
 func TestGenerateCodexInstallScriptIgnoresOTELTextInMultilineString(t *testing.T) {
 	t.Parallel()
 
@@ -2252,7 +2335,7 @@ func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	existing := `["otel"]
+	existing := `["ot\u0065l"]
 exporter . "otlp-http" . endpoint = "https://collector.example.com/v1/logs"
 exporter . "otlp-http" . protocol = "json"
 exporter . "otlp-http" . headers = { Authorization = "Bearer existing" }

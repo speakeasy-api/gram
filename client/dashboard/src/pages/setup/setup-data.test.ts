@@ -27,16 +27,11 @@ describe("AGENT_PLATFORMS", () => {
       CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
-        "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+        "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
       OTEL_LOGS_EXPORTER: "otlp",
       OTEL_METRICS_EXPORTER: "otlp",
       OTEL_TRACES_EXPORTER: "otlp",
     });
-    for (const signal of ["logs", "metrics", "traces"]) {
-      expect(`${settings.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/${signal}`).toBe(
-        `https://app.getgram.ai/otel/v1/${signal}`,
-      );
-    }
   });
 });

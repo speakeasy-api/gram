@@ -2150,7 +2150,7 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	if cfg.HooksAPIKey != "" {
 		serverURL, err := url.Parse(cfg.ServerURL)
 		if err != nil {
-			return nil, fmt.Errorf("invalid Codex OTLP server URL: %w", err)
+			return nil, errors.New("invalid Codex OTLP server URL")
 		}
 		if serverURL.ForceQuery || serverURL.RawQuery != "" {
 			return nil, errors.New("invalid Codex OTLP server URL: query parameters are not allowed")
@@ -2273,40 +2273,146 @@ content = open(config_path).read() if os.path.exists(config_path) else ""
 # with an explicit [table] header elsewhere in the file. Only the region
 # before the first table header is touched.
 def strip_root_dotted_key(text, key):
-    m = re.search(r'(?m)^[ \t]*\[', text)
-    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
-    root = re.sub(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?', '', root)
-    return root + rest
+    pattern = re.compile(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?')
+    matches = list(pattern.finditer(searchable_root(text)))
+    if not matches:
+        return text
+    parts = []
+    start = 0
+    for match in matches:
+        parts.append(text[start:match.start()])
+        start = match.end()
+    parts.append(text[start:])
+    return ''.join(parts)
 
 def toml_dotted_key_pattern(key):
     components = []
     for component in key.split('.'):
         escaped = re.escape(component)
-        components.append(f"""(?:{escaped}|"{escaped}"|'{escaped}')""")
+        basic_chars = []
+        for char in component:
+            short_hex = f'{ord(char):04x}'
+            long_hex = f'{ord(char):08x}'
+            short_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in short_hex
+            )
+            long_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in long_hex
+            )
+            basic_chars.append(
+                '(?:' + re.escape(char) + r'|\\u' + short_pattern + r'|\\U' + long_pattern + ')'
+            )
+        basic = ''.join(basic_chars)
+        components.append(f"""(?:{escaped}|"{basic}"|'{escaped}')""")
     return r'[ \t]*\.[ \t]*'.join(components)
+
+TOML_KEY_COMPONENT_PATTERN = r"""(?:[A-Za-z0-9_-]+|"(?:\\[^\r\n]|[^"\\\r\n])*"|'[^'\r\n]*')"""
+TOML_DOTTED_KEY_PATTERN = (
+    TOML_KEY_COMPONENT_PATTERN
+    + r'(?:[ \t]*\.[ \t]*' + TOML_KEY_COMPONENT_PATTERN + r')*'
+)
+TOML_TABLE_HEADER_PATTERN = (
+    r'(?m)^[ \t]*(?:'
+    + r'\[\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]\]'
+    + r'|\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]'
+    + r')[ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)'
+)
+
+def toml_assignment_value(line):
+    quote = None
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            return None
+        elif char == '=':
+            return line[index + 1:]
+        index += 1
+    return None
+
+def scan_toml_value(value, nesting, multiline_delimiter):
+    quote = None
+    index = 0
+    while index < len(value):
+        if multiline_delimiter is not None:
+            end = value.find(multiline_delimiter, index)
+            if end < 0:
+                return nesting, multiline_delimiter
+            if multiline_delimiter == '"""':
+                backslashes = 0
+                cursor = end - 1
+                while cursor >= 0 and value[cursor] == '\\':
+                    backslashes += 1
+                    cursor -= 1
+                if backslashes % 2 == 1:
+                    index = end + len(multiline_delimiter)
+                    continue
+            index = end + len(multiline_delimiter)
+            multiline_delimiter = None
+            continue
+
+        char = value[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif value.startswith('"""', index) or value.startswith("'''", index):
+            multiline_delimiter = value[index:index + 3]
+            index += 3
+            continue
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            break
+        elif char in '[{':
+            nesting.append(char)
+        elif char == ']' and nesting and nesting[-1] == '[':
+            nesting.pop()
+        elif char == '}' and nesting and nesting[-1] == '{':
+            nesting.pop()
+        index += 1
+    return nesting, multiline_delimiter
 
 def searchable_toml(text):
     lines = []
+    nesting = []
     multiline_delimiter = None
     for line in text.splitlines(keepends=True):
-        if multiline_delimiter is not None:
+        continuation = bool(nesting) or multiline_delimiter is not None
+        if continuation:
             lines.append(''.join(char if char in '\r\n' else ' ' for char in line))
-            if line.count(multiline_delimiter) % 2 == 1:
-                multiline_delimiter = None
-            continue
-        lines.append(line)
-        equals = line.find('=')
-        if equals < 0:
-            continue
-        value = line[equals + 1:].lstrip()
-        for delimiter in ('"""', "'''"):
-            if value.startswith(delimiter) and value.count(delimiter) % 2 == 1:
-                multiline_delimiter = delimiter
-                break
+            value = line
+        else:
+            lines.append(line)
+            value = toml_assignment_value(line)
+        if value is not None:
+            nesting, multiline_delimiter = scan_toml_value(
+                value,
+                nesting,
+                multiline_delimiter,
+            )
     return ''.join(lines)
 
 def root_end(text):
-    match = re.search(r'(?m)^[ \t]*\[', searchable_toml(text))
+    match = re.search(TOML_TABLE_HEADER_PATTERN, searchable_toml(text))
     return match.start() if match else len(text)
 
 def searchable_root(text):
@@ -2340,7 +2446,7 @@ def table_body_bounds(text, table_header):
     if not m:
         return None
     start = m.end()
-    m2 = re.search(r'(?m)^[ \t]*\[', searchable[start:])
+    m2 = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
     end = start + m2.start() if m2 else len(text)
     return start, end
 
@@ -2355,7 +2461,7 @@ def dotted_table_body_bounds(text, table):
     if match is None:
         return None
     start = match.end()
-    next_header = re.search(r'(?m)^[ \t]*\[', searchable[start:])
+    next_header = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
     end = start + next_header.start() if next_header else len(text)
     return start, end
 
