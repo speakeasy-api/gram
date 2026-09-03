@@ -45,8 +45,10 @@ export function FilterChip({
   active = false,
   onClick,
   onRemove,
+  ariaLabel,
 }: {
   label: string;
+  ariaLabel?: string;
   /**
    * The dimension's accent, from the brand spectrum. Identity, not state: the
    * square says *which* filter this is at a glance, while the border and text
@@ -77,6 +79,7 @@ export function FilterChip({
     >
       <button
         type="button"
+        aria-label={ariaLabel}
         onClick={onClick}
         className="hover:text-foreground flex items-center gap-2 transition-colors"
       >

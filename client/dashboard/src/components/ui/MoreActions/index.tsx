@@ -25,12 +25,15 @@ export type Action = {
 export function MoreActions({
   actions,
   triggerLabel,
+  triggerAriaLabel,
   triggerLoading,
   triggerDisabled,
   triggerStyle,
 }: {
   actions: Action[];
   triggerLabel?: string;
+  /** Accessible name for an icon-only trigger. */
+  triggerAriaLabel?: string;
   /** Shows a spinner in place of the trigger icon, disables it, and restores
    * trigger focus when the async action completes. */
   triggerLoading?: boolean;
@@ -109,9 +112,11 @@ export function MoreActions({
               name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
               className={cn("size-4", triggerLoading && "animate-spin")}
             />
-            <span className="sr-only">
-              {triggerLoading ? "Action in progress" : "Open menu"}
-            </span>
+            <Button.Text className="sr-only">
+              {triggerLoading
+                ? "Action in progress"
+                : (triggerAriaLabel ?? "Open menu")}
+            </Button.Text>
           </Button>
         )}
       </DropdownMenuTrigger>

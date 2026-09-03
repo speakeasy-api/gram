@@ -33,9 +33,12 @@ import { ConnectionsListSection } from "@/components/connections/ConnectionsList
  */
 export function ClientsAndSessionsTab({
   issuerId,
+  originatingMcpServerId,
   authTabPath = "settings",
 }: {
   issuerId: string | undefined;
+  /** Canonical mcp_servers.id only; never an issuer, toolset, or gateway id. */
+  originatingMcpServerId?: string;
   /**
    * Sibling tab where authentication is configured, for the no-issuer empty
    * state to point at. Differs between the two server pages this tab is shared
@@ -187,6 +190,10 @@ export function ClientsAndSessionsTab({
         <ConnectionsListSection
           sessions={sessions}
           clients={clients}
+          killswitchContext={{
+            capabilityKey: "mcp_tool_calls",
+            originatingMcpServerId,
+          }}
           isPending={sessionsQuery.isPending || clientsQuery.isPending}
           isError={sessionsQuery.isError && sessions.length === 0}
           onRetry={() => {
