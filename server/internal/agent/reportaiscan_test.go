@@ -39,6 +39,7 @@ func aiDetectionSummaries(t *testing.T, ti *testInstance, orgID string) map[stri
 		OrganizationID:       orgID,
 		Categories:           nil,
 		UserEmails:           nil,
+		ExactUserEmail:       "",
 		CanonicalIdentityOrg: "",
 	})
 	require.NoError(t, err)

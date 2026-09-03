@@ -318,9 +318,11 @@ type ListAIDetectionSummariesParams struct {
 	// UserEmails restricts to detections attributed to these normalized
 	// emails (the team-filter pushdown).
 	UserEmails []string
+	// ExactUserEmail restricts to one canonical enrolled-user identity.
+	ExactUserEmail string
 	// CanonicalIdentityOrg enables the identity fold for the UserEmails
-	// filter: set it to the org id when the canonical identity fold is
-	// rolled out to the org, "" otherwise (see canonical_identity.go).
+	// and ExactUserEmail filters: set it to the org id when the canonical
+	// identity fold is rolled out to the org, "" otherwise.
 	CanonicalIdentityOrg string
 }
 
@@ -338,6 +340,7 @@ type AIDetectionSummaryRow struct {
 	UserCount   uint64    `ch:"user_count"`
 	DeviceCount uint64    `ch:"device_count"`
 	Signals     []string  `ch:"signals"`
+	Versions    []string  `ch:"versions"`
 	FirstSeen   time.Time `ch:"first_seen"`
 	LastSeen    time.Time `ch:"last_seen"`
 }
@@ -372,31 +375,57 @@ func (q *Queries) ListAIDetectionSummaries(ctx context.Context, arg ListAIDetect
 }
 
 func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (string, []any, error) {
-	sb := sq.Select(
+	canonicalOrgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userEmailExpr := "user_email"
+	if canonicalOrgLit != "" {
+		userEmailExpr = canonicalEmailExpr(canonicalOrgLit, "user_email")
+	}
+
+	resolved := sq.Select(
+		"organization_id",
 		"target_id",
-		"argMax(category, updated_at) AS detected_category",
-		"uniqExact(user_email) AS user_count",
-		"uniqExactIf(device_serial, device_serial != '') AS device_count",
-		"groupUniqArray(signal) AS signals",
-		"min(first_seen) AS first_seen",
-		"max(last_seen) AS last_seen",
+		"device_serial",
+		"user_email",
+		"signal",
+		"argMax(category, updated_at) AS resolved_category",
+		"argMaxIf(version, updated_at, version != '') AS resolved_version",
+		"min(first_seen) AS resolved_first_seen",
+		"max(last_seen) AS resolved_last_seen",
 	).
 		From("ai_detections").
-		Where("organization_id = ?", arg.OrganizationID)
+		Where("organization_id = ?", arg.OrganizationID).
+		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
+
+	sb := sq.Select(
+		"target_id",
+		"argMax(resolved_category, resolved_last_seen) AS detected_category",
+		"uniqExact("+userEmailExpr+") AS user_count",
+		"uniqExactIf(device_serial, device_serial != '') AS device_count",
+		"arraySort(groupUniqArray(signal)) AS signals",
+		"arraySort(groupUniqArrayIf(resolved_version, resolved_version != '')) AS versions",
+		"min(resolved_first_seen) AS first_seen",
+		"max(resolved_last_seen) AS last_seen",
+	).
+		FromSelect(resolved, "resolved_ai_detections")
 
 	if len(arg.Categories) > 0 {
-		sb = sb.Where(squirrel.Eq{"category": arg.Categories})
+		sb = sb.Where(squirrel.Eq{"resolved_category": arg.Categories})
 	}
-	canonicalOrgLit := ""
 	if len(arg.UserEmails) > 0 {
 		// Fold the team filter through the identity map where rolled out, so
 		// detections stored under an employee's linked alias emails still
 		// match their directory email.
-		canonicalOrgLit = canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
 		if canonicalOrgLit != "" {
 			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", arg.UserEmails))
 		} else {
 			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
+		}
+	}
+	if arg.ExactUserEmail != "" {
+		if canonicalOrgLit != "" {
+			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", []string{arg.ExactUserEmail}))
+		} else {
+			sb = sb.Where("lowerUTF8(user_email) = ?", arg.ExactUserEmail) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
 		}
 	}
 

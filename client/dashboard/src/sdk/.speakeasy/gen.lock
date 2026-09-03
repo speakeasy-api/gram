@@ -40,6 +40,7 @@ trackedFiles:
   src/funcs/accessListAIDetections.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
+  src/funcs/accessListEmployeeAIDetections.ts: {}
   src/funcs/accessListGrants.ts: {}
   src/funcs/accessListMembers.ts: {}
   src/funcs/accessListRoles.ts: {}
@@ -1920,6 +1921,7 @@ trackedFiles:
   src/models/operations/listdeviceintegrationschedules.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
   src/models/operations/listdomains.ts: {}
+  src/models/operations/listemployeeaidetections.ts: {}
   src/models/operations/listenvironments.ts: {}
   src/models/operations/listeventlog.ts: {}
   src/models/operations/listexternalcredentials.ts: {}
@@ -2407,6 +2409,8 @@ trackedFiles:
   src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
   src/react-query/distributeSkill.ts: {}
   src/react-query/editKillswitch.ts: {}
+  src/react-query/employeeAIDetections.core.ts: {}
+  src/react-query/employeeAIDetections.ts: {}
   src/react-query/enableAdminOpenRouterKey.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
@@ -6821,7 +6825,7 @@ examples:
     speakeasy-default-list-AI-detections:
       responses:
         "200":
-          application/json: {"detections": [{"category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569}]}
+          application/json: {"detections": [{"category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569, "versions": ["<value 1>", "<value 2>"]}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7192,6 +7196,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listEmployeeAIDetections:
+    speakeasy-default-list-employee-AI-detections:
+      parameters:
+        query:
+          user_email: "Jaycee_Langosh62@gmail.com"
+      responses:
+        "200":
+          application/json: {"detections": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listEnvironments:
     speakeasy-default-list-environments:
       responses:

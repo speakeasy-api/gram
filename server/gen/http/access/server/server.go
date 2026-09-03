@@ -35,6 +35,7 @@ type Server struct {
 	ListShadowMCPInventoryServersForUser http.Handler
 	ResolveShadowMCPInventoryRequest     http.Handler
 	ListAIDetections                     http.Handler
+	ListEmployeeAIDetections             http.Handler
 	RequestAccess                        http.Handler
 	ListChallenges                       http.Handler
 	ListChallengeBuckets                 http.Handler
@@ -84,6 +85,7 @@ func New(
 			{"ListShadowMCPInventoryServersForUser", "GET", "/rpc/access.listShadowMCPInventoryServersForUser"},
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
 			{"ListAIDetections", "GET", "/rpc/access.listAIDetections"},
+			{"ListEmployeeAIDetections", "GET", "/rpc/access.listEmployeeAIDetections"},
 			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
@@ -105,6 +107,7 @@ func New(
 		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserHandler(e.ListShadowMCPInventoryServersForUser, mux, decoder, encoder, errhandler, formatter),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
 		ListAIDetections:                     NewListAIDetectionsHandler(e.ListAIDetections, mux, decoder, encoder, errhandler, formatter),
+		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsHandler(e.ListEmployeeAIDetections, mux, decoder, encoder, errhandler, formatter),
 		RequestAccess:                        NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
@@ -133,6 +136,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListShadowMCPInventoryServersForUser = m(s.ListShadowMCPInventoryServersForUser)
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
 	s.ListAIDetections = m(s.ListAIDetections)
+	s.ListEmployeeAIDetections = m(s.ListEmployeeAIDetections)
 	s.RequestAccess = m(s.RequestAccess)
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
@@ -160,6 +164,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListShadowMCPInventoryServersForUserHandler(mux, h.ListShadowMCPInventoryServersForUser)
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
 	MountListAIDetectionsHandler(mux, h.ListAIDetections)
+	MountListEmployeeAIDetectionsHandler(mux, h.ListEmployeeAIDetections)
 	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
@@ -1001,6 +1006,60 @@ func NewListAIDetectionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listAIDetections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListEmployeeAIDetectionsHandler configures the mux to serve the
+// "access" service "listEmployeeAIDetections" endpoint.
+func MountListEmployeeAIDetectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listEmployeeAIDetections", f)
+}
+
+// NewListEmployeeAIDetectionsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listEmployeeAIDetections"
+// endpoint.
+func NewListEmployeeAIDetectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListEmployeeAIDetectionsRequest(mux, decoder)
+		encodeResponse = EncodeListEmployeeAIDetectionsResponse(encoder)
+		encodeError    = EncodeListEmployeeAIDetectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listEmployeeAIDetections")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

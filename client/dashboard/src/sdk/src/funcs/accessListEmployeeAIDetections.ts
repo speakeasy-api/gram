@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListAIDetectionsRequest,
-  ListAIDetectionsRequest$outboundSchema,
-  ListAIDetectionsSecurity,
-} from "../models/operations/listaidetections.js";
+  ListEmployeeAIDetectionsRequest,
+  ListEmployeeAIDetectionsRequest$outboundSchema,
+  ListEmployeeAIDetectionsSecurity,
+} from "../models/operations/listemployeeaidetections.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listAIDetections access
+ * listEmployeeAIDetections access
  *
  * @remarks
- * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+ * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
  */
-export function accessListAIDetections(
+export function accessListEmployeeAIDetections(
   client: GramCore,
-  request?: ListAIDetectionsRequest | undefined,
-  security?: ListAIDetectionsSecurity | undefined,
+  request: ListEmployeeAIDetectionsRequest,
+  security?: ListEmployeeAIDetectionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListAIDetections(
 
 async function $do(
   client: GramCore,
-  request?: ListAIDetectionsRequest | undefined,
-  security?: ListAIDetectionsSecurity | undefined,
+  request: ListEmployeeAIDetectionsRequest,
+  security?: ListEmployeeAIDetectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,8 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(ListAIDetectionsRequest$outboundSchema), value),
+    (value) => z.parse(ListEmployeeAIDetectionsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -105,16 +104,19 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.listAIDetections")();
+  const path = pathToFunc("/rpc/access.listEmployeeAIDetections")();
 
   const query = encodeFormQuery({
-    "category": payload?.category,
-    "directory_group_id": payload?.directory_group_id,
+    "user_email": payload.user_email,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -122,6 +124,11 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -133,7 +140,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listAIDetections",
+    operationID: "listEmployeeAIDetections",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

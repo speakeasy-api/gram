@@ -1,4 +1,5 @@
 import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
+import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { IdentityDataFlowGraphCard } from "@/components/observe/employee-data-flow";
 import {
   fetchIdentityDataFlowGraph,
@@ -83,6 +84,8 @@ export default function IdentityConnections(): JSX.Element {
   );
   const sessions = sessionsQuery.data?.result.items ?? [];
   const graph = graphQuery.data;
+  const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
+  const employeeEmail = isEmployee ? (identity.emails[0] ?? null) : null;
 
   return (
     <IdentitySection
@@ -139,6 +142,8 @@ export default function IdentityConnections(): JSX.Element {
             emptyDescription="This identity has no live MCP connections."
           />
         </IdentityPanel>
+
+        {isEmployee && <EmployeeShadowAISection userEmail={employeeEmail} />}
       </div>
     </IdentitySection>
   );
