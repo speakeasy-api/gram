@@ -1,5 +1,6 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 
 /**
  * Backend-attested member classification. "hosted" (toolset-backed) members
@@ -106,4 +107,45 @@ export function memberBackendKind(
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";
   return undefined;
+}
+
+/**
+ * Add member candidates: existing mcp_servers rows, plus toolsets with no
+ * toolset-backed row yet (adding one mints the row, then attaches it).
+ */
+export type AddCandidate =
+  | { kind: "server"; server: McpServer }
+  | { kind: "toolset"; toolset: ToolsetEntry };
+
+export function buildAddCandidates(
+  servers: McpServer[],
+  toolsets: ToolsetEntry[],
+  memberServerIds: Set<string>,
+  search: string,
+): AddCandidate[] {
+  const query = search.trim().toLowerCase();
+  const matches = (...fields: (string | undefined)[]) =>
+    !query || fields.some((f) => f?.toLowerCase().includes(query));
+  const wrappedToolsetIds = new Set(
+    servers.flatMap((s) => (s.toolsetId ? [s.toolsetId] : [])),
+  );
+
+  const serverCandidates: AddCandidate[] = servers
+    .filter((s) => !memberServerIds.has(s.id))
+    .filter((s) => matches(s.name, s.slug))
+    .map((server) => ({ kind: "server", server }));
+  const toolsetCandidates: AddCandidate[] = toolsets
+    .filter((t) => !wrappedToolsetIds.has(t.id))
+    .filter((t) => matches(t.name, t.slug))
+    .map((toolset) => ({ kind: "toolset", toolset }));
+
+  return [...serverCandidates, ...toolsetCandidates].sort((a, b) =>
+    candidateName(a).localeCompare(candidateName(b)),
+  );
+}
+
+function candidateName(candidate: AddCandidate): string {
+  return candidate.kind === "server"
+    ? (candidate.server.name ?? "")
+    : candidate.toolset.name;
 }
