@@ -112,6 +112,27 @@ func TestPushEmptyVariadic(t *testing.T) {
 	require.Equal(t, []string{"a"}, keysOf(wide.Emit(ctx)))
 }
 
+func TestAttrsRetainedWithoutCopy(t *testing.T) {
+	t.Parallel()
+
+	// Characterization: Start and Push retain the caller's attribute slices.
+	// Mutation after either call violates the caller contract; doing so here
+	// verifies that the zero-copy implementation does not silently regress.
+	startAttrs := []slog.Attr{slog.String(testAKey, "start-original")}
+	ctx := wide.Start(t.Context(), startAttrs...)
+
+	pushedAttrs := []slog.Attr{slog.String(testBKey, "push-original")}
+	wide.Push(ctx, pushedAttrs...)
+
+	startAttrs[0] = slog.String(testAKey, "start-mutated")
+	pushedAttrs[0] = slog.String(testBKey, "push-mutated")
+
+	got := wide.Emit(ctx)
+	require.Len(t, got, 2)
+	require.Equal(t, "start-mutated", got[0].Value.String())
+	require.Equal(t, "push-mutated", got[1].Value.String())
+}
+
 func TestCancelledContextEmitStillWorks(t *testing.T) {
 	t.Parallel()
 
