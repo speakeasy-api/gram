@@ -1496,7 +1496,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-authz-v1-challenge-ch-writer
     name: gram-authz-v1-challenge-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
@@ -1512,7 +1513,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 2678400s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
@@ -1527,7 +1529,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
     name: gram-otel-v1-inbound-log-record-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-metric
@@ -1543,7 +1546,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-metric-transformer
     name: gram-otel-v1-inbound-metric-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span
@@ -1558,13 +1562,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
     name: gram-otel-v1-inbound-span-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-otel-v1-log-event-ch-writer
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-event-ch-writer
     name: gram-otel-v1-log-event-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
@@ -1580,7 +1586,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
     name: gram-otel-v1-log-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-metric
@@ -1596,7 +1603,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-metric-relay
     name: gram-otel-v1-metric-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span
@@ -1612,13 +1620,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-event-ch-writer
     name: gram-otel-v1-span-event-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-otel-v1-span-relay
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
     name: gram-otel-v1-span-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message
@@ -1634,13 +1644,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
     name: gram-ping-v2-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       dlq_for: gram-ping-v2-py-processor
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-py-processor
     name: gram-ping-v2-py-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
@@ -1692,7 +1704,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-enforcer
     name: gram-risk-v1-gitleaks-enforcer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
@@ -1718,7 +1731,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-enforcer
     name: gram-risk-v1-presidio-enforcer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
@@ -1764,4 +1778,5 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
     name: gram-webhooks-v1-svix-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
