@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
@@ -131,6 +132,75 @@ describe("ProjectNameSection", () => {
     expect(testState.setQueriesData).toHaveBeenCalledWith(
       { queryKey: ["@gram/client", "auth", "info"] },
       expect.any(Function),
+    );
+
+    const session: SessionInfoResponse = {
+      headers: {},
+      result: {
+        activeOrganizationId: "organization-1",
+        gramAccountType: "user",
+        hasActiveSubscription: true,
+        isAdmin: false,
+        organizationOverride: false,
+        organizations: [
+          {
+            id: "organization-1",
+            name: "Organization one",
+            slug: "organization-one",
+            projects: [
+              {
+                id: "project-1",
+                name: "Current project",
+                slug: "current-project",
+              },
+              {
+                id: "project-2",
+                name: "Sibling project",
+                slug: "sibling-project",
+              },
+            ],
+          },
+          {
+            id: "organization-2",
+            name: "Organization two",
+            slug: "organization-two",
+            projects: [
+              {
+                id: "project-3",
+                name: "Unrelated project",
+                slug: "unrelated-project",
+              },
+            ],
+          },
+        ],
+        trial: null,
+        userEmail: "developer@example.com",
+        userId: "user-1",
+        whitelisted: true,
+      },
+    };
+    const updateSession = testState.setQueriesData.mock.calls[0]?.[1] as (
+      cachedSession: SessionInfoResponse | undefined,
+    ) => SessionInfoResponse | undefined;
+
+    const updatedSession = updateSession(session);
+    expect(updatedSession?.result.organizations[0]?.projects).toEqual([
+      {
+        id: "project-1",
+        name: "Renamed project",
+        slug: "current-project",
+      },
+      {
+        id: "project-2",
+        name: "Sibling project",
+        slug: "sibling-project",
+      },
+    ]);
+    expect(updatedSession?.result.organizations[0]?.projects[1]).toBe(
+      session.result.organizations[0]?.projects[1],
+    );
+    expect(updatedSession?.result.organizations[1]).toEqual(
+      session.result.organizations[1],
     );
   });
 
