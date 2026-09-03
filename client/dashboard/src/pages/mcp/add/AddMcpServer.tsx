@@ -193,7 +193,7 @@ function AddOptionCard({
 
 function AddOptionGrid({ options }: { options: AddOption[] }): JSX.Element {
   return (
-    <Grid columns={{ xs: 1, md: 2, xl: 3 }} gap={3}>
+    <Grid columns={{ xs: 1, md: 2, "2xl": 3 }} gap={3}>
       {options.map((option) => (
         <Grid.Item key={option.title}>
           <AddOptionCard {...option} />
