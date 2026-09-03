@@ -3,10 +3,13 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
+import { SetupViewToggle } from "./setup-view-toggle";
 import {
   ConnectIdpStep,
   DirectorySyncStep,
@@ -80,6 +83,7 @@ export function SetupWizard(): JSX.Element {
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { markSetupStarted } = useOrgSetupStarted(orgSlug);
+  const setupBoardFlag = useFeatureFlag(FEATURE_FLAGS.setupBoard);
 
   useEffect(() => {
     markSetupStarted();
@@ -315,11 +319,15 @@ export function SetupWizard(): JSX.Element {
 
   return (
     <div className="bg-background flex min-h-screen flex-col">
-      <OnboardingHeader onLeave={handleLeave} />
+      <OnboardingHeader onLeave={handleLeave}>
+        {setupBoardFlag.status === "enabled" ? (
+          <SetupViewToggle view="wizard" />
+        ) : null}
+      </OnboardingHeader>
 
-      <main className="flex flex-1 items-start justify-center px-8 py-16">
+      <main className="flex flex-1 items-start justify-center px-4 py-8 md:px-8 md:py-16">
         <div className="flex w-full max-w-5xl gap-24">
-          <div className="w-64 flex-shrink-0">
+          <div className="hidden w-64 flex-shrink-0 md:block">
             {resolvingResume ? (
               <Skeleton>
                 {steps.map((step) => (

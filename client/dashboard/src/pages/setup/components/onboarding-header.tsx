@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
@@ -5,27 +6,30 @@ import { showPylonChat } from "@/lib/pylon";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
+  children?: ReactNode;
 }
 
 export function OnboardingHeader({
   onLeave,
+  children,
 }: OnboardingHeaderProps): JSX.Element {
   return (
     <header className="border-border bg-background w-full border-b">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4 sm:px-0">
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
-          <div className="bg-border h-5 w-px" />
-          <span className="text-foreground text-sm font-medium">
+          <div className="bg-border hidden h-5 w-px sm:block" />
+          <span className="text-foreground hidden text-sm font-medium sm:block">
             Setup organization
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {children}
           <Button
             asChild
             variant="tertiary"
             size="sm"
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
           >
             <a
               href="https://www.speakeasy.com/docs/mcp"
@@ -40,7 +44,7 @@ export function OnboardingHeader({
             variant="tertiary"
             size="sm"
             onClick={showPylonChat}
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
           >
             <LifeBuoy className="h-4 w-4" />
             Get support
@@ -49,7 +53,7 @@ export function OnboardingHeader({
             variant="tertiary"
             size="sm"
             onClick={onLeave}
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
           >
             Go to dashboard
             <ArrowRight className="h-4 w-4" />

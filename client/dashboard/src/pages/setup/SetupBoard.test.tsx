@@ -41,6 +41,7 @@ vi.mock("@/components/page-layout", () => {
     Title: Part,
     Description: Part,
     Body: Part,
+    CTA: Part,
   });
   const Toolbar = Object.assign(Part, {
     Leading: Part,
@@ -102,6 +103,7 @@ vi.mock("@/routes", () => ({
         <a href="/setup">{children}</a>
       ),
     },
+    setupBoard: { goTo: vi.fn() },
   }),
 }));
 
@@ -275,11 +277,10 @@ describe("SetupBoard", () => {
     }
     expect(screen.getByText("Blocked by Instrument agents")).toBeTruthy();
     expect(
-      within(screen.getByTestId("setup-task-confirm-traffic")).getByRole(
-        "button",
-        { name: /Confirm traffic/ },
-      ),
-    ).toBeTruthy();
+      within(screen.getByTestId("setup-task-confirm-traffic"))
+        .getByRole("button", { name: /Confirm traffic/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     expect(screen.getByText("1 of 4 complete")).toBeTruthy();
     expect(
       screen

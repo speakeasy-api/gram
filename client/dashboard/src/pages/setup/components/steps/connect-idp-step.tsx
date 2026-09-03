@@ -148,6 +148,7 @@ export function ConnectIdpStep({
       description="Connect your SSO provider to enable secure authentication for your team. This allows employees to sign in with their existing credentials."
       onContinue={continueAction}
       onBack={onBack}
+      showBack={onBack !== undefined}
       onSkip={onSkip}
       skipLabel="Skip for now"
       continueLabel={continueLabel}

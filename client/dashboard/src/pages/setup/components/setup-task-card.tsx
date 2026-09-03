@@ -117,7 +117,7 @@ export function SetupTaskCard({
         type="button"
         className="w-full flex-1 space-y-3 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
         onClick={onOpen}
-        disabled={task.hidden}
+        disabled={blocked || task.hidden}
         aria-describedby={descriptionId}
       >
         <h3 className="font-medium text-foreground">{task.title}</h3>
@@ -151,7 +151,7 @@ export function SetupTaskCard({
           variant="secondary"
           className="min-w-0 flex-1"
           onClick={onOpen}
-          disabled={pending || task.hidden}
+          disabled={pending || blocked || task.hidden}
         >
           {taskActionLabel(task.status, blocked)}
         </Button>

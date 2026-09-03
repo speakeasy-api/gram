@@ -28,6 +28,7 @@ import { useOrgRoutes } from "@/routes";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupTaskDialog } from "./components/setup-task-dialog";
+import { SetupViewToggle } from "./components/setup-view-toggle";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 
 type FailedInvite = { email: string; roleId: string };
@@ -51,6 +52,9 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
           <Page.Section.Description>
             Assign and track the work required to prepare your organization.
           </Page.Section.Description>
+          <Page.Section.CTA>
+            <SetupViewToggle view="board" />
+          </Page.Section.CTA>
           <Page.Section.Body>
             <div className="flex min-h-0 flex-1 flex-col">{children}</div>
           </Page.Section.Body>

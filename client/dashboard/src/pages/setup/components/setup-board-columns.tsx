@@ -127,7 +127,10 @@ export function SetupBoardColumns({
                       blockedTitles={task.blockedBy.map(
                         (key) => taskTitles.get(key) ?? key,
                       )}
-                      canChangeStatus={canAdmin || assignedToCurrentUser}
+                      canChangeStatus={
+                        task.blockedBy.length === 0 &&
+                        (canAdmin || assignedToCurrentUser)
+                      }
                       canAssign={canAdmin}
                       isPlatformAdmin={isPlatformAdmin}
                       pending={pending}
