@@ -76,7 +76,6 @@ const (
 	RequestAuthSchemeSessionKey          = attribute.Key("req.auth_scheme_session")
 	RequestAuthSchemeProjectKey          = attribute.Key("req.auth_scheme_project")
 	RequestAuthSchemeAPIKeyKey           = attribute.Key("req.auth_scheme_api_key")
-	RequestAuthSessionIDKey              = attribute.Key("req.auth_session_id")
 	RequestAuthUserEmailKey              = attribute.Key("req.auth_user_email")
 	RequestAuthUserIDKey                 = attribute.Key("req.auth_user_id")
 	RequestAuthUserExternalIDKey         = attribute.Key("req.auth_external_user_id")
@@ -145,7 +144,6 @@ const (
 	AuthProjectIDKey         = attribute.Key("gram.auth.project_id")
 	AuthProjectSlugKey       = attribute.Key("gram.auth.project_slug")
 	AuthSchemeKey            = attribute.Key("gram.auth.scheme")
-	AuthSessionIDKey         = attribute.Key("gram.auth.session_id")
 	AuthUserEmailKey         = attribute.Key("gram.auth.user_email")
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
@@ -1082,11 +1080,6 @@ func SlogRequestAuthAPIKeyScheme(matched bool) slog.Attr {
 	return slog.Bool(string(RequestAuthSchemeAPIKeyKey), matched)
 }
 
-func RequestAuthSessionID(v string) attribute.KeyValue { return RequestAuthSessionIDKey.String(v) }
-func SlogRequestAuthSessionID(v string) slog.Attr {
-	return slog.String(string(RequestAuthSessionIDKey), v)
-}
-
 func RequestAuthUserEmail(v string) attribute.KeyValue { return RequestAuthUserEmailKey.String(v) }
 func SlogRequestAuthUserEmail(v string) slog.Attr {
 	return slog.String(string(RequestAuthUserEmailKey), v)
@@ -1245,9 +1238,6 @@ func SlogAuthProjectSlug(v string) slog.Attr      { return slog.String(string(Au
 
 func AuthScheme(v string) attribute.KeyValue { return AuthSchemeKey.String(v) }
 func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSchemeKey), v) }
-
-func AuthSessionID(v string) attribute.KeyValue { return AuthSessionIDKey.String(v) }
-func SlogAuthSessionID(v string) slog.Attr      { return slog.String(string(AuthSessionIDKey), v) }
 
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }

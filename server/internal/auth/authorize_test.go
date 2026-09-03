@@ -137,7 +137,7 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
-	firstCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
+	firstCtx, err := instance.authorizer.Authorize(wide.Start(t.Context()), session.SessionID, sessionScheme)
 	require.NoError(t, err)
 	firstCtx, err = instance.authorizer.Authorize(firstCtx, projects[0].Slug, projectSlugScheme)
 	require.NoError(t, err)
@@ -145,6 +145,9 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, projects[0].ID, *firstAuthCtx.ProjectID)
 
+	for _, eventAttr := range wide.Emit(firstCtx) {
+		require.NotEqual(t, session.SessionID, eventAttr.Value.Any(), "session token must not be logged")
+	}
 	secondCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
 	require.NoError(t, err)
 	secondCtx, err = instance.authorizer.Authorize(secondCtx, projects[1].Slug, projectSlugScheme)

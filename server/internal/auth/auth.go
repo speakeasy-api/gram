@@ -236,9 +236,6 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		if authCtx.APIKeyID != "" {
 			attrs = append(attrs, attr.SlogRequestAuthAPIKeyID(authCtx.APIKeyID))
 		}
-		if authCtx.SessionID != nil {
-			attrs = append(attrs, attr.SlogRequestAuthSessionID(*authCtx.SessionID))
-		}
 	}
 	if authCtx.ProjectID != nil && !wide.Contains(ctx, string(attr.RequestAuthProjectIDKey)) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectID(authCtx.ProjectID.String()))
