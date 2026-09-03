@@ -358,12 +358,6 @@ func TestIngest_SpendGateDeniesCursorPrompt(t *testing.T) {
 
 func TestIngest_SpendGateDeniesCopilotToolCall(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.Email)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
 	tests := []struct {
 		adapter      string
@@ -374,25 +368,35 @@ func TestIngest_SpendGateDeniesCopilotToolCall(t *testing.T) {
 		{adapter: "vscode-copilot", rawEventName: "PreToolUse"},
 	}
 	for _, tt := range tests {
-		payload := canonicalIngestPayload(tt.adapter, "tool.requested", "spend-gate-ingest-"+tt.adapter)
-		payload.Source.RawEventName = &tt.rawEventName
-		toolName := "bash"
-		toolCallID := "call-spend-" + tt.adapter
-		payload.Data = &gen.HookIngestData{
-			ToolCall: &gen.HookToolCallData{
-				ID:    &toolCallID,
-				Name:  &toolName,
-				Input: map[string]any{"command": "ls"},
-			},
-		}
+		t.Run(tt.adapter, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
 
-		result, err := ti.service.Ingest(ctx, payload)
-		require.NoError(t, err, tt.adapter)
-		require.NotNil(t, result, tt.adapter)
-		assert.Equal(t, "deny", result.Decision, tt.adapter)
-		require.NotNil(t, result.Message, tt.adapter)
-		assert.Contains(t, *result.Message, "Intern hard limit", tt.adapter)
-		assert.Contains(t, *result.Message, "/blocks/", tt.adapter)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.Email)
+			seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+			payload := canonicalIngestPayload(tt.adapter, "tool.requested", "spend-gate-ingest-"+tt.adapter)
+			payload.Source.RawEventName = &tt.rawEventName
+			toolName := "bash"
+			toolCallID := "call-spend-" + tt.adapter
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID:    &toolCallID,
+					Name:  &toolName,
+					Input: map[string]any{"command": "ls"},
+				},
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err, tt.adapter)
+			require.NotNil(t, result, tt.adapter)
+			assert.Equal(t, "deny", result.Decision, tt.adapter)
+			require.NotNil(t, result.Message, tt.adapter)
+			assert.Contains(t, *result.Message, "Intern hard limit", tt.adapter)
+			assert.Contains(t, *result.Message, "/blocks/", tt.adapter)
+		})
 	}
 }
 
