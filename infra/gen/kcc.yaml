@@ -958,6 +958,29 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message PresidioEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          repeated string entities = 11;
+          double score_threshold = 12;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
     name: gram-risk-v1-prompt-injection-analysis
     spec:
@@ -1363,6 +1386,24 @@ pubsub:
         name: gram-risk-v1-presidio-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+      topic_proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-presidio-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-presidio-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analyzer
       topic_proto_message: gram-risk-v1-prompt-injection-analysis
     name: gram-risk-v1-prompt-injection-analyzer
@@ -1638,6 +1679,22 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-presidio-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-presidio-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+    name: gram-risk-v1-presidio-enforcer-dlq
+    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
