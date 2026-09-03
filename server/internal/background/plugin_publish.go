@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -22,6 +24,11 @@ import (
 // fingerprint check while a first publish (which has no fingerprint to compare
 // against) still republishes unconditionally.
 const pluginPublishForceSignal = "force"
+
+// pluginPublishEnqueueTimeout bounds the signal-with-start RPC. Enqueuing runs
+// inline on a request that has already committed, so it must fail fast rather
+// than hold the response open through a Temporal outage.
+const pluginPublishEnqueueTimeout = 10 * time.Second
 
 // PluginPublishParams identifies the project to publish. One debounce key per
 // project: every publish trigger for a project — a new plugin, a server or
@@ -56,6 +63,13 @@ func pluginPublishDebounceSignal(params PluginPublishParams) string {
 // enqueuing before commit risks Temporal publishing state that a later failure
 // in the same transaction rolls back.
 func ExecutePluginPublishWorkflowDebounced(ctx context.Context, temporalEnv *tenv.Environment, params PluginPublishParams) (client.WorkflowRun, error) {
+	// Callers enqueue after commit on a non-cancelable context so the request
+	// returning can't drop the signal, which leaves this RPC with no deadline
+	// of its own: bound it here, or a Temporal outage blocks the mutation
+	// request indefinitely instead of failing the best-effort enqueue.
+	ctx, cancel := context.WithTimeout(ctx, pluginPublishEnqueueTimeout)
+	defer cancel()
+
 	id := pluginPublishWorkflowID(params)
 
 	message := "enqueue"
@@ -162,4 +176,35 @@ func (p *TemporalPluginPublisher) SignalPluginPublish(ctx context.Context, proje
 		return fmt.Errorf("signal plugin publish: %w", err)
 	}
 	return nil
+}
+
+// TriggerPluginPublish enqueues the marketplace publish for a project whose
+// plugin membership just changed, shared by the mutation services (toolsets,
+// mcpservers, mcpendpoints, projects) so those paths cannot drift apart in how
+// they publish. A lazily created Default plugin (or a project's first publish)
+// passes force: there is no prior fingerprint to compare against and the repo
+// may not exist yet. Otherwise the publish is fingerprint-gated and does no
+// GitHub work when the generated output is unchanged.
+//
+// Must only be called after the triggering transaction has committed —
+// enqueuing before commit risks publishing state that a later failure in the
+// same transaction rolls back. Best-effort: the enqueue is logged and never
+// fails the request, since the rollout sweep still picks the project up on its
+// next tick.
+func TriggerPluginPublish(ctx context.Context, temporalEnv *tenv.Environment, logger *slog.Logger, projectID uuid.UUID, createdByUserID string, force bool) {
+	commitMessage := "Update plugin packages"
+	if force {
+		commitMessage = "Initial marketplace publish"
+	}
+
+	// The request returning shouldn't drop the enqueue.
+	if _, err := ExecutePluginPublishWorkflowDebounced(context.WithoutCancel(ctx), temporalEnv, PluginPublishParams{
+		ProjectID:       projectID,
+		CreatedByUserID: createdByUserID,
+		CommitMessage:   commitMessage,
+		SkipIfUnchanged: !force,
+	}); err != nil {
+		logger.WarnContext(ctx, "failed to enqueue plugin publish",
+			attr.SlogProjectID(projectID.String()), attr.SlogError(err))
+	}
 }

@@ -244,15 +244,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	// the request returning (or its caller disconnecting) right after commit
 	// can't drop the enqueue.
 	if s.pluginsGitHubEnabled {
-		enqueueCtx := context.WithoutCancel(ctx)
-		if _, err := background.ExecutePluginPublishWorkflowDebounced(enqueueCtx, s.temporalEnv, background.PluginPublishParams{
-			ProjectID:       prj.ID,
-			CreatedByUserID: authCtx.UserID,
-			CommitMessage:   "Initial marketplace publish",
-			SkipIfUnchanged: false,
-		}); err != nil {
-			s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
-		}
+		background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, prj.ID, authCtx.UserID, true)
 	}
 
 	project := &gen.CreateProjectResult{

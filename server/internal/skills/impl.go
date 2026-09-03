@@ -357,7 +357,9 @@ func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget,
 }
 
 // signalPluginPublish republishes the project's marketplace packages after a
-// plugin-channel distribution changed. Best-effort: a failed enqueue is logged
+// plugin-channel distribution changed. The publisher is nil when GitHub
+// publishing is not configured, so a deployment without it enqueues nothing
+// rather than filling Temporal with runs that can only fail. Best-effort: a failed enqueue is logged
 // and never fails the request, since the rollout sweep still picks the project
 // up on its next tick. Must only be called after the triggering transaction
 // has committed — the publish reads live state a rollback would take back.
@@ -368,7 +370,8 @@ func (s *Service) signalPluginPublish(ctx context.Context, target distributionTa
 
 	// The request returning shouldn't drop the enqueue.
 	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), *authCtx.ProjectID, authCtx.UserID); err != nil {
-		s.logger.WarnContext(ctx, "failed to signal plugin publish", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "failed to signal plugin publish",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
 	}
 }
 

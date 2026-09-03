@@ -31,6 +31,7 @@ func (s *Service) signalPublish(ctx context.Context, projectID uuid.UUID, create
 
 	// The request returning shouldn't drop the enqueue.
 	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
-		s.logger.WarnContext(ctx, "failed to signal plugin publish", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "failed to signal plugin publish",
+			attr.SlogProjectID(projectID.String()), attr.SlogError(err))
 	}
 }

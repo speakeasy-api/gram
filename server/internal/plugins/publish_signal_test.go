@@ -63,3 +63,21 @@ func TestPluginsService_MutationsSignalRepublish(t *testing.T) {
 	require.NoError(t, ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: plugin.ID}))
 	assertSignalled(t, 6, "deleting a plugin")
 }
+
+// ListPlugins lazily provisions the Default plugin for a project that predates
+// it. That changes what a publish would generate, so it must signal like any
+// explicit mutation — and must not keep signalling once the plugin exists.
+func TestPluginsService_LazyDefaultPluginSignalsRepublish(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	_, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.captured(), 1, "lazily creating the Default plugin should enqueue a republish")
+
+	_, err = ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.captured(), 1, "a read that creates nothing must not enqueue")
+}

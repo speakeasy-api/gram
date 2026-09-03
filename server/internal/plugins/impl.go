@@ -369,6 +369,12 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	// A legacy project gets its Default plugin here, on a read. That is a
+	// change to what a publish would generate like any other, so it signals
+	// too rather than waiting out the rollout sweep.
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
