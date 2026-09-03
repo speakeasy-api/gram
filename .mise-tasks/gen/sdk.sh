@@ -18,33 +18,19 @@ generate() {
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
+  CI=true speakeasy run "$@" --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {
   workflow=".speakeasy/workflow.yaml"
-  source_key=".sources.Gram-Internal"
-  schema=$(yq "${source_key}.inputs[0].location" "$workflow")
-  output=$(yq "${source_key}.output" "$workflow")
-  tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
+  output=$(yq '.sources.Gram-Internal.output' "$workflow")
+  expected=$(mktemp)
+  cp "$output" "$expected"
+  trap 'cp "$expected" "$output"; rm -f "$expected"' EXIT
 
-  current="$schema"
-  overlay_index=0
-  while IFS= read -r overlay; do
-    overlay_index=$((overlay_index + 1))
-    next="$tmpdir/overlay-${overlay_index}.yaml"
-    speakeasy overlay apply --schema "$current" --overlay "$overlay" --out "$next" >/dev/null 2>&1
-    current="$next"
-  done < <(yq -r "${source_key}.overlays[].location" "$workflow")
+  generate --source Gram-Internal >/dev/null 2>&1
 
-  result="$current"
-  if [[ "$(yq "${source_key}.transformations[0].removeUnused // false" "$workflow")" == "true" ]]; then
-    result="$tmpdir/normalized.yaml"
-    speakeasy openapi transform remove-unused --schema "$current" --out "$result" >/dev/null 2>&1
-  fi
-
-  if ! diff -q "$result" "$output" >/dev/null 2>&1; then
+  if ! diff -q "$expected" "$output" >/dev/null 2>&1; then
     echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
     exit 1
   fi
