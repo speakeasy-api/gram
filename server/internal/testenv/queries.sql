@@ -184,31 +184,6 @@ WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
 
--- name: SeedOutboxEntry :one
--- Fixture insert for the deprecated outbox table. Producers write to
--- publish_outbox now, so the only thing that still needs to create one of
--- these rows is the legacy relay's own tests; this goes away with them.
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES (@organization_id, @event_type, @payload)
-RETURNING id;
-
--- name: GetOutboxEntry :one
--- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-SELECT id FROM outbox WHERE id = @id;
-
--- name: GetOutboxRelayState :one
--- Reads the relay tracking state for a single outbox row.
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = @outbox_id;
-
 -- name: GetPublishOutboxRow :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at

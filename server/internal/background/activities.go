@@ -11,7 +11,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
@@ -163,8 +161,6 @@ type Activities struct {
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
-	outboxRelay                     *outbox_relay.Relay
-	outboxGC                        *outbox_relay.GC
 	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
@@ -221,7 +217,6 @@ func NewActivities(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
-	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
 	chatWriter *chat.ChatMessageWriter,
@@ -435,8 +430,6 @@ func NewActivities(
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
-		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
-		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
@@ -917,29 +910,6 @@ func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args acti
 	return a.cancelAssistantsSubscription.Do(ctx, args)
 }
 
-func (a *Activities) FetchPendingOutboxEvents(ctx context.Context, events outbox_relay.FetchEventArgs) (outbox_relay.FetchEventsResult, error) {
-	result, err := a.outboxRelay.FetchEvents(ctx, events)
-	if err != nil {
-		return outbox_relay.FetchEventsResult{}, fmt.Errorf("fetch pending outbox events: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) FilterNoopOutboxEvents(ctx context.Context, events []*outbox_relay.Event) ([]*outbox_relay.Event, error) {
-	result, err := a.outboxRelay.FilterNoopEvents(ctx, events)
-	if err != nil {
-		return nil, fmt.Errorf("mark outbox events noop: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay.Event) error {
-	if err := a.outboxRelay.RelayEvents(ctx, args); err != nil {
-		return fmt.Errorf("relay outbox events: %w", err)
-	}
-	return nil
-}
-
 // DrainPublishOutbox claims, publishes and settles one batch in a single
 // activity. Keeping it fused is deliberate: splitting claim from publish would
 // put message bodies into workflow history.
@@ -975,14 +945,6 @@ func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, bat
 	n, err := a.killswitchMaintenance.CleanupExpiredOperationsGlobal(ctx, batchSize)
 	if err != nil {
 		return n, fmt.Errorf("cleanup expired killswitch operations: %w", err)
-	}
-	return n, nil
-}
-
-func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
-	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
-	if err != nil {
-		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
 	}
 	return n, nil
 }

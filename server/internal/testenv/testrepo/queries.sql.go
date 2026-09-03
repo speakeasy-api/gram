@@ -751,57 +751,6 @@ func (q *Queries) GetOrganizationRoleAssignmentMembershipIDFixture(ctx context.C
 	return workos_membership_id, err
 }
 
-const getOutboxEntry = `-- name: GetOutboxEntry :one
-SELECT id FROM outbox WHERE id = $1
-`
-
-// Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-func (q *Queries) GetOutboxEntry(ctx context.Context, id int64) (int64, error) {
-	row := q.db.QueryRow(ctx, getOutboxEntry, id)
-	var id_2 int64
-	err := row.Scan(&id_2)
-	return id_2, err
-}
-
-const getOutboxRelayState = `-- name: GetOutboxRelayState :one
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = $1
-`
-
-type GetOutboxRelayStateRow struct {
-	OutboxID      int64
-	ProcessedAt   pgtype.Timestamptz
-	Noop          bool
-	DeadLettered  bool
-	SvixMessageID pgtype.Text
-	Attempts      int32
-	LastError     pgtype.Text
-}
-
-// Reads the relay tracking state for a single outbox row.
-func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetOutboxRelayStateRow, error) {
-	row := q.db.QueryRow(ctx, getOutboxRelayState, outboxID)
-	var i GetOutboxRelayStateRow
-	err := row.Scan(
-		&i.OutboxID,
-		&i.ProcessedAt,
-		&i.Noop,
-		&i.DeadLettered,
-		&i.SvixMessageID,
-		&i.Attempts,
-		&i.LastError,
-	)
-	return i, err
-}
-
 const getPlatformMCPReadinessFingerprintFixture = `-- name: GetPlatformMCPReadinessFingerprintFixture :one
 SELECT provider_authorization_fingerprint
 FROM platform_mcp_readiness
@@ -2005,28 +1954,6 @@ func (q *Queries) SeedOpenRouterSpendRangeFixture(ctx context.Context, arg SeedO
 		arg.EndDay,
 	)
 	return err
-}
-
-const seedOutboxEntry = `-- name: SeedOutboxEntry :one
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES ($1, $2, $3)
-RETURNING id
-`
-
-type SeedOutboxEntryParams struct {
-	OrganizationID string
-	EventType      string
-	Payload        []byte
-}
-
-// Fixture insert for the deprecated outbox table. Producers write to
-// publish_outbox now, so the only thing that still needs to create one of
-// these rows is the legacy relay's own tests; this goes away with them.
-func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams) (int64, error) {
-	row := q.db.QueryRow(ctx, seedOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
 }
 
 const seedPromptTemplatePrivacyFixture = `-- name: SeedPromptTemplatePrivacyFixture :exec

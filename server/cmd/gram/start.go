@@ -1805,7 +1805,6 @@ func newStartCommand() *cli.Command {
 						ShadowMCPClient:           shadowMCPClient,
 						AuditLogger:               auditLogger,
 						WorkOSClient:              backgroundWorkOSClient,
-						SvixClient:                svixClient,
 						ProductFeatures:           productFeatures,
 						PluginPublisher:           pluginPublisher,
 						Publishers:                publishers,
