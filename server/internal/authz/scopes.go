@@ -122,7 +122,19 @@ type scopeDefinition struct {
 }
 
 func activeScope(visibility scopeVisibility) scopeDefinition {
-	return scopeDefinition{visibility: visibility, lifecycle: ScopeLifecycleActive}
+	return scopeDefinition{
+		visibility:            visibility,
+		lifecycle:             ScopeLifecycleActive,
+		agentRuntimeSafeSince: 0,
+	}
+}
+
+func retiredScope() scopeDefinition {
+	return scopeDefinition{
+		visibility:            0,
+		lifecycle:             ScopeLifecycleRetired,
+		agentRuntimeSafeSince: 0,
+	}
 }
 
 func agentSafeScope(visibility scopeVisibility) scopeDefinition {
@@ -168,8 +180,8 @@ var scopeDefinitions = map[Scope]scopeDefinition{
 	ScopeAgentWrite:                 activeScope(scopeVisibilityUserVisible),
 	ScopeAgentAuthorize:             activeScope(scopeVisibilityUserVisible),
 	ScopeAgentTransfer:              activeScope(scopeVisibilityUserVisible),
-	scopeMCPApprovalReadTombstone:   {lifecycle: ScopeLifecycleRetired},
-	scopeMCPApprovalDecideTombstone: {lifecycle: ScopeLifecycleRetired},
+	scopeMCPApprovalReadTombstone:   retiredScope(),
+	scopeMCPApprovalDecideTombstone: retiredScope(),
 }
 
 var memberScopes = []Scope{
@@ -228,6 +240,8 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // Preserves qstearns' non-escalation rule: project:read does not grant environment access
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
+//
+//nolint:exhaustive // Retired scope tombstones intentionally have no authorization expansions.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -266,6 +280,8 @@ var scopeExpansions = map[Scope][]Scope{
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
+//
+//nolint:exhaustive // Retired scope tombstones intentionally have no exclusion scopes.
 var scopeExclusions = map[Scope]Scope{
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
@@ -356,7 +372,8 @@ func ScopeLifecycleFor(scope Scope) (ScopeLifecycle, bool) {
 // AgentRuntimeScopeImplicationClosure returns the complete set of checks that a
 // grant for scope can satisfy, including scope itself.
 func AgentRuntimeScopeImplicationClosure(scope Scope) []Scope {
-	seen := map[Scope]struct{}{scope: {}}
+	seen := make(map[Scope]struct{}, 1)
+	seen[scope] = struct{}{}
 	queue := []Scope{scope}
 	for len(queue) > 0 {
 		granted := queue[0]
