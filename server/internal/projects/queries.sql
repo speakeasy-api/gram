@@ -56,6 +56,13 @@ FROM projects
 WHERE id = @id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetProjectByIDAndOrganizationID :one
 SELECT *
 FROM projects

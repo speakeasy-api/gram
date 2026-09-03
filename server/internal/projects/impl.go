@@ -284,7 +284,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	pr := s.repo.WithTx(dbtx)
-	existingRow, err := pr.GetProjectByID(ctx, *authCtx.ProjectID)
+	existingRow, err := pr.GetProjectByIDForUpdate(ctx, *authCtx.ProjectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
@@ -295,7 +295,10 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 		ProjectID: *authCtx.ProjectID,
 		Name:      name,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
