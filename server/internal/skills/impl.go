@@ -62,7 +62,11 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
-	siteURL  *url.URL
+	// publisher republishes a project's marketplace packages after a skill is
+	// distributed to or revoked from a plugin. Nil in tests; signalPluginPublish
+	// is a no-op then.
+	publisher PluginPublishSignaler
+	siteURL   *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,20 +81,22 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	publisher PluginPublishSignaler,
 	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		audit:    auditLogger,
-		signaler: signaler,
-		siteURL:  siteURL,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
+		logger:    logger,
+		db:        db,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
+		features:  features,
+		audit:     auditLogger,
+		signaler:  signaler,
+		publisher: publisher,
+		siteURL:   siteURL,
 	}
 }
 
@@ -348,6 +354,22 @@ func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget,
 		return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid assistant id")
 	}
 	return distributionTarget{channel: "assistant", pluginID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, assistantID: uuid.NullUUID{UUID: id, Valid: true}}, nil
+}
+
+// signalPluginPublish republishes the project's marketplace packages after a
+// plugin-channel distribution changed. Best-effort: a failed enqueue is logged
+// and never fails the request, since the rollout sweep still picks the project
+// up on its next tick. Must only be called after the triggering transaction
+// has committed — the publish reads live state a rollback would take back.
+func (s *Service) signalPluginPublish(ctx context.Context, target distributionTarget, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil || target.channel != "plugin" {
+		return
+	}
+
+	// The request returning shouldn't drop the enqueue.
+	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), *authCtx.ProjectID, authCtx.UserID); err != nil {
+		s.logger.WarnContext(ctx, "failed to signal plugin publish", attr.SlogError(err))
+	}
 }
 
 func (s *Service) recordVersion(
@@ -1492,6 +1514,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
+
+		s.signalPluginPublish(ctx, target, authCtx)
+
 		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -1526,6 +1551,8 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 }
@@ -1603,6 +1630,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return nil
 }

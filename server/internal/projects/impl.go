@@ -245,7 +245,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	// can't drop the enqueue.
 	if s.pluginsGitHubEnabled {
 		enqueueCtx := context.WithoutCancel(ctx)
-		if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+		if _, err := background.ExecutePluginPublishWorkflowDebounced(enqueueCtx, s.temporalEnv, background.PluginPublishParams{
 			ProjectID:       prj.ID,
 			CreatedByUserID: authCtx.UserID,
 			CommitMessage:   "Initial marketplace publish",

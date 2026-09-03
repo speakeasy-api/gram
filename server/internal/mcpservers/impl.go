@@ -750,7 +750,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	s.triggerPluginPublish(ctx, authCtx, pluginCreated)
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
@@ -794,25 +794,34 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	return pluginCreated, nil
 }
 
-// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
-// publish for a project whose Default plugin was just lazily created. Must
-// only be called after the triggering transaction has committed — enqueuing
-// before commit risks Temporal running against state that a later failure
-// in the same transaction rolls back. Best-effort: a non-cancelable ctx
-// since the request returning shouldn't drop the enqueue.
-func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
-	if !pluginCreated || !s.pluginsGitHubEnabled {
+// triggerPluginPublish enqueues the marketplace publish for the project whose
+// Default plugin membership just changed. A lazily created Default plugin
+// (project predates the feature) forces the publish: there is no prior
+// fingerprint to compare against, and the repo itself may not exist yet.
+// Otherwise the attach may well have been a no-op, so the publish is
+// fingerprint-gated and does no GitHub work when the generated output is
+// unchanged. Must only be called after the triggering transaction has
+// committed — enqueuing before commit risks Temporal running against state
+// that a later failure in the same transaction rolls back. Best-effort: a
+// non-cancelable ctx since the request returning shouldn't drop the enqueue.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
+	if !s.pluginsGitHubEnabled {
 		return
 	}
 
+	commitMessage := "Update plugin packages"
+	if pluginCreated {
+		commitMessage = "Initial marketplace publish"
+	}
+
 	enqueueCtx := context.WithoutCancel(ctx)
-	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
+	if _, err := background.ExecutePluginPublishWorkflowDebounced(enqueueCtx, s.temporalEnv, background.PluginPublishParams{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
+		CommitMessage:   commitMessage,
+		SkipIfUnchanged: !pluginCreated,
 	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "failed to enqueue plugin publish", attr.SlogError(err))
 	}
 }
 
