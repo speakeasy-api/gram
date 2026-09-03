@@ -167,9 +167,12 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "team", label: "Team" },
 ];
 
+// A chip carries the chosen option's label and nothing else, so each one has
+// to name the filter it came from: a chip reading "Yes" says nothing about
+// what was answered.
 const PERSONAL_ACCOUNT_OPTIONS = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
+  { value: "yes", label: "Personal account" },
+  { value: "no", label: "No personal account" },
 ];
 
 const ENROLLMENT_OPTIONS = [
@@ -188,7 +191,7 @@ const ACTIVITY_OPTIONS = [
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
   { value: "older", label: "Over 30 days ago" },
-  { value: "never", label: "Never" },
+  { value: "never", label: "Never active" },
 ];
 
 function matchesActivity(identity: Employee, bucket: string): boolean {
