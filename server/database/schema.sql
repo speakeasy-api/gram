@@ -2191,6 +2191,13 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   -- exact-match credential routing. Names a host inside the customer's
   -- private network — this value must NEVER be dialed by Gram.
   resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
+  -- Anonymous public MCP request rate limit, requests per second. NULL: deployment default.
+  public_request_rate_per_second integer CHECK (public_request_rate_per_second IS NULL OR (public_request_rate_per_second > 0 AND public_request_rate_per_second <= 100000)),
+  -- Token-bucket capacity for public_request_rate_per_second: the number of
+  -- requests admitted back-to-back from an idle tunnel before admission drops
+  -- to the sustained rate. Each request takes one token; tokens refill at
+  -- public_request_rate_per_second per second up to this cap. NULL: 2 × rate.
+  public_request_burst integer CHECK (public_request_burst IS NULL OR (public_request_burst > 0 AND public_request_burst <= 1000000)),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
   last_seen_at timestamptz,
 
