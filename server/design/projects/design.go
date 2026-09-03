@@ -66,6 +66,7 @@ var _ = Service("projects", func() {
 
 		Payload(func() {
 			Extend(UpdateProjectForm)
+			Meta("openapi:typename", "UpdateProjectForm")
 			security.ProjectPayload()
 			security.SessionPayload()
 		})
@@ -265,9 +266,7 @@ var CreateProjectResult = Type("CreateProjectResult", func() {
 var UpdateProjectForm = Type("UpdateProjectForm", func() {
 	Required("name")
 
-	Attribute("name", String, "The display name of the project", func() {
-		MinLength(1)
-	})
+	Attribute("name", String, "The display name of the project")
 })
 
 var UpdateProjectResult = Type("UpdateProjectResult", func() {

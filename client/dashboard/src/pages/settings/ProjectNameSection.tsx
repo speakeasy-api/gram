@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { invalidateAllListProjects } from "@gram/client/react-query/listProjects";
+import { invalidateAllProject } from "@gram/client/react-query/project";
 import { useUpdateProjectMutation } from "@gram/client/react-query/updateProject";
 import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,8 +21,8 @@ const projectNameSchema = z
   .string()
   .trim()
   .min(1, "Enter a project name.")
-  .max(
-    PROJECT_NAME_MAX_LENGTH,
+  .refine(
+    (name) => Array.from(name).length <= PROJECT_NAME_MAX_LENGTH,
     `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
   );
 
@@ -82,6 +83,7 @@ function ProjectNameForm({
       await Promise.allSettled([
         organization.refetch(),
         invalidateAllListProjects(queryClient),
+        invalidateAllProject(queryClient),
       ]);
 
       toast.success("Project name updated");
@@ -144,7 +146,6 @@ function ProjectNameForm({
                         }}
                         onBlur={field.handleBlur}
                         disabled={update.isPending}
-                        maxLength={PROJECT_NAME_MAX_LENGTH}
                         aria-invalid={Boolean(error)}
                         aria-describedby={
                           error ? "project-display-name-error" : undefined
@@ -176,7 +177,9 @@ function ProjectNameForm({
             {([isDirty, canSubmit]) => (
               <SettingsSection.Footer>
                 <SettingsSection.FooterHint>
-                  {isDirty ? "Unsaved changes" : ""}
+                  <span role="status" aria-live="polite">
+                    {isDirty ? "Unsaved changes" : ""}
+                  </span>
                 </SettingsSection.FooterHint>
                 <SettingsSection.FooterActions>
                   <RequireScope
