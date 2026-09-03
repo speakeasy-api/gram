@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitDisplayName } from "./demo-booking";
+import { splitDisplayName } from "./booking-calendar";
 
 describe("splitDisplayName", () => {
   it("splits a two-part name", () => {

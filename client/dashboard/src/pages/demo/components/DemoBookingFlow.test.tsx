@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { CAL_DEMO_LINK } from "./demo-booking";
+import { BOOKING_CALENDAR_LINK } from "./booking-calendar/booking-calendar";
 
 type MockSession = {
   user: { email: string; displayName?: string };
@@ -72,7 +72,7 @@ describe("DemoBookingFlow", () => {
   it("embeds the demo calendar directly with no intermediate form", () => {
     render(<DemoBookingFlow />);
     const embed = screen.getByTestId("cal-embed");
-    expect(embed.getAttribute("data-cal-link")).toBe(CAL_DEMO_LINK);
+    expect(embed.getAttribute("data-cal-link")).toBe(BOOKING_CALENDAR_LINK);
   });
 
   // Checkout is the shortcut past the gate, so it has to read before the
@@ -132,7 +132,7 @@ describe("DemoBookingFlow", () => {
     sessionHolder.current = null;
     render(<DemoBookingFlow />);
     const embed = screen.getByTestId("cal-embed");
-    expect(embed.getAttribute("data-cal-link")).toBe(CAL_DEMO_LINK);
+    expect(embed.getAttribute("data-cal-link")).toBe(BOOKING_CALENDAR_LINK);
     expect(embed.getAttribute("data-cal-name")).toBe("");
     expect(embed.getAttribute("data-cal-email")).toBe("");
     expect(embed.getAttribute("data-cal-company")).toBe("");
