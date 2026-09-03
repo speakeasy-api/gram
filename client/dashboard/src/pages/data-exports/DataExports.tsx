@@ -13,22 +13,19 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { toError } from "@/lib/errors";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportsForOrgResult } from "@gram/client/models/components/listdataexportsfororgresult.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useCreateDataExportRouteMutation } from "@gram/client/react-query/createDataExportRoute.js";
 import { useCreateDataExportDestinationMutation } from "@gram/client/react-query/createDataExportDestination.js";
 import { invalidateDataExportRoutes } from "@gram/client/react-query/dataExportRoutes.js";
 import { useDeleteDataExportRouteMutation } from "@gram/client/react-query/deleteDataExportRoute.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateDataExportDestinations } from "@gram/client/react-query/dataExportDestinations.js";
-import {
-  invalidateAllListDataExportsForOrg,
-  queryKeyListDataExportsForOrg,
-  useListDataExportsForOrg,
-} from "@gram/client/react-query/listDataExportsForOrg.js";
+import { buildListDataExportsForOrgQuery } from "@gram/client/react-query/listDataExportsForOrg.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -116,9 +113,19 @@ export default function DataExports(): JSX.Element {
 
 function DataExportsInner(): JSX.Element {
   const organization = useOrganization();
+  const client = useGramContext();
   const queryClient = useQueryClient();
   const projectsQuery = useListProjects({ organizationId: organization.id });
-  const exportsQuery = useListDataExportsForOrg();
+  const aggregateQuery = buildListDataExportsForOrgQuery(client);
+  const aggregateQueryKey = [
+    ...aggregateQuery.queryKey,
+    { organizationId: organization.id },
+  ];
+  const exportsQuery = useQuery({
+    ...aggregateQuery,
+    queryKey: aggregateQueryKey,
+    throwOnError: false,
+  });
   const projects = projectsQuery.data?.projects ?? EMPTY_PROJECTS;
   const destinationsByProjectID = new Map<
     string,
@@ -211,7 +218,7 @@ function DataExportsInner(): JSX.Element {
         { gramProject: projectSlug },
       ]),
       invalidateDataExportRoutes(queryClient, [{ gramProject: projectSlug }]),
-      invalidateAllListDataExportsForOrg(queryClient),
+      queryClient.invalidateQueries({ queryKey: aggregateQueryKey }),
     ]);
 
   const handleSaveExport = async (values: ConfigureExportValues) => {
@@ -290,7 +297,7 @@ function DataExportsInner(): JSX.Element {
     route: DataExportRoute,
     enabled: boolean,
   ) => {
-    const queryKey = queryKeyListDataExportsForOrg({});
+    const queryKey = aggregateQueryKey;
     await queryClient.cancelQueries({ queryKey });
     const previous =
       queryClient.getQueryData<ListDataExportsForOrgResult>(queryKey);
@@ -329,7 +336,7 @@ function DataExportsInner(): JSX.Element {
         invalidateDataExportRoutes(queryClient, [
           { gramProject: project.slug },
         ]),
-        invalidateAllListDataExportsForOrg(queryClient),
+        queryClient.invalidateQueries({ queryKey: aggregateQueryKey }),
       ]);
     }
   };

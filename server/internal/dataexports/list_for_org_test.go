@@ -52,6 +52,31 @@ func TestListForOrgReturnsExportsAcrossLiveProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	deletedSlug := "data-exports-deleted-" + uuid.NewString()[:8]
+	deletedProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           deletedSlug,
+		Slug:           deletedSlug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	deletedAuthCtx := *authCtx
+	deletedAuthCtx.ProjectID = &deletedProject.ID
+	deletedAuthCtx.ProjectSlug = &deletedSlug
+	deletedCtx := contextvalues.SetAuthContext(ctx, &deletedAuthCtx)
+
+	deletedDestination := createDestination(t, deletedCtx, ti, "https://deleted.example.test", "exclude")
+	deletedRoute, err := ti.service.CreateRoute(deletedCtx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "product_telemetry",
+		Enabled:           true,
+		OtelDestinationID: &deletedDestination.ID,
+	})
+	require.NoError(t, err)
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, deletedProject.ID)
+	require.NoError(t, err)
+
 	orgAuthCtx := *authCtx
 	orgAuthCtx.ProjectID = nil
 	orgAuthCtx.ProjectSlug = nil
@@ -60,4 +85,6 @@ func TestListForOrgReturnsExportsAcrossLiveProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []*gen.Destination{firstDestination, secondDestination}, result.Destinations)
 	require.ElementsMatch(t, []*gen.DataExportRoute{firstRoute, secondRoute}, result.Routes)
+	require.NotContains(t, result.Destinations, deletedDestination)
+	require.NotContains(t, result.Routes, deletedRoute)
 }

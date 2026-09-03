@@ -150,7 +150,12 @@ func (s *Service) listOtelDestinations(ctx context.Context, authCtx *contextvalu
 		return nil, oops.E(oops.CodeUnexpected, err, "list OTEL destinations").LogError(ctx, logger)
 	}
 
-	return s.buildDestinationViews(rows)
+	destinations, err := s.buildDestinationViews(rows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destinations").LogError(ctx, logger)
+	}
+
+	return destinations, nil
 }
 
 func (s *Service) buildDestinationViews(rows []repo.OtelDestination) ([]*gen.Destination, error) {
