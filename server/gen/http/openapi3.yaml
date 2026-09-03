@@ -89012,7 +89012,6 @@ components:
                     type: string
                     description: The display name of the project
                     minLength: 1
-                    maxLength: 40
             required:
                 - name
         UpdateProjectResult:

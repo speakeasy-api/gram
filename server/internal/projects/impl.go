@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -39,6 +40,8 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const projectNameMaxLength = 40
 
 type Service struct {
 	tracer               trace.Tracer
@@ -274,7 +277,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	}
 
 	name := strings.TrimSpace(payload.Name)
-	if name == "" {
+	if name == "" || utf8.RuneCountInString(name) > projectNameMaxLength {
 		return nil, oops.C(oops.CodeInvalid)
 	}
 	dbtx, err := s.db.Begin(ctx)

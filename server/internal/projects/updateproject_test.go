@@ -1,6 +1,7 @@
 package projects_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -113,6 +114,36 @@ func TestUpdateProjectRejectsBlankName(t *testing.T) {
 	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeAuditCount, afterAuditCount)
+}
+
+func TestUpdateProjectAcceptsMaxLengthNameAfterTrimming(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	name := strings.Repeat("a", 40)
+
+	result, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{
+		Name: "  " + name + "  ",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Project)
+	require.Equal(t, name, result.Project.Name)
+}
+
+func TestUpdateProjectRejectsTooLongName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	result, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{
+		Name: strings.Repeat("a", 41),
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
 func TestUpdateProjectRequiresProjectWrite(t *testing.T) {

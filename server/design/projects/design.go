@@ -267,7 +267,6 @@ var UpdateProjectForm = Type("UpdateProjectForm", func() {
 
 	Attribute("name", String, "The display name of the project", func() {
 		MinLength(1)
-		MaxLength(40)
 	})
 })
 

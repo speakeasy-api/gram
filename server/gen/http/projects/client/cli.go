@@ -104,9 +104,6 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
 		}
-		if utf8.RuneCountInString(body.Name) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
-		}
 		if err != nil {
 			return nil, err
 		}

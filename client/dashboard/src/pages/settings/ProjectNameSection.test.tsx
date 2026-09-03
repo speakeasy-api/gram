@@ -27,6 +27,7 @@ const testState = vi.hoisted(() => ({
     name: "Current project",
     slug: "current-project",
   },
+  session: { session: "session-token" },
   setQueriesData: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ const invalidateAllListProjects = vi.hoisted(() => vi.fn());
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => testState.organization,
   useProject: () => testState.project,
+  useSession: () => testState.session,
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -114,6 +116,10 @@ describe("ProjectNameSection", () => {
       expect(testState.mutate).toHaveBeenCalledWith({
         request: {
           updateProjectForm: { name: "Renamed project" },
+        },
+        security: {
+          projectSlugHeaderGramProject: "current-project",
+          sessionHeaderGramSession: "session-token",
         },
       }),
     );

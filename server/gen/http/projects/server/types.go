@@ -3315,11 +3315,6 @@ func ValidateUpdateProjectRequestBody(body *UpdateProjectRequestBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
 		}
 	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
-		}
-	}
 	return
 }
 
