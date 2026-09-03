@@ -611,6 +611,25 @@ WHERE user_id = @user_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: ReassignOrganizationUserWorkOSID :exec
+-- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- rows must follow the new WorkOS user id.
+UPDATE organization_user_relationships
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id = @old_workos_user_id;
+
+-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+-- Role assignments are keyed by workos_user_id. Move them when a recreated
+-- WorkOS user reuses the Gram identity so roster and sync joins still match.
+UPDATE organization_role_assignments
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id = @old_workos_user_id
+  AND deleted_at IS NULL;
+
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT *
 FROM organization_role_assignments

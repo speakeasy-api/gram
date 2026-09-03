@@ -1251,6 +1251,49 @@ func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkO
 	return err
 }
 
+const reassignOrganizationRoleAssignmentWorkOSID = `-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+UPDATE organization_role_assignments
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id = $3
+  AND deleted_at IS NULL
+`
+
+type ReassignOrganizationRoleAssignmentWorkOSIDParams struct {
+	NewWorkosUserID string
+	UserID          pgtype.Text
+	OldWorkosUserID string
+}
+
+// Role assignments are keyed by workos_user_id. Move them when a recreated
+// WorkOS user reuses the Gram identity so roster and sync joins still match.
+func (q *Queries) ReassignOrganizationRoleAssignmentWorkOSID(ctx context.Context, arg ReassignOrganizationRoleAssignmentWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationRoleAssignmentWorkOSID, arg.NewWorkosUserID, arg.UserID, arg.OldWorkosUserID)
+	return err
+}
+
+const reassignOrganizationUserWorkOSID = `-- name: ReassignOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id = $3
+`
+
+type ReassignOrganizationUserWorkOSIDParams struct {
+	NewWorkosUserID pgtype.Text
+	UserID          pgtype.Text
+	OldWorkosUserID pgtype.Text
+}
+
+// Login reuses a Gram user after WorkOS delete-and-signup, so membership
+// rows must follow the new WorkOS user id.
+func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg ReassignOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationUserWorkOSID, arg.NewWorkosUserID, arg.UserID, arg.OldWorkosUserID)
+	return err
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :exec
 UPDATE organization_invitations
 SET state = 'revoked',

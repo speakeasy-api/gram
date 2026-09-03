@@ -291,6 +291,8 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
 		r.logger.ErrorContext(ctx, "failed to set workos_id on user", attr.SlogError(err))
+	} else if err := r.reassignWorkOSIdentity(ctx, gramUserID, user.WorkosID, idpUser.Sub); err != nil {
+		return "", err
 	}
 
 	if r.workosClient != nil {
@@ -313,6 +315,30 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 	}
 
 	return user.ID, nil
+}
+
+func (r *Resolver) reassignWorkOSIdentity(ctx context.Context, gramUserID string, previousWorkosID pgtype.Text, newWorkosID string) error {
+	if !previousWorkosID.Valid || previousWorkosID.String == "" || previousWorkosID.String == newWorkosID || newWorkosID == "" {
+		return nil
+	}
+
+	if err := r.orgRepo.ReassignOrganizationUserWorkOSID(ctx, orgRepo.ReassignOrganizationUserWorkOSIDParams{
+		NewWorkosUserID: conv.ToPGText(newWorkosID),
+		UserID:          conv.ToPGText(gramUserID),
+		OldWorkosUserID: conv.ToPGText(previousWorkosID.String),
+	}); err != nil {
+		return fmt.Errorf("reassign organization memberships to workos user: %w", err)
+	}
+
+	if err := r.orgRepo.ReassignOrganizationRoleAssignmentWorkOSID(ctx, orgRepo.ReassignOrganizationRoleAssignmentWorkOSIDParams{
+		NewWorkosUserID: newWorkosID,
+		UserID:          conv.ToPGText(gramUserID),
+		OldWorkosUserID: previousWorkosID.String,
+	}); err != nil {
+		return fmt.Errorf("reassign organization role assignments to workos user: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool) {
