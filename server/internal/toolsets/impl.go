@@ -241,8 +241,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Only an MCP-enabled toolset reaches the Default plugin, so a plain
-	// toolset must not enqueue a publish.
-	s.triggerPluginPublish(ctx, authCtx, createToolParams.McpEnabled, pluginCreated)
+	// toolset must not enqueue a publish. The attach ran for exactly the same
+	// condition, so this call may also create the project's first marketplace.
+	s.triggerPluginPublish(ctx, authCtx, createToolParams.McpEnabled, createToolParams.McpEnabled, pluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
@@ -307,18 +308,20 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
-// Default plugin membership just changed. attached is false when the mutation
+// Default plugin membership just changed. publish is false when the mutation
 // could not have changed generated plugin output (a Meta-MCP endpoint, a
 // non-MCP toolset, a disabled or endpointless server): those paths must not
-// enqueue at all, since a project with no GitHub connection yet treats any
-// publish as its first and would get a marketplace repo it has no packages
-// for.
-func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, attached, pluginCreated bool) {
-	if !attached || !s.pluginsGitHubEnabled {
+// enqueue at all. attached says this request actually ran the attach, which is
+// what licenses creating the project's first marketplace repo — a mutation
+// that only edits an existing member (a rename, a disable) must never hand an
+// unpublished project a repo, since nothing here proves it has anything to put
+// in one.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, publish, attached, pluginCreated bool) {
+	if !publish || !s.pluginsGitHubEnabled {
 		return
 	}
 
-	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, true, pluginCreated)
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, attached, pluginCreated)
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -620,8 +623,12 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	// An already-attached toolset publishes too: a rename or slug change moves
 	// its entry in the generated package even though no attach ran, and
 	// disabling MCP drops the entry entirely — so the previous state counts as
-	// much as the new one.
-	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled, pluginCreated)
+	// much as the new one. Only the enable transition attached anything though,
+	// so only it may create the project's first marketplace.
+	s.triggerPluginPublish(ctx, authCtx,
+		existingToolset.McpEnabled || updatedToolset.McpEnabled,
+		!existingToolset.McpEnabled && updatedToolset.McpEnabled,
+		pluginCreated)
 
 	return toolsetDetails, nil
 }
