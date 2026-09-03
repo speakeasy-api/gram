@@ -3545,8 +3545,8 @@ func ValidateCreateRouteRequestBody(body *CreateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("data_source", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3565,8 +3565,8 @@ func ValidateUpdateRouteRequestBody(body *UpdateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

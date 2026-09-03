@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -43,7 +44,7 @@ func TestSignalRelayDestinationUsesConfiguredSignalEndpoint(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	relay := newSignalRelay(nil, nil, policy, "/v1/metrics", "metric")
+	relay := newSignalRelay(nil, nil, policy, dataexports.DataSourceProductTelemetry, "/v1/metrics", "metric")
 	destination, err := relay.newDestination(
 		relayTestRouteKey("organization-id", testLogProjectID),
 		server.URL,
@@ -68,7 +69,7 @@ func TestSignalRelayLoadsActiveDataExportRoute(t *testing.T) {
 	projectID := createRelayTestProject(t, db, "org-test")
 	headers := encryptRelayTestHeaders(t, enc, map[string]string{"Authorization": "Bearer route"})
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test/otlp", headers, "include")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 
 	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
 	require.NoError(t, err)
@@ -87,7 +88,7 @@ func TestSignalRelayReloadsRoutesThatMayExportSensitiveData(t *testing.T) {
 	projectID := createRelayTestProject(t, db, "org-test")
 	headers := encryptRelayTestHeaders(t, enc, nil)
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test/otlp", headers, "include")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 	key := relayRouteKey{organizationID: "org-test", projectID: projectID}
 
 	included, err := relay.destinationForRoute(t.Context(), key)
@@ -118,7 +119,7 @@ func TestSignalRelayTreatsUnknownSensitiveDataPolicyAsExclude(t *testing.T) {
 	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "unknown")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 
 	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
 	require.NoError(t, err)
@@ -163,8 +164,8 @@ func TestSignalRelayRoutesSameOrganizationProjectsIndependently(t *testing.T) {
 		encryptRelayTestHeaders(t, enc, map[string]string{"X-Project": "second"}),
 		"include",
 	)
-	createRelayTestRoute(t, db, "org-test", firstProjectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: firstDestination.ID, Valid: true})
-	createRelayTestRoute(t, db, "org-test", secondProjectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: secondDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", firstProjectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: firstDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", secondProjectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: secondDestination.ID, Valid: true})
 
 	first, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: firstProjectID})
 	require.NoError(t, err)
@@ -195,7 +196,7 @@ func TestSignalRelayReturnsNoDestinationForDisabledRoute(t *testing.T) {
 	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "exclude")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, false, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, false, uuid.NullUUID{UUID: destination.ID, Valid: true})
 
 	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
 	require.NoError(t, err)
@@ -207,7 +208,7 @@ func TestSignalRelayReturnsNoDestinationWithoutSelectedOtelDestination(t *testin
 
 	db, _, relay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	destination, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
 	require.NoError(t, err)
@@ -220,7 +221,7 @@ func TestSignalRelayReturnsNoDestinationForSoftDeletedRoute(t *testing.T) {
 	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "exclude")
-	route := createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	route := createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 	_, err := dataexportsrepo.New(db).SoftDeleteDataExportRoute(t.Context(), dataexportsrepo.SoftDeleteDataExportRouteParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
@@ -239,7 +240,7 @@ func TestSignalRelayReturnsNoDestinationForSoftDeletedDestination(t *testing.T) 
 	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
 	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "exclude")
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 	_, err := dataexportsrepo.New(db).SoftDeleteOtelDestination(t.Context(), dataexportsrepo.SoftDeleteOtelDestinationParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
@@ -252,17 +253,43 @@ func TestSignalRelayReturnsNoDestinationForSoftDeletedDestination(t *testing.T) 
 	require.Nil(t, loaded)
 }
 
-func TestSignalRelayIgnoresRoutesForOtherDataSources(t *testing.T) {
+func TestSignalRelaySelectsOnlyItsConfiguredDataSource(t *testing.T) {
 	t.Parallel()
 
-	db, enc, relay := newRelayRouteTest(t, "/v1/traces")
+	db, enc, productRelay := newRelayRouteTest(t, "/v1/traces")
 	projectID := createRelayTestProject(t, db, "org-test")
-	destination := createRelayTestDestination(t, db, "org-test", projectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "exclude")
-	createRelayTestRoute(t, db, "org-test", projectID, "risk_findings", true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	productDestination := createRelayTestDestination(
+		t,
+		db,
+		"org-test",
+		projectID,
+		"https://product.example.test/otlp",
+		encryptRelayTestHeaders(t, enc, map[string]string{"X-Source": "product"}),
+		"exclude",
+	)
+	riskDestination := createRelayTestDestination(
+		t,
+		db,
+		"org-test",
+		projectID,
+		"https://risk.example.test/otlp",
+		encryptRelayTestHeaders(t, enc, map[string]string{"X-Source": "risk"}),
+		"exclude",
+	)
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: productDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceRiskFindings, true, uuid.NullUUID{UUID: riskDestination.ID, Valid: true})
 
-	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
+	key := relayRouteKey{organizationID: "org-test", projectID: projectID}
+	product, err := productRelay.destinationForRoute(t.Context(), key)
 	require.NoError(t, err)
-	require.Nil(t, loaded)
+	require.Equal(t, "https://product.example.test/otlp/v1/traces", product.endpoint)
+	require.Equal(t, "product", product.headers.Get("X-Source"))
+
+	riskRelay := newSignalRelay(db, enc, productRelay.policy, dataexports.DataSourceRiskFindings, "/v1/logs", "risk finding")
+	risk, err := riskRelay.destinationForRoute(t.Context(), key)
+	require.NoError(t, err)
+	require.Equal(t, "https://risk.example.test/otlp/v1/logs", risk.endpoint)
+	require.Equal(t, "risk", risk.headers.Get("X-Source"))
 }
 
 func TestSignalRelayCannotResolveAnotherProjectRoute(t *testing.T) {
@@ -272,7 +299,7 @@ func TestSignalRelayCannotResolveAnotherProjectRoute(t *testing.T) {
 	configuredProjectID := createRelayTestProject(t, db, "org-test")
 	otherProjectID := createRelayTestProject(t, db, "org-test")
 	destination := createRelayTestDestination(t, db, "org-test", configuredProjectID, "https://collector.example.test", encryptRelayTestHeaders(t, enc, nil), "exclude")
-	createRelayTestRoute(t, db, "org-test", configuredProjectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", configuredProjectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 
 	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: otherProjectID})
 	require.NoError(t, err)
@@ -296,7 +323,7 @@ func TestSignalRelayFailsMalformedEncryptedHeaders(t *testing.T) {
 		pgtype.Text{String: "not-valid-ciphertext", Valid: true},
 		"exclude",
 	)
-	createRelayTestRoute(t, db, "org-test", projectID, relayDataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
 
 	loaded, err := relay.destinationForRoute(t.Context(), relayRouteKey{organizationID: "org-test", projectID: projectID})
 	require.ErrorContains(t, err, "decrypt destination headers")
@@ -322,7 +349,7 @@ func TestSignalRelayDestinationDrainsFailedResponses(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	relay := newSignalRelay(nil, nil, policy, "/v1/traces", "trace")
+	relay := newSignalRelay(nil, nil, policy, dataexports.DataSourceProductTelemetry, "/v1/traces", "trace")
 	destination, err := relay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, false)
 	require.NoError(t, err)
 
@@ -350,7 +377,7 @@ func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	permanentRelay := newSignalRelay(nil, nil, policy, "/permanent", "trace")
+	permanentRelay := newSignalRelay(nil, nil, policy, dataexports.DataSourceProductTelemetry, "/permanent", "trace")
 	permanentDestination, err := permanentRelay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, true)
 	require.NoError(t, err)
 
@@ -360,7 +387,7 @@ func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
 	require.NotContains(t, err.Error(), "\n")
 	require.NotContains(t, err.Error(), "\x07")
 
-	retryableRelay := newSignalRelay(nil, nil, policy, "/retryable", "trace")
+	retryableRelay := newSignalRelay(nil, nil, policy, dataexports.DataSourceProductTelemetry, "/retryable", "trace")
 	retryableDestination, err := retryableRelay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, true)
 	require.NoError(t, err)
 
@@ -373,7 +400,7 @@ func TestSignalRelayCacheReturnsActiveAndRemovesExpiredDestinations(t *testing.T
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	relay := newSignalRelay(nil, nil, nil, dataexports.DataSourceProductTelemetry, "", "trace")
 	active, activeTransport := newTrackedRelayDestination()
 	expired, expiredTransport := newTrackedRelayDestination()
 	activeKey := relayTestRouteKey("active", testLogProjectID)
@@ -403,7 +430,7 @@ func TestSignalRelayCacheIsolatesProjectsWithinOrganization(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	relay := newSignalRelay(nil, nil, nil, dataexports.DataSourceProductTelemetry, "", "trace")
 	first, _ := newTrackedRelayDestination()
 	second, _ := newTrackedRelayDestination()
 	firstKey := relayTestRouteKey("organization-id", testLogProjectID)
@@ -429,7 +456,7 @@ func TestSignalRelayCacheInsertionPrunesExpiredDestinations(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	relay := newSignalRelay(nil, nil, nil, dataexports.DataSourceProductTelemetry, "", "trace")
 	expired, expiredTransport := newTrackedRelayDestination()
 	expiredKey := relayTestRouteKey("expired", testLogProjectID)
 	newKey := relayTestRouteKey("new", testLogProjectID)
@@ -452,7 +479,7 @@ func TestSignalRelayCacheReplacementClosesOldDestination(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	relay := newSignalRelay(nil, nil, nil, dataexports.DataSourceProductTelemetry, "", "trace")
 	oldDestination, oldTransport := newTrackedRelayDestination()
 	newDestination, newTransport := newTrackedRelayDestination()
 	key := relayTestRouteKey("organization-id", testLogProjectID)
@@ -477,7 +504,7 @@ func TestSignalRelayCacheEvictsEarliestExpiryAtCapacity(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
-	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	relay := newSignalRelay(nil, nil, nil, dataexports.DataSourceProductTelemetry, "", "trace")
 	oldestDestination, oldestTransport := newTrackedRelayDestination()
 	oldestKey := relayTestRouteKey("organization-0000", testLogProjectID)
 	for i := range relayDestinationCacheMaxEntries {
@@ -537,7 +564,7 @@ func newRelayRouteTest(t *testing.T, endpointPath string) (*pgxpool.Pool, *encry
 	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return db, enc, newSignalRelay(db, enc, policy, endpointPath, "test")
+	return db, enc, newSignalRelay(db, enc, policy, dataexports.DataSourceProductTelemetry, endpointPath, "test")
 }
 
 func createRelayTestProject(t *testing.T, db *pgxpool.Pool, organizationID string) uuid.UUID {

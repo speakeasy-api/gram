@@ -14,7 +14,10 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { toError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
+import {
+  DataSource,
+  type DataSource as DataSourceValue,
+} from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportsForOrgResult } from "@gram/client/models/components/listdataexportsfororgresult.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
@@ -38,6 +41,24 @@ import {
 const EMPTY_PROJECTS: ProjectEntry[] = [];
 const EMPTY_DESTINATIONS: OtelDataExportDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
+
+const DATA_SOURCE_OPTIONS: Array<{
+  value: DataSourceValue;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: DataSource.ProductTelemetry,
+    label: "Product telemetry",
+    description:
+      "OTLP traces, logs, and metrics from MCP servers and tool calls.",
+  },
+  {
+    value: DataSource.RiskFindings,
+    label: "Risk findings",
+    description: "OTLP logs for findings detected by Gram risk scanners.",
+  },
+];
 
 type ExportRow = {
   route: DataExportRoute;
@@ -80,7 +101,7 @@ function visualSource({ route }: ProjectExportRow): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: "OTLP traces, logs, and metrics",
+    detail: sourceDescription(route.dataSource),
   };
 }
 
@@ -99,8 +120,17 @@ type DeleteCandidate = {
 };
 
 function sourceLabel(dataSource: string): string {
-  if (dataSource === DataSource.ProductTelemetry) return "Product telemetry";
-  return dataSource.replaceAll("_", " ");
+  return (
+    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
+    dataSource.replaceAll("_", " ")
+  );
+}
+
+function sourceDescription(dataSource: string): string {
+  return (
+    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)
+      ?.description ?? "OTLP data"
+  );
 }
 
 export default function DataExports(): JSX.Element {
@@ -183,8 +213,9 @@ function DataExportsInner(): JSX.Element {
     (state) =>
       !state.pending &&
       !state.error &&
-      !state.routes.some(
-        (route) => route.dataSource === DataSource.ProductTelemetry,
+      DATA_SOURCE_OPTIONS.some(
+        (source) =>
+          !state.routes.some((route) => route.dataSource === source.value),
       ),
   );
   const projectQueriesPending = exportsQuery.isPending;
@@ -194,14 +225,27 @@ function DataExportsInner(): JSX.Element {
   const createRoute = useCreateDataExportRouteMutation();
   const updateRoute = useUpdateDataExportRouteMutation();
   const deleteRoute = useDeleteDataExportRouteMutation();
-  const [configureProjectSlug, setConfigureProjectSlug] = useState<string>();
+  const [configureTarget, setConfigureTarget] = useState<{
+    projectSlug: string;
+    routeId?: string;
+  }>();
   const [deleteCandidate, setDeleteCandidate] = useState<DeleteCandidate>();
   const configureState = projectExports.find(
-    ({ project }) => project.slug === configureProjectSlug,
+    ({ project }) => project.slug === configureTarget?.projectSlug,
   );
   const configureRoute = configureState?.routes.find(
-    (route) => route.dataSource === DataSource.ProductTelemetry,
+    (route) => route.id === configureTarget?.routeId,
   );
+  const configureDataSources = configureRoute
+    ? DATA_SOURCE_OPTIONS.filter(
+        (source) => source.value === configureRoute.dataSource,
+      )
+    : DATA_SOURCE_OPTIONS.filter(
+        (source) =>
+          !configureState?.routes.some(
+            (route) => route.dataSource === source.value,
+          ),
+      );
   const configureProjects =
     configureState && configureRoute
       ? [configureState.project]
@@ -285,7 +329,7 @@ function DataExportsInner(): JSX.Element {
 
       await invalidateProjectExports(state.project.slug);
       toast.success(existingRoute ? "Export updated" : "Export configured");
-      setConfigureProjectSlug(undefined);
+      setConfigureTarget(undefined);
     } catch (error) {
       await invalidateProjectExports(state.project.slug);
       toast.error(`Failed to configure export: ${toError(error).message}`);
@@ -365,7 +409,9 @@ function DataExportsInner(): JSX.Element {
       <Button
         variant="primary"
         size="sm"
-        onClick={() => setConfigureProjectSlug(newExportProject.slug)}
+        onClick={() =>
+          setConfigureTarget({ projectSlug: newExportProject.slug })
+        }
       >
         New export
       </Button>
@@ -390,7 +436,12 @@ function DataExportsInner(): JSX.Element {
         <ExportMap
           exports={configuredExports}
           mutating={mutating}
-          onConfigure={(project) => setConfigureProjectSlug(project.slug)}
+          onConfigure={(project, route) =>
+            setConfigureTarget({
+              projectSlug: project.slug,
+              routeId: route.id,
+            })
+          }
           onToggle={(project, route, enabled) =>
             void handleToggleExport(project, route, enabled)
           }
@@ -434,9 +485,10 @@ function DataExportsInner(): JSX.Element {
 
       {configureState ? (
         <ConfigureExportSheet
-          key={`${configureState.project.slug}:${configureState.pending ? "pending" : "ready"}`}
+          key={`${configureState.project.slug}:${configureRoute?.id ?? "new"}:${configureState.pending ? "pending" : "ready"}`}
           projects={configureProjects}
           project={configureState.project}
+          dataSources={configureDataSources}
           destinations={configureState.destinations}
           route={configureRoute}
           loading={configureState.pending}
@@ -445,8 +497,8 @@ function DataExportsInner(): JSX.Element {
             createRoute.isPending ||
             updateRoute.isPending
           }
-          onClose={() => setConfigureProjectSlug(undefined)}
-          onProjectChange={setConfigureProjectSlug}
+          onClose={() => setConfigureTarget(undefined)}
+          onProjectChange={(projectSlug) => setConfigureTarget({ projectSlug })}
           onSave={handleSaveExport}
         />
       ) : null}
@@ -493,7 +545,7 @@ function ExportMap({
 }: {
   exports: ProjectExportRow[];
   mutating: boolean;
-  onConfigure: (project: ProjectEntry) => void;
+  onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
   onToggle: (
     project: ProjectEntry,
     route: DataExportRoute,
@@ -545,7 +597,7 @@ function ExportMap({
                           {
                             label: "Configure export",
                             icon: "pencil",
-                            onClick: () => onConfigure(project),
+                            onClick: () => onConfigure(project, route),
                           },
                           {
                             label: "Delete export",
