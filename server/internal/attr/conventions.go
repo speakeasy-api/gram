@@ -12,6 +12,8 @@ import (
 type Key = attribute.Key
 
 const (
+	WideEventKey = attribute.Key("gram.wide_event")
+
 	ErrorIDKey                       = attribute.Key("error.id")
 	ErrorMessageKey                  = attribute.Key("error.message")
 	ErrorStackKey                    = attribute.Key("error.stack")
@@ -64,6 +66,24 @@ const (
 	UserIDKey                            = semconv.UserIDKey
 	UserEmailKey                         = semconv.UserEmailKey
 	UserRolesKey                         = semconv.UserRolesKey
+
+	RequestAuthAccountTypeKey            = attribute.Key("req.auth_account_type")
+	RequestAuthAPIKeyIDKey               = attribute.Key("req.auth_api_key_id")
+	RequestAuthOrganizationIDKey         = attribute.Key("req.auth_organization_id")
+	RequestAuthOrganizationSlugKey       = attribute.Key("req.auth_organization_slug")
+	RequestAuthProjectIDKey              = attribute.Key("req.auth_project_id")
+	RequestAuthProjectSlugKey            = attribute.Key("req.auth_project_slug")
+	RequestAuthSchemeSessionKey          = attribute.Key("req.auth_scheme_session")
+	RequestAuthSchemeProjectKey          = attribute.Key("req.auth_scheme_project")
+	RequestAuthSchemeAPIKeyKey           = attribute.Key("req.auth_scheme_api_key")
+	RequestAuthUserEmailKey              = attribute.Key("req.auth_user_email")
+	RequestAuthUserIDKey                 = attribute.Key("req.auth_user_id")
+	RequestAuthUserExternalIDKey         = attribute.Key("req.auth_external_user_id")
+	RequestAuthSchemeAPIKeyErrorKey      = attribute.Key("req.auth_api_key_error")
+	RequestAuthSchemeSessionErrorKey     = attribute.Key("req.auth_session_error")
+	RequestAuthSchemeProjectSlugErrorKey = attribute.Key("req.auth_project_slug_error")
+	RequestCustomDomainIDKey             = attribute.Key("req.custom_domain_id")
+	RequestCustomDomainNameKey           = attribute.Key("req.custom_domain_name")
 
 	// UserAttributesKey and UserGroupsKey carry the denormalized WorkOS
 	// Directory Sync snapshot stamped onto telemetry logs at write time.
@@ -124,7 +144,6 @@ const (
 	AuthProjectIDKey         = attribute.Key("gram.auth.project_id")
 	AuthProjectSlugKey       = attribute.Key("gram.auth.project_slug")
 	AuthSchemeKey            = attribute.Key("gram.auth.scheme")
-	AuthSessionIDKey         = attribute.Key("gram.auth.session_id")
 	AuthUserEmailKey         = attribute.Key("gram.auth.user_email")
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
@@ -750,6 +769,9 @@ const (
 	VisibilityInternalValue = "internal"
 )
 
+func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
+func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
+
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
 
@@ -1009,6 +1031,107 @@ func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey),
 func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
 func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
 
+func RequestAuthAccountType(v string) attribute.KeyValue { return RequestAuthAccountTypeKey.String(v) }
+func SlogRequestAuthAccountType(v string) slog.Attr {
+	return slog.String(string(RequestAuthAccountTypeKey), v)
+}
+
+func RequestAuthAPIKeyID(v string) attribute.KeyValue { return RequestAuthAPIKeyIDKey.String(v) }
+func SlogRequestAuthAPIKeyID(v string) slog.Attr {
+	return slog.String(string(RequestAuthAPIKeyIDKey), v)
+}
+
+func RequestAuthOrganizationID(v string) attribute.KeyValue {
+	return RequestAuthOrganizationIDKey.String(v)
+}
+func SlogRequestAuthOrganizationID(v string) slog.Attr {
+	return slog.String(string(RequestAuthOrganizationIDKey), v)
+}
+
+func RequestAuthOrganizationSlug(v string) attribute.KeyValue {
+	return RequestAuthOrganizationSlugKey.String(v)
+}
+func SlogRequestAuthOrganizationSlug(v string) slog.Attr {
+	return slog.String(string(RequestAuthOrganizationSlugKey), v)
+}
+
+func RequestAuthProjectID(v string) attribute.KeyValue { return RequestAuthProjectIDKey.String(v) }
+func SlogRequestAuthProjectID(v string) slog.Attr {
+	return slog.String(string(RequestAuthProjectIDKey), v)
+}
+
+func RequestAuthProjectSlug(v string) attribute.KeyValue { return RequestAuthProjectSlugKey.String(v) }
+func SlogRequestAuthProjectSlug(v string) slog.Attr {
+	return slog.String(string(RequestAuthProjectSlugKey), v)
+}
+
+func RequestAuthSessionScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeSessionKey.Bool(matched)
+}
+func SlogRequestAuthSessionScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeSessionKey), matched)
+}
+func RequestAuthProjectScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeProjectKey.Bool(matched)
+}
+func SlogRequestAuthProjectScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeProjectKey), matched)
+}
+func RequestAuthAPIKeyScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeAPIKeyKey.Bool(matched)
+}
+func SlogRequestAuthAPIKeyScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeAPIKeyKey), matched)
+}
+
+func RequestAuthUserEmail(v string) attribute.KeyValue { return RequestAuthUserEmailKey.String(v) }
+func SlogRequestAuthUserEmail(v string) slog.Attr {
+	return slog.String(string(RequestAuthUserEmailKey), v)
+}
+
+func RequestAuthUserID(v string) attribute.KeyValue { return RequestAuthUserIDKey.String(v) }
+func SlogRequestAuthUserID(v string) slog.Attr      { return slog.String(string(RequestAuthUserIDKey), v) }
+
+func RequestAuthUserExternalID(v string) attribute.KeyValue {
+	return RequestAuthUserExternalIDKey.String(v)
+}
+func SlogRequestAuthUserExternalID(v string) slog.Attr {
+	return slog.String(string(RequestAuthUserExternalIDKey), v)
+}
+
+func RequestAuthSchemeAPIKeyError(v string) attribute.KeyValue {
+	return RequestAuthSchemeAPIKeyErrorKey.String(v)
+}
+func SlogRequestAuthSchemeAPIKeyError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeAPIKeyErrorKey), v)
+}
+
+func RequestAuthSchemeSessionError(v string) attribute.KeyValue {
+	return RequestAuthSchemeSessionErrorKey.String(v)
+}
+func SlogRequestAuthSchemeSessionError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeSessionErrorKey), v)
+}
+
+func RequestAuthSchemeProjectSlugError(v string) attribute.KeyValue {
+	return RequestAuthSchemeProjectSlugErrorKey.String(v)
+}
+func SlogRequestAuthSchemeProjectSlugError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeProjectSlugErrorKey), v)
+}
+
+func RequestCustomDomainID(v string) attribute.KeyValue { return RequestCustomDomainIDKey.String(v) }
+func SlogRequestCustomDomainID(v string) slog.Attr {
+	return slog.String(string(RequestCustomDomainIDKey), v)
+}
+
+func RequestCustomDomainName(v string) attribute.KeyValue {
+	return RequestCustomDomainNameKey.String(v)
+}
+func SlogRequestCustomDomainName(v string) slog.Attr {
+	return slog.String(string(RequestCustomDomainNameKey), v)
+}
+
 func APIKeyID(v string) attribute.KeyValue { return APIKeyIDKey.String(v) }
 func SlogAPIKeyID(v string) slog.Attr      { return slog.String(string(APIKeyIDKey), v) }
 
@@ -1119,9 +1242,6 @@ func SlogAuthProjectSlug(v string) slog.Attr      { return slog.String(string(Au
 
 func AuthScheme(v string) attribute.KeyValue { return AuthSchemeKey.String(v) }
 func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSchemeKey), v) }
-
-func AuthSessionID(v string) attribute.KeyValue { return AuthSessionIDKey.String(v) }
-func SlogAuthSessionID(v string) slog.Attr      { return slog.String(string(AuthSessionIDKey), v) }
 
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
