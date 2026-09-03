@@ -6,6 +6,7 @@ import {
 } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { getAdminServerUrl } from "@/lib/admin-server-url";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
@@ -45,11 +46,12 @@ import {
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const isPlatformAdmin = useIsPlatformAdmin();
-  const adminServerUrl = document
-    .querySelector<HTMLMetaElement>('meta[name="gram-admin-server-url"]')
-    ?.getAttribute("content");
-  const hasAdminServerUrl =
-    adminServerUrl && adminServerUrl !== "__GRAM_ADMIN_SERVER_URL__";
+  const adminServerUrl = getAdminServerUrl(
+    document
+      .querySelector<HTMLMetaElement>('meta[name="gram-admin-server-url"]')
+      ?.getAttribute("content"),
+    import.meta.env.DEV,
+  );
   const session = useSession();
   const organization = useOrganization();
   const navigate = useNavigate();
@@ -138,7 +140,7 @@ export function SidebarUserMenu(): JSX.Element {
                 </p>
               </div>
             </DropdownMenuLabel>
-            {isPlatformAdmin && hasAdminServerUrl && (
+            {isPlatformAdmin && adminServerUrl && (
               <DropdownMenuItem
                 asChild
                 className="text-muted-foreground hover:text-foreground absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground"

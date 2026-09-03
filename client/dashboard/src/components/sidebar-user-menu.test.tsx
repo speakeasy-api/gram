@@ -139,6 +139,30 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByRole("link", { name: "Platform admin" })).toBeNull();
   });
 
+  it.each(["not a URL", "javascript:alert(1)", "http://admin.example.invalid"])(
+    "hides the Platform admin link for unsafe URL %s",
+    (url) => {
+      configureAdminServerUrl(url);
+      render(<SidebarUserMenu />);
+
+      expect(screen.queryByRole("link", { name: "Platform admin" })).toBeNull();
+    },
+  );
+
+  it.each(["localhost", "127.0.0.1", "[::1]"])(
+    "allows HTTP for the development loopback host %s",
+    (host) => {
+      configureAdminServerUrl(`http://${host}:8080`);
+      render(<SidebarUserMenu />);
+
+      expect(
+        screen
+          .getByRole("link", { name: "Platform admin" })
+          .getAttribute("href"),
+      ).toBe(`http://${host}:8080`);
+    },
+  );
+
   it("links Roadmap to roadmap.speakeasy.com and has no GitHub issues link", () => {
     render(<SidebarUserMenu />);
     fireEvent.click(screen.getByTestId("user-menu-trigger"));
