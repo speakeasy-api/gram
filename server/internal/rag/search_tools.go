@@ -241,6 +241,10 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// HNSW applies filters after approximate candidate selection. Iterative scanning
+	// expands the candidate window when toolset or tag filters remove candidates,
+	// while strict_order preserves distance ordering. SET LOCAL confines this
+	// behavior to the current search transaction.
 	if _, err := dbtx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = strict_order"); err != nil {
 		return nil, fmt.Errorf("configure filtered tool search: %w", err)
 	}
