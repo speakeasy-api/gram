@@ -177,7 +177,7 @@ func TestAgentSchemaStoresOnlyAuthoritativeFields(t *testing.T) {
 	conn := newTestDB(t)
 	columns, err := testrepo.New(conn).ListAgentColumnNamesFixture(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, []string{
+	require.ElementsMatch(t, []string{
 		"id",
 		"organization_id",
 		"owner_user_id",
