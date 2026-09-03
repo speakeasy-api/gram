@@ -1650,6 +1650,7 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   metadata JSONB NOT NULL,
+  authorization_server_issuer TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1657,7 +1658,13 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_oauth_server_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT external_oauth_server_metadata_authorization_server_issuer_check CHECK (
+    authorization_server_issuer IS NULL OR (
+      authorization_server_issuer <> '' AND
+      CHAR_LENGTH(authorization_server_issuer) <= 500
+    )
+  )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_server_metadata_project_slug_key
