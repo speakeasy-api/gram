@@ -186,10 +186,41 @@ func TestEnvelopeVSCodeCopilotPreToolUse(t *testing.T) {
 	agenthookstest.Invoke(t, runner, agenthooks.ProviderVSCodeCopilot, payload)
 
 	require.Equal(t, "vscode-copilot", got.Source.Adapter)
+	require.NotNil(t, got.Source.RawEventName)
 	require.Equal(t, "PreToolUse", *got.Source.RawEventName)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.NotNil(t, got.Data)
+	require.NotNil(t, got.Data.ToolCall)
+	require.NotNil(t, got.Data.ToolCall.Name)
 	require.Equal(t, "run_in_terminal", *got.Data.ToolCall.Name)
 	require.Equal(t, agenthooks.ToolShell, canonical)
+}
+
+func TestVSCodeCopilotObserveEventsRelay(t *testing.T) {
+	tests := []struct {
+		eventName string
+		payload   string
+	}{
+		{eventName: "SubagentStart", payload: `{"hook_event_name":"SubagentStart","session_id":"vs-subagent","agent_id":"agent-1","agent_type":"task","cwd":"/work/repo"}`},
+		{eventName: "PreCompact", payload: `{"hook_event_name":"PreCompact","session_id":"vs-compact","trigger":"auto","custom_instructions":"preserve context","cwd":"/work/repo"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.eventName, func(t *testing.T) {
+			fs := newFakeServer(t, nil)
+			cfg := authedConfig(t, fs.URL)
+
+			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, []byte(tt.payload))
+
+			require.Equal(t, 0, res.ExitCode)
+			require.Equal(t, 1, fs.count())
+			got := fs.last()
+			require.Equal(t, "vscode-copilot", got.Source.Adapter)
+			require.NotNil(t, got.Source.RawEventName)
+			require.Equal(t, tt.eventName, *got.Source.RawEventName)
+			require.Equal(t, components.TypeSessionUpdated, got.Event.Type)
+		})
+	}
 }
 
 func TestRatchetVSCodeCopilotUsesNestedDeny(t *testing.T) {

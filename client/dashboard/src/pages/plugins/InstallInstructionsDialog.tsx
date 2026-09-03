@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
@@ -791,31 +792,37 @@ export function CopilotInstallContent(): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("copilot", "observability-copilot.zip");
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
+  const isDeviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
 
   return (
     <div className="min-w-0 space-y-6">
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          GitHub Copilot in VS Code
-        </h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Install the Speakeasy Device Agent to sync your assigned Copilot
-          plugin and create the VS Code hook registration automatically.
-        </p>
-        <Button variant="secondary" size="sm" asChild>
-          <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
-        </Button>
-        <p className="text-muted-foreground mt-2 text-xs">
-          Launch Copilot once so its configuration directory exists. The agent
-          reconciles within 60 seconds; reload VS Code after{" "}
-          <code className="bg-muted px-1 py-0.5">
-            ~/.copilot/hooks/agenthooks-vscode.json
-          </code>{" "}
-          appears.
-        </p>
-      </div>
+      {isDeviceAgentEnabled && (
+        <>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              GitHub Copilot in VS Code
+            </h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Install the Speakeasy Device Agent to sync your assigned Copilot
+              plugin and create the VS Code hook registration automatically.
+            </p>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
+            </Button>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Launch Copilot once so its configuration directory exists. The
+              agent reconciles within 60 seconds; reload VS Code after{" "}
+              <code className="bg-muted px-1 py-0.5">
+                ~/.copilot/hooks/agenthooks-vscode.json
+              </code>{" "}
+              appears.
+            </p>
+          </div>
 
-      <div className="border-t" />
+          <div className="border-t" />
+        </>
+      )}
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Copilot CLI</h3>

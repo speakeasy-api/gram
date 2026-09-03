@@ -377,7 +377,7 @@ Registered CLI events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `pre
 
 Four differences from the other dialects, each load-bearing:
 
-| Field                 | Copilot                | Why                                                                                                                                                                                |
+| Field                 | Copilot CLI            | Why                                                                                                                                                                                |
 | --------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `matcher`             | **absent**             | An empty matcher is a validation error that discards this plugin's entire hook config. Absent means match-all — the semantic the other dialects' `"matcher": ""` was reaching for. |
 | `timeoutSec`          | seconds                | Copilot's own default is 30s. Claude and Cursor spell the same field `timeout`.                                                                                                    |
