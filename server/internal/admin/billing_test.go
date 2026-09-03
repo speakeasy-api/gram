@@ -121,7 +121,7 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
 		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true},
-		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: nil, DisableCausesClassified: false},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"admin_lock"}, DisableCausesClassified: true},
 	}, result)
 }
 
