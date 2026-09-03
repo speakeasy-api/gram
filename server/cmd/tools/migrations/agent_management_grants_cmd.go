@@ -94,10 +94,29 @@ func parseAgentManagementGrantsFlags(args []string, getenv func(string) string) 
 	if dbURL == "" {
 		return agentManagementGrantsConfig{}, errors.New("GRAM_DATABASE_URL is required")
 	}
+	if err := validateAgentManagementGrantsDatabaseURL(dbURL); err != nil {
+		return agentManagementGrantsConfig{}, err
+	}
 	return agentManagementGrantsConfig{
 		dbURL: dbURL, environment: *environment, codeSHA: getenv("GRAM_CODE_SHA"), mode: mode,
 		batchSize: *batchSize, sampleLimit: *sampleLimit, lockTimeout: *lockTimeout, statementTimeout: *statementTimeout,
 	}, nil
+}
+
+func validateAgentManagementGrantsDatabaseURL(databaseURL string) error {
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return errors.New("GRAM_DATABASE_URL is invalid")
+	}
+	if config.ConnConfig.TLSConfig == nil {
+		return errors.New("GRAM_DATABASE_URL must require TLS without plaintext fallbacks")
+	}
+	for _, fallback := range config.ConnConfig.Fallbacks {
+		if fallback.TLSConfig == nil {
+			return errors.New("GRAM_DATABASE_URL must require TLS without plaintext fallbacks")
+		}
+	}
+	return nil
 }
 
 func runAgentManagementGrants(args []string, stdout io.Writer, getenv func(string) string) int {
@@ -148,6 +167,9 @@ func agentManagementGrantsErrorCategory(err error) string {
 		return "database_or_timeout"
 	default:
 		if _, ok := errors.AsType[*pgconn.PgError](err); ok {
+			return "database_or_timeout"
+		}
+		if _, ok := errors.AsType[*pgconn.ConnectError](err); ok {
 			return "database_or_timeout"
 		}
 		return "unexpected"

@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/agentmanagementgrants"
@@ -28,7 +30,7 @@ func TestParseAgentManagementGrantsFlags(t *testing.T) {
 			getenv := func(key string) string {
 				switch key {
 				case "GRAM_DATABASE_URL":
-					return "postgres://test"
+					return "postgres://test?sslmode=require"
 				case "GRAM_ENVIRONMENT":
 					return test.environment
 				default:
@@ -47,7 +49,7 @@ func TestParseAgentManagementGrantsFlagsRejectsUnsafeModes(t *testing.T) {
 	getenv := func(key string) string {
 		switch key {
 		case "GRAM_DATABASE_URL":
-			return "postgres://test"
+			return "postgres://test?sslmode=require"
 		case "GRAM_ENVIRONMENT":
 			return "staging"
 		default:
@@ -67,6 +69,32 @@ func TestParseAgentManagementGrantsFlagsRejectsUnsafeModes(t *testing.T) {
 		_, err := parseAgentManagementGrantsFlags(args, getenv)
 		require.Error(t, err)
 	}
+}
+
+func TestParseAgentManagementGrantsFlagsRejectsPlaintextDatabaseConnections(t *testing.T) {
+	t.Parallel()
+
+	for _, databaseURL := range []string{
+		"postgres://test",
+		"postgres://test?sslmode=allow",
+		"postgres://test?sslmode=disable",
+		"postgres://test?sslmode=prefer",
+	} {
+		getenv := func(key string) string {
+			if key == "GRAM_DATABASE_URL" {
+				return databaseURL
+			}
+			return ""
+		}
+		_, err := parseAgentManagementGrantsFlags([]string{"-environment=staging"}, getenv)
+		require.ErrorContains(t, err, "must require TLS")
+	}
+}
+
+func TestAgentManagementGrantsErrorCategoryIncludesConnectionErrors(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("connect: %w", &pgconn.ConnectError{})
+	require.Equal(t, "database_or_timeout", agentManagementGrantsErrorCategory(err))
 }
 
 func TestAgentManagementGrantsSummaryIsBoundedAndContainsNoUserData(t *testing.T) {

@@ -2,7 +2,6 @@
 package agentmanagementgrants
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -202,7 +201,7 @@ WHERE id = $1`, id).Scan(
 func countCanonicalGrants(t *testing.T, pool *pgxpool.Pool, organizationID, principalURN string) int64 {
 	t.Helper()
 	var count int64
-	err := pool.QueryRow(context.Background(), `
+	err := pool.QueryRow(t.Context(), `
 SELECT COUNT(*)
 FROM principal_grants
 WHERE organization_id = $1
