@@ -273,6 +273,21 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const createOwnerlessAgentFixture = `-- name: CreateOwnerlessAgentFixture :exec
+INSERT INTO agents (organization_id, owner_user_id, name)
+VALUES ($1, NULL, $2)
+`
+
+type CreateOwnerlessAgentFixtureParams struct {
+	OrganizationID string
+	Name           string
+}
+
+func (q *Queries) CreateOwnerlessAgentFixture(ctx context.Context, arg CreateOwnerlessAgentFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOwnerlessAgentFixture, arg.OrganizationID, arg.Name)
+	return err
+}
+
 const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
 CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
 BEGIN
@@ -346,6 +361,21 @@ type DeleteOpenRouterSpendDayFixtureParams struct {
 // Test-only fixture: creates an incomplete historical month.
 func (q *Queries) DeleteOpenRouterSpendDayFixture(ctx context.Context, arg DeleteOpenRouterSpendDayFixtureParams) error {
 	_, err := q.db.Exec(ctx, deleteOpenRouterSpendDayFixture, arg.OrganizationID, arg.KeyType, arg.Day)
+	return err
+}
+
+const deleteOrganizationUserRelationshipFixture = `-- name: DeleteOrganizationUserRelationshipFixture :exec
+DELETE FROM organization_user_relationships
+WHERE organization_id = $1 AND user_id = $2
+`
+
+type DeleteOrganizationUserRelationshipFixtureParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context, arg DeleteOrganizationUserRelationshipFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationshipFixture, arg.OrganizationID, arg.UserID)
 	return err
 }
 
@@ -1318,6 +1348,33 @@ func (q *Queries) IsQueryBlockedOnLockFixture(ctx context.Context, queryPattern 
 	return exists, err
 }
 
+const listAgentColumnNamesFixture = `-- name: ListAgentColumnNamesFixture :many
+SELECT column_name::text
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'agents'
+ORDER BY ordinal_position
+`
+
+func (q *Queries) ListAgentColumnNamesFixture(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentColumnNamesFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var column_name string
+		if err := rows.Scan(&column_name); err != nil {
+			return nil, err
+		}
+		items = append(items, column_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
@@ -2237,6 +2294,81 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
+UPDATE agents
+SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetAgentInvalidLifecycleFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentInvalidLifecycleFixture, id)
+	return err
+}
+
+const setAgentOwnerLatchFixture = `-- name: SetAgentOwnerLatchFixture :exec
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = $1
+`
+
+func (q *Queries) SetAgentOwnerLatchFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentOwnerLatchFixture, id)
+	return err
+}
+
+const setAgentOwnerLatchReasonOnlyFixture = `-- name: SetAgentOwnerLatchReasonOnlyFixture :exec
+UPDATE agents SET owner_reassignment_reason = 'owner unavailable' WHERE id = $1
+`
+
+func (q *Queries) SetAgentOwnerLatchReasonOnlyFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentOwnerLatchReasonOnlyFixture, id)
+	return err
+}
+
+const setAgentOwnerLatchTimestampOnlyFixture = `-- name: SetAgentOwnerLatchTimestampOnlyFixture :exec
+UPDATE agents SET owner_reassignment_required_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SetAgentOwnerLatchTimestampOnlyFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentOwnerLatchTimestampOnlyFixture, id)
+	return err
+}
+
+const setAgentRevokedAndOwnerLatchFixture = `-- name: SetAgentRevokedAndOwnerLatchFixture :exec
+UPDATE agents
+SET suspended_at = NULL,
+    revoked_at = clock_timestamp(),
+    owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = $1
+`
+
+func (q *Queries) SetAgentRevokedAndOwnerLatchFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentRevokedAndOwnerLatchFixture, id)
+	return err
+}
+
+const setAgentRevokedFixture = `-- name: SetAgentRevokedFixture :exec
+UPDATE agents
+SET suspended_at = NULL, revoked_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetAgentRevokedFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentRevokedFixture, id)
+	return err
+}
+
+const setAgentSuspendedFixture = `-- name: SetAgentSuspendedFixture :exec
+UPDATE agents SET suspended_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SetAgentSuspendedFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setAgentSuspendedFixture, id)
+	return err
+}
+
 const setDeploymentFunctionInfraOverrides = `-- name: SetDeploymentFunctionInfraOverrides :exec
 UPDATE deployments_functions SET memory_mib_override = $1, scale_override = $2 WHERE deployment_id = $3
 `
@@ -2565,6 +2697,15 @@ type SetWorkosLastEventIDFixtureParams struct {
 // get wrong while still compiling.
 func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
 	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
+	return err
+}
+
+const softDeleteAgentFixture = `-- name: SoftDeleteAgentFixture :exec
+UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteAgentFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteAgentFixture, id)
 	return err
 }
 

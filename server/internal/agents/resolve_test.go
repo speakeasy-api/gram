@@ -1,17 +1,19 @@
 package agents
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestResolvePrincipalIsTenantScopedAndFailClosed(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org_one")
 	seedOrganization(t, conn, "org_two")
@@ -36,7 +38,7 @@ func TestResolvePrincipalIsTenantScopedAndFailClosed(t *testing.T) {
 	_, err = ResolvePrincipal(t.Context(), conn, "org_one", missing)
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
-	_, err = conn.Exec(t.Context(), `UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1`, agent.ID)
+	err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), agent.ID)
 	require.NoError(t, err)
 	_, err = ResolvePrincipal(t.Context(), conn, "org_one", principal)
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
@@ -51,6 +53,6 @@ func TestResolvePrincipalIsTenantScopedAndFailClosed(t *testing.T) {
 	conn.Close()
 	_, err = ResolvePrincipal(t.Context(), conn, "org_one", missing)
 	require.Error(t, err)
-	require.False(t, errors.Is(err, ErrPrincipalInvalid))
-	require.False(t, errors.Is(err, ErrPrincipalNotFound))
+	require.NotErrorIs(t, err, ErrPrincipalInvalid)
+	require.NotErrorIs(t, err, ErrPrincipalNotFound)
 }
