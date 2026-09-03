@@ -8,6 +8,8 @@ import (
 )
 
 func TestRollbackTransactionIgnoresRequestCancellation(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.WithValue(t.Context(), rollbackContextKey{}, "value")
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()

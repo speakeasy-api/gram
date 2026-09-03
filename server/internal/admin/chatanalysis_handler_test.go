@@ -176,6 +176,7 @@ func TestTriggerOrganizationChatAnalysis_RejectsUnknownAndTrailingJSON(t *testin
 		"trailing": `{"organization_id":"org_unused"}{}`,
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(body))
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()

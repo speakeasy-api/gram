@@ -3,6 +3,7 @@ package productfeatures
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -119,13 +120,19 @@ func (m *Mutator) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organi
 	setFeatureState := func(feature Feature, state bool) (bool, error) {
 		if state {
 			inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
-			return inserted > 0, err
+			if err != nil {
+				return false, fmt.Errorf("enable feature %q: %w", feature, err)
+			}
+			return inserted > 0, nil
 		}
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
-		return err == nil, err
+		if err != nil {
+			return false, fmt.Errorf("disable feature %q: %w", feature, err)
+		}
+		return true, nil
 	}
 
 	enforcedChanged, err := setFeatureState(FeatureRemoteSessionAutoRefreshEnforced, false)

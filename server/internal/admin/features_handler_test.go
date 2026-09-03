@@ -204,6 +204,7 @@ func TestSetOrganizationFeature_RejectsUnknownAndTrailingJSON(t *testing.T) {
 		"trailing": `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true}{}`,
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(body))
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()
@@ -232,19 +233,6 @@ func setAdminOrganizationFeature(
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, "feature=%s body=%s", feature, rec.Body.String())
-
-	var result adminOrganizationFeaturesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	return result
-}
-
-func getAdminOrganizationFeatures(t *testing.T, handler http.Handler, sessionID, orgID string) adminOrganizationFeaturesResponse {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
-	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
 
 	var result adminOrganizationFeaturesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))

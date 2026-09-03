@@ -264,14 +264,14 @@ func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOr
 	actor, displayName, _ := adminActor(ctx)
 	mutator := productfeatures.NewMutator(s.productFeatures, s.audit)
 	feature := productfeatures.Feature(payload.FeatureName)
-	mutationActor := productfeatures.MutationActor{Principal: actor, DisplayName: displayName}
+	mutationActor := productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}
 	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
 		err = mutator.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, payload.Enabled, mutationActor)
 	} else {
 		err = mutator.SetFeature(ctx, organizationID, feature, payload.Enabled, mutationActor)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set organization feature: %w", err)
 	}
 	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }

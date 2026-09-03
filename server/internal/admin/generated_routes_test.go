@@ -47,6 +47,7 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
+	unauthenticatedHandler := handler
 
 	for name, request := range map[string]*http.Request{
 		"session":          httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
@@ -58,8 +59,9 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 		"open dashboard":   httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, request)
+			unauthenticatedHandler.ServeHTTP(rec, request)
 			require.Equal(t, http.StatusUnauthorized, rec.Code)
 		})
 	}

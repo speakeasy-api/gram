@@ -12,7 +12,11 @@ import (
 )
 
 func (s *Service) authorizeAdminRequest(r *http.Request) (context.Context, error) {
-	scheme := security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}
+	scheme := security.APIKeyScheme{
+		Name:           constants.AdminAuthSecurityScheme,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
 	ctx, err := s.verifier.Authorize(r.Context(), "", &scheme)
 	if err != nil {
 		return nil, fmt.Errorf("admin auth: %w", err)
