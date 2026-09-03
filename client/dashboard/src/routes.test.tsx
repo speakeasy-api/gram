@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -19,6 +19,23 @@ function LocationPath(): JSX.Element {
   return <output>{location.pathname + location.search + location.hash}</output>;
 }
 
+function GoToExploreDemo(): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          routes.exploreDemo.goTo();
+        }}
+      >
+        go
+      </button>
+      <LocationPath />
+    </>
+  );
+}
+
 describe("project routes", () => {
   it("exposes the standalone guide route", () => {
     render(
@@ -28,6 +45,18 @@ describe("project routes", () => {
     );
 
     expect(screen.getByText("/org/projects/project/guide")).toBeTruthy();
+  });
+
+  it("navigates to absolute routes through goTo", () => {
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project"]}>
+        <GoToExploreDemo />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("go"));
+
+    expect(screen.getByText("/explore-demo")).toBeTruthy();
   });
 });
 
