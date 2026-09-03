@@ -3974,6 +3974,14 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 	} else {
 		res.PromptTemplates = []*PromptTemplateEntryResponseBody{}
 	}
+	if v.TopLevelToolUrns != nil {
+		res.TopLevelToolUrns = make([]string, len(v.TopLevelToolUrns))
+		for i, val := range v.TopLevelToolUrns {
+			res.TopLevelToolUrns[i] = val
+		}
+	} else {
+		res.TopLevelToolUrns = []string{}
+	}
 	if v.Origin != nil {
 		res.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(v.Origin)
 	}

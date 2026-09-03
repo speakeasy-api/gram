@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -824,4 +825,171 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 2, "re-enabling an already-enabled toolset must not double-attach")
+}
+
+func TestToolsetsService_UpdateToolset_TopLevelToolUrns(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createPetstoreDeployment(t, ctx, ti)
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools from petstore")
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Top Level Tools",
+		Description:            new("Dynamic top-level tools"),
+		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.TopLevelToolUrns)
+
+	pinned := tools[0].ToolUrn.String()
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       []string{pinned},
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{pinned}, updated.TopLevelToolUrns)
+
+	cleared, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       []string{},
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, cleared.TopLevelToolUrns)
+}
+
+func TestToolsetsService_UpdateToolset_TopLevelToolUrnsRejectUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createPetstoreDeployment(t, ctx, ti)
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.GreaterOrEqual(t, len(tools), 1, "expected at least 1 tool from petstore")
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Unknown Top Level",
+		Description:            nil,
+		ToolUrns:               []string{tools[0].ToolUrn.String()},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       []string{"tools:http:missing:tool"},
+		ProjectSlugInput:       nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestToolsetsService_UpdateToolset_PrunesTopLevelWhenToolsRemoved(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createPetstoreDeployment(t, ctx, ti)
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools from petstore")
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Prune Top Level",
+		Description:            nil,
+		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       []string{tools[0].ToolUrn.String()},
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	pruned, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               []string{tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
+		TopLevelToolUrns:       nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, pruned.TopLevelToolUrns)
+	require.Equal(t, []string{tools[1].ToolUrn.String()}, pruned.ToolUrns)
 }

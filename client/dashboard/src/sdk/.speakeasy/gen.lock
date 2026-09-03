@@ -3255,7 +3255,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-08-30T03:23:36.997Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 29048}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 920071, "updated_at": "2025-07-24T13:29:21.934Z"}
+          application/json: {"account_type": "<value>", "created_at": "2024-08-30T03:23:36.997Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 29048}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 920071, "top_level_tool_urns": [], "updated_at": "2025-07-24T13:29:21.934Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -3580,7 +3580,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-07-26T03:45:28.599Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 604042}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-01-02T11:30:40.444Z", "description": "times yieldingly until boo pertain", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>"], "updated_at": "2025-06-09T17:56:05.845Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 441950, "updated_at": "2024-08-20T09:56:27.633Z"}
+          application/json: {"account_type": "<value>", "created_at": "2024-07-26T03:45:28.599Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 604042}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-01-02T11:30:40.444Z", "description": "times yieldingly until boo pertain", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>"], "updated_at": "2025-06-09T17:56:05.845Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 441950, "top_level_tool_urns": [], "updated_at": "2024-08-20T09:56:27.633Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4199,7 +4199,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 446545}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 354797, "updated_at": "2025-02-12T06:01:44.569Z"}
+          application/json: {"account_type": "<value>", "created_at": "2026-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 446545}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "toolset_version": 354797, "top_level_tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2025-02-12T06:01:44.569Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6377,7 +6377,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-06-21T22:46:40.439Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 888562}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-09-11T05:25:33.891Z", "description": "tired yet gah", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2025-10-11T13:53:11.124Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [{}], "toolset_version": 331769, "updated_at": "2024-09-17T10:48:55.904Z"}
+          application/json: {"account_type": "<value>", "created_at": "2024-06-21T22:46:40.439Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 888562}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-09-11T05:25:33.891Z", "description": "tired yet gah", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2025-10-11T13:53:11.124Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [{}], "toolset_version": 331769, "top_level_tool_urns": [], "updated_at": "2024-09-17T10:48:55.904Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8775,7 +8775,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-08-29T05:28:04.458Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 244787}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 873871, "updated_at": "2024-09-04T10:55:03.232Z"}
+          application/json: {"account_type": "<value>", "created_at": "2024-08-29T05:28:04.458Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 244787}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 873871, "top_level_tool_urns": [], "updated_at": "2024-09-04T10:55:03.232Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9531,7 +9531,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-11-23T05:03:04.400Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 880036}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 1836, "updated_at": "2025-03-04T23:02:16.729Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-11-23T05:03:04.400Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 880036}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "toolset_version": 1836, "top_level_tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2025-03-04T23:02:16.729Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9545,7 +9545,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-09-08T18:44:39.379Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 16455}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 503506, "updated_at": "2024-09-22T05:20:40.508Z"}
+          application/json: {"account_type": "<value>", "created_at": "2026-09-08T18:44:39.379Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 16455}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 503506, "top_level_tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-09-22T05:20:40.508Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10289,7 +10289,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 337241}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-09-02T01:42:31.498Z", "description": "dearest phew blissfully about meh yearly phooey huzzah", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-03-29T07:07:07.497Z"}], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 517781, "updated_at": "2025-07-15T12:30:29.804Z"}
+          application/json: {"account_type": "<value>", "created_at": "2026-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 337241}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2026-09-02T01:42:31.498Z", "description": "dearest phew blissfully about meh yearly phooey huzzah", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-03-29T07:07:07.497Z"}], "resource_urns": ["<value 1>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>"], "tools": [], "toolset_version": 517781, "top_level_tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-07-15T12:30:29.804Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

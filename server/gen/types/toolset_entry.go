@@ -49,6 +49,9 @@ type ToolsetEntry struct {
 	McpEnabled *bool
 	// The mode to use for tool selection
 	ToolSelectionMode string
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The registry lineage for toolsets installed from an external MCP catalog

@@ -87238,6 +87238,11 @@ components:
                     type: integer
                     description: The version of the toolset (will be 0 if none exists)
                     format: int64
+                top_level_tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -87259,6 +87264,7 @@ components:
                 - slug
                 - tools
                 - tool_selection_mode
+                - top_level_tool_urns
                 - toolset_version
                 - prompt_templates
                 - tool_urns
@@ -87363,6 +87369,11 @@ components:
                     items:
                         $ref: '#/components/schemas/ToolEntry'
                     description: The tools in this toolset
+                top_level_tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -87375,6 +87386,7 @@ components:
                 - slug
                 - tools
                 - tool_selection_mode
+                - top_level_tool_urns
                 - prompt_templates
                 - tool_urns
                 - resources
@@ -89471,6 +89483,11 @@ components:
                     items:
                         type: string
                     description: List of tool URNs to include in the toolset
+                top_level_tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
             required:
                 - slug
         UpdateToolsetRequestBody:
@@ -89519,6 +89536,11 @@ components:
                     items:
                         type: string
                     description: List of tool URNs to include in the toolset
+                top_level_tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
         UpdateTriggerInstanceForm:
             type: object
             properties:

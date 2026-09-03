@@ -144,6 +144,10 @@ export type Toolset = {
    */
   toolsetVersion: number;
   /**
+   * Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode
+   */
+  topLevelToolUrns: Array<string>;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -195,6 +199,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     tool_variations_group_id: z.optional(z.string()),
     tools: z.array(Tool$inboundSchema),
     toolset_version: z.int(),
+    top_level_tool_urns: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -225,6 +230,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "tool_urns": "toolUrns",
       "tool_variations_group_id": "toolVariationsGroupId",
       "toolset_version": "toolsetVersion",
+      "top_level_tool_urns": "topLevelToolUrns",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
       "user_session_issuer_slug": "userSessionIssuerSlug",

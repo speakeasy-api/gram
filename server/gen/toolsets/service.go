@@ -291,7 +291,10 @@ type UpdateToolsetPayload struct {
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string
-	ProjectSlugInput  *string
+	// Tool URNs listed next to search_tools, describe_tools, and execute_tool when
+	// the toolset is served in dynamic mode
+	TopLevelToolUrns []string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

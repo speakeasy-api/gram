@@ -90,6 +90,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
+	Attribute("top_level_tool_urns", ArrayOf(String), "Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
@@ -104,7 +105,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "oauth_enablement_metadata", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "top_level_tool_urns", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "oauth_enablement_metadata", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {
@@ -131,6 +132,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
+	Attribute("top_level_tool_urns", ArrayOf(String), "Tool URNs listed next to search_tools, describe_tools, and execute_tool when the toolset is served in dynamic mode")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("created_at", String, func() {
@@ -141,7 +143,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "slug", "tools", "tool_selection_mode", "top_level_tool_urns", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ToolsetSummary = Type("ToolsetSummary", func() {

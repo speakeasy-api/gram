@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -545,6 +546,29 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.ToolSelectionMode = *payload.ToolSelectionMode
 	}
 
+	effectiveToolUrns := existingView.ToolUrns
+	if payload.ToolUrns != nil {
+		effectiveToolUrns = payload.ToolUrns
+	}
+
+	topLevelToolUrns := conv.DefaultSlice(existingToolset.TopLevelToolUrns, []string{})
+	writeTopLevel := false
+	switch {
+	case payload.TopLevelToolUrns != nil:
+		normalized, err := normalizeTopLevelToolUrns(payload.TopLevelToolUrns, effectiveToolUrns)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "top-level tool URNs must belong to this toolset").LogWarn(ctx, logger)
+		}
+		topLevelToolUrns = normalized
+		writeTopLevel = true
+	case payload.ToolUrns != nil:
+		pruned := intersectToolUrns(existingToolset.TopLevelToolUrns, payload.ToolUrns)
+		if !slices.Equal(pruned, topLevelToolUrns) {
+			topLevelToolUrns = pruned
+			writeTopLevel = true
+		}
+	}
+
 	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
 	if err != nil {
 		return nil, err
@@ -553,6 +577,17 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
+	}
+
+	if writeTopLevel {
+		updatedToolset, err = tr.SetToolsetTopLevelToolUrns(ctx, repo.SetToolsetTopLevelToolUrnsParams{
+			Slug:             updatedToolset.Slug,
+			ProjectID:        *authCtx.ProjectID,
+			TopLevelToolUrns: topLevelToolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error updating top-level tool URNs").LogError(ctx, logger)
+		}
 	}
 
 	var pluginCreated bool
@@ -851,6 +886,17 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").LogError(ctx, logger)
+	}
+
+	if len(originalToolset.TopLevelToolUrns) > 0 {
+		clonedToolset, err = tr.SetToolsetTopLevelToolUrns(ctx, repo.SetToolsetTopLevelToolUrnsParams{
+			Slug:             clonedToolset.Slug,
+			ProjectID:        *authCtx.ProjectID,
+			TopLevelToolUrns: originalToolset.TopLevelToolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone top-level tool URNs").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{

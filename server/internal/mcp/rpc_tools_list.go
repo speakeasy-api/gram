@@ -140,6 +140,12 @@ func handleToolsList(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").LogError(ctx, logger)
 		}
+
+		topLevel, topLevelErr := buildTopLevelDynamicTools(ctx, logger, guardianPolicy, db, env, payload, toolset, platformExtras)
+		if topLevelErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, topLevelErr, "failed to build top-level dynamic tools").LogError(ctx, logger)
+		}
+		tools = append(tools, topLevel...)
 	case ToolModeStatic:
 		fallthrough
 	default:
@@ -284,6 +290,65 @@ func buildToolListEntries(
 	}
 
 	return tools, nil
+}
+
+func buildTopLevelDynamicTools(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	envLoader toolconfig.EnvironmentLoader,
+	payload *mcpInputs,
+	toolset *types.Toolset,
+	platformExtras []platformtools.ExternalTool,
+) ([]*toolListEntry, error) {
+	if len(toolset.TopLevelToolUrns) == 0 {
+		return nil, nil
+	}
+
+	wanted := make(map[string]struct{}, len(toolset.TopLevelToolUrns))
+	for _, u := range toolset.TopLevelToolUrns {
+		wanted[u] = struct{}{}
+	}
+
+	filtered := make([]*types.Tool, 0, len(wanted))
+	for _, tool := range toolset.Tools {
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil || toolURN == nil {
+			continue
+		}
+		if _, ok := wanted[toolURN.String()]; ok {
+			filtered = append(filtered, tool)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+
+	subset := *toolset
+	subset.Tools = filtered
+	entries, err := buildToolListEntries(ctx, logger, guardianPolicy, db, envLoader, payload, &subset, platformExtras)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*toolListEntry, 0, len(entries))
+	for _, entry := range entries {
+		if isDynamicFacadeToolName(entry.Name) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+func isDynamicFacadeToolName(name string) bool {
+	switch name {
+	case searchToolsToolName, describeToolsToolName, executeToolToolName, listToolsToolName:
+		return true
+	default:
+		return false
+	}
 }
 
 func toolToListEntry(tool *types.Tool) *toolListEntry {

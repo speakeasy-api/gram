@@ -2821,6 +2821,7 @@ type Toolset struct {
 	McpIsPublic            bool
 	McpEnabled             bool
 	ToolSelectionMode      string
+	TopLevelToolUrns       []string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
