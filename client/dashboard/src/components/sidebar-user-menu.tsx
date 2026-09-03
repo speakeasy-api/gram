@@ -45,6 +45,11 @@ import {
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const isPlatformAdmin = useIsPlatformAdmin();
+  const adminServerUrl = document
+    .querySelector<HTMLMetaElement>('meta[name="gram-admin-server-url"]')
+    ?.getAttribute("content");
+  const hasAdminServerUrl =
+    adminServerUrl && adminServerUrl !== "__GRAM_ADMIN_SERVER_URL__";
   const session = useSession();
   const organization = useOrganization();
   const navigate = useNavigate();
@@ -132,9 +137,9 @@ export function SidebarUserMenu(): JSX.Element {
                   {user.email}
                 </p>
               </div>
-              {isPlatformAdmin && (
+              {isPlatformAdmin && hasAdminServerUrl && (
                 <a
-                  href="https://gram-admin.tail7d394.ts.net"
+                  href={adminServerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Platform admin"

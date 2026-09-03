@@ -84,11 +84,19 @@ import { installMockPylon } from "@/lib/pylon-test-mock";
 
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
+function configureAdminServerUrl(url = "https://admin.example.invalid"): void {
+  const meta = document.createElement("meta");
+  meta.name = "gram-admin-server-url";
+  meta.content = url;
+  document.head.append(meta);
+}
+
 afterEach(() => {
   if (isPylonChatOpen()) {
     togglePylonChat();
   }
   cleanup();
+  document.querySelector('meta[name="gram-admin-server-url"]')?.remove();
   Reflect.deleteProperty(window, "Pylon");
   orgSlug.current = "acme";
   isPlatformAdmin.mockReset();
@@ -104,11 +112,12 @@ describe("SidebarUserMenu", () => {
   });
 
   it("links the crown icon to Platform admin in a new tab", () => {
+    configureAdminServerUrl();
     render(<SidebarUserMenu />);
     const platformAdmin = screen.getByRole("link", { name: "Platform admin" });
 
     expect(platformAdmin.getAttribute("href")).toBe(
-      "https://gram-admin.tail7d394.ts.net",
+      "https://admin.example.invalid",
     );
     expect(platformAdmin.getAttribute("target")).toBe("_blank");
     expect(platformAdmin.getAttribute("rel")).toBe("noopener noreferrer");
@@ -116,8 +125,15 @@ describe("SidebarUserMenu", () => {
   });
 
   it("hides the Platform admin link from regular users", () => {
+    configureAdminServerUrl();
     isPlatformAdmin.mockReturnValue(false);
 
+    render(<SidebarUserMenu />);
+
+    expect(screen.queryByRole("link", { name: "Platform admin" })).toBeNull();
+  });
+
+  it("hides the Platform admin link when its URL is not configured", () => {
     render(<SidebarUserMenu />);
 
     expect(screen.queryByRole("link", { name: "Platform admin" })).toBeNull();
