@@ -112,11 +112,11 @@ export function MoreActions({
               name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
               className={cn("size-4", triggerLoading && "animate-spin")}
             />
-            <span className="sr-only">
+            <Button.Text className="sr-only">
               {triggerLoading
                 ? "Action in progress"
                 : (triggerAriaLabel ?? "Open menu")}
-            </span>
+            </Button.Text>
           </Button>
         )}
       </DropdownMenuTrigger>

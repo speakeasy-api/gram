@@ -1257,6 +1257,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
+    stage: "beta",
     component: KillswitchesRoot,
     indexComponent: Killswitches,
     subPages: {

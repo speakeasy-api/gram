@@ -70,6 +70,11 @@ vi.mock("@/components/ui/MoreActions", () => ({
 
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ killswitch: { href: () => "/example/killswitch" } }),
+  useRoutes: () => ({
+    identities: {
+      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
+    },
+  }),
 }));
 
 vi.mock("@/hooks/useKillswitchAccess", () => ({
