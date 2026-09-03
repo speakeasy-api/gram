@@ -254,6 +254,36 @@ describe("OAuthWizard - external OAuth sources", () => {
     expect(screen.queryByLabelText("OAuth Server Slug")).toBeNull();
   });
 
+  it("renders discovered provider metadata for review", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
+      issuer: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/authorize",
+      tokenEndpoint: "https://auth.example.com/token",
+      authorizationResponseIssParameterSupported: true,
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Provider-hosted metadata/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Issuer URL"), {
+      target: { value: "https://auth.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify metadata" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("https://auth.example.com")).toBeTruthy();
+    });
+    expect(screen.getByText("https://auth.example.com/authorize")).toBeTruthy();
+    expect(screen.getByText("https://auth.example.com/token")).toBeTruthy();
+    expect(screen.getByText("RFC 9207 support")).toBeTruthy();
+    expect(screen.getByText("Supported")).toBeTruthy();
+  });
+
   it("warns that Gram-hosted metadata is for multi-origin compatibility", () => {
     renderWizard();
     fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
