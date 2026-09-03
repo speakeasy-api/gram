@@ -5696,6 +5696,25 @@ type GetInferenceSpendHistoryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPaygBillingSummaryUnavailableResponseBody is the type of the "admin"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unavailable" error.
+type GetPaygBillingSummaryUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "admin"
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -5869,6 +5888,25 @@ type GetPaygBillingSummaryUnexpectedResponseBody struct {
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetPaygBillingSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type GetStripeSubscriptionUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6072,6 +6110,25 @@ type GetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CancelStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type CancelStripeSubscriptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CancelStripeSubscriptionUnauthorizedResponseBody is the type of the "admin"
 // service "cancelStripeSubscription" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -6247,6 +6304,25 @@ type CancelStripeSubscriptionUnexpectedResponseBody struct {
 // service "cancelStripeSubscription" endpoint HTTP response body for the
 // "gateway_error" error.
 type CancelStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type ResumeStripeSubscriptionUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11442,6 +11518,21 @@ func NewGetPaygBillingSummaryAdminPaygBillingSummaryOK(body *GetPaygBillingSumma
 	return v
 }
 
+// NewGetPaygBillingSummaryUnavailable builds a admin service
+// getPaygBillingSummary endpoint unavailable error.
+func NewGetPaygBillingSummaryUnavailable(body *GetPaygBillingSummaryUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPaygBillingSummaryUnauthorized builds a admin service
 // getPaygBillingSummary endpoint unauthorized error.
 func NewGetPaygBillingSummaryUnauthorized(body *GetPaygBillingSummaryUnauthorizedResponseBody) *goa.ServiceError {
@@ -11605,6 +11696,21 @@ func NewGetStripeSubscriptionAdminStripeSubscriptionOK(body *GetStripeSubscripti
 		CancelAt:           body.CancelAt,
 		CanceledAt:         body.CanceledAt,
 		PaymentFailed:      *body.PaymentFailed,
+	}
+
+	return v
+}
+
+// NewGetStripeSubscriptionUnavailable builds a admin service
+// getStripeSubscription endpoint unavailable error.
+func NewGetStripeSubscriptionUnavailable(body *GetStripeSubscriptionUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -11778,6 +11884,21 @@ func NewCancelStripeSubscriptionAdminStripeSubscriptionOK(body *CancelStripeSubs
 	return v
 }
 
+// NewCancelStripeSubscriptionUnavailable builds a admin service
+// cancelStripeSubscription endpoint unavailable error.
+func NewCancelStripeSubscriptionUnavailable(body *CancelStripeSubscriptionUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCancelStripeSubscriptionUnauthorized builds a admin service
 // cancelStripeSubscription endpoint unauthorized error.
 func NewCancelStripeSubscriptionUnauthorized(body *CancelStripeSubscriptionUnauthorizedResponseBody) *goa.ServiceError {
@@ -11941,6 +12062,21 @@ func NewResumeStripeSubscriptionAdminStripeSubscriptionOK(body *ResumeStripeSubs
 		CancelAt:           body.CancelAt,
 		CanceledAt:         body.CanceledAt,
 		PaymentFailed:      *body.PaymentFailed,
+	}
+
+	return v
+}
+
+// NewResumeStripeSubscriptionUnavailable builds a admin service
+// resumeStripeSubscription endpoint unavailable error.
+func NewResumeStripeSubscriptionUnavailable(body *ResumeStripeSubscriptionUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -19569,6 +19705,30 @@ func ValidateGetInferenceSpendHistoryGatewayErrorResponseBody(body *GetInference
 	return
 }
 
+// ValidateGetPaygBillingSummaryUnavailableResponseBody runs the validations
+// defined on getPaygBillingSummary_unavailable_response_body
+func ValidateGetPaygBillingSummaryUnavailableResponseBody(body *GetPaygBillingSummaryUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPaygBillingSummaryUnauthorizedResponseBody runs the validations
 // defined on getPaygBillingSummary_unauthorized_response_body
 func ValidateGetPaygBillingSummaryUnauthorizedResponseBody(body *GetPaygBillingSummaryUnauthorizedResponseBody) (err error) {
@@ -19789,6 +19949,30 @@ func ValidateGetPaygBillingSummaryUnexpectedResponseBody(body *GetPaygBillingSum
 // ValidateGetPaygBillingSummaryGatewayErrorResponseBody runs the validations
 // defined on getPaygBillingSummary_gateway_error_response_body
 func ValidateGetPaygBillingSummaryGatewayErrorResponseBody(body *GetPaygBillingSummaryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeSubscriptionUnavailableResponseBody runs the validations
+// defined on getStripeSubscription_unavailable_response_body
+func ValidateGetStripeSubscriptionUnavailableResponseBody(body *GetStripeSubscriptionUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -20051,6 +20235,30 @@ func ValidateGetStripeSubscriptionGatewayErrorResponseBody(body *GetStripeSubscr
 	return
 }
 
+// ValidateCancelStripeSubscriptionUnavailableResponseBody runs the validations
+// defined on cancelStripeSubscription_unavailable_response_body
+func ValidateCancelStripeSubscriptionUnavailableResponseBody(body *CancelStripeSubscriptionUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCancelStripeSubscriptionUnauthorizedResponseBody runs the
 // validations defined on cancelStripeSubscription_unauthorized_response_body
 func ValidateCancelStripeSubscriptionUnauthorizedResponseBody(body *CancelStripeSubscriptionUnauthorizedResponseBody) (err error) {
@@ -20272,6 +20480,30 @@ func ValidateCancelStripeSubscriptionUnexpectedResponseBody(body *CancelStripeSu
 // ValidateCancelStripeSubscriptionGatewayErrorResponseBody runs the
 // validations defined on cancelStripeSubscription_gateway_error_response_body
 func ValidateCancelStripeSubscriptionGatewayErrorResponseBody(body *CancelStripeSubscriptionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeStripeSubscriptionUnavailableResponseBody runs the validations
+// defined on resumeStripeSubscription_unavailable_response_body
+func ValidateResumeStripeSubscriptionUnavailableResponseBody(body *ResumeStripeSubscriptionUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

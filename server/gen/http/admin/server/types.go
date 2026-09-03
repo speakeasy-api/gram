@@ -5705,6 +5705,25 @@ type GetInferenceSpendHistoryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetPaygBillingSummaryUnavailableResponseBody is the type of the "admin"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unavailable" error.
+type GetPaygBillingSummaryUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "admin"
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -5878,6 +5897,25 @@ type GetPaygBillingSummaryUnexpectedResponseBody struct {
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetPaygBillingSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type GetStripeSubscriptionUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6081,6 +6119,25 @@ type GetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CancelStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type CancelStripeSubscriptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CancelStripeSubscriptionUnauthorizedResponseBody is the type of the "admin"
 // service "cancelStripeSubscription" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -6256,6 +6313,25 @@ type CancelStripeSubscriptionUnexpectedResponseBody struct {
 // service "cancelStripeSubscription" endpoint HTTP response body for the
 // "gateway_error" error.
 type CancelStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionUnavailableResponseBody is the type of the "admin"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "unavailable" error.
+type ResumeStripeSubscriptionUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11216,6 +11292,21 @@ func NewGetInferenceSpendHistoryGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetPaygBillingSummaryUnavailableResponseBody builds the HTTP response
+// body from the result of the "getPaygBillingSummary" endpoint of the "admin"
+// service.
+func NewGetPaygBillingSummaryUnavailableResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnavailableResponseBody {
+	body := &GetPaygBillingSummaryUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPaygBillingSummaryUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getPaygBillingSummary" endpoint of the "admin"
 // service.
@@ -11356,6 +11447,21 @@ func NewGetPaygBillingSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetP
 // service.
 func NewGetPaygBillingSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryGatewayErrorResponseBody {
 	body := &GetPaygBillingSummaryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionUnavailableResponseBody builds the HTTP response
+// body from the result of the "getStripeSubscription" endpoint of the "admin"
+// service.
+func NewGetStripeSubscriptionUnavailableResponseBody(res *goa.ServiceError) *GetStripeSubscriptionUnavailableResponseBody {
+	body := &GetStripeSubscriptionUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -11516,6 +11622,21 @@ func NewGetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewCancelStripeSubscriptionUnavailableResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "admin" service.
+func NewCancelStripeSubscriptionUnavailableResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionUnavailableResponseBody {
+	body := &CancelStripeSubscriptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCancelStripeSubscriptionUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "cancelStripeSubscription" endpoint of the
 // "admin" service.
@@ -11656,6 +11777,21 @@ func NewCancelStripeSubscriptionUnexpectedResponseBody(res *goa.ServiceError) *C
 // "admin" service.
 func NewCancelStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionGatewayErrorResponseBody {
 	body := &CancelStripeSubscriptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionUnavailableResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "admin" service.
+func NewResumeStripeSubscriptionUnavailableResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionUnavailableResponseBody {
+	body := &ResumeStripeSubscriptionUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

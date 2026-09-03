@@ -5713,6 +5713,20 @@ func EncodeGetPaygBillingSummaryError(encoder func(context.Context, http.Respons
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPaygBillingSummaryUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -5915,6 +5929,20 @@ func EncodeGetStripeSubscriptionError(encoder func(context.Context, http.Respons
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetStripeSubscriptionUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -6128,6 +6156,20 @@ func EncodeCancelStripeSubscriptionError(encoder func(context.Context, http.Resp
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCancelStripeSubscriptionUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -6341,6 +6383,20 @@ func EncodeResumeStripeSubscriptionError(encoder func(context.Context, http.Resp
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResumeStripeSubscriptionUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)

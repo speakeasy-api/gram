@@ -445,6 +445,12 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
     /admin/organization.chatAnalysisSettings:
@@ -1524,6 +1530,12 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
     /admin/organization.projects:
@@ -1679,6 +1691,12 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
     /admin/organization.setInferenceKeyMonthlyLimit:
@@ -1828,6 +1846,12 @@ paths:
                                 $ref: '#/components/schemas/Error'
                 "502":
                     description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
                     content:
                         application/json:
                             schema:

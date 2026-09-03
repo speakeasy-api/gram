@@ -6468,6 +6468,7 @@ func EncodeGetPaygBillingSummaryRequest(encoder func(*http.Request) goahttp.Enco
 // by the admin getPaygBillingSummary endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeGetPaygBillingSummaryResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -6509,6 +6510,20 @@ func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewGetPaygBillingSummaryAdminPaygBillingSummaryOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetPaygBillingSummaryUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetPaygBillingSummaryUnauthorizedResponseBody
@@ -6702,6 +6717,7 @@ func EncodeGetStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Enco
 // by the admin getStripeSubscription endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeGetStripeSubscriptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -6743,6 +6759,20 @@ func DecodeGetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewGetStripeSubscriptionAdminStripeSubscriptionOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetStripeSubscriptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetStripeSubscriptionUnauthorizedResponseBody
@@ -6937,6 +6967,7 @@ func EncodeCancelStripeSubscriptionRequest(encoder func(*http.Request) goahttp.E
 // returned by the admin cancelStripeSubscription endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeCancelStripeSubscriptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -6978,6 +7009,20 @@ func DecodeCancelStripeSubscriptionResponse(decoder func(*http.Response) goahttp
 			}
 			res := NewCancelStripeSubscriptionAdminStripeSubscriptionOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body CancelStripeSubscriptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body CancelStripeSubscriptionUnauthorizedResponseBody
@@ -7172,6 +7217,7 @@ func EncodeResumeStripeSubscriptionRequest(encoder func(*http.Request) goahttp.E
 // returned by the admin resumeStripeSubscription endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeResumeStripeSubscriptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -7213,6 +7259,20 @@ func DecodeResumeStripeSubscriptionResponse(decoder func(*http.Response) goahttp
 			}
 			res := NewResumeStripeSubscriptionAdminStripeSubscriptionOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ResumeStripeSubscriptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ResumeStripeSubscriptionUnauthorizedResponseBody

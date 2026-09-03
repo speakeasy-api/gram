@@ -845,6 +845,11 @@ func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
 }
 
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
+}
+
 // NewProductFeatures initializes result type ProductFeatures from viewed
 // result type ProductFeatures.
 func NewProductFeatures(vres *adminviews.ProductFeatures) *ProductFeatures {

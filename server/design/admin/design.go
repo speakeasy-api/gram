@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResult", func() {
@@ -261,6 +262,17 @@ var AdminDashboardRedirect = Type("AdminDashboardRedirect", func() {
 // Shared so the two write paths, and the service's own copy of the check,
 // cannot drift into accepting different sets.
 var accountTypes = conv.AnySlice(constants.AccountTypes)
+
+func declareUnavailable() {
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+}
+
+func declareUnavailableResponse() {
+	Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
+}
 
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
@@ -842,7 +854,13 @@ var _ = Service("admin", func() {
 		Description("Returns current PAYG usage and estimated cost for an organization.")
 		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
 		Result(AdminPaygBillingSummary)
-		HTTP(func() { GET("/admin/organization.paygBillingSummary"); Param("organization_id"); Response(StatusOK) })
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.paygBillingSummary")
+			Param("organization_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
 		Meta("openapi:operationId", "adminGetPaygBillingSummary")
 	})
 
@@ -850,7 +868,13 @@ var _ = Service("admin", func() {
 		Description("Returns the live Stripe subscription and payment state for an organization.")
 		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
 		Result(AdminStripeSubscription)
-		HTTP(func() { GET("/admin/organization.stripeSubscription"); Param("organization_id"); Response(StatusOK) })
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeSubscription")
+			Param("organization_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
 		Meta("openapi:operationId", "adminGetStripeSubscription")
 	})
 
@@ -863,7 +887,12 @@ var _ = Service("admin", func() {
 			Meta("openapi:typename", "CancelStripeSubscriptionRequestBody")
 		})
 		Result(AdminStripeSubscription)
-		HTTP(func() { POST("/admin/organization.cancelStripeSubscription"); Response(StatusOK) })
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.cancelStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
 		Meta("openapi:operationId", "adminCancelStripeSubscription")
 	})
 
@@ -876,7 +905,12 @@ var _ = Service("admin", func() {
 			Meta("openapi:typename", "ResumeStripeSubscriptionRequestBody")
 		})
 		Result(AdminStripeSubscription)
-		HTTP(func() { POST("/admin/organization.resumeStripeSubscription"); Response(StatusOK) })
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.resumeStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
 		Meta("openapi:operationId", "adminResumeStripeSubscription")
 	})
 

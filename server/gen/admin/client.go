@@ -699,6 +699,7 @@ func (c *Client) GetInferenceSpendHistory(ctx context.Context, p *GetInferenceSp
 // GetPaygBillingSummary calls the "getPaygBillingSummary" endpoint of the
 // "admin" service.
 // GetPaygBillingSummary may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -722,6 +723,7 @@ func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSum
 // GetStripeSubscription calls the "getStripeSubscription" endpoint of the
 // "admin" service.
 // GetStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -745,6 +747,7 @@ func (c *Client) GetStripeSubscription(ctx context.Context, p *GetStripeSubscrip
 // CancelStripeSubscription calls the "cancelStripeSubscription" endpoint of
 // the "admin" service.
 // CancelStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -768,6 +771,7 @@ func (c *Client) CancelStripeSubscription(ctx context.Context, p *CancelStripeSu
 // ResumeStripeSubscription calls the "resumeStripeSubscription" endpoint of
 // the "admin" service.
 // ResumeStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
