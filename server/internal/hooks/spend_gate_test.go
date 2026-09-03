@@ -374,27 +374,25 @@ func TestIngest_SpendGateDeniesCopilotToolCall(t *testing.T) {
 		{adapter: "vscode-copilot", rawEventName: "PreToolUse"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.adapter, func(t *testing.T) {
-			payload := canonicalIngestPayload(tt.adapter, "tool.requested", "spend-gate-ingest-"+tt.adapter)
-			payload.Source.RawEventName = &tt.rawEventName
-			toolName := "bash"
-			toolCallID := "call-spend-" + tt.adapter
-			payload.Data = &gen.HookIngestData{
-				ToolCall: &gen.HookToolCallData{
-					ID:    &toolCallID,
-					Name:  &toolName,
-					Input: map[string]any{"command": "ls"},
-				},
-			}
+		payload := canonicalIngestPayload(tt.adapter, "tool.requested", "spend-gate-ingest-"+tt.adapter)
+		payload.Source.RawEventName = &tt.rawEventName
+		toolName := "bash"
+		toolCallID := "call-spend-" + tt.adapter
+		payload.Data = &gen.HookIngestData{
+			ToolCall: &gen.HookToolCallData{
+				ID:    &toolCallID,
+				Name:  &toolName,
+				Input: map[string]any{"command": "ls"},
+			},
+		}
 
-			result, err := ti.service.Ingest(ctx, payload)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			assert.Equal(t, "deny", result.Decision)
-			require.NotNil(t, result.Message)
-			assert.Contains(t, *result.Message, "Intern hard limit")
-			assert.Contains(t, *result.Message, "/blocks/")
-		})
+		result, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err, tt.adapter)
+		require.NotNil(t, result, tt.adapter)
+		assert.Equal(t, "deny", result.Decision, tt.adapter)
+		require.NotNil(t, result.Message, tt.adapter)
+		assert.Contains(t, *result.Message, "Intern hard limit", tt.adapter)
+		assert.Contains(t, *result.Message, "/blocks/", tt.adapter)
 	}
 }
 

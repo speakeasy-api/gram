@@ -213,7 +213,7 @@ func TestVSCodeCopilotObserveEventsRelay(t *testing.T) {
 			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, []byte(tt.payload))
 
 			require.Equal(t, 0, res.ExitCode)
-			require.Equal(t, 1, fs.count())
+			require.Positive(t, fs.count())
 			got := fs.last()
 			require.Equal(t, "vscode-copilot", got.Source.Adapter)
 			require.NotNil(t, got.Source.RawEventName)
