@@ -350,11 +350,12 @@ function DataExportsInner(): JSX.Element {
           gramProject: deleteCandidate.project.slug,
         },
       });
-      await invalidateProjectExports(deleteCandidate.project.slug);
       toast.success("Export deleted");
       setDeleteCandidate(undefined);
     } catch (error) {
       toast.error(`Failed to delete export: ${toError(error).message}`);
+    } finally {
+      await invalidateProjectExports(deleteCandidate.project.slug);
     }
   };
 
