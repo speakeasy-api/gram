@@ -428,7 +428,6 @@ const (
 	OutboxIDKey                       = attribute.Key("gram.outbox.id")
 	OutboxPublicIDKey                 = attribute.Key("gram.outbox.public_id")
 	OutboxBatchSizeKey                = attribute.Key("gram.outbox.batch_size")
-	OutboxNoopRowsKey                 = attribute.Key("gram.outbox.noop_rows")
 	AccessMemberIDKey                 = attribute.Key("gram.access.member.id")
 	AccessRoleIDKey                   = attribute.Key("gram.access.role.id")
 	AccessRoleSlugKey                 = attribute.Key("gram.access.role.slug")
@@ -1756,17 +1755,11 @@ func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
 	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
 }
 
-func OutboxID(v int64) attribute.KeyValue { return OutboxIDKey.Int64(v) }
-func SlogOutboxID(v int64) slog.Attr      { return slog.Int64(string(OutboxIDKey), v) }
+func SlogOutboxID(v int64) slog.Attr { return slog.Int64(string(OutboxIDKey), v) }
 
-func OutboxPublicID(v string) attribute.KeyValue { return OutboxPublicIDKey.String(v) }
-func SlogOutboxPublicID(v string) slog.Attr      { return slog.String(string(OutboxPublicIDKey), v) }
+func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPublicIDKey), v) }
 
 func OutboxBatchSize(v int) attribute.KeyValue { return OutboxBatchSizeKey.Int(v) }
-func SlogOutboxBatchSize(v int) slog.Attr      { return slog.Int(string(OutboxBatchSizeKey), v) }
-
-func OutboxNoopRows(v int) attribute.KeyValue { return OutboxNoopRowsKey.Int(v) }
-func SlogOutboxNoopRows(v int) slog.Attr      { return slog.Int(string(OutboxNoopRowsKey), v) }
 
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
