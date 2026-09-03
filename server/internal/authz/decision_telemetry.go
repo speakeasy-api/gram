@@ -42,9 +42,6 @@ func RecordAuthorizationDecision(ctx context.Context, operation repo.Operation, 
 		if authCtx.APIKeyID != "" {
 			attrs = append(attrs, attribute.String("gram.authorization.api_key_id", authCtx.APIKeyID))
 		}
-		if authCtx.SessionID != nil && *authCtx.SessionID != "" {
-			attrs = append(attrs, attribute.String("gram.authorization.session_id", *authCtx.SessionID))
-		}
 	}
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
 		attrs = append(attrs, attribute.String("gram.authorization.oauth_client_id", clientID))
