@@ -616,6 +616,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
+	// Deprecated: superseded by PluginPublishWorkflowDebounced. Kept registered
+	// for one release so executions in flight across the deploy can finish;
+	// nothing starts it any more. Safe to delete once none are running.
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
 	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
