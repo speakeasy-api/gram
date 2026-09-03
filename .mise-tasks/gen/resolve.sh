@@ -14,7 +14,15 @@ if ! git rev-parse --verify "$base" >/dev/null 2>&1; then
   exit 1
 fi
 
-paths=(.speakeasy client/admin/src/sdk client/dashboard/src/sdk server/gen)
+paths=(
+  .speakeasy/openapi-hooks.yaml
+  .speakeasy/out.admin.openapi.yaml
+  .speakeasy/out.openapi.yaml
+  .speakeasy/workflow.lock
+  client/admin/src/sdk
+  client/dashboard/src/sdk
+  server/gen
+)
 
 echo "==> Checking out $base for: ${paths[*]}"
 for path in "${paths[@]}"; do

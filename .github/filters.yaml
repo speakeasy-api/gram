@@ -51,6 +51,7 @@ sdk:
 
 sdk-gen:
   - ".mise-tasks/gen/**"
+  - ".mise-tasks/test/gen-resolve.sh"
   - ".mise-tasks/test/sdk-overlays.sh"
   - ".speakeasy/out.admin.openapi.yaml"
   - ".speakeasy/workflow.yaml"

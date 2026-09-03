@@ -1943,6 +1943,9 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      - name: Test generated artifact conflict resolution
+        run: mise run test:gen-resolve
+
       - name: Test SDK overlays
         run: mise run test:sdk-overlays
 
