@@ -1091,9 +1091,6 @@ const SETUP_LIFECYCLE_STEP_COUNT = 5;
 const SETUP_TOTAL_STEP_COUNT =
   SETUP_PRIMER_STEP_COUNT + SETUP_LIFECYCLE_STEP_COUNT;
 const SECURE_SETUP_RECOVERY_DELAY_MS = 3 * 60_000;
-// Padding lives on an inner wrapper so overflow:auto cannot clip the bottom
-// gutter — otherwise the last card sits flush against the sheet edge.
-const SETUP_SHEET_BODY_CLASS = "px-6 pt-6 pb-10";
 
 function PlatformMCPProgress({ step }: { step: number }): JSX.Element {
   return (
@@ -1143,7 +1140,7 @@ function PlatformMCPAgentPickerSheet({
         </SheetHeader>
         <PlatformMCPProgress step={1} />
         <div className="flex-1 overflow-y-auto">
-          <div className={SETUP_SHEET_BODY_CLASS}>
+          <div className="px-6 pt-6 pb-10">
             <p className="text-eyebrow">Step 1</p>
             <h2 className="text-display-xs mt-1 font-thin">Choose an agent</h2>
             <p className="text-muted-foreground mt-2 text-sm">
@@ -1230,7 +1227,7 @@ function PlatformMCPInstallMethodSheet({
         </SheetHeader>
         <PlatformMCPProgress step={2} />
         <div className="flex-1 overflow-y-auto">
-          <div className={SETUP_SHEET_BODY_CLASS}>
+          <div className="px-6 pt-6 pb-10">
             <p className="text-eyebrow">Step 2</p>
             <h2 className="text-display-xs mt-1 font-thin">
               Choose an install method
@@ -1620,7 +1617,7 @@ function PlatformMCPSetupSheet({
           </span>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <div className={SETUP_SHEET_BODY_CLASS}>
+          <div className="px-6 pt-6 pb-10">
             <p className="text-eyebrow">
               Step {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}
             </p>
