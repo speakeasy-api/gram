@@ -13,6 +13,7 @@ var All = []outbox.EventRegistration{
 	AccessRequestV1,
 	AccessRoleV1,
 	AccessRuleV1,
+	AgentV1,
 	AssetV1,
 	AssistantToolCallV1,
 	AssistantWakeV1,
