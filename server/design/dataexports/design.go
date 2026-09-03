@@ -33,6 +33,27 @@ var _ = Service("dataExports", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DataExportDestinations"}`)
 	})
 
+	Method("listForOrg", func() {
+		Description("List data export destinations and routes across the active organization.")
+
+		// Session-only: this dashboard flow spans projects, while API keys are
+		// project-scoped and must not enumerate organization-wide configuration.
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+		Result(ListDataExportsForOrgResult)
+		HTTP(func() {
+			GET("/rpc/dataExports.listForOrg")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listDataExportsForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListDataExportsForOrg"}`)
+	})
+
 	Method("createDestination", func() {
 		Description("Create a data export destination in the selected project.")
 		Payload(func() {
@@ -299,6 +320,12 @@ var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 var ListDestinationsResult = Type("ListDestinationsResult", func() {
 	Attribute("destinations", ArrayOf(Destination), "Active data export destinations in the selected project.")
 	Required("destinations")
+})
+
+var ListDataExportsForOrgResult = Type("ListDataExportsForOrgResult", func() {
+	Attribute("destinations", ArrayOf(Destination), "Active data export destinations across the active organization.")
+	Attribute("routes", ArrayOf(DataExportRoute), "Active data export routes across the active organization.")
+	Required("destinations", "routes")
 })
 
 var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {

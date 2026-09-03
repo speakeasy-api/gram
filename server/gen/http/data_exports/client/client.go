@@ -21,6 +21,10 @@ type Client struct {
 	// listDestinations endpoint.
 	ListDestinationsDoer goahttp.Doer
 
+	// ListForOrg Doer is the HTTP client used to make requests to the listForOrg
+	// endpoint.
+	ListForOrgDoer goahttp.Doer
+
 	// CreateDestination Doer is the HTTP client used to make requests to the
 	// createDestination endpoint.
 	CreateDestinationDoer goahttp.Doer
@@ -70,6 +74,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListDestinationsDoer:  doer,
+		ListForOrgDoer:        doer,
 		CreateDestinationDoer: doer,
 		UpdateDestinationDoer: doer,
 		DeleteDestinationDoer: doer,
@@ -104,6 +109,30 @@ func (c *Client) ListDestinations() goa.Endpoint {
 		resp, err := c.ListDestinationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("dataExports", "listDestinations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListForOrg returns an endpoint that makes HTTP requests to the dataExports
+// service listForOrg server.
+func (c *Client) ListForOrg() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListForOrgRequest(c.encoder)
+		decodeResponse = DecodeListForOrgResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListForOrgRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListForOrgDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("dataExports", "listForOrg", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,9 +14,37 @@ function GuideHref(): JSX.Element {
   return <output>{routes.guide.href()}</output>;
 }
 
+function ProjectRouteHrefs(): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <output data-testid="project-route-hrefs">
+      {Object.values(routes)
+        .map((route) => route.href())
+        .join("\n")}
+    </output>
+  );
+}
+
 function LocationPath(): JSX.Element {
   const location = useLocation();
   return <output>{location.pathname + location.search + location.hash}</output>;
+}
+
+function GoToExploreDemo(): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          routes.exploreDemo.goTo();
+        }}
+      >
+        go
+      </button>
+      <LocationPath />
+    </>
+  );
 }
 
 describe("project routes", () => {
@@ -28,6 +56,30 @@ describe("project routes", () => {
     );
 
     expect(screen.getByText("/org/projects/project/guide")).toBeTruthy();
+  });
+
+  it("does not expose a dedicated Shadow AI route", () => {
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project"]}>
+        <ProjectRouteHrefs />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("project-route-hrefs").textContent).not.toContain(
+      "shadow-ai",
+    );
+  });
+
+  it("navigates to absolute routes through goTo", () => {
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project"]}>
+        <GoToExploreDemo />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("go"));
+
+    expect(screen.getByText("/explore-demo")).toBeTruthy();
   });
 });
 

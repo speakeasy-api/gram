@@ -366,10 +366,6 @@ var AddExternalMCPForm = Type("AddExternalMCPForm", func() {
 		Description("The ID of the external MCP registry the server is from.")
 		Format(FormatUUID)
 	})
-	Attribute("organization_mcp_collection_registry_id", String, func() {
-		Description("The ID of the internal collection registry the server is from.")
-		Format(FormatUUID)
-	})
 	Attribute("name", String, func() {
 		Description("The display name for the external MCP server.")
 		Example("My Slack Integration")

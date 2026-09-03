@@ -158,6 +158,17 @@ type UpdateServerPayload struct {
 	// exact-match credential routing and never dialed by Gram. Pass an empty
 	// string to clear. Omit to leave unchanged.
 	ResourceIdentifier *string
+	// Sustained anonymous MCP requests per second admitted when this source is
+	// served through a public MCP endpoint. Applies to every MCP interaction; one
+	// bucket is shared by every caller. Omit to leave unchanged, 0 to clear back
+	// to the deployment default.
+	PublicRequestRatePerSecond *int
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Each request takes one token; tokens refill at the sustained
+	// rate up to this cap. Omit to leave unchanged, 0 to clear (twice the
+	// sustained rate applies).
+	PublicRequestBurst *int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

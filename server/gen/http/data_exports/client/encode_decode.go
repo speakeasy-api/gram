@@ -256,6 +256,236 @@ func DecodeListDestinationsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListForOrgRequest instantiates a HTTP request object with method and
+// path set to call the "dataExports" service "listForOrg" endpoint
+func (c *Client) BuildListForOrgRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListForOrgDataExportsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("dataExports", "listForOrg", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListForOrgRequest returns an encoder for requests sent to the
+// dataExports listForOrg server.
+func EncodeListForOrgRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*dataexports.ListForOrgPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("dataExports", "listForOrg", "*dataexports.ListForOrgPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListForOrgResponse returns a decoder for responses returned by the
+// dataExports listForOrg endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListForOrgResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListForOrgResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListForOrgResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			res := NewListForOrgListDataExportsForOrgResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListForOrgUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListForOrgForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListForOrgBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListForOrgNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListForOrgConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListForOrgUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListForOrgInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListForOrgInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+				}
+				err = ValidateListForOrgInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+				}
+				return nil, NewListForOrgInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListForOrgUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+				}
+				err = ValidateListForOrgUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+				}
+				return nil, NewListForOrgUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("dataExports", "listForOrg", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListForOrgGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "listForOrg", err)
+			}
+			err = ValidateListForOrgGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "listForOrg", err)
+			}
+			return nil, NewListForOrgGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("dataExports", "listForOrg", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateDestinationRequest instantiates a HTTP request object with method
 // and path set to call the "dataExports" service "createDestination" endpoint
 func (c *Client) BuildCreateDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1978,6 +2208,23 @@ func unmarshalOtelDestinationHeaderResponseBodyToDataexportsOtelDestinationHeade
 	return res
 }
 
+// unmarshalDataExportRouteResponseBodyToDataexportsDataExportRoute builds a
+// value of type *dataexports.DataExportRoute from a value of type
+// *DataExportRouteResponseBody.
+func unmarshalDataExportRouteResponseBodyToDataexportsDataExportRoute(v *DataExportRouteResponseBody) *dataexports.DataExportRoute {
+	res := &dataexports.DataExportRoute{
+		ID:                *v.ID,
+		ProjectID:         *v.ProjectID,
+		DataSource:        *v.DataSource,
+		Enabled:           *v.Enabled,
+		OtelDestinationID: v.OtelDestinationID,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+	}
+
+	return res
+}
+
 // marshalDataexportsCreateOtelDestinationInputToCreateOtelDestinationInputRequestBody
 // builds a value of type *CreateOtelDestinationInputRequestBody from a value
 // of type *dataexports.CreateOtelDestinationInput.
@@ -2125,23 +2372,6 @@ func marshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDe
 	res := &dataexports.UpdateOtelDestinationHeaderInput{
 		Name:  v.Name,
 		Value: v.Value,
-	}
-
-	return res
-}
-
-// unmarshalDataExportRouteResponseBodyToDataexportsDataExportRoute builds a
-// value of type *dataexports.DataExportRoute from a value of type
-// *DataExportRouteResponseBody.
-func unmarshalDataExportRouteResponseBodyToDataexportsDataExportRoute(v *DataExportRouteResponseBody) *dataexports.DataExportRoute {
-	res := &dataexports.DataExportRoute{
-		ID:                *v.ID,
-		ProjectID:         *v.ProjectID,
-		DataSource:        *v.DataSource,
-		Enabled:           *v.Enabled,
-		OtelDestinationID: v.OtelDestinationID,
-		CreatedAt:         *v.CreatedAt,
-		UpdatedAt:         *v.UpdatedAt,
 	}
 
 	return res

@@ -32,6 +32,7 @@ Derive the PR description from the diff, commits, and user intent. Do not merely
 
 - `## Summary`: the concrete, reviewer-relevant changes and their scope.
 - `## Motivation`: the problem being solved and why this approach was taken.
+- If the diff touches `server/internal/background/` or starts, signals, or schedules a Temporal workflow anywhere: a `Temporal actions/month ≈ N, scales with <fixed|projects|orgs|messages|tool calls>` line, computed as described in the `gram-temporal` skill.
 
 Do not add a `Testing` or `Verification` section or enumerate test commands and steps. Keep each included section concise but complete. If a Linear ticket was provided, include it at the top. Otherwise, tell the user after creating the PR; if they then provide one, amend the description.
 

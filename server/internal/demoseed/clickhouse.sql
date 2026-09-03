@@ -75,10 +75,21 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM ai_scan_receipts WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+
+-- Inserts must never race rows from the previous seed generation. The Go
+-- runner polls this same condition before advancing past the delete phase, and
+-- this preflight keeps the invariant explicit for every script executor.
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+   ) != 0,
+  'demo seed preflight: telemetry rows remain after scoped deletes');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -800,6 +811,99 @@ FROM (
   FROM numbers(180)
 );
 
+-- Shadow AI detections (employee enrollment detail): device-agent AI scan
+-- results for the six demo directory users. Target
+-- ids and categories come from the aitargets catalog
+-- (server/internal/agent/aitargets); one row per (target, device, user,
+-- signal) matching the ReplacingMergeTree key. Priya carries two devices so
+-- the users/devices counts differ. Versions stamp installed rows only —
+-- running detections usually cannot extract one.
+INSERT INTO ai_detections
+  (organization_id, target_id, device_serial, user_email, signal, category,
+   version, first_seen, last_seen, updated_at)
+VALUES
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '2.0.41', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '2.0.38', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 30 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 22 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '2.0.41', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'claude-code', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'harness', '2.0.44', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 12 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '1.7.52', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '1.7.49', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 28 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.7.52', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cursor', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'codex', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '0.52.0', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'codex', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '0.50.1', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 50 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'local_model', '0.6.2', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'local_model', '0.6.0', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'local_model', '0.6.2', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'ollama', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'lmstudio', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'local_model', '0.3.9', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'aider', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9));
+
+-- Scan receipts: one per device per day over the trailing 5 days, proving
+-- every enrolled device scanned recently (the page's freshness story and the
+-- provable-coverage contract for zero-match devices).
+INSERT INTO ai_scan_receipts
+  (organization_id, device_serial, user_email, scan_started_at,
+   scan_completed_at, target_list_version, match_count, received_at)
+SELECT
+  'org_gram_demo_workspace',
+  arrayElement(['DEMO-MBP-AMARA', 'DEMO-MBP-JONAS', 'DEMO-MBP-PRIYA',
+                'DEMO-MSTUDIO-PRIYA', 'DEMO-MBP-MATEO', 'DEMO-MBP-HANA',
+                'DEMO-MBP-LUCAS'], didx),
+  arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                'priya@demo.getgram.ai', 'mateo@demo.getgram.ai', 'hana@demo.getgram.ai',
+                'lucas@demo.getgram.ai'], didx),
+  ts - toIntervalSecond(6),
+  ts - toIntervalSecond(1),
+  3,
+  arrayElement([4, 4, 7, 2, 6, 2, 1], didx),
+  ts
+FROM (
+  SELECT
+    1 + toUInt32(number % 7) AS didx,
+    toUInt32(intDiv(number, 7)) AS day_off,
+    now64(9) - toIntervalDay(day_off)
+      - toIntervalHour(2 + cityHash64('aiscan', number) % 4)
+      - toIntervalMinute(cityHash64('aiscanm', number) % 55) AS ts
+  FROM numbers(35)
+);
+
 -- Authz challenges (org home "Recent challenges" panel, /access/challenges, and
 -- the per-identity Access and Security tabs).
 --
@@ -1366,6 +1470,16 @@ SELECT throwIf(
 SELECT throwIf(
   (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 90,
   'demo seed postflight: risk_findings mirror missing rows');
+
+SELECT throwIf(
+  (SELECT uniqExact(target_id) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') < 6,
+  'demo seed postflight: ai_detections missing targets');
+
+SELECT throwIf(
+  (SELECT count() FROM ai_scan_receipts
+   WHERE organization_id = 'org_gram_demo_workspace') < 25,
+  'demo seed postflight: ai_scan_receipts missing rows');
 
 -- The Watchdog groups by these three denormalized columns. A mirror that
 -- forgot them still lists signals, but every App/Team grouping and every

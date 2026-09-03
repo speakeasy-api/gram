@@ -9,6 +9,7 @@ import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPIn
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
@@ -66,6 +67,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListEmployeeAIDetectionsRequest,
+  ListEmployeeAIDetectionsSecurity,
+} from "../models/operations/listemployeeaidetections.js";
 import {
   ListGrantsRequest,
   ListGrantsSecurity,
@@ -201,7 +206,7 @@ export class Access extends ClientSDK {
    * listAIDetections access
    *
    * @remarks
-   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
    */
   async listAIDetections(
     request?: ListAIDetectionsRequest | undefined,
@@ -247,6 +252,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listEmployeeAIDetections access
+   *
+   * @remarks
+   * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+   */
+  async listEmployeeAIDetections(
+    request: ListEmployeeAIDetectionsRequest,
+    security?: ListEmployeeAIDetectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionsResult> {
+    return unwrapAsync(accessListEmployeeAIDetections(
       this,
       request,
       security,

@@ -52,11 +52,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
     const readWrite: Scope[] = ["project:read", "project:write"];
-    // The Observe surface is gated on org:admin at the page level (each page
-    // renders an "Access restricted" notice for non-admins, like the Secure
-    // section). The nav items themselves stay visible to any project member
-    // (project:read) so the group isn't silently hidden — mirrors Secure's
-    // riskOverview.
+    // Observe navigation stays visible to project readers. The Identities
+    // roster uses that scope; identity detail resolution separately requires
+    // org:read, and the remaining Observe pages render an org-admin notice.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },

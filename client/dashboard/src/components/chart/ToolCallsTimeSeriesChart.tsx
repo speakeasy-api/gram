@@ -61,6 +61,8 @@ export interface ToolCallsTimeSeriesChartProps {
   onRangeSelect?: (from: Date, to: Date) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
+  /** Shown when the range has no buckets; defaults to a generic message. */
+  emptyMessage?: string;
 }
 
 /**
@@ -78,6 +80,7 @@ export function ToolCallsTimeSeriesChart({
   onRangeSelect,
   isZoomed,
   onResetZoom,
+  emptyMessage = "No tool calls for the selected time range",
 }: ToolCallsTimeSeriesChartProps): JSX.Element {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
@@ -234,10 +237,7 @@ export function ToolCallsTimeSeriesChart({
       onResetZoom={onResetZoom}
     >
       {!hasData ? (
-        <WidgetEmptyState
-          message="No tool calls for the selected time range"
-          className="h-[260px]"
-        />
+        <WidgetEmptyState message={emptyMessage} className="h-[260px]" />
       ) : (
         <div style={{ height }}>
           {/* `<Chart>` (not `<Bar>`) because this mixes a stacked bar series

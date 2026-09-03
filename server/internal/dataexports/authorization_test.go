@@ -24,17 +24,23 @@ func TestDestinationAndRouteReadsRequireOrgRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.ListRoutes(noGrants, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListForOrg(noGrants, &gen.ListForOrgPayload{SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 
 	projectRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 	_, err = ti.service.ListDestinations(projectRead, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.ListRoutes(projectRead, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListForOrg(projectRead, &gen.ListForOrgPayload{SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 
 	orgRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
 	_, err = ti.service.ListDestinations(orgRead, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	_, err = ti.service.ListRoutes(orgRead, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = ti.service.ListForOrg(orgRead, &gen.ListForOrgPayload{SessionToken: nil})
 	require.NoError(t, err)
 }
 

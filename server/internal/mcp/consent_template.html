@@ -120,6 +120,10 @@
                   <span class="text-xs text-default-warning"
                     >Expired — reconnect to continue</span
                   >
+                  {{else if .Unroutable}}
+                  <span class="text-xs text-default-warning"
+                    >Connected elsewhere — reconnect to continue</span
+                  >
                   {{else}}
                   <span class="text-xs text-muted-foreground"
                     >Not connected</span
@@ -146,7 +150,7 @@
                   value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
                   data-auto-refresh-input
                 />
-                {{if .Connected}} {{if .CanRefresh}}
+                {{if or .Connected .Unroutable}} {{if .CanRefresh}}
                 <button
                   type="submit"
                   name="action"
@@ -156,7 +160,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{else}}
+                {{end}} {{end}} {{if not .Connected}}
                 <button
                   type="submit"
                   name="action"
@@ -164,9 +168,9 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if .Expired}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable}}Reconnect{{else}}Connect{{end}}
                 </button>
-                {{end}} {{if or .Connected .Expired}}
+                {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button
                   type="submit"
                   name="action"

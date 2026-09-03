@@ -88,10 +88,6 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if err != nil {
 		return fmt.Errorf("parse enforcement created_at: %w", err)
 	}
-	if time.Since(createdAt) > h.maxRequestAge {
-		h.metrics.staleDropped.Add(ctx, 1)
-		return nil
-	}
 	if m.GetOrganizationId() == "" {
 		return errors.New("enforcement organization id is required")
 	}
@@ -105,6 +101,13 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	_, correlationID, err := enforcereply.ParseReplyURN(replyURN)
 	if err != nil {
 		return fmt.Errorf("parse enforcement reply urn: %w", err)
+	}
+	// Structural validation first: a stale AND malformed request belongs in the
+	// forensic DLQ, not in a silent drop. Symmetric window: a far-future stamp
+	// is as suspect as a stale one.
+	if age := time.Since(createdAt); age > h.maxRequestAge || age < -h.maxRequestAge {
+		h.metrics.staleDropped.Add(ctx, 1)
+		return nil
 	}
 
 	started := time.Now()

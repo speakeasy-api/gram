@@ -3929,6 +3929,7 @@ const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesF
 SELECT
   s.remote_session_client_id,
   s.auto_refresh,
+  s.resource,
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
@@ -3968,6 +3969,7 @@ type ListRemoteSessionStatusesForSubjectParams struct {
 type ListRemoteSessionStatusesForSubjectRow struct {
 	RemoteSessionClientID  uuid.UUID
 	AutoRefresh            bool
+	Resource               pgtype.Text
 	AccessExpiresAt        pgtype.Timestamptz
 	AuthorizationExpiresAt pgtype.Timestamptz
 	RefreshExpiresAt       pgtype.Timestamptz
@@ -4025,6 +4027,7 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 		if err := rows.Scan(
 			&i.RemoteSessionClientID,
 			&i.AutoRefresh,
+			&i.Resource,
 			&i.AccessExpiresAt,
 			&i.AuthorizationExpiresAt,
 			&i.RefreshExpiresAt,

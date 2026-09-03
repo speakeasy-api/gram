@@ -85,6 +85,14 @@ beforeEach(() => {
 });
 
 describe("useProjectNavRoutes", () => {
+  it("does not include a dedicated Shadow AI destination", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+
+    expect(
+      result.current.some((entry) => entry.route.title === "Shadow AI"),
+    ).toBe(false);
+  });
+
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 

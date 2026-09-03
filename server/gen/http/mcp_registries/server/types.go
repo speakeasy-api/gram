@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,16 +1018,12 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1245,16 +1237,15 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 // result of the "getServerDetails" endpoint of the "mcpRegistries" service.
 func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDetailsResponseBody {
 	body := &GetServerDetailsResponseBody{
-		RegistrySpecifier:                   res.RegistrySpecifier,
-		Version:                             res.Version,
-		Description:                         res.Description,
-		ToolsetID:                           res.ToolsetID,
-		McpServerID:                         res.McpServerID,
-		RegistryID:                          res.RegistryID,
-		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
-		Title:                               res.Title,
-		IconURL:                             res.IconURL,
-		Meta:                                res.Meta,
+		RegistrySpecifier: res.RegistrySpecifier,
+		Version:           res.Version,
+		Description:       res.Description,
+		ToolsetID:         res.ToolsetID,
+		McpServerID:       res.McpServerID,
+		RegistryID:        res.RegistryID,
+		Title:             res.Title,
+		IconURL:           res.IconURL,
+		Meta:              res.Meta,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

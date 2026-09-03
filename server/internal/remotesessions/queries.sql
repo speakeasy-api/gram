@@ -956,6 +956,7 @@ RETURNING *;
 SELECT
   s.remote_session_client_id,
   s.auto_refresh,
+  s.resource,
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -42,7 +43,7 @@ const (
 type ToolsetVectorStore struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
-	db             repo.DBTX
+	db             *pgxpool.Pool
 	queries        *repo.Queries
 	chatClient     openrouter.CompletionClient
 	embeddingModel string
@@ -188,10 +189,18 @@ type SearchToolsOptions struct {
 	Limit     int
 }
 
-// ToolSearchResult represents a search result with tool name and similarity score.
+// ToolSearchResult represents a search result with stable tool identity and ranking metadata.
 type ToolSearchResult struct {
-	ToolName        string
-	Tags            []string
+	// ToolURN identifies the source tool independently of runtime variations.
+	ToolURN string
+
+	// ToolName is the name stored in the embedding payload.
+	ToolName string
+
+	// Tags are the indexed tags associated with the tool.
+	Tags []string
+
+	// SimilarityScore is the vector similarity between the query and tool.
 	SimilarityScore float64
 }
 
@@ -234,41 +243,95 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 	if len(tags) == 0 {
 		tags = make([]string, 0)
 	}
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tool search transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	// HNSW applies filters after approximate candidate selection. Iterative scanning
+	// expands the candidate window when toolset or tag filters remove candidates,
+	// while strict_order preserves distance ordering. SET LOCAL confines this
+	// behavior to the current search transaction.
+	if _, err := dbtx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = strict_order"); err != nil {
+		return nil, fmt.Errorf("configure filtered tool search: %w", err)
+	}
+	queries := repo.New(dbtx)
+
+	queryEmbedding := pgvector_go.NewVector(queryVectors[0])
+	projectUUID := uuid.MustParse(toolset.ProjectID)
+	resultLimit := int32(limit)
 
 	var rows []repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow
 	switch opts.MatchMode {
 	case MatchModeAny:
-		rows, err = s.queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
-			QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
-			ProjectID:          uuid.MustParse(toolset.ProjectID),
+		rows, err = queries.SearchToolsetToolEmbeddingsAnyTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchParams{
+			QueryEmbedding1536: queryEmbedding,
+			ProjectID:          projectUUID,
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit),
+			ResultLimit:        resultLimit,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("search toolset embeddings: %w", err)
+		}
+		if len(rows) < limit {
+			exactRows, exactErr := queries.SearchToolsetToolEmbeddingsAnyTagsMatchExact(ctx, repo.SearchToolsetToolEmbeddingsAnyTagsMatchExactParams{
+				QueryEmbedding1536: queryEmbedding,
+				ResultLimit:        resultLimit,
+				ProjectID:          projectUUID,
+				ToolsetID:          toolsetUUID,
+				ToolsetVersion:     toolset.ToolsetVersion,
+				Tags:               tags,
+			})
+			if exactErr != nil {
+				return nil, fmt.Errorf("search exact toolset embeddings: %w", exactErr)
+			}
+			rows = make([]repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow, len(exactRows))
+			for i, row := range exactRows {
+				rows[i] = repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow(row)
+			}
 		}
 	case MatchModeAll:
-		anyRows, err := s.queries.SearchToolsetToolEmbeddingsAllTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAllTagsMatchParams{
-			QueryEmbedding1536: pgvector_go.NewVector(queryVectors[0]),
-			ProjectID:          uuid.MustParse(toolset.ProjectID),
+		allRows, searchErr := queries.SearchToolsetToolEmbeddingsAllTagsMatch(ctx, repo.SearchToolsetToolEmbeddingsAllTagsMatchParams{
+			QueryEmbedding1536: queryEmbedding,
+			ProjectID:          projectUUID,
 			ToolsetID:          toolsetUUID,
 			ToolsetVersion:     toolset.ToolsetVersion,
 			Tags:               tags,
-			ResultLimit:        int32(limit),
+			ResultLimit:        resultLimit,
 		})
-		if err != nil {
-			return nil, fmt.Errorf("search toolset embeddings: %w", err)
+		if searchErr != nil {
+			return nil, fmt.Errorf("search toolset embeddings: %w", searchErr)
+		}
+		if len(allRows) < limit {
+			exactRows, exactErr := queries.SearchToolsetToolEmbeddingsAllTagsMatchExact(ctx, repo.SearchToolsetToolEmbeddingsAllTagsMatchExactParams{
+				QueryEmbedding1536: queryEmbedding,
+				ResultLimit:        resultLimit,
+				ProjectID:          projectUUID,
+				ToolsetID:          toolsetUUID,
+				ToolsetVersion:     toolset.ToolsetVersion,
+				Tags:               tags,
+			})
+			if exactErr != nil {
+				return nil, fmt.Errorf("search exact toolset embeddings: %w", exactErr)
+			}
+			allRows = make([]repo.SearchToolsetToolEmbeddingsAllTagsMatchRow, len(exactRows))
+			for i, row := range exactRows {
+				allRows[i] = repo.SearchToolsetToolEmbeddingsAllTagsMatchRow(row)
+			}
 		}
 
-		// Need to convert to make the types match
-		rows = make([]repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow, len(anyRows))
-		for i, r := range anyRows {
-			rows[i] = repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow(r)
+		rows = make([]repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow, len(allRows))
+		for i, row := range allRows {
+			rows[i] = repo.SearchToolsetToolEmbeddingsAnyTagsMatchRow(row)
 		}
 	default:
 		return nil, fmt.Errorf("invalid match mode: %s", opts.MatchMode)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tool search transaction: %w", err)
 	}
 
 	if len(rows) == 0 {
@@ -283,9 +346,10 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 		}
 
 		matches = append(matches, &ToolSearchResult{
+			ToolURN:         row.EntryKey,
 			ToolName:        entry.Name,
-			SimilarityScore: float64(row.Similarity),
 			Tags:            row.Tags,
+			SimilarityScore: float64(row.Similarity),
 		})
 	}
 

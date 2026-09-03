@@ -121,6 +121,11 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
 				RoleIds:      nil,
 				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
+				// Null when no directory row was matched, or when the row
+				// reports no non-empty department — the query collapses both
+				// to an empty string, so the two cannot be told apart here.
+				Department: conv.PtrEmpty(row.Department),
+				Groups:     row.GroupNames,
 			}
 			memberMap[row.ID] = m
 			order = append(order, row.ID)
@@ -714,6 +719,9 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		MembershipID: membershipID,
 		WorkosUserID: connectedUser.WorkosID.String,
 		UserID:       connectedUser.ID,
+		// These two are the audit record of a role change, so they carry the
+		// roles and nothing the directory owns: a profile this update cannot
+		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
 			ID:           connectedUser.ID,
 			PrincipalUrn: memberPrincipalURN,
@@ -722,6 +730,8 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
 			RoleIds:      existingRoleIDs,
 			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:   nil,
+			Groups:       nil,
 		},
 		After: &gen.AccessMember{
 			ID:           connectedUser.ID,
@@ -731,6 +741,8 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
 			RoleIds:      afterRoleIDs,
 			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:   nil,
+			Groups:       nil,
 		},
 	}
 

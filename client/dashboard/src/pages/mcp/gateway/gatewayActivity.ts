@@ -29,6 +29,18 @@ export function metaToolUsageItems(
   ];
 }
 
+// True when agents walked the discovery tools but never reached execute_tool.
+// The dispatched-call panels are empty in that case even though the funnel
+// chart is not, so their empty states should say so.
+export function discoveredWithoutExecuting(
+  funnel: MetaMcpDiscoveryFunnel | undefined,
+): boolean {
+  if (!funnel) return false;
+  const discovery =
+    funnel.listServers + funnel.describeServer + funnel.describeTools;
+  return funnel.executeTool === 0 && discovery > 0;
+}
+
 export interface MemberUsageRow {
   mcpServerId: string;
   label: string;

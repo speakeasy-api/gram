@@ -63,6 +63,10 @@ export type AIDetection = {
    * Distinct enrolled users this tool was detected for.
    */
   userCount: number;
+  /**
+   * Unique non-empty detected versions for this target.
+   */
+  versions: Array<string>;
 };
 
 /** @internal */
@@ -93,6 +97,7 @@ export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
       signals: z.array(Signals$inboundSchema),
       target_id: z.string(),
       user_count: z.int(),
+      versions: z.array(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {

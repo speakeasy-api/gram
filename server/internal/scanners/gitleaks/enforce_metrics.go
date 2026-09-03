@@ -15,7 +15,7 @@ func newEnforceHandlerMetrics(meterProvider metric.MeterProvider) (enforceHandle
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/gitleaks")
 	staleDropped, err := meter.Int64Counter(
 		"risk.enforcement.gitleaks.stale_dropped",
-		metric.WithDescription("Gitleaks enforcement requests acknowledged without scanning because they were stale"),
+		metric.WithDescription("Gitleaks enforcement requests acknowledged without scanning because their timestamp fell outside the freshness window (stale or far-future)"),
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {

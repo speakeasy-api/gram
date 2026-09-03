@@ -36,6 +36,14 @@ export type Employee = {
   mostRecentAccount: EmployeeAccount | null;
   // Convenience flag: any account is personal. Drives the account-type filter.
   hasPersonalAccount: boolean;
+  // Role IDs from the member row, for filtering by role without re-parsing the
+  // display string above. Empty for an identity with no member row.
+  roleIds: string[];
+  // Identity-provider profile, when a directory is connected and knows them:
+  // the department it reports, and the directory groups they belong to (the
+  // "team" a person would name). Empty otherwise.
+  department: string;
+  teams: string[];
 };
 
 // Maps a user summary's linked accounts (from the directory) into the display
@@ -295,6 +303,9 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+      roleIds: member.roleIds,
+      department: member.department ?? "",
+      teams: member.groups ?? [],
     };
   });
 
@@ -317,6 +328,11 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+      // Usage the directory matched to nobody: no member row, so no roles and
+      // no directory profile to read either.
+      roleIds: [],
+      department: "",
+      teams: [],
     };
   });
 

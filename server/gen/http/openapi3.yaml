@@ -2735,7 +2735,7 @@ paths:
                 name: ShadowMCPInventoryServer
     /rpc/access.listAIDetections:
         get:
-            description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+            description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
             operationId: listAIDetections
             parameters:
                 - allowEmptyValue: true
@@ -3153,6 +3153,105 @@ paths:
             x-speakeasy-name-override: listChallenges
             x-speakeasy-react-hook:
                 name: Challenges
+    /rpc/access.listEmployeeAIDetections:
+        get:
+            description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+            operationId: listEmployeeAIDetections
+            parameters:
+                - allowEmptyValue: true
+                  description: Canonical enrolled-employee email to list detections for.
+                  in: query
+                  name: user_email
+                  required: true
+                  schema:
+                    description: Canonical enrolled-employee email to list detections for.
+                    format: email
+                    maxLength: 320
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIDetectionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listEmployeeAIDetections access
+            tags:
+                - access
+            x-speakeasy-name-override: listEmployeeAIDetections
+            x-speakeasy-react-hook:
+                name: EmployeeAIDetections
     /rpc/access.listGrants:
         get:
             description: List the current user's effective grants, including inherited role grants.
@@ -14758,6 +14857,87 @@ paths:
             x-speakeasy-name-override: listDestinations
             x-speakeasy-react-hook:
                 name: DataExportDestinations
+    /rpc/dataExports.listForOrg:
+        get:
+            description: List data export destinations and routes across the active organization.
+            operationId: listDataExportsForOrg
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDataExportsForOrgResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listForOrg dataExports
+            tags:
+                - dataExports
+            x-speakeasy-name-override: listForOrg
+            x-speakeasy-react-hook:
+                name: ListDataExportsForOrg
     /rpc/dataExports.listRoutes:
         get:
             description: List data source export route configurations for the selected project.
@@ -64109,6 +64289,11 @@ components:
                     type: integer
                     description: Distinct enrolled users this tool was detected for.
                     format: int64
+                versions:
+                    type: array
+                    items:
+                        type: string
+                    description: Unique non-empty detected versions for this target.
             description: One AI detection target aggregated across an organization's device-agent scan reports.
             required:
                 - target_id
@@ -64117,6 +64302,7 @@ components:
                 - user_count
                 - device_count
                 - signals
+                - versions
                 - first_seen
                 - last_seen
         AIIntegrationConfig:
@@ -64272,9 +64458,17 @@ components:
         AccessMember:
             type: object
             properties:
+                department:
+                    type: string
+                    description: Department name as reported by the identity provider.
                 email:
                     type: string
                     description: Email address.
+                groups:
+                    type: array
+                    items:
+                        type: string
+                    description: Names of the directory groups the member belongs to.
                 id:
                     type: string
                     description: User ID.
@@ -64419,10 +64613,6 @@ components:
                     type: string
                     description: The display name for the external MCP server.
                     example: My Slack Integration
-                organization_mcp_collection_registry_id:
-                    type: string
-                    description: The ID of the internal collection registry the server is from.
-                    format: uuid
                 registry_id:
                     type: string
                     description: The ID of the external MCP registry the server is from.
@@ -69494,9 +69684,6 @@ components:
                 name:
                     type: string
                     description: The display name for the external MCP server.
-                organization_mcp_collection_registry_id:
-                    type: string
-                    description: The ID of the internal collection registry the server is from.
                 registry_id:
                     type: string
                     description: The ID of the external MCP registry the server is from.
@@ -70809,14 +70996,10 @@ components:
                     format: uri
                 mcp_server_id:
                     type: string
-                    description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+                    description: ID of the attached MCP server backing this server
                     format: uuid
                 meta:
                     description: Opaque metadata from the registry
-                organization_mcp_collection_registry_id:
-                    type: string
-                    description: ID of the internal collection registry this server came from
-                    format: uuid
                 registry_id:
                     type: string
                     description: ID of the external MCP registry this server came from
@@ -70840,7 +71023,7 @@ components:
                     description: Tools available on the server
                 toolset_id:
                     type: string
-                    description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+                    description: ID of the attached toolset backing this server
                     format: uuid
                 version:
                     type: string
@@ -70866,14 +71049,10 @@ components:
                     description: Whether every tool on the server is read-only
                 mcp_server_id:
                     type: string
-                    description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+                    description: ID of the attached MCP server backing this server
                     format: uuid
                 meta:
                     description: Opaque metadata from the registry
-                organization_mcp_collection_registry_id:
-                    type: string
-                    description: ID of the internal collection registry this server came from
-                    format: uuid
                 packages:
                     type: array
                     items:
@@ -70906,7 +71085,7 @@ components:
                     format: int64
                 toolset_id:
                     type: string
-                    description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+                    description: ID of the attached toolset backing this server
                     format: uuid
                 version:
                     type: string
@@ -74842,6 +75021,22 @@ components:
                         $ref: '#/components/schemas/DataExportRoute'
                     description: Active data export routes in the selected project.
             required:
+                - routes
+        ListDataExportsForOrgResult:
+            type: object
+            properties:
+                destinations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Destination'
+                    description: Active data export destinations across the active organization.
+                routes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DataExportRoute'
+                    description: Active data export routes across the active organization.
+            required:
+                - destinations
                 - routes
         ListDefinitionsResponseBody:
             type: object
@@ -87711,6 +87906,14 @@ components:
                     type: string
                     description: When the tunneled MCP server source was created
                     format: date-time
+                effective_public_request_burst:
+                    type: integer
+                    description: 'The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).'
+                    format: int64
+                effective_public_request_rate_per_second:
+                    type: integer
+                    description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.'
+                    format: int64
                 id:
                     type: string
                     description: The ID of the tunneled MCP server
@@ -87729,6 +87932,14 @@ components:
                     type: string
                     description: The project ID this tunneled MCP server belongs to
                     format: uuid
+                public_request_burst:
+                    type: integer
+                    description: 'Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.'
+                    format: int64
+                public_request_rate_per_second:
+                    type: integer
+                    description: Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.
+                    format: int64
                 resource_identifier:
                     type: string
                     description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
@@ -87756,6 +87967,8 @@ components:
                 - active_consumer_session_count
                 - created_at
                 - updated_at
+                - effective_public_request_rate_per_second
+                - effective_public_request_burst
         TunneledMcpServerConnections:
             type: object
             properties:
@@ -89375,6 +89588,18 @@ components:
                 name:
                     type: string
                     description: Human-readable display name for the tunneled MCP server. Omit to leave unchanged.
+                public_request_burst:
+                    type: integer
+                    description: 'Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Each request takes one token; tokens refill at the sustained rate up to this cap. Omit to leave unchanged, 0 to clear (twice the sustained rate applies).'
+                    format: int64
+                    minimum: 0
+                    maximum: 1e+06
+                public_request_rate_per_second:
+                    type: integer
+                    description: Sustained anonymous MCP requests per second admitted when this source is served through a public MCP endpoint. Applies to every MCP interaction; one bucket is shared by every caller. Omit to leave unchanged, 0 to clear back to the deployment default.
+                    format: int64
+                    minimum: 0
+                    maximum: 100000
                 resource_identifier:
                     type: string
                     description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.

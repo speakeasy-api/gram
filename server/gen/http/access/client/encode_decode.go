@@ -3787,6 +3787,244 @@ func DecodeListAIDetectionsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListEmployeeAIDetectionsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listEmployeeAIDetections"
+// endpoint
+func (c *Client) BuildListEmployeeAIDetectionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListEmployeeAIDetectionsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listEmployeeAIDetections", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListEmployeeAIDetectionsRequest returns an encoder for requests sent
+// to the access listEmployeeAIDetections server.
+func EncodeListEmployeeAIDetectionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListEmployeeAIDetectionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listEmployeeAIDetections", "*access.ListEmployeeAIDetectionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_email", p.UserEmail)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListEmployeeAIDetectionsResponse returns a decoder for responses
+// returned by the access listEmployeeAIDetections endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListEmployeeAIDetectionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListEmployeeAIDetectionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListEmployeeAIDetectionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			res := NewListEmployeeAIDetectionsListAIDetectionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListEmployeeAIDetectionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListEmployeeAIDetectionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListEmployeeAIDetectionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListEmployeeAIDetectionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListEmployeeAIDetectionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListEmployeeAIDetectionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListEmployeeAIDetectionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListEmployeeAIDetectionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+				}
+				err = ValidateListEmployeeAIDetectionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+				}
+				return nil, NewListEmployeeAIDetectionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListEmployeeAIDetectionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+				}
+				err = ValidateListEmployeeAIDetectionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+				}
+				return nil, NewListEmployeeAIDetectionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listEmployeeAIDetections", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListEmployeeAIDetectionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listEmployeeAIDetections", err)
+			}
+			err = ValidateListEmployeeAIDetectionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listEmployeeAIDetections", err)
+			}
+			return nil, NewListEmployeeAIDetectionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listEmployeeAIDetections", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRequestAccessRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "requestAccess" endpoint
 func (c *Client) BuildRequestAccessRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4944,10 +5182,17 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		Email:        *v.Email,
 		PhotoURL:     v.PhotoURL,
 		JoinedAt:     *v.JoinedAt,
+		Department:   v.Department,
 	}
 	res.RoleIds = make([]string, len(v.RoleIds))
 	for i, val := range v.RoleIds {
 		res.RoleIds[i] = val
+	}
+	if v.Groups != nil {
+		res.Groups = make([]string, len(v.Groups))
+		for i, val := range v.Groups {
+			res.Groups[i] = val
+		}
 	}
 
 	return res
@@ -5132,6 +5377,10 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 	res.Signals = make([]string, len(v.Signals))
 	for i, val := range v.Signals {
 		res.Signals[i] = val
+	}
+	res.Versions = make([]string, len(v.Versions))
+	for i, val := range v.Versions {
+		res.Versions[i] = val
 	}
 
 	return res

@@ -1064,12 +1064,6 @@ export const useRoutes = (overrides?: {
       ...subPages,
     };
 
-    if (route.url.startsWith("/")) {
-      newRoute.goTo = () => {
-        void route.url;
-      };
-    }
-
     return newRoute;
   };
 
@@ -1263,6 +1257,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
+    stage: "beta",
     component: KillswitchesRoot,
     indexComponent: Killswitches,
     subPages: {
