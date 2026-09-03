@@ -385,14 +385,19 @@ func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
 	})
 }
 
+const maxAdminJSONBodyBytes = 1 << 20
+
 func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		ctx, err := s.authorizeAdminRequest(r)
 		if err != nil {
 			return err
 		}
-		raw, err := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminJSONBodyBytes))
 		if err != nil {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")
+			}
 			return oops.E(oops.CodeBadRequest, err, "read admin request body")
 		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))

@@ -84,3 +84,23 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Equal(t, 1, userinfoCalls, "successful pre-decode verification must be reused by Goa auth")
 }
+
+func TestGeneratedAdminRoutes_RejectOversizedJSONBody(t *testing.T) {
+	t.Parallel()
+
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("sub-oversized", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(t.Context(), StoreParams{
+		Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-oversized", HD: testAdminHD,
+		AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(make([]byte, 1<<20+1)))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	SessionMiddleware(mux).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+}

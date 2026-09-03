@@ -86,7 +86,20 @@ func TestGetOrganizationFeatures_ReturnsNineteenFields(t *testing.T) {
 
 	var result map[string]bool
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	require.Len(t, result, 19)
+	wantKeys := map[string]struct{}{
+		"logs_enabled": {}, "tool_io_logs_enabled": {}, "session_capture_enabled": {},
+		"authz_challenge_logging_enabled": {}, "sso_enabled": {}, "scim_enabled": {},
+		"hooks_browser_login_enabled": {}, "hooks_fail_open_enabled": {}, "custom_model_keys_enabled": {},
+		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
+		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
+		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
+		"consent_tool_filtering_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+	}
+	gotKeys := make(map[string]struct{}, len(result))
+	for key := range result {
+		gotKeys[key] = struct{}{}
+	}
+	require.Equal(t, wantKeys, gotKeys)
 }
 
 func TestSetOrganizationFeature_SkillsAndRefreshSemantics(t *testing.T) {
