@@ -20,9 +20,9 @@ func TestScopeParts(t *testing.T) {
 func TestUserVisibleScopesCoverDefinedPublicScopes(t *testing.T) {
 	t.Parallel()
 
-	seen := make(map[Scope]struct{}, len(scopeVisibilityByScope))
-	for scope, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
+	seen := make(map[Scope]struct{}, len(scopeDefinitions))
+	for scope, definition := range scopeDefinitions {
+		if definition.lifecycle != ScopeLifecycleActive || definition.visibility != scopeVisibilityUserVisible {
 			continue
 		}
 		require.NotEqual(t, ScopeRoot, scope)
@@ -35,7 +35,7 @@ func TestUserVisibleScopesCoverDefinedPublicScopes(t *testing.T) {
 		if scope == ScopeRoot {
 			continue
 		}
-		if scopeVisibilityByScope[scope] == scopeVisibilityInternal {
+		if scopeDefinitions[scope].visibility == scopeVisibilityInternal {
 			continue
 		}
 		require.Contains(t, seen, scope)
@@ -50,7 +50,101 @@ func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
 			continue
 		}
 
-		require.Contains(t, scopeVisibilityByScope, scope)
+		require.Contains(t, scopeDefinitions, scope)
+	}
+}
+
+func TestAgentRuntimeSafeScopesHaveSafeImplicationClosures(t *testing.T) {
+	t.Parallel()
+
+	for scope, definition := range scopeDefinitions {
+		if definition.agentRuntimeSafeSince == 0 {
+			continue
+		}
+
+		t.Run(string(scope), func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope))
+			for _, implied := range AgentRuntimeScopeImplicationClosure(scope) {
+				impliedDefinition, ok := scopeDefinitions[implied]
+				require.True(t, ok, "implication %q must remain registered", implied)
+				require.Equal(t, ScopeLifecycleActive, impliedDefinition.lifecycle)
+				require.NotZero(t, impliedDefinition.agentRuntimeSafeSince)
+				require.LessOrEqual(t, impliedDefinition.agentRuntimeSafeSince, CurrentAgentRuntimeScopeRegistryVersion)
+			}
+		})
+	}
+}
+
+func TestAgentRuntimeScopeAllowlist(t *testing.T) {
+	t.Parallel()
+
+	safe := []Scope{
+		ScopeProjectRead, ScopeProjectWrite,
+		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
+		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+		ScopeSkillRead, ScopeSkillWrite,
+		ScopeRiskPolicyEvaluate,
+	}
+	for _, scope := range safe {
+		require.True(t, IsAgentRuntimeScopeSafe(CurrentAgentRuntimeScopeRegistryVersion, scope), scope)
+	}
+
+	unsafe := []Scope{
+		Scope("unknown:scope"),
+		ScopeRoot,
+		ScopeOrgRead, ScopeOrgBlockedRead, ScopeOrgAdmin, ScopeOrgBlockedAdmin,
+		ScopeProjectBlockedRead, ScopeProjectBlockedWrite,
+		ScopeMCPBlockedRead, ScopeMCPBlockedWrite, ScopeMCPBlockedConnect,
+		ScopeEnvironmentBlockedRead, ScopeEnvironmentBlockedWrite,
+		ScopeSkillBlockedRead, ScopeSkillBlockedWrite,
+		ScopeRiskPolicyBypass, ScopeRiskPolicyBlock,
+		ScopeChatRead, ScopeChatWrite,
+		ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer,
+		scopeMCPApprovalReadTombstone, scopeMCPApprovalDecideTombstone,
+	}
+	for _, scope := range unsafe {
+		require.False(t, IsAgentRuntimeScopeSafe(CurrentAgentRuntimeScopeRegistryVersion, scope), scope)
+	}
+	require.False(t, IsAgentRuntimeScopeSafe(0, ScopeMCPConnect))
+}
+
+func TestAgentRuntimeScopeImplicationClosure(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []Scope{ScopeMCPConnect, ScopeMCPRead, ScopeMCPWrite}, AgentRuntimeScopeImplicationClosure(ScopeMCPWrite))
+	require.Equal(t, []Scope{ScopeProjectRead, ScopeProjectWrite}, AgentRuntimeScopeImplicationClosure(ScopeProjectWrite))
+	require.Equal(t, []Scope{ScopeSkillRead}, AgentRuntimeScopeImplicationClosure(ScopeSkillRead))
+}
+
+func TestRetiredScopeTombstonesFailClosedIndependently(t *testing.T) {
+	t.Parallel()
+
+	lifecycle, ok := ScopeLifecycleFor(scopeMCPApprovalReadTombstone)
+	require.True(t, ok)
+	require.Equal(t, ScopeLifecycleRetired, lifecycle)
+
+	_, ok = ScopeLifecycleFor(Scope("unknown:scope"))
+	require.False(t, ok)
+	require.Error(t, ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scopeMCPApprovalReadTombstone))
+	require.Error(t, ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, Scope("unknown:scope")))
+	require.NoError(t, ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, ScopeProjectRead))
+}
+
+func TestAgentManagementScopesAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	managementScopes := []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer}
+	for _, granted := range managementScopes {
+		grants := []Grant{NewGrant(granted, "agent_123")}
+		for _, checked := range managementScopes {
+			require.Equal(t, granted == checked, GrantsSatisfy(grants, Check{Scope: checked, ResourceID: "agent_123"}),
+				"grant %q checking %q", granted, checked)
+		}
+	}
+
+	for _, checked := range managementScopes {
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "agent_123")}, Check{Scope: checked, ResourceID: "agent_123"}))
 	}
 }
 
@@ -464,11 +558,11 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 	t.Parallel()
 
 	for lower, highers := range scopeExpansions {
-		if scopeVisibilityByScope[lower] != scopeVisibilityUserVisible {
+		if scopeDefinitions[lower].visibility != scopeVisibilityUserVisible {
 			continue
 		}
 		for _, h := range highers {
-			if scopeVisibilityByScope[h] != scopeVisibilityUserVisible {
+			if scopeDefinitions[h].visibility != scopeVisibilityUserVisible {
 				continue
 			}
 			require.Contains(t, CalculateSubScopes(h), string(lower),

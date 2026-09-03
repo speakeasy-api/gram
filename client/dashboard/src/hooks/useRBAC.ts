@@ -15,6 +15,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
+  if (scope.startsWith("agent:")) return "agent";
   return "*";
 }
 
