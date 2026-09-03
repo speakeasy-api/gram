@@ -143,7 +143,7 @@ export function SidebarUserMenu(): JSX.Element {
             {isPlatformAdmin && adminServerUrl && (
               <DropdownMenuItem
                 asChild
-                className="text-muted-foreground hover:text-foreground absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-offset-1"
               >
                 <a
                   href={adminServerUrl}

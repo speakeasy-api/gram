@@ -6,6 +6,15 @@ describe("getAdminServerUrl", () => {
   it("rejects loopback HTTP outside development", () => {
     expect(getAdminServerUrl("http://localhost:8080", false)).toBeNull();
   });
+
+  it.each([
+    "https://user@admin.example.invalid",
+    "https://:password@admin.example.invalid",
+    "http://user@localhost:8080",
+    "http://:password@localhost:8080",
+  ])("rejects URL userinfo in %s", (value) => {
+    expect(getAdminServerUrl(value, true)).toBeNull();
+  });
 });
 
 describe("replaceAdminServerUrl", () => {

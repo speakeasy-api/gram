@@ -8,6 +8,7 @@ export function getAdminServerUrl(
 
   try {
     const url = new URL(value);
+    if (url.username || url.password) return null;
     if (url.protocol === "https:") return value;
     if (isDev && url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) {
       return value;
