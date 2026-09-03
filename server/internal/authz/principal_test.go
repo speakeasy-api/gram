@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -139,9 +140,45 @@ func TestValidatePrincipal(t *testing.T) {
 	rolePrincipal, err := urn.ParsePrincipal(role.RoleUrn)
 	require.NoError(t, err)
 
+	otherOrganizationID := "org_validate_principal_other"
+	seedOrganization(t, ctx, conn, otherOrganizationID)
+	agent, err := agentsrepo.New(conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: organizationID,
+		OwnerUserID:    userID,
+		Name:           "Principal Validator Agent",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, AllUsersPrincipal()))
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID)))
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, rolePrincipal))
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	_, err = conn.Exec(ctx, `UPDATE agents SET suspended_at = clock_timestamp() WHERE id = $1`, agent.ID)
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	_, err = conn.Exec(ctx, `
+		UPDATE agents
+		SET suspended_at = NULL, revoked_at = clock_timestamp(),
+		    owner_reassignment_required_at = clock_timestamp(),
+		    owner_reassignment_reason = 'owner unavailable'
+		WHERE id = $1`, agent.ID)
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	err = ValidatePrincipal(ctx, conn, otherOrganizationID, agentPrincipal)
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, "not-a-uuid"))
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
+	_, err = conn.Exec(ctx, `UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1`, agent.ID)
+	require.NoError(t, err)
+	err = ValidatePrincipal(ctx, conn, organizationID, agentPrincipal)
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, "user_missing"))
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
