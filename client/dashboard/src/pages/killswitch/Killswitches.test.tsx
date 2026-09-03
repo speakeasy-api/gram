@@ -200,6 +200,64 @@ describe("KillswitchesRoot", () => {
 });
 
 describe("Killswitches list", () => {
+  it("renders the standard filter bar and Killswitch table", () => {
+    listHook.mockReturnValue({
+      data: {
+        pages: [
+          {
+            result: {
+              items: [
+                {
+                  id: "ks-1",
+                  userId: "user-1",
+                  capabilityKey: "mcp_tool_calls",
+                  capabilityLabel: "MCP tool calls",
+                  scope: { type: "all_servers" },
+                  schedule: { start: "now", end: "until_lifted" },
+                  status: "active",
+                  version: 1,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/acme/killswitch"]}>
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Member filter: All members" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Status filter: All statuses" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Capability filter: All capabilities",
+      }),
+    ).not.toBeNull();
+    expect(screen.getByRole("table")).not.toBeNull();
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Member", "Capability", "Status", "Schedule", ""]);
+    expect(screen.getByRole("link", { name: "Alex Morgan" })).not.toBeNull();
+    expect(screen.getByText("All MCP servers")).not.toBeNull();
+    expect(screen.getByText("Active")).not.toBeNull();
+  });
+
   it("scopes every cached query by session", () => {
     listHook.mockReturnValue({
       data: { pages: [{ result: { items: [] } }] },
@@ -224,6 +282,43 @@ describe("Killswitches list", () => {
     expect(dependencies.membersRequest).toEqual({ gramSession: "session" });
     expect(dependencies.capabilityRequest).toEqual({ gramSession: "session" });
     expect(dependencies.serverRequest).toEqual({ gramSession: "session" });
+  });
+
+  it("ignores unsupported status and capability URL filters", () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/acme/killswitch?status=unknown&capability=deprecated",
+        ]}
+      >
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(listHook.mock.calls.at(-1)?.[1]).toMatchObject({
+      status: undefined,
+      capabilityKey: undefined,
+    });
+    expect(
+      screen.getByRole("button", { name: "Status filter: All statuses" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Capability filter: All capabilities",
+      }),
+    ).not.toBeNull();
   });
 
   it("retries every list dependency that can make rows inaccurate", async () => {

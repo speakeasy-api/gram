@@ -327,25 +327,29 @@ function ToolbarFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {pillDims.map((dim) => (
-        <FilterChip
-          key={dim.id}
-          label={chipLabel(dim, values[dim.id]!, optionsById[dim.id])}
-          color={accents[dim.id]}
-          active={!isDimensionAtDefault(dim, values[dim.id]!)}
-          onClick={() => setSheetOpen(true)}
-          // A default pinned chip ("All …", default daterange) has nothing to
-          // clear, and a `required` dimension has nothing to clear *to* —
-          // clearing it just resolves back to a value, so the × would look
-          // broken. Omit onRemove in both cases so it is hidden rather than a
-          // no-op.
-          onRemove={
-            dim.required || isDimensionAtDefault(dim, values[dim.id]!)
-              ? undefined
-              : () => onClear(dim.id)
-          }
-        />
-      ))}
+      {pillDims.map((dim) => {
+        const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
+        return (
+          <FilterChip
+            key={dim.id}
+            label={label}
+            ariaLabel={`${dim.label} filter: ${label}`}
+            color={accents[dim.id]}
+            active={!isDimensionAtDefault(dim, values[dim.id]!)}
+            onClick={() => setSheetOpen(true)}
+            // A default pinned chip ("All …", default daterange) has nothing to
+            // clear, and a `required` dimension has nothing to clear *to* —
+            // clearing it just resolves back to a value, so the × would look
+            // broken. Omit onRemove in both cases so it is hidden rather than a
+            // no-op.
+            onRemove={
+              dim.required || isDimensionAtDefault(dim, values[dim.id]!)
+                ? undefined
+                : () => onClear(dim.id)
+            }
+          />
+        );
+      })}
 
       {customFilters.map((filter) => (
         <CustomFilterChip

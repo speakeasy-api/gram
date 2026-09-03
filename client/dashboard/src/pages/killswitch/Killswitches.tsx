@@ -1,6 +1,14 @@
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { type Column, Table } from "@/components/ui/Table";
 import { useSession } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,25 +58,64 @@ const statuses: KillswitchListStatus[] = [
   "lifted",
 ];
 
+const KILLSWITCH_FILTERS = defineFilters([
+  {
+    id: "user",
+    label: "Member",
+    kind: "select",
+    pinned: true,
+    allLabel: "All members",
+  },
+  {
+    id: "status",
+    label: "Status",
+    kind: "select",
+    pinned: true,
+    allLabel: "All statuses",
+  },
+  {
+    id: "capability",
+    label: "Capability",
+    kind: "select",
+    pinned: true,
+    allLabel: "All capabilities",
+  },
+]);
+
+const STATUS_FILTER_OPTIONS = statuses.map((status) => ({
+  value: status,
+  label: capitalize(status),
+}));
+const CAPABILITY_FILTER_OPTIONS = [
+  { value: MCP_TOOL_CALLS_CAPABILITY, label: "MCP tool calls" },
+];
+
 export default function Killswitches(): JSX.Element {
   const session = useSession();
   const security = { sessionHeaderGramSession: session.session };
   const routes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(KILLSWITCH_FILTERS);
   const createRoute = parseKillswitchCreateRoute(params);
   const editorOpen = createRoute.open;
   const [requestOpen, setRequestOpen] = useState(false);
-  const userId = params.get("user") || undefined;
-  const statusParam = params.get("status");
+  const userId = values.user || undefined;
+  const statusParam = values.status;
   const status = statuses.includes(statusParam as KillswitchListStatus)
     ? (statusParam as KillswitchListStatus)
     : undefined;
-  const capabilityParam = params.get("capability");
+  const capabilityParam = values.capability;
   const capabilityKey =
     capabilityParam === MCP_TOOL_CALLS_CAPABILITY
       ? (capabilityParam as KillswitchCapabilityKey)
       : undefined;
+  const toolbarValues = {
+    ...values,
+    status: status ?? null,
+    capability: capabilityKey ?? null,
+  };
 
   const listQuery = useKillswitchesInfinite(
     security,
@@ -133,6 +180,71 @@ export default function Killswitches(): JSX.Element {
     () => new Map(servers.map((server) => [server.id, server.name])),
     [servers],
   );
+  const filterOptions: OptionsById = useMemo(
+    () => ({
+      user: members.map((member) => ({
+        value: member.id,
+        label: member.name,
+      })),
+      status: STATUS_FILTER_OPTIONS,
+      capability: CAPABILITY_FILTER_OPTIONS,
+    }),
+    [members],
+  );
+  const columns: Column<KillswitchSummary>[] = [
+    {
+      key: "member",
+      header: "Member",
+      width: "1fr",
+      render: (item) => (
+        <Link
+          className="font-medium hover:underline"
+          to={routes.killswitch.detail.href(item.id)}
+        >
+          {memberNames.get(item.userId) ?? "Deleted member"}
+        </Link>
+      ),
+    },
+    {
+      key: "capability",
+      header: "Capability",
+      width: "1.4fr",
+      render: (item) => (
+        <div>
+          <div>{item.capabilityLabel}</div>
+          <div className="text-muted-foreground">
+            {scopeLabel(item.scope, serverNames)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "140px",
+      render: (item) => (
+        <Badge variant={item.status === "active" ? "success" : "neutral"}>
+          {capitalize(item.status)}
+        </Badge>
+      ),
+    },
+    {
+      key: "schedule",
+      header: "Schedule",
+      width: "1.2fr",
+      render: (item) => scheduleLabel(item.schedule),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "auto",
+      render: (item) => (
+        <Button variant="secondary" size="sm" asChild>
+          <Link to={routes.killswitch.detail.href(item.id)}>View details</Link>
+        </Button>
+      ),
+    },
+  ];
   const readError = listQuery.error ?? membersQuery.error ?? serversQuery.error;
   const editorCatalogError =
     capabilitiesQuery.error ?? membersQuery.error ?? serversQuery.error;
@@ -165,15 +277,6 @@ export default function Killswitches(): JSX.Element {
     if (membersQuery.error) retries.push(membersQuery.refetch());
     if (serversQuery.error) retries.push(serversQuery.refetch());
     void Promise.allSettled(retries);
-  };
-
-  const setFilter = (key: string, value: string) => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (value) next.set(key, value);
-      else next.delete(key);
-      return next;
-    });
   };
 
   const preview = (draft: EditorDraft) =>
@@ -226,52 +329,16 @@ export default function Killswitches(): JSX.Element {
         </Button>
       </header>
 
-      <div className="grid gap-3 border p-4 sm:grid-cols-3">
-        <label className="space-y-1 text-sm">
-          Member
-          <select
-            aria-label="Filter by member"
-            className="border-input bg-background block h-9 w-full border px-2"
-            value={userId ?? ""}
-            onChange={(event) => setFilter("user", event.target.value)}
-          >
-            <option value="">All members</option>
-            {members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-sm">
-          Status
-          <select
-            aria-label="Filter by status"
-            className="border-input bg-background block h-9 w-full border px-2"
-            value={status ?? ""}
-            onChange={(event) => setFilter("status", event.target.value)}
-          >
-            <option value="">All statuses</option>
-            {statuses.map((item) => (
-              <option key={item} value={item}>
-                {capitalize(item)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-sm">
-          Capability
-          <select
-            aria-label="Filter by capability"
-            className="border-input bg-background block h-9 w-full border px-2"
-            value={capabilityKey ?? ""}
-            onChange={(event) => setFilter("capability", event.target.value)}
-          >
-            <option value="">All capabilities</option>
-            <option value={MCP_TOOL_CALLS_CAPABILITY}>MCP tool calls</option>
-          </select>
-        </label>
-      </div>
+      <Page.Toolbar>
+        <Page.Toolbar.Filters
+          schema={KILLSWITCH_FILTERS}
+          values={toolbarValues}
+          optionsById={filterOptions}
+          onChange={setValue as (id: string, value: FilterValue) => void}
+          onClear={clearValue as (id: string) => void}
+          onClearAll={clearAll}
+        />
+      </Page.Toolbar>
 
       {readError ? (
         <Alert variant="error">
@@ -301,38 +368,44 @@ export default function Killswitches(): JSX.Element {
         <div className="border p-8 text-center text-sm text-muted-foreground">
           Loading Killswitches…
         </div>
-      ) : items.length === 0 ? (
-        <div className="border border-dashed p-10 text-center">
-          <h2 className="font-medium">No Killswitches match these filters</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Create one or clear a filter to see organization-wide restrictions.
-          </p>
-        </div>
       ) : (
-        <ul className="grid gap-3">
-          {items.map((item) => (
-            <KillswitchRow
-              key={item.id}
-              item={item}
-              memberName={memberNames.get(item.userId)}
-              serverNames={serverNames}
-              href={routes.killswitch.detail.href(item.id)}
-            />
-          ))}
-        </ul>
+        <div className="w-full overflow-x-auto">
+          <Table
+            columns={columns}
+            data={items}
+            rowKey={(item) => item.id}
+            cellPadding="spacious"
+            className="min-w-[840px]"
+            noResultsMessage={
+              <div className="py-4 text-center">
+                <h2 className="text-foreground font-medium">
+                  No Killswitches match these filters
+                </h2>
+                <p className="mt-1">
+                  Create one or clear a filter to see organization-wide
+                  restrictions.
+                </p>
+              </div>
+            }
+          />
+        </div>
       )}
 
-      {listQuery.hasNextPage && (
-        <div className="text-center">
-          <Button
-            variant="secondary"
-            disabled={listQuery.isFetchingNextPage}
-            onClick={() => void listQuery.fetchNextPage()}
-          >
-            {listQuery.isFetchingNextPage ? "Loading…" : "Load more"}
-          </Button>
-        </div>
-      )}
+      {!readError &&
+        !listQuery.isLoading &&
+        !membersQuery.isLoading &&
+        !serversQuery.isLoading &&
+        listQuery.hasNextPage && (
+          <div className="text-center">
+            <Button
+              variant="secondary"
+              disabled={listQuery.isFetchingNextPage}
+              onClick={() => void listQuery.fetchNextPage()}
+            >
+              {listQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        )}
 
       <section className="border border-dashed p-5">
         <h2 className="font-medium">More capabilities coming soon</h2>
@@ -392,41 +465,5 @@ export default function Killswitches(): JSX.Element {
         }}
       />
     </main>
-  );
-}
-
-function KillswitchRow({
-  item,
-  memberName,
-  serverNames,
-  href,
-}: {
-  item: KillswitchSummary;
-  memberName?: string;
-  serverNames: ReadonlyMap<string, string>;
-  href: string;
-}): JSX.Element {
-  return (
-    <li className="grid gap-4 border p-4 text-sm md:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)_auto_minmax(12rem,1fr)_auto] md:items-center">
-      <div>
-        <div className="text-muted-foreground text-xs md:hidden">Member</div>
-        <Link className="font-medium hover:underline" to={href}>
-          {memberName ?? "Deleted member"}
-        </Link>
-      </div>
-      <div>
-        <div>{item.capabilityLabel}</div>
-        <div className="text-muted-foreground">
-          {scopeLabel(item.scope, serverNames)}
-        </div>
-      </div>
-      <Badge variant={item.status === "active" ? "success" : "neutral"}>
-        {capitalize(item.status)}
-      </Badge>
-      <div>{scheduleLabel(item.schedule)}</div>
-      <Button className="w-full md:w-auto" variant="secondary" asChild>
-        <Link to={href}>View details</Link>
-      </Button>
-    </li>
   );
 }
