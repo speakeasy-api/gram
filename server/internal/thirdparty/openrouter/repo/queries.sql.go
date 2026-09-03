@@ -462,17 +462,9 @@ func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg Re
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = CASE
-      WHEN $3::boolean AND disable_causes IS NULL THEN FALSE
-      ELSE disabled
-    END,
-    disable_causes = CASE
-      WHEN $3::boolean AND disable_causes IS NULL THEN '{}'::text[]
-      ELSE disable_causes
-    END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
-WHERE organization_id = $4
-  AND key_type = $5
+WHERE organization_id = $3
+  AND key_type = $4
   AND deleted IS FALSE
 RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
@@ -480,7 +472,6 @@ RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credi
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -489,7 +480,6 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
-		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)

@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -125,11 +124,6 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 		change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, dbtx, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
 		if err != nil {
 			demotionErr := fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
-			if errors.Is(err, openrouter.ErrAPIKeyDisableCausesUnclassified) {
-				return temporal.NewNonRetryableApplicationError(
-					demotionErr.Error(), "openrouter_disable_causes_unclassified", demotionErr,
-				)
-			}
 			return demotionErr
 		}
 		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged

@@ -174,7 +174,6 @@ func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string,
 			KeyType:        string(keyType),
 			MonthlyCredits: int64(conv.PtrValOr(limit, 0)),
 			KeyHash:        "hash-" + orgID + "-" + string(keyType),
-			Reinstate:      true,
 		}); err != nil {
 			return 0, fmt.Errorf("reinstate %s key: %w", keyType, err)
 		}
@@ -456,7 +455,7 @@ func TestRearmTrial_PreservesLayeredProtectionAndCaps(t *testing.T) {
 			for _, keyType := range openrouter.AllKeyTypes {
 				classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(tt.cause), string(openrouter.DisableCauseTrialDemotion)})
 				row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
-				_, err := orrepo.New(conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, MonthlyCredits: tt.limit, Reinstate: false})
+				_, err := orrepo.New(conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, MonthlyCredits: tt.limit})
 				require.NoError(t, err)
 			}
 

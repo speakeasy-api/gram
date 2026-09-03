@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/temporal"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -1028,10 +1030,16 @@ func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
 }
 
 func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
-	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
-		return fmt.Errorf("demote expired trial: %w", err)
+	err := a.demoteExpiredTrials.Demote(ctx, args)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if errors.Is(err, openrouter.ErrAPIKeyDisableCausesUnclassified) {
+		return temporal.NewNonRetryableApplicationError(
+			"demote expired trial: "+err.Error(), "openrouter_disable_causes_unclassified", err,
+		)
+	}
+	return fmt.Errorf("demote expired trial: %w", err)
 }
 
 // RunMcpResearch executes one research-agent run for an MCP approval request
