@@ -99,6 +99,18 @@ describe("SidebarUserMenu", () => {
     expect(screen.getAllByText("Sagar").length).toBeGreaterThan(0);
   });
 
+  it("links the crown icon to Platform admin in a new tab", () => {
+    render(<SidebarUserMenu />);
+    const platformAdmin = screen.getByRole("link", { name: "Platform admin" });
+
+    expect(platformAdmin.getAttribute("href")).toBe(
+      "https://gram-admin.tail7d394.ts.net",
+    );
+    expect(platformAdmin.getAttribute("target")).toBe("_blank");
+    expect(platformAdmin.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(platformAdmin.querySelector(".lucide-crown")).toBeTruthy();
+  });
+
   it("links Roadmap to roadmap.speakeasy.com and has no GitHub issues link", () => {
     render(<SidebarUserMenu />);
     fireEvent.click(screen.getByTestId("user-menu-trigger"));

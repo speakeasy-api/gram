@@ -19,6 +19,7 @@ import {
   BuildingIcon,
   CompassIcon,
   CreditCardIcon,
+  CrownIcon,
   LogOutIcon,
   MailIcon,
   MapIcon,
@@ -125,16 +126,15 @@ export function SidebarUserMenu(): JSX.Element {
                   {user.email}
                 </p>
               </div>
-              {projectSlug && (
-                <button
-                  type="button"
-                  aria-label="Project Settings"
-                  onClick={() => routes.settings.goTo()}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <SettingsIcon className="h-4 w-4" />
-                </button>
-              )}
+              <a
+                href="https://gram-admin.tail7d394.ts.net"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Platform admin"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <CrownIcon className="h-4 w-4" />
+              </a>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
