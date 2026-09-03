@@ -1,4 +1,4 @@
-h1:whYSBmXbaulqucXedUIV6GT2ARECenLCcBhRyuBo2bM=
+h1:X/J7GzYcbMZSeSqJgojO8BZTbjMUelegAQyGF++XY18=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -383,4 +383,4 @@ h1:whYSBmXbaulqucXedUIV6GT2ARECenLCcBhRyuBo2bM=
 20260902212254_public-tunnel-rate-limits.sql h1:nZB403TMLx/lHT2gVqVrlsN1Iw4CBhrGJjcNcaOxMuI=
 20260903163542_openrouter-disable-causes-default.sql h1:LS+zQwFykPPu8UqRaH4IGmyaioQr3GhQrLGuoi32B1o=
 20260903190252_dno1005-device-agent-environment-syncs.sql h1:kUaZL31hQY1vrBt5UvtGefk/D8r1kDGpYAhFFBaNoLk=
-20260903195016_organization-setup-tasks.sql h1:XnHUij5b63Y6b9Mbuo0Hp+lrut7l5bVw8KVwqngb62o=
+20260903194055_add_external_oauth_authorization_server_issuer.sql h1:ulax1MM1HwC0e9Gdxf8gRp6GVh7cZ3dtpyOG0VKfmIU=
