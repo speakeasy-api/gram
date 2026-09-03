@@ -144,7 +144,7 @@ export function EmployeeShadowAISection({
       <InlineEmptyState
         icon="radar"
         heading="No detected AI tools"
-        description="No AI harnesses or local model runtimes have been detected for this enrolled user."
+        description="No AI harnesses or local model runtimes have been detected for this identity."
         orientation="horizontal"
       />
     );
@@ -166,8 +166,7 @@ export function EmployeeShadowAISection({
       <div className="mb-4">
         <h2 className="text-eyebrow">Shadow AI</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Organization-wide device-agent detections attributed to this enrolled
-          user.
+          Organization-wide device-agent detections attributed to this identity.
         </p>
       </div>
 
