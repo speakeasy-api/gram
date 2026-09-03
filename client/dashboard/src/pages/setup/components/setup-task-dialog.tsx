@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import { SetupTaskContent } from "./setup-task-content";
@@ -6,7 +7,7 @@ type SetupTaskDialogProps = {
   task: SetupTask | null;
   pending: boolean;
   onClose: () => void;
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
   onSkip: () => void;
 };
 
@@ -17,6 +18,18 @@ export function SetupTaskDialog({
   onComplete,
   onSkip,
 }: SetupTaskDialogProps): JSX.Element {
+  const completionInFlight = useRef(false);
+
+  const handleComplete = async () => {
+    if (pending || completionInFlight.current) return;
+    completionInFlight.current = true;
+    try {
+      await onComplete();
+    } finally {
+      completionInFlight.current = false;
+    }
+  };
+
   return (
     <Dialog
       open={task !== null}
@@ -42,9 +55,7 @@ export function SetupTaskDialog({
           <SetupTaskContent
             taskKey={task.key}
             projectSlug="default"
-            onComplete={() => {
-              if (!pending) onComplete();
-            }}
+            onComplete={() => void handleComplete()}
             onSkip={() => {
               if (!pending) onSkip();
             }}

@@ -364,7 +364,7 @@ function SetupBoardInner(): JSX.Element {
         task={selectedTask}
         pending={pending}
         onClose={() => setSelectedTask(null)}
-        onComplete={() => void completeSelectedTask()}
+        onComplete={completeSelectedTask}
         onSkip={() => setSelectedTask(null)}
       />
       <SetupTaskAssignmentDialog

@@ -90,6 +90,32 @@ describe("setup interaction fixes", () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
+  it("prevents duplicate completion while the full handler is in flight", () => {
+    let finishCompletion = () => {};
+    const onComplete = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCompletion = resolve;
+        }),
+    );
+    render(
+      <SetupTaskDialog
+        task={task}
+        pending={false}
+        onClose={() => {}}
+        onComplete={onComplete}
+        onSkip={() => {}}
+      />,
+    );
+
+    const complete = screen.getByRole("button", { name: "Complete" });
+    fireEvent.click(complete);
+    fireEvent.click(complete);
+
+    expect(onComplete).toHaveBeenCalledOnce();
+    finishCompletion();
+  });
+
   it("does not dismiss or repeat task actions while pending", () => {
     const onClose = vi.fn();
     const onComplete = vi.fn();
