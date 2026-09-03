@@ -127,8 +127,8 @@ export function SidebarUserMenu(): JSX.Element {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex items-start justify-between gap-2">
+          <DropdownMenuGroup className="relative">
+            <DropdownMenuLabel className="pr-8 font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm leading-none font-medium">
                   {user.displayName || "User"}
@@ -137,19 +137,23 @@ export function SidebarUserMenu(): JSX.Element {
                   {user.email}
                 </p>
               </div>
-              {isPlatformAdmin && hasAdminServerUrl && (
+            </DropdownMenuLabel>
+            {isPlatformAdmin && hasAdminServerUrl && (
+              <DropdownMenuItem
+                asChild
+                className="text-muted-foreground hover:text-foreground absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground"
+              >
                 <a
                   href={adminServerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Platform admin"
-                  className="text-muted-foreground hover:text-foreground"
                 >
                   <CrownIcon className="h-4 w-4" />
                 </a>
-              )}
-            </div>
-          </DropdownMenuLabel>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             {projectSlug && (
