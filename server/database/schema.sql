@@ -3600,6 +3600,23 @@ ON users (workos_id);
 
 COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.';
 
+CREATE TABLE IF NOT EXISTS organization_setup_tasks (
+  organization_id TEXT NOT NULL,
+  task_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'todo',
+  assignee_user_id TEXT,
+  assignee_email TEXT,
+  hidden_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_setup_tasks_pkey PRIMARY KEY (organization_id, task_key),
+  CONSTRAINT organization_setup_tasks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_setup_tasks_assignee_user_id_fkey FOREIGN KEY (assignee_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT organization_setup_tasks_assignee_check CHECK (assignee_user_id IS NULL OR assignee_email IS NULL)
+);
+
 CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
