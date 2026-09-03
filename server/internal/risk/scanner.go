@@ -36,6 +36,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"math"
+
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -954,10 +956,16 @@ func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) (
 		if start < 0 || start > end || end > len(text) {
 			return nil, fmt.Errorf("enforcement finding has invalid byte range %d:%d", start, end)
 		}
+		score := finding.GetScore()
+		if math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 1 {
+			return nil, fmt.Errorf("enforcement finding has invalid score %v", score)
+		}
 		match := text[start:end]
 		description := finding.GetRuleId()
 		if source == ra.SourcePresidio {
 			_, description = ra.DescribePresidioEntity(strings.ToUpper(strings.TrimPrefix(finding.GetRuleId(), "pii.")))
+		} else if ruleDescription, ok := gitleaks.DescribeRule(finding.GetRuleId()); ok {
+			description = ruleDescription
 		}
 		out = append(out, scanners.Finding{
 			RuleID:              finding.GetRuleId(),
@@ -1003,11 +1011,21 @@ func effectivePresidioThreshold(config []byte) float64 {
 }
 
 func filterPresidioFindings(findings []scanners.Finding, policy repo.RiskPolicy) []scanners.Finding {
+	// Mirror the local scanner's entity blocklist: pinned lists are trimmed
+	// (a fully blocklisted pin scans nothing), and finding-level drops never
+	// surface even on unpinned scans.
+	pinned := ra.FilterPinnedEntities(policy.PresidioEntities)
+	if len(policy.PresidioEntities) > 0 && len(pinned) == 0 {
+		return nil
+	}
 	threshold := effectivePresidioThreshold(policy.AnalyzerConfig)
 	out := make([]scanners.Finding, 0, len(findings))
 	for _, finding := range findings {
 		entity := strings.ToUpper(strings.TrimPrefix(finding.RuleID, "pii."))
-		if finding.Confidence < threshold || (len(policy.PresidioEntities) > 0 && !slices.Contains(policy.PresidioEntities, entity)) {
+		if ra.IsEntityFindingDropped(entity) {
+			continue
+		}
+		if finding.Confidence < threshold || (len(pinned) > 0 && !slices.Contains(pinned, entity)) {
 			continue
 		}
 		out = append(out, finding)
