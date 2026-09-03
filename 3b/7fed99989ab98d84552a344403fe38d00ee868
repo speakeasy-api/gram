@@ -1,0 +1,19 @@
+client/dashboard/src/pages/setup/setup-data.ts
+  s_064b53b4505990::t_5ae90974fa3999 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3b7fed99989ab98d84552a344403fe38d00ee868",
+  "prompts": {},
+  "sessions": {
+    "s_064b53b4505990": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06788-da69-70b1-88b9-84ac6993aaa7",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
