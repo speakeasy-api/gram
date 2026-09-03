@@ -618,8 +618,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 
 	// An already-attached toolset publishes too: a rename or slug change moves
-	// its entry in the generated package even though no attach ran.
-	s.triggerPluginPublish(ctx, authCtx, updatedToolset.McpEnabled, pluginCreated)
+	// its entry in the generated package even though no attach ran, and
+	// disabling MCP drops the entry entirely — so the previous state counts as
+	// much as the new one.
+	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled, pluginCreated)
 
 	return toolsetDetails, nil
 }

@@ -750,7 +750,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
+	// A server that was already enabled is already a Default-plugin member, so
+	// renaming it (its display name is generated into the package) or disabling
+	// it (it drops out of the package) has to publish too — not just the
+	// enable transition this block attaches. A server disabled before and
+	// after contributes nothing either way and stays silent.
+	s.triggerPluginPublish(ctx, authCtx, attached || existing.Visibility != VisibilityDisabled, pluginCreated)
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
