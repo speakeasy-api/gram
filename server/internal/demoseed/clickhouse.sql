@@ -82,6 +82,15 @@ DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
 
+-- Inserts must never race rows from the previous seed generation. The Go
+-- runner polls this same condition before advancing past the delete phase, and
+-- this preflight keeps the invariant explicit for every script executor.
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+   ) != 0,
+  'demo seed preflight: telemetry rows remain after scoped deletes');
+
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
 -- classify each trace as hosted MCP traffic; unique per-call trace ids keep
