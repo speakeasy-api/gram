@@ -8,6 +8,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/access"
 	_ "github.com/speakeasy-api/gram/server/design/admin"
 	_ "github.com/speakeasy-api/gram/server/design/agent"
+	_ "github.com/speakeasy-api/gram/server/design/agents"
 	_ "github.com/speakeasy-api/gram/server/design/aiintegrations"
 	_ "github.com/speakeasy-api/gram/server/design/assets"
 	_ "github.com/speakeasy-api/gram/server/design/assistantmemories"

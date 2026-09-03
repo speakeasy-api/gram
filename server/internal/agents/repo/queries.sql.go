@@ -50,6 +50,88 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 	return i, err
 }
 
+const createAgentWithID = `-- name: CreateAgentWithID :one
+INSERT INTO agents (
+  id,
+  organization_id,
+  owner_user_id,
+  name
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAgentWithIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	OwnerUserID    string
+	Name           string
+}
+
+func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, createAgentWithID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.OwnerUserID,
+		arg.Name,
+	)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteAgent = `-- name: DeleteAgent :one
+UPDATE agents
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteAgentParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, deleteAgent, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getAgentByID = `-- name: GetAgentByID :one
 SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
@@ -66,6 +148,188 @@ type GetAgentByIDParams struct {
 
 func (q *Queries) GetAgentByID(ctx context.Context, arg GetAgentByIDParams) (Agent, error) {
 	row := q.db.QueryRow(ctx, getAgentByID, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAgentByIDForUpdate = `-- name: GetAgentByIDForUpdate :one
+SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+FROM agents
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+LIMIT 1
+FOR UPDATE
+`
+
+type GetAgentByIDForUpdateParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDForUpdateParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, getAgentByIDForUpdate, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const renameAgent = `-- name: RenameAgent :one
+UPDATE agents
+SET name = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type RenameAgentParams struct {
+	Name           string
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) RenameAgent(ctx context.Context, arg RenameAgentParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, renameAgent, arg.Name, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const resumeAgent = `-- name: ResumeAgent :one
+UPDATE agents
+SET suspended_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND suspended_at IS NOT NULL
+  AND revoked_at IS NULL
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type ResumeAgentParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) ResumeAgent(ctx context.Context, arg ResumeAgentParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, resumeAgent, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const revokeAgent = `-- name: RevokeAgent :one
+UPDATE agents
+SET suspended_at = NULL,
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND revoked_at IS NULL
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type RevokeAgentParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, revokeAgent, arg.OrganizationID, arg.ID)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+		&i.OwnerReassignmentReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const suspendAgent = `-- name: SuspendAgent :one
+UPDATE agents
+SET suspended_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type SuspendAgentParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) SuspendAgent(ctx context.Context, arg SuspendAgentParams) (Agent, error) {
+	row := q.db.QueryRow(ctx, suspendAgent, arg.OrganizationID, arg.ID)
 	var i Agent
 	err := row.Scan(
 		&i.ID,
