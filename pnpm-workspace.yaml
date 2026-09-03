@@ -13,7 +13,7 @@ packages:
   - dev-idp-dashboard
 
 catalog:
-  "@ai-sdk/react": ^4.0.69
+  "@ai-sdk/react": ^4.0.86
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
@@ -22,7 +22,7 @@ catalog:
   "@types/react-dom": ^19.2.4
   "@assistant-ui/react": ^0.15.13
   "@vitejs/plugin-react": ^6.0.5
-  ai: ^7.0.66
+  ai: ^7.0.83
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.2.0
