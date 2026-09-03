@@ -813,6 +813,11 @@ var MemberModel = Type("AccessMember", func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
 	})
+	// Directory profile, from the org's synced identity provider. Every field
+	// is absent when no directory is connected, when the member has no profile
+	// in it, or when the provider does not report that attribute.
+	Attribute("department", String, "Department name as reported by the identity provider.")
+	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
