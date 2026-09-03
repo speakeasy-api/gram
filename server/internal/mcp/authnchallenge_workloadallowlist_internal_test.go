@@ -11,10 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -34,6 +37,37 @@ func workloadTenantEndpoint(organizationID string, projectID, issuerID uuid.UUID
 // workloadTestTenant is a fresh, fully distinct tenancy.
 func workloadTestTenant() *ResolvedMcpEndpoint {
 	return workloadTenantEndpoint(uuid.NewString(), uuid.New(), uuid.New())
+}
+
+// newWorkloadTestCache builds the shared store admission remembers misses in,
+// backed by an in-process Redis so a test can advance its clock rather than
+// wait out a ttl.
+func newWorkloadTestCache(t *testing.T) (cache.Cache, *miniredis.Miniredis) {
+	t.Helper()
+
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	return cache.NewRedisCacheAdapter(client), mr
+}
+
+// newWorkloadTestAdmission builds admission over its own store, so parallel
+// tests cannot see each other's misses.
+func newWorkloadTestAdmission(t *testing.T, lookup workloadIssuerLookup, charge workloadIssuerBudget) *workloadIssuerAdmission {
+	t.Helper()
+
+	cacheImpl, _ := newWorkloadTestCache(t)
+	return newWorkloadIssuerAdmission(testenv.NewLogger(t), cacheImpl, lookup, charge)
+}
+
+// newWorkloadTestMissCache builds the miss cache alone, with the Redis handle
+// a test needs to lapse an entry.
+func newWorkloadTestMissCache(t *testing.T) (*workloadIssuerMissCache, *miniredis.Miniredis) {
+	t.Helper()
+
+	cacheImpl, mr := newWorkloadTestCache(t)
+	return newWorkloadIssuerMissCache(testenv.NewLogger(t), cacheImpl), mr
 }
 
 // countingLookup records every call so a test can assert what the miss path
@@ -82,7 +116,7 @@ func TestWorkloadIssuerAdmission_TrustedIssuerResolves(t *testing.T) {
 
 	want := &remotesessions_repo.RemoteSessionIssuer{Slug: "gh-actions"}
 	lookup := &countingLookup{issuer: want, found: true}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	got, err := admission.admit(t.Context(), workloadTestTenant(), "https://token.actions.example.test")
 
@@ -97,7 +131,7 @@ func TestWorkloadIssuerAdmission_UntrustedIssuerRejectedWithoutEgress(t *testing
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	row, err := admission.admit(t.Context(), workloadTestTenant(), "https://attacker.example.test")
 
@@ -112,7 +146,7 @@ func TestWorkloadIssuerAdmission_RepeatedMissCostsOneLookup(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	for range 25 {
@@ -132,7 +166,7 @@ func TestWorkloadIssuerAdmission_ConcurrentMissesCollapseToOneLookup(t *testing.
 	const callers = 32
 
 	lookup := &countingLookup{found: false, release: make(chan struct{})}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	// Held inside admit: one caller occupies the lookup, the rest join it.
@@ -168,7 +202,7 @@ func TestWorkloadIssuerAdmission_AbandonedCallerStopsWaitingButFlightFinishes(t 
 	const issuerURL = "https://attacker.example.test"
 
 	lookup := &countingLookup{found: false, release: make(chan struct{})}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -200,7 +234,7 @@ func TestWorkloadIssuerAdmission_AbandonedCallerStopsWaitingButFlightFinishes(t 
 	// from the cache instead of paying for the query again.
 	close(lookup.release)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		reason, ok := admission.misses.seen(workloadIssuerMissKey(endpoint, issuerURL))
+		reason, ok := admission.misses.seen(t.Context(), workloadIssuerMissKey(endpoint, issuerURL))
 		if assert.True(c, ok, "the flight must record its miss even though its caller left") {
 			assert.Equal(c, workloadIssuerMissUnknown, reason)
 		}
@@ -215,7 +249,7 @@ func TestWorkloadIssuerAdmission_MissIsNotSharedAcrossTenancies(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	const issuerURL = "https://idp.example.test"
 	_, err := admission.admit(t.Context(), workloadTestTenant(), issuerURL)
@@ -235,7 +269,7 @@ func TestWorkloadIssuerAdmission_MissIsNotSharedAcrossProjectsOnOneIssuer(t *tes
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	organizationID := uuid.NewString()
 	sharedIssuer := uuid.New()
@@ -255,7 +289,7 @@ func TestWorkloadIssuerAdmission_LookupFailureIsNotRemembered(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{err: errors.New("connection refused")}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, err := admission.admit(t.Context(), endpoint, "https://idp.example.test")
@@ -274,7 +308,7 @@ func TestWorkloadIssuerAdmission_MalformedIssuerIsRejectedAndRemembered(t *testi
 	t.Parallel()
 
 	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	for range 5 {
@@ -294,7 +328,7 @@ func TestWorkloadIssuerAdmission_SpellingsSharingACanonicalFormResolveSeparately
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, err := admission.admit(t.Context(), endpoint, "https://idp.example.test")
@@ -313,7 +347,7 @@ func TestWorkloadIssuerAdmission_CachedMalformedMissKeepsItsTaxonomy(t *testing.
 	t.Parallel()
 
 	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, first := admission.admit(t.Context(), endpoint, "not-a-url")
@@ -331,15 +365,15 @@ func TestWorkloadIssuerAdmission_CachedMalformedMissKeepsItsTaxonomy(t *testing.
 func TestWorkloadIssuerMissCache_ReasonSurvivesTheEntry(t *testing.T) {
 	t.Parallel()
 
-	cache := newWorkloadIssuerMissCache(8, time.Minute)
-	cache.remember("malformed", workloadIssuerMissMalformed)
-	cache.remember("unknown", workloadIssuerMissUnknown)
+	misses, _ := newWorkloadTestMissCache(t)
+	misses.remember(t.Context(), "malformed", workloadIssuerMissMalformed)
+	misses.remember(t.Context(), "unknown", workloadIssuerMissUnknown)
 
-	malformed, ok := cache.seen("malformed")
+	malformed, ok := misses.seen(t.Context(), "malformed")
 	require.True(t, ok)
 	require.ErrorIs(t, malformed.err(), remotesessions.ErrIssuerURLInvalid)
 
-	unknown, ok := cache.seen("unknown")
+	unknown, ok := misses.seen(t.Context(), "unknown")
 	require.True(t, ok)
 	require.ErrorIs(t, unknown.err(), errWorkloadIssuerUntrusted)
 	require.NotErrorIs(t, unknown.err(), remotesessions.ErrIssuerURLInvalid)
@@ -348,29 +382,22 @@ func TestWorkloadIssuerMissCache_ReasonSurvivesTheEntry(t *testing.T) {
 // A lapsed entry is a corpse, not a held entry: a fresh miss colliding with
 // one must be recorded rather than silently dropped.
 //
-// admit reaches remember only through seen, which drops a lapsed entry on the
-// way past, so this drives remember directly — the footgun is reachable by any
-// second consumer that does not happen to read first, and asserting it through
-// seen would assert nothing.
+// remember writes set-if-absent, so this is the case that must not be caught
+// by that condition: once the entry is gone the next miss has to take, or an
+// issuer would stay uncached after its first rejection lapsed.
 func TestWorkloadIssuerMissCache_LapsedEntryIsRecordedAgain(t *testing.T) {
 	t.Parallel()
 
-	cache := newWorkloadIssuerMissCache(8, time.Minute)
-	cache.remember("issuer", workloadIssuerMissUnknown)
+	misses, mr := newWorkloadTestMissCache(t)
+	misses.remember(t.Context(), "issuer", workloadIssuerMissUnknown)
 
-	// Lapse the entry in place, leaving it present but dead — the state a
-	// read would have cleaned up.
-	cache.entries["issuer"] = workloadIssuerMissEntry{
-		expiry: time.Now().Add(-time.Minute),
-		reason: workloadIssuerMissUnknown,
-	}
+	mr.FastForward(workloadIssuerMissTTL + time.Second)
 
-	cache.remember("issuer", workloadIssuerMissMalformed)
+	misses.remember(t.Context(), "issuer", workloadIssuerMissMalformed)
 
-	reason, ok := cache.seen("issuer")
+	reason, ok := misses.seen(t.Context(), "issuer")
 	require.True(t, ok, "a miss recorded after the previous entry lapsed must be held")
 	require.Equal(t, workloadIssuerMissMalformed, reason, "the new miss, not the lapsed one, must be what answers")
-	require.Len(t, cache.order, 1, "the lapsed entry must not leave a second slot behind")
 }
 
 // The key must distinguish exactly what the lookup distinguishes: same
@@ -410,25 +437,71 @@ func TestWorkloadIssuerMissKey_IsFixedSize(t *testing.T) {
 	require.Len(t, long, len(short), "a megabyte of issuer must occupy no more key than a short one")
 }
 
-// The cache is keyed partly by an unauthenticated request's own value, so it
-// has to be bounded: without a cap, varying the issuer each time would make
-// every rejection cost a permanent allocation.
-func TestWorkloadIssuerMissCache_BoundedByEntries(t *testing.T) {
+// Entries live in a store shared with every other subsystem and are keyed
+// partly by an unauthenticated request's own value, so one must cost the same
+// whatever produced it. The key is a digest and the reason is a sentinel, so
+// the parse error's prose — derived from that unbounded value — must not have
+// come along with it.
+func TestWorkloadIssuerMissCache_StoredEntryIsFixedSize(t *testing.T) {
 	t.Parallel()
 
-	const maxEntries = 8
-	cache := newWorkloadIssuerMissCache(maxEntries, time.Minute)
+	misses, mr := newWorkloadTestMissCache(t)
+	endpoint := workloadTestTenant()
 
-	for i := range maxEntries * 10 {
-		cache.remember("issuer-"+strconv.Itoa(i), workloadIssuerMissUnknown)
+	shortKey := workloadIssuerMissKey(endpoint, "https://a.test")
+	longKey := workloadIssuerMissKey(endpoint, "https://a.test/"+strings.Repeat("x", 1<<20))
+	misses.remember(t.Context(), shortKey, workloadIssuerMissMalformed)
+	misses.remember(t.Context(), longKey, workloadIssuerMissMalformed)
+
+	// Matched by prefix rather than read at CacheKey directly: the typed cache
+	// appends its suffix separator, and this is asserting entry size, not the
+	// key convention TestWorkloadIssuerMissKey_IsFixedSize covers.
+	stored := func(key string) string {
+		prefix := workloadIssuerMissCacheKey(key)
+		for _, held := range mr.Keys() {
+			if !strings.HasPrefix(held, prefix) {
+				continue
+			}
+			value, err := mr.Get(held)
+			require.NoError(t, err)
+			return value
+		}
+		require.FailNow(t, "the miss must have been written", "no entry stored under %s", prefix)
+		return ""
 	}
 
-	require.LessOrEqual(t, len(cache.entries), maxEntries, "a flood of distinct issuers must evict, never grow")
-	require.Len(t, cache.order, len(cache.entries), "the insertion order must not outlive the entries it tracks")
-	_, held := cache.seen("issuer-79")
-	require.True(t, held, "the most recent miss must still be held")
-	_, evicted := cache.seen("issuer-0")
-	require.False(t, evicted, "the oldest miss must have been evicted")
+	require.Len(t, stored(longKey), len(stored(shortKey)),
+		"a megabyte of issuer must occupy no more of the shared store than a short one")
+}
+
+// Nothing caps how many entries the shared store holds, so the bound is
+// upstream: a miss is only recorded after a lookup a charge admitted, which
+// makes the limiter that bounds queries bound writes by the same amount.
+// TestWorkloadIssuerAdmission_BudgetOutcomesAreNeverRemembered is the other
+// half — that an unadmitted lookup writes nothing at all.
+func TestWorkloadIssuerMissCache_WritesAreGatedByTheCharge(t *testing.T) {
+	t.Parallel()
+
+	endpoint := workloadTestTenant()
+	lookup := &countingLookup{found: false}
+	charges := 0
+	admission := newWorkloadTestAdmission(t, lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
+		charges++
+		return ratelimit.Result{Allowed: true, Remaining: 0, RetryAfter: 0}, nil
+	})
+
+	const spellings = 8
+	for i := range spellings {
+		issuerURL := "https://idp-" + strconv.Itoa(i) + ".example.test"
+		_, err := admission.admit(t.Context(), endpoint, issuerURL)
+		require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
+
+		_, held := admission.misses.seen(t.Context(), workloadIssuerMissKey(endpoint, issuerURL))
+		require.True(t, held, "an admitted lookup that found nothing must leave a remembered miss")
+	}
+
+	require.Equal(t, spellings, charges, "every distinct spelling must be charged before it can be remembered")
+	require.EqualValues(t, spellings, lookup.calls.Load(), "one charge, one lookup, one entry")
 }
 
 // A lapsed entry must stop answering, so an issuer an operator has just added
@@ -438,19 +511,16 @@ func TestWorkloadIssuerMissCache_BoundedByEntries(t *testing.T) {
 func TestWorkloadIssuerMissCache_EntryExpires(t *testing.T) {
 	t.Parallel()
 
-	held := newWorkloadIssuerMissCache(8, time.Minute)
-	held.remember("issuer", workloadIssuerMissUnknown)
-	_, fresh := held.seen("issuer")
+	misses, mr := newWorkloadTestMissCache(t)
+	misses.remember(t.Context(), "issuer", workloadIssuerMissUnknown)
+
+	_, fresh := misses.seen(t.Context(), "issuer")
 	require.True(t, fresh, "a fresh entry answers")
 
-	lapsing := newWorkloadIssuerMissCache(8, time.Millisecond)
-	lapsing.remember("issuer", workloadIssuerMissUnknown)
-	require.Eventually(t, func() bool {
-		_, still := lapsing.seen("issuer")
-		return !still
-	}, time.Second, 5*time.Millisecond, "a miss must stop being remembered once its ttl lapses")
+	mr.FastForward(workloadIssuerMissTTL + time.Second)
 
-	require.Empty(t, lapsing.entries, "a lapsed entry must be dropped, not merely ignored")
+	_, still := misses.seen(t.Context(), "issuer")
+	require.False(t, still, "a miss must stop being remembered once its ttl lapses")
 }
 
 // Repeating a miss must not extend it. Otherwise a caller could pin an entry
@@ -458,14 +528,19 @@ func TestWorkloadIssuerMissCache_EntryExpires(t *testing.T) {
 func TestWorkloadIssuerMissCache_RepeatDoesNotExtendEntry(t *testing.T) {
 	t.Parallel()
 
-	cache := newWorkloadIssuerMissCache(8, time.Minute)
-	cache.remember("issuer", workloadIssuerMissUnknown)
-	first := cache.entries["issuer"]
+	misses, mr := newWorkloadTestMissCache(t)
+	misses.remember(t.Context(), "issuer", workloadIssuerMissUnknown)
 
-	cache.remember("issuer", workloadIssuerMissUnknown)
+	// Spend most of the entry's life, then repeat the miss. A write that
+	// refreshed rather than declined would reset the ttl here.
+	mr.FastForward(workloadIssuerMissTTL - time.Second)
+	misses.remember(t.Context(), "issuer", workloadIssuerMissUnknown)
 
-	require.Equal(t, first, cache.entries["issuer"], "a repeated miss must not refresh the entry it hits")
-	require.Len(t, cache.order, 1, "a repeated miss must not take a second slot")
+	// Past the original expiry: only a refreshed entry would still answer.
+	mr.FastForward(2 * time.Second)
+
+	_, held := misses.seen(t.Context(), "issuer")
+	require.False(t, held, "a repeated miss must not extend the entry it hits")
 }
 
 // The database-backed lookup must reject a value that is not an issuer
@@ -504,7 +579,7 @@ func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 	spent := func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}, nil
 	}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), spent)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), spent)
 
 	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
 
@@ -521,7 +596,7 @@ func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 
 	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
 	outage := errors.New("redis unreachable")
-	admission := newWorkloadIssuerAdmission(lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
+	admission := newWorkloadTestAdmission(t, lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, outage
 	})
 
@@ -540,7 +615,7 @@ func TestWorkloadIssuerAdmission_AbsentBudgetRefuses(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
-	admission := newWorkloadIssuerAdmission(lookup.fn(), nil)
+	admission := newWorkloadTestAdmission(t, lookup.fn(), nil)
 
 	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
 
@@ -568,11 +643,11 @@ func TestWorkloadIssuerAdmission_BudgetOutcomesAreNeverRemembered(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			admission := newWorkloadIssuerAdmission((&countingLookup{found: false}).fn(), charge)
+			admission := newWorkloadTestAdmission(t, (&countingLookup{found: false}).fn(), charge)
 			_, err := admission.admit(t.Context(), endpoint, issuerURL)
 			require.Error(t, err)
 
-			_, held := admission.misses.seen(workloadIssuerMissKey(endpoint, issuerURL))
+			_, held := admission.misses.seen(t.Context(), workloadIssuerMissKey(endpoint, issuerURL))
 			require.False(t, held, "%s is a statement about load, not about the issuer", name)
 		})
 	}
