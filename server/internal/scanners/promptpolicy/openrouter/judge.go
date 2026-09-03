@@ -36,11 +36,13 @@ const (
 	// cannot pin their own model: one model keeps verdicts comparable across
 	// policies and keeps the benchmark an honest measure of production.
 	judgeModel = "google/gemini-3.5-flash-lite"
-	// judgeReasoningEffort must stay non-empty. The object-completion path
+	// JudgeReasoningEffort must stay non-empty. The object-completion path
 	// defaults a nil Reasoning to effort "none", which the Gemini 3.5
 	// generation rejects with a 400 ("Reasoning is mandatory for this
 	// endpoint") - every evaluation would fail into the policy's error mode.
-	judgeReasoningEffort = "low"
+	// Exported so server/cmd/riskjudgebench benches the production effort
+	// rather than a drifting copy.
+	JudgeReasoningEffort = "low"
 	// defaultJudgeTemperature keeps verdicts deterministic when a policy does
 	// not pin its own temperature.
 	defaultJudgeTemperature = 0.0
@@ -221,7 +223,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		UserEmail:              "",
 		HTTPMetadata:           nil,
 		JSONSchema:             &jsonSchema,
-		Reasoning:              &openrouter.Reasoning{Effort: judgeReasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil},
+		Reasoning:              &openrouter.Reasoning{Effort: JudgeReasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		DisableResponseHealing: false,
 	})
 	if err != nil {

@@ -4,7 +4,8 @@
 // Unlike a hand-rolled HTTP client, this drives the REAL production
 // openrouter.ChatClient (NewUnifiedClient to GetObjectCompletion), so every
 // model runs under prod-equivalent conditions:
-//   - reasoning disabled (Effort:"none"), as the object-completion path forces,
+//   - reasoning effort "low", which is what the judge sends (override with
+//     -reasoning-effort; see that flag for why routes disagree),
 //   - the production model allowlist + ResolveModel fallback,
 //   - the same guardian-policy HTTP transport,
 //   - the identical ObjectCompletionRequest shape judge.call() builds
@@ -116,7 +117,7 @@ func main() {
 		timeout         = flag.Duration("timeout", 30*time.Second, "per-call timeout (prod judgeTimeout is 10s)")
 		orgID           = flag.String("org", "5a25158b-24dc-4d49-b03d-e85acfbea59c", "OrgID label (default: speakeasy-team)")
 		outFile         = flag.String("out", "server/cmd/riskjudgebench/results.json", "write raw per-call results here ('' to skip)")
-		reasoningEffort = flag.String("reasoning-effort", "low", "reasoning effort sent with each call; \"low\" matches production. Pass \"none\" to disable reasoning, which the Gemini 3.5 generation rejects with a 400")
+		reasoningEffort = flag.String("reasoning-effort", ppopenrouter.JudgeReasoningEffort, "reasoning effort sent with each call; \"low\" matches production. Pass \"none\" to disable reasoning, which the Gemini 3.5 generation rejects with a 400")
 	)
 	flag.Parse()
 
@@ -376,7 +377,11 @@ func report(models []string, results []result, reasoningEffort string) {
 	}
 
 	fmt.Println("\nlegend: acc=accuracy prec=precision rec=recall (on matched=true); ranked by F1, tie-broken by p50.")
-	fmt.Printf("        reasoning effort %q, matching the prod judge call, so latency is comparable.\n", reasoningEffort)
+	if reasoningEffort == ppopenrouter.JudgeReasoningEffort {
+		fmt.Printf("        reasoning effort %q, matching the prod judge call, so latency is comparable.\n", reasoningEffort)
+	} else {
+		fmt.Printf("        reasoning effort %q; production sends %q, so latency is NOT comparable to prod.\n", reasoningEffort, ppopenrouter.JudgeReasoningEffort)
+	}
 
 	confidenceSweep(models, results)
 

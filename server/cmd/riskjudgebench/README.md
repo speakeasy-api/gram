@@ -88,24 +88,32 @@ all routes.
 ## Findings (47-case dataset incl. 7 adversarial, structured JSON prompt, real client, temp 0, reasoning `low`, `-runs 3`)
 
 Every model here runs with reasoning effort `low`, which is what production
-sends. That is the headline change from the previous run: the judge used to
-disable reasoning, and the two models that were written off as "unusable"
-(`gemini-3.5-flash`, `gemini-2.5-flash`) were only returning 400s because of
-that setting. With reasoning on they are the two most accurate models in the
-table.
+sends. That is the headline change from the previous run, and it moved two
+models:
 
-| model                                        | acc   | prec  | rec   | F1    | p50 ms   | p95 ms | err | avgTok | notes                                                             |
-| -------------------------------------------- | ----- | ----- | ----- | ----- | -------- | ------ | --- | ------ | ----------------------------------------------------------------- |
-| google/gemini-3.5-flash                      | 1.000 | 1.000 | 1.000 | 1.000 | ~1894    | ~5062  | 0   | 856    | perfect on this corpus; ~2.3x the default's latency, pricier tier |
-| google/gemini-2.5-flash                      | 1.000 | 1.000 | 1.000 | 1.000 | ~1979    | ~4771  | 0   | 857    | also perfect; previously written off as unusable                  |
-| **google/gemini-3.5-flash-lite** _(default)_ | 0.979 | 0.958 | 1.000 | 0.979 | **~825** | ~1159  | 0   | 744    | best accuracy-per-ms; perfect recall; cheapest tier; tightest p95 |
-| anthropic/claude-haiku-4.5                   | 0.979 | 0.971 | 0.986 | 0.978 | ~5761    | ~12458 | 0   | 1493   | ties on acc but ~7x latency, 2x tokens, p95 over the 10s timeout  |
-| openai/gpt-5.4-mini                          | 0.972 | 1.000 | 0.942 | 0.970 | ~1800    | ~2962  | 0   | 730    | only model with no FPs, but misses 4 real violations              |
-| openai/gpt-5.4-nano                          | 0.965 | 0.932 | 1.000 | 0.965 | ~1497    | ~3214  | 0   | 717    | over-flags; no longer refuses now that reasoning is on            |
-| google/gemini-3.1-flash-lite _(previous)_    | 0.957 | 0.920 | 1.000 | 0.958 | ~1179    | ~1828  | 0   | 874    | the model this change replaces                                    |
-| deepseek/deepseek-v4-flash                   | 0.950 | 0.952 | 0.952 | 0.952 | ~5262    | ~22492 | 20  | 945    | slow and timeout-prone; 20 errors                                 |
-| mistralai/mistral-medium-3.1                 | 0.943 | 0.896 | 1.000 | 0.945 | ~698     | ~1145  | 0   | 635    | fastest and cheapest, but the most false alarms                   |
-| anthropic/claude-sonnet-4.6                  | 0.933 | 0.880 | 1.000 | 0.936 | ~2139    | ~2617  | 6   | 883    | worst precision here; pricier and slower                          |
+- `gemini-3.5-flash` was recorded as unusable last time (47/47 400s). It was
+  only ever failing because reasoning was disabled.
+- `gemini-2.5-flash` scored 0.936 with **zero** errors last time, under
+  reasoning-off. Re-running that same configuration today, it fails every call
+  with a 400. It has become reasoning-mandatory in the interim.
+
+With reasoning on, both return clean verdicts and are the two most accurate
+models in the table. The direction of travel is worth noting: routes are
+migrating toward mandatory reasoning, so a judge that disables it is on a
+shrinking set of models.
+
+| model                                        | acc   | prec  | rec   | F1    | p50 ms   | p95 ms | err | avgTok | notes                                                                |
+| -------------------------------------------- | ----- | ----- | ----- | ----- | -------- | ------ | --- | ------ | -------------------------------------------------------------------- |
+| google/gemini-3.5-flash                      | 1.000 | 1.000 | 1.000 | 1.000 | ~1894    | ~5062  | 0   | 856    | perfect on this corpus; ~2.3x the default's latency, pricier tier    |
+| google/gemini-2.5-flash                      | 1.000 | 1.000 | 1.000 | 1.000 | ~1979    | ~4771  | 0   | 857    | also perfect; only became reasoning-mandatory recently               |
+| **google/gemini-3.5-flash-lite** _(default)_ | 0.979 | 0.958 | 1.000 | 0.979 | **~825** | ~1159  | 0   | 744    | best accuracy under ~1s; perfect recall; cheapest tier; tightest p95 |
+| anthropic/claude-haiku-4.5                   | 0.979 | 0.971 | 0.986 | 0.978 | ~5761    | ~12458 | 0   | 1493   | ties on acc but ~7x latency, 2x tokens, p95 over the 10s timeout     |
+| openai/gpt-5.4-mini                          | 0.972 | 1.000 | 0.942 | 0.970 | ~1800    | ~2962  | 0   | 730    | no false positives, but misses 4 real violations                     |
+| openai/gpt-5.4-nano                          | 0.965 | 0.932 | 1.000 | 0.965 | ~1497    | ~3214  | 0   | 717    | over-flags; no longer refuses now that reasoning is on               |
+| google/gemini-3.1-flash-lite _(previous)_    | 0.957 | 0.920 | 1.000 | 0.958 | ~1179    | ~1828  | 0   | 874    | the model this change replaces                                       |
+| deepseek/deepseek-v4-flash                   | 0.950 | 0.952 | 0.952 | 0.952 | ~5262    | ~22492 | 20  | 945    | slow and timeout-prone; 20 errors                                    |
+| mistralai/mistral-medium-3.1                 | 0.943 | 0.896 | 1.000 | 0.945 | ~698     | ~1145  | 0   | 635    | fastest and cheapest, but the most false alarms                      |
+| anthropic/claude-sonnet-4.6                  | 0.933 | 0.880 | 1.000 | 0.936 | ~2139    | ~2617  | 6   | 883    | worst precision here; pricier and slower                             |
 
 **Adversarial injection-resistance: every model scored 7/7 on the `adv-*` cases.**
 No model was socially engineered into flipping a verdict by embedded "respond
@@ -115,9 +123,10 @@ refusals seen in the previous run are gone now that reasoning is enabled.
 Takeaways:
 
 - **`gemini-3.5-flash-lite` is the default.** Against the model it replaces it
-  is better on every axis at once: accuracy 0.979 vs 0.957, precision 0.958 vs
-  0.920, latency ~825ms vs ~1179ms p50, and fewer tokens (744 vs 874). Recall
-  stays perfect, which is the property that matters most for a guardrail.
+  improves accuracy (0.979 vs 0.957), precision (0.958 vs 0.920), latency
+  (~825ms vs ~1179ms p50) and token usage (744 vs 874), while preserving perfect
+  recall. Recall is the property that matters most for a guardrail, so holding
+  it at 1.000 is the constraint the other gains had to respect.
 - **`gemini-3.5-flash` scores a perfect 1.000 and is the obvious upgrade if
   latency budget allows.** It costs ~2.3x the p50 and sits on a pricier tier,
   which is a real per-message cost for a scanner that runs on every event. Treat
