@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func staticChallengeLogging(enabled bool) ChallengeLoggingEnabled {
@@ -424,28 +425,45 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoChecks)
 }
 
-func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
+func TestEngineRequire_APIKeyAuthorizationModeIsExplicit(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	sessionID := "session_123"
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org_123",
-		UserID:                "user_123",
-		ExternalUserID:        "",
-		APIKeyID:              "key_123",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-	})
+	authCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_123",
+		UserID:               "user_123",
+		APIKeyID:             "key_123",
+	}
+	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}
 
-	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
+	unclassified := contextvalues.SetAuthContext(t.Context(), authCtx)
+	err := engine.Require(unclassified, check)
+	require.Error(t, err)
+	var unclassifiedErr *oops.ShareableError
+	require.ErrorAs(t, err, &unclassifiedErr)
+	require.Equal(t, oops.CodeUnauthorized, unclassifiedErr.Code)
+
+	legacy := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
+	require.NoError(t, engine.Require(legacy, check))
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	principalBacked := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, agent)
+	enforce, err := engine.ShouldEnforce(principalBacked)
 	require.NoError(t, err)
+	require.True(t, enforce)
+
+	// Generic preloaded grants cannot bypass principal-backed admission.
+	principalBacked = GrantsToContext(principalBacked, []Grant{NewGrant(ScopeProjectRead, "proj_123")})
+	principalBacked, err = engine.PrepareContext(principalBacked)
+	require.NoError(t, err)
+	prepared, ok := GrantsFromContext(principalBacked)
+	require.True(t, ok)
+	require.Empty(t, prepared)
+
+	err = engine.Require(principalBacked, check)
+	require.Error(t, err)
+	var principalErr *oops.ShareableError
+	require.ErrorAs(t, err, &principalErr)
+	require.Equal(t, oops.CodeForbidden, principalErr.Code)
 }
 
 func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
