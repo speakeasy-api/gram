@@ -36,8 +36,8 @@ type FailedInvite = { email: string; roleId: string };
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <SetupShell view="board">
-      <main className="flex min-h-0 flex-1 overflow-y-auto">
-        <div className="@container/main mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pb-24">
+      <main className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 p-8 pb-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
           <Page.Section>
             <Page.Section.Title area="" stage="preview">
               Organization setup

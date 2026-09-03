@@ -316,7 +316,7 @@ export function SetupWizard(): JSX.Element {
       view="wizard"
       showViewToggle={setupBoardFlag.status === "enabled"}
     >
-      <main className="flex flex-1 items-start justify-center px-4 py-8 md:px-8 md:py-16">
+      <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
         <div className="flex w-full max-w-5xl gap-24">
           <div className="order-first hidden w-64 flex-shrink-0 md:block">
             {resolvingResume ? (
