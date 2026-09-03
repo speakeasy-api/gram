@@ -87906,6 +87906,14 @@ components:
                     type: string
                     description: When the tunneled MCP server source was created
                     format: date-time
+                effective_public_request_burst:
+                    type: integer
+                    description: 'The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).'
+                    format: int64
+                effective_public_request_rate_per_second:
+                    type: integer
+                    description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.'
+                    format: int64
                 id:
                     type: string
                     description: The ID of the tunneled MCP server
@@ -87924,6 +87932,14 @@ components:
                     type: string
                     description: The project ID this tunneled MCP server belongs to
                     format: uuid
+                public_request_burst:
+                    type: integer
+                    description: 'Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.'
+                    format: int64
+                public_request_rate_per_second:
+                    type: integer
+                    description: Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.
+                    format: int64
                 resource_identifier:
                     type: string
                     description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
@@ -87951,6 +87967,8 @@ components:
                 - active_consumer_session_count
                 - created_at
                 - updated_at
+                - effective_public_request_rate_per_second
+                - effective_public_request_burst
         TunneledMcpServerConnections:
             type: object
             properties:
@@ -89570,6 +89588,18 @@ components:
                 name:
                     type: string
                     description: Human-readable display name for the tunneled MCP server. Omit to leave unchanged.
+                public_request_burst:
+                    type: integer
+                    description: 'Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Each request takes one token; tokens refill at the sustained rate up to this cap. Omit to leave unchanged, 0 to clear (twice the sustained rate applies).'
+                    format: int64
+                    minimum: 0
+                    maximum: 1e+06
+                public_request_rate_per_second:
+                    type: integer
+                    description: Sustained anonymous MCP requests per second admitted when this source is served through a public MCP endpoint. Applies to every MCP interaction; one bucket is shared by every caller. Omit to leave unchanged, 0 to clear back to the deployment default.
+                    format: int64
+                    minimum: 0
+                    maximum: 100000
                 resource_identifier:
                     type: string
                     description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.

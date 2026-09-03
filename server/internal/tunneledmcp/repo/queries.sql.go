@@ -316,17 +316,30 @@ SET
         WHEN $3::text IS NULL THEN resource_identifier
         ELSE NULLIF($3::text, '')
     END,
+    -- Public admission limit, tri-state per column: NULL leaves the stored
+    -- value, 0 clears to NULL (deployment default), any other value is stored.
+    -- Bounds are enforced by the column CHECK constraints.
+    public_request_rate_per_second = CASE
+        WHEN $4::int IS NULL THEN public_request_rate_per_second
+        ELSE NULLIF($4::int, 0)
+    END,
+    public_request_burst = CASE
+        WHEN $5::int IS NULL THEN public_request_burst
+        ELSE NULLIF($5::int, 0)
+    END,
     updated_at = clock_timestamp()
-WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
+WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
-	Name               pgtype.Text
-	AllowPublic        pgtype.Bool
-	ResourceIdentifier pgtype.Text
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
+	Name                       pgtype.Text
+	AllowPublic                pgtype.Bool
+	ResourceIdentifier         pgtype.Text
+	PublicRequestRatePerSecond pgtype.Int4
+	PublicRequestBurst         pgtype.Int4
+	ID                         uuid.UUID
+	ProjectID                  uuid.UUID
 }
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (TunneledMcpServer, error) {
@@ -334,6 +347,8 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (Tun
 		arg.Name,
 		arg.AllowPublic,
 		arg.ResourceIdentifier,
+		arg.PublicRequestRatePerSecond,
+		arg.PublicRequestBurst,
 		arg.ID,
 		arg.ProjectID,
 	)
