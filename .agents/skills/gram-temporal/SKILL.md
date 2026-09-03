@@ -18,9 +18,7 @@ metadata:
 
 Temporal Cloud bills per **action**: every workflow start (ContinueAsNew and child starts included), every activity attempt (retries count), every timer, every signal. Workflow tasks are free. A no-op activity costs the same as five minutes of work. List price is $25–50 per million actions, so cost is set by **how many things you schedule**, not how much work they do.
 
-Core rule: **Temporal is for durable, multi-step orchestration started once per user or system action. Anything that scales with messages, tool calls, MCP requests, rows, or entities goes through the transactional outbox or a Pub/Sub publisher and a `gram streams` handler. Anything on a timer costs `ticks × activities × namespaces` and must state that number in its PR.**
-
-`server/internal/scanners/publish.go` (per-tool-call scanning over Pub/Sub) is the shape to copy. The offenders listed below grew the bill ~6× in two months; migrate them, do not copy them.
+Core rule: **Temporal is for durable, multi-step orchestration started once per user or system action. Anything that scales with messages, tool calls, MCP requests, rows, or entities goes through the transactional outbox or a Pub/Sub publisher and a `gram streams` handler. Anything on a timer costs `ticks × activities × namespaces` and must state that number in its PR.** `server/internal/scanners/publish.go` (per-tool-call scanning over Pub/Sub) is the shape to copy.
 
 ## Quick reference
 
@@ -45,9 +43,9 @@ Scales with: fixed | projects | orgs | messages | tool calls.
 `Temporal actions/month: 0 (outbox → batch handler, no Temporal)` is a valid and common answer. Rules of thumb, per namespace:
 
 - A 10 s schedule is 260k starts/month before it does any work. 1 min: 43k. 1 h: 720.
-- One activity per project per 10 s tick at 110 projects: ~29M actions/month.
+- One activity per project per 10 s tick at 100 projects: ~26M actions/month.
 - A loop with one activity and a 5 s timer: ~1M actions/month, forever, even idle.
-- A per-project coordinator signalled on every chat write through a 30 s `ThrottledSignaler`, measured in prod: **1.0 action per message** (median 4 messages per run, 14% of runs fetch nothing). At 250k messages/day that is 7.5M actions/month per coordinator. Do not estimate 0.05 per message "amortised over the batch": the throttle fires on the leading edge and is per pod, so batches stay small.
+- A per-project coordinator signalled on every chat write through a 30 s `ThrottledSignaler`, measured in prod: **1.0 action per message** (median 4 messages per run, 14% of runs fetch nothing). Do not estimate 0.05 per message "amortised over the batch": the throttle fires on the leading edge and is per pod, so batches stay small.
 
 Anything over 1M actions/month needs a sentence saying why.
 
@@ -85,25 +83,3 @@ One activity returns only the rows that changed (SQL), fan out over that. Cadenc
 - Scope the ID by task queue: `fmt.Sprintf("v1:%s:%s", name, temporalEnv.Queue())`. PR previews share the dev namespace; an unscoped ID gets re-pointed by each preview's `Update` and deleted by the preview sweeper, orphaning the loop it tracked.
 - `Create`, then on `ErrScheduleAlreadyRunning` do nothing unless the spec changed. Never `Update` a shared schedule from a preview worker.
 - Every `ContinueAsNew` loop must exit on its own (max iterations or wall-clock) so a lost schedule cannot leave an immortal workflow behind.
-
-### Existing offenders (migrate when you touch them)
-
-`PluginGeneratorRolloutWorkflow` (10 s schedule × activity per project → hourly, SQL change detection, outbox event on config change). `RiskAnalysisCoordinatorWorkflow`, `ChatAnalysisCoordinatorWorkflow`, `SkillEfficacyCoordinatorWorkflow` (`SignalWithStart` per chat write, three times → one coordinator with in-workflow debounce, or a batch handler). `PublishOutboxWorkflow` (5 s idle timer, unscoped ID, immortal loop → 60 s idle, scoped ID, bounded lifetime). `SpendRuleEvaluationWorkflow`, `SessionQuarantineReassertWorkflow` (30 s schedules → 5 min).
-
-## Rationalizations seen in real designs
-
-| Excuse                                                                 | Reality                                                                                      |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| "Gram already solves this trigger point this way three times"          | Those three are the incident. Reuse the outbox, not the coordinator.                         |
-| "The activity is cheap / short-circuits when unchanged"                | Billing counts the start, not the work.                                                      |
-| "Signal-on-commit is not transactional, so poll"                       | `outbox.Publish` inside the transaction is transactional. Poll only as an hourly safety net. |
-| "Zero idle cost, it only runs when signalled, the throttle batches it" | Per-run cost is the problem, and the measured median batch is 4 messages.                    |
-
-## Red flags in a diff
-
-- `time.Second` inside a `ScheduleIntervalSpec`
-- `ExecuteActivity` inside a `for ... range` over projects, orgs, or users
-- `SignalWithStart`, `ExecuteWorkflow`, or `NewThrottledSignaler` in a request path, a `MessageObserver`, or a tool-call handler (from a `streams` batch handler or a scheduled sweep is fine)
-- `workflow.Sleep` under 30 s inside `for {}`
-- A schedule ID that does not include the task queue
-- A PR touching `server/internal/background/` with no `Temporal actions/month` line
