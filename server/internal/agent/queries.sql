@@ -130,6 +130,34 @@ WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 m
    OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
    OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
 
+-- name: UpsertDeviceAgentEnvironmentSync :exec
+-- Best-effort record that an agent polled from a box that is not somebody's
+-- laptop — a cloud sandbox, a container, a shared server. Sibling of
+-- UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+-- an MDM device's assigned-user email against THAT one, so a cloud session
+-- polling under a real person's address would otherwise mark their laptop
+-- covered whether or not the laptop runs the agent.
+--
+-- Only called when the agent declared a non-laptop environment. A laptop, and
+-- every agent predating the header, still writes the sibling.
+--
+-- The guard mirrors the device sibling's rather than the plain heartbeat
+-- throttle, because hostname is mutable and a ~60s poll cadence keeps
+-- last_seen_at almost always fresh — a changed hostname could otherwise go
+-- unrecorded for a whole session.
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES (@organization_id, @email, @environment, sqlc.narg('hostname'))
+-- Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one identity from holding two rows.
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
 -- recently active first, for the dashboard's device-agent users view.

@@ -181,6 +181,34 @@ func normalizeSerial(reported *string) string {
 	return serial
 }
 
+// Environment kinds an agent may declare. "laptop" is the default and is never
+// stored as such: those heartbeats go to device_agent_syncs, whose email match
+// device coverage reads.
+const (
+	environmentLaptop    = "laptop"
+	environmentEphemeral = "ephemeral"
+	environmentServer    = "server"
+)
+
+// normalizeEnvironment maps the declared kind onto the closed set, returning
+// "" for a laptop and for anything unrecognized.
+//
+// Unrecognized degrades rather than erroring, deliberately. The alternative is
+// rejecting the poll, which would stop that device syncing plugins at all —
+// an outage caused by an attribution hint. A new agent inventing a kind an
+// older server has not heard of should keep working, and the worst case is
+// that its heartbeat is counted as a laptop, which is where it lands today.
+func normalizeEnvironment(reported *string) string {
+	switch strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, ""))) {
+	case environmentEphemeral:
+		return environmentEphemeral
+	case environmentServer:
+		return environmentServer
+	default:
+		return ""
+	}
+}
+
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -219,7 +247,28 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// can show who is actively running it. Never fail the sync if the write fails
 	// (mirrors api_keys.last_accessed_at). The query's ON CONFLICT guard caps
 	// writes to at most once per minute per (org, email).
-	if err := s.repo.UpsertDeviceAgentSync(ctx, repo.UpsertDeviceAgentSyncParams{
+	//
+	// A non-laptop box records into device_agent_environment_syncs INSTEAD.
+	// Keeping those rows out of device_agent_syncs is the point: coverage falls
+	// back to matching an MDM device's assigned-user email against that table,
+	// so a cloud session polling under a real person's address would otherwise
+	// mark their laptop agent_active whether or not the laptop runs the agent.
+	// Cloud environments enroll with one shared identity, so using a real
+	// person's address is an easy accident, and a false coverage claim is worse
+	// than an absent one because nothing prompts anyone to look.
+	if environment := normalizeEnvironment(payload.Environment); environment != "" {
+		if err := s.repo.UpsertDeviceAgentEnvironmentSync(ctx, repo.UpsertDeviceAgentEnvironmentSyncParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Email:          email,
+			Environment:    environment,
+			Hostname:       conv.PtrToPGTextTrimmed(payload.Hostname),
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to record device agent environment sync",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	} else if err := s.repo.UpsertDeviceAgentSync(ctx, repo.UpsertDeviceAgentSyncParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Email:          email,
 	}); err != nil {

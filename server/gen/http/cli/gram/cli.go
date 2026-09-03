@@ -191,7 +191,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "killswitches list-capabilities --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
 		""
 }
 
@@ -385,6 +385,7 @@ func ParseEndpoint(
 		agentGetPluginsEmailFlag        = agentGetPluginsFlags.String("email", "", "")
 		agentGetPluginsSerialNumberFlag = agentGetPluginsFlags.String("serial-number", "", "")
 		agentGetPluginsHostnameFlag     = agentGetPluginsFlags.String("hostname", "", "")
+		agentGetPluginsEnvironmentFlag  = agentGetPluginsFlags.String("environment", "", "")
 
 		agentListSyncedUsersFlags            = flag.NewFlagSet("list-synced-users", flag.ExitOnError)
 		agentListSyncedUsersSessionTokenFlag = agentListSyncedUsersFlags.String("session-token", "", "")
@@ -7251,7 +7252,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-plugins":
 				endpoint = c.GetPlugins()
-				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag)
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag, *agentGetPluginsEnvironmentFlag)
 			case "list-synced-users":
 				endpoint = c.ListSyncedUsers()
 				data, err = agentc.BuildListSyncedUsersPayload(*agentListSyncedUsersSessionTokenFlag)
@@ -10239,6 +10240,7 @@ func agentGetPluginsUsage() {
 	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -serial-number STRING")
 	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprint(os.Stderr, " -environment STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -10251,10 +10253,11 @@ func agentGetPluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -environment STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"")
 }
 
 func agentListSyncedUsersUsage() {

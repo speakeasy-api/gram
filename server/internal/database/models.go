@@ -648,6 +648,18 @@ type DeviceAgentDeviceSync struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type DeviceAgentEnvironmentSync struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	Environment    string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DeviceAgentSync struct {
 	ID             uuid.UUID
 	OrganizationID string
