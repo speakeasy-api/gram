@@ -18,6 +18,10 @@ import (
 // other use of the same pepper.
 const hkdfInfo = "gram/risk/fingerprint/tenant"
 
+// minCurrentPepperBytes is the minimum length of the key that signs new
+// fingerprints; an HMAC pepper shorter than this is guessable.
+const minCurrentPepperBytes = 16
+
 var (
 	ErrInvalidFingerprintPepperJSON    = errors.New("invalid fingerprint pepper keyring json")
 	ErrInvalidFingerprintPepperKeyRing = errors.New("invalid fingerprint pepper keyring")
@@ -230,6 +234,12 @@ func ParsePepperKeyRing(jsonSecret []byte) (Fingerprinter, error) {
 
 	if len(keyring.keys) == 0 {
 		return empty, fmt.Errorf("no keys found in keyring: %w", ErrInvalidFingerprintPepperKeyRing)
+	}
+
+	// Only the current key signs new fingerprints; retired keys may be any
+	// length. Mirrors the pystreams keyring validation.
+	if len(keyring.keys[keyring.currentVersion]) < minCurrentPepperBytes {
+		return empty, fmt.Errorf("current pepper %s is %d bytes; minimum is %d: %w", keyring.currentVersion, len(keyring.keys[keyring.currentVersion]), minCurrentPepperBytes, ErrInvalidFingerprintPepperKeyRing)
 	}
 
 	return keyring, nil
