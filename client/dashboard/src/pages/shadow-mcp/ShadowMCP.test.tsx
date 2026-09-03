@@ -1,72 +1,43 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
-import type { ReactElement, ReactNode } from "react";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShadowMCP from "./ShadowMCP";
+import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   useProject: vi.fn(),
   useRBAC: vi.fn(),
+  useShadowMCPPolicyInventory: vi.fn(),
   useMembers: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
 }));
 
-vi.mock("@/components/page-layout", () => {
-  function Page({ children }: { children: ReactNode }) {
-    return <div>{children}</div>;
-  }
-
-  function Header({ children }: { children?: ReactNode }) {
-    return <div>{children}</div>;
-  }
-  Header.Breadcrumbs = () => null;
-
-  function Body({ children }: { children: ReactNode }) {
-    return <div>{children}</div>;
-  }
-
-  function Section({ children }: { children: ReactNode }) {
-    let title: ReactElement | null = null;
-    let description: ReactElement | null = null;
-    let cta: ReactElement | null = null;
-    let body: ReactElement | null = null;
-
-    for (const child of Array.isArray(children) ? children : [children]) {
-      if (typeof child === "object" && child && "type" in child) {
-        if (child.type === Section.Title) title = child;
-        if (child.type === Section.Description) description = child;
-        if (child.type === Section.CTA) cta = child;
-        if (child.type === Section.Body) body = child;
-      }
-    }
-
-    return (
-      <section>
-        <div data-testid="section-header">
-          {title}
-          <div data-testid="section-cta">{cta}</div>
-        </div>
-        {description}
-        {body}
-      </section>
-    );
-  }
-  Section.Title = ({ children }: { children: ReactNode }) => (
-    <h1>{children}</h1>
-  );
-  Section.Description = ({ children }: { children: ReactNode }) => (
-    <p>{children}</p>
-  );
-  Section.CTA = ({ children }: { children: ReactNode }) => <>{children}</>;
-  Section.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
-
+vi.mock("@/components/page-templates", () => {
   return {
-    Page: Object.assign(Page, {
-      Header,
-      Body,
-      Section,
-    }),
+    TabbedPage: ({
+      title,
+      tabs,
+      activeTab,
+      children,
+    }: {
+      title: string;
+      tabs: Array<{ value: string; label: string }>;
+      activeTab: string;
+      children: ReactNode;
+    }) => (
+      <section>
+        <h1>{title}</h1>
+        <div data-testid="tabs">
+          {tabs.map((tab) => (
+            <span key={tab.value}>{tab.label}</span>
+          ))}
+        </div>
+        <div data-testid="active-tab">{activeTab}</div>
+        {children}
+      </section>
+    ),
   };
 });
 
@@ -82,14 +53,21 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: mocks.useRoles,
 }));
 
+vi.mock("@/components/shadow-mcp/useShadowMCPPolicyInventory", () => ({
+  useShadowMCPPolicyInventory: mocks.useShadowMCPPolicyInventory,
+}));
+
 vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    mcp: { goTo: vi.fn(), href: () => "/mcp" },
+    policyCenter: { goTo: vi.fn(), href: () => "/risk-policies" },
     shadowMCP: {
       detail: {
+        goTo: vi.fn(),
         href: (serverURL: string) => `/shadow-mcp/${serverURL}`,
       },
     },
@@ -166,6 +144,12 @@ describe("ShadowMCP", () => {
       isError: false,
       isLoading: false,
     });
+    mocks.useShadowMCPPolicyInventory.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
     mocks.useMembers.mockReturnValue({
       data: { members: [{ name: "Admin User" }] },
     });
@@ -174,31 +158,51 @@ describe("ShadowMCP", () => {
     });
   });
 
-  it("renders the Shadow MCP inventory management page", () => {
+  function inventoryServer(overrides: Record<string, unknown> = {}) {
+    return {
+      access: "none",
+      accessSummary: testAccessSummary("none"),
+      allowedPolicyIds: [],
+      blockedPolicyIds: [],
+      canonicalServerUrl: "https://shadow.example/mcp",
+      firstSeen: new Date("2026-01-01T00:00:00Z"),
+      lastCalled: new Date("2026-01-03T00:00:00Z"),
+      lastSeen: new Date("2026-01-03T00:00:00Z"),
+      observedUseCount: 12,
+      requestCount: 0,
+      serverName: "Shadow Example",
+      serverSlug: "shadow-example",
+      topUsers: [],
+      urlHost: "shadow.example",
+      userCount: 2,
+      ...overrides,
+    };
+  }
+
+  it("defaults to the policy use case tab", () => {
     render(
       <MemoryRouter>
         <ShadowMCP />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
-      screen.getByText(/Every MCP server this project knows about/),
+      screen.getByRole("heading", { name: "Shadow MCP Inventory" }),
     ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
+    expect(screen.getByTestId("active-tab").textContent).toBe("policy");
+    expect(screen.getByText("Policy Use Case")).toBeTruthy();
+    expect(screen.getByText("Gateway Use Case")).toBeTruthy();
+    expect(screen.getByText("Full Inventory")).toBeTruthy();
+    expect(screen.getByText("Top risky Shadow MCP servers")).toBeTruthy();
+    expect(screen.getByText("Open Guardrails")).toBeTruthy();
   });
 
-  it("blocks inventory rendering until policy data loads", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
+  it("shows loading state while policy use case inventory is pending", () => {
+    mocks.useShadowMCPPolicyInventory.mockReturnValue({
       data: undefined,
+      isPending: true,
       isError: false,
-      isLoading: true,
+      refetch: vi.fn(),
     });
 
     render(
@@ -208,114 +212,41 @@ describe("ShadowMCP", () => {
     );
 
     expect(screen.getByRole("status").getAttribute("aria-label")).toBe(
-      "Loading Shadow MCP policies",
+      "Loading risky Shadow MCP servers",
     );
     expect(screen.getByText("Loading table")).toBeTruthy();
-    expect(screen.queryByText("No Policy")).toBeNull();
-    expect(screen.queryByText(/Shadow MCP inventory for/)).toBeNull();
-    expect(
-      within(screen.getByTestId("section-cta")).queryByText(/./),
-    ).toBeNull();
   });
 
-  it("renders blocking policy status in the section header", () => {
+  it("renders inventory tab with policy status and table", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: {
-        policies: [
-          riskPolicy({ action: "flag" }),
-          riskPolicy({ action: "block", enabled: false, id: "disabled-block" }),
-          riskPolicy({ action: "block", id: "block-policy-1" }),
-        ],
+        policies: [riskPolicy({ action: "block", id: "block-policy-1" })],
       },
       isError: false,
       isLoading: false,
     });
+    mocks.useShadowMCPPolicyInventory.mockReturnValue({
+      data: [inventoryServer()],
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter
+        initialEntries={["/org/projects/demo/shadow-mcp?tab=inventory"]}
+      >
         <ShadowMCP />
       </MemoryRouter>,
     );
 
-    const sectionCTA = within(screen.getByTestId("section-cta"));
-    expect(sectionCTA.getByText("Blocking")).toBeTruthy();
-    expect(
-      sectionCTA.getByText(
-        "Block policy is enabled. Servers without allow rules are not allowed.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByTestId("active-tab").textContent).toBe("inventory");
+    expect(screen.getByText("Blocking")).toBeTruthy();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
-  });
-
-  it("renders warning policy status when no blocking policy is enabled", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: { policies: [riskPolicy({ action: "warn" })] },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Warning")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Warn policy is enabled. Users must acknowledge warnings before continuing.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-  });
-
-  it("renders flagging policy status when no blocking policy is enabled", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: { policies: [riskPolicy({ action: "flag" })] },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Flagging")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Flagging policy is enabled. Servers without allow rules are only flagged.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-  });
-
-  it("renders no policy when no enabled Shadow MCP policy exists", () => {
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: {
-        policies: [
-          riskPolicy({ action: "block", enabled: false }),
-          riskPolicy({ action: "block", sources: ["prompt_injection"] }),
-        ],
-      },
-      isError: false,
-      isLoading: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <ShadowMCP />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
   });
 });
