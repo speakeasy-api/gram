@@ -288,11 +288,16 @@ describe("SetupBoard", () => {
     }
     expect(screen.getByRole("region", { name: "Setup board" })).toBeTruthy();
     expect(screen.getByText("Blocked by Instrument agents")).toBeTruthy();
+    const blockedTask = screen.getByTestId("setup-task-confirm-traffic");
+    const viewBlockedTask = within(blockedTask).getByRole("button", {
+      name: "View task: Confirm traffic",
+    });
+    expect(viewBlockedTask.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(viewBlockedTask);
     expect(
-      within(screen.getByTestId("setup-task-confirm-traffic"))
-        .getAllByRole("button", { name: /Confirm traffic/ })
-        .every((button) => button.hasAttribute("disabled")),
-    ).toBe(true);
+      screen.getByRole("dialog", { name: "Confirm traffic" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByText("1 of 4 tasks complete")).toBeTruthy();
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByText("4 tasks")).toBeNull();

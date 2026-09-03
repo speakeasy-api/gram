@@ -113,6 +113,41 @@ describe("setup interaction fixes", () => {
     expect(onSkip).not.toHaveBeenCalled();
   });
 
+  it("selects the task's current member when changing owners", () => {
+    render(
+      <SetupTaskAssignmentDialog
+        task={{
+          ...task,
+          assignee: {
+            userId: "user-current",
+            email: "current@example.com",
+            name: "Current User",
+          },
+        }}
+        members={[
+          {
+            id: "user-current",
+            email: "current@example.com",
+            name: "Current User",
+            joinedAt: new Date(0),
+            principalUrn: "principal:user-current",
+            roleIds: [],
+          },
+        ]}
+        roles={[]}
+        pending={false}
+        onClose={() => {}}
+        onAssignMember={() => {}}
+        onAssignEmail={() => {}}
+        onUnassign={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Member" }).textContent,
+    ).toContain("Current User (current@example.com)");
+  });
+
   it("does not dismiss the assignment dialog while pending", () => {
     const onClose = vi.fn();
     render(

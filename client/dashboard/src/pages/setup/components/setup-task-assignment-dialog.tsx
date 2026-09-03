@@ -38,9 +38,13 @@ export function SetupTaskAssignmentDialog({
   onAssignEmail,
   onUnassign,
 }: SetupTaskAssignmentDialogProps): JSX.Element {
-  const [mode, setMode] = useState<"member" | "email">("member");
-  const [memberId, setMemberId] = useState("");
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"member" | "email">(
+    task?.assignee?.userId ? "member" : task?.assignee ? "email" : "member",
+  );
+  const [memberId, setMemberId] = useState(task?.assignee?.userId ?? "");
+  const [email, setEmail] = useState(
+    task?.assignee && !task.assignee.userId ? task.assignee.email : "",
+  );
   const [invite, setInvite] = useState(false);
   const memberRole = roles.find(
     (role) => role.slug === "member" || role.name.toLowerCase() === "member",

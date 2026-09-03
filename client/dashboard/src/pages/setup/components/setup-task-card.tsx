@@ -121,7 +121,7 @@ export function SetupTaskCard({
         type="button"
         className="w-full space-y-2 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
         onClick={onOpen}
-        disabled={pending || blocked || task.hidden || !canOpen}
+        disabled={pending || task.hidden || !canOpen}
         aria-describedby={descriptionId}
       >
         <h3 className="font-medium text-foreground">{task.title}</h3>
@@ -155,7 +155,7 @@ export function SetupTaskCard({
           variant="secondary"
           className="min-w-0 flex-1"
           onClick={onOpen}
-          disabled={pending || blocked || task.hidden || !canOpen}
+          disabled={pending || task.hidden || !canOpen}
           aria-label={`${taskActionLabel(task.status, blocked)}: ${task.title}`}
         >
           {taskActionLabel(task.status, blocked)}

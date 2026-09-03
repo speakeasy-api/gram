@@ -121,9 +121,9 @@ export function SetupBoardColumns({
                     task.assignee?.userId === currentUserId ||
                     task.assignee?.email.toLowerCase() ===
                       currentUserEmail.toLowerCase();
+                  const canOpen = canAdmin || assignedToCurrentUser;
                   const canChangeStatus =
-                    task.blockedBy.length === 0 &&
-                    (canAdmin || assignedToCurrentUser);
+                    task.blockedBy.length === 0 && canOpen;
                   return (
                     <SetupTaskCard
                       key={task.key}
@@ -132,7 +132,7 @@ export function SetupBoardColumns({
                         (key) => taskTitles.get(key) ?? key,
                       )}
                       canChangeStatus={canChangeStatus}
-                      canOpen={canChangeStatus}
+                      canOpen={canOpen}
                       canAssign={canAdmin}
                       isPlatformAdmin={isPlatformAdmin}
                       pending={pending}
