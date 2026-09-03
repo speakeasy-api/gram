@@ -112,14 +112,14 @@ export function SetupTaskCard({
   return (
     <article
       className={cn(
-        "flex h-64 shrink-0 flex-col border bg-card",
+        "flex shrink-0 flex-col border bg-card",
         (blocked || task.hidden) && "text-muted-foreground",
       )}
       data-testid={`setup-task-${task.key}`}
     >
       <button
         type="button"
-        className="w-full flex-1 space-y-3 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
+        className="w-full space-y-2 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
         onClick={onOpen}
         disabled={pending || blocked || task.hidden || !canOpen}
         aria-describedby={descriptionId}
@@ -151,7 +151,7 @@ export function SetupTaskCard({
 
       <div className="flex min-w-0 items-center gap-2 border-t p-3">
         <Button
-          size="sm"
+          size="xs"
           variant="secondary"
           className="min-w-0 flex-1"
           onClick={onOpen}
@@ -162,7 +162,7 @@ export function SetupTaskCard({
         </Button>
         {canAssign && !ownerLabel ? (
           <Button
-            size="sm"
+            size="xs"
             variant="tertiary"
             onClick={onAssign}
             disabled={pending}

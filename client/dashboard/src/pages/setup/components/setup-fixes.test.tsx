@@ -1,23 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import { OnboardingHeader } from "./onboarding-header";
 import { SetupTaskAssignmentDialog } from "./setup-task-assignment-dialog";
 import { SetupTaskDialog } from "./setup-task-dialog";
-import { SetupViewToggle } from "./setup-view-toggle";
-
-const routes = vi.hoisted(() => ({
-  wizard: vi.fn(),
-  board: vi.fn(),
-}));
-
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: { goTo: routes.wizard },
-    setupBoard: { goTo: routes.board },
-  }),
-}));
-
 vi.mock("./setup-task-content", () => ({
   SetupTaskContent: ({
     onComplete,
@@ -48,21 +34,7 @@ const task: SetupTask = {
 
 afterEach(cleanup);
 
-beforeEach(() => {
-  routes.wizard.mockReset();
-  routes.board.mockReset();
-});
-
 describe("setup interaction fixes", () => {
-  it("does not navigate when the active setup view is selected", () => {
-    render(<SetupViewToggle view="board" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Board" }));
-
-    expect(routes.board).not.toHaveBeenCalled();
-    expect(routes.wizard).not.toHaveBeenCalled();
-  });
-
   it("exposes the compact dashboard action by name", () => {
     render(<OnboardingHeader onLeave={() => {}} />);
 

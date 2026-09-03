@@ -37,12 +37,6 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
 vi.mock("@/components/ui/Skeleton", () => ({
   Skeleton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "enabled" }),
-}));
-vi.mock("./setup-view-toggle", () => ({
-  SetupViewToggle: () => null,
-}));
 vi.mock("./onboarding-header", () => ({
   OnboardingHeader: () => null,
 }));

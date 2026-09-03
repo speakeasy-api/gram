@@ -3,8 +3,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
 import { SetupShell } from "./setup-shell";
@@ -81,7 +79,6 @@ export function SetupWizard(): JSX.Element {
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { markSetupStarted } = useOrgSetupStarted(orgSlug);
-  const setupBoardFlag = useFeatureFlag(FEATURE_FLAGS.setupBoard);
 
   useEffect(() => {
     markSetupStarted();
@@ -312,10 +309,7 @@ export function SetupWizard(): JSX.Element {
   };
 
   return (
-    <SetupShell
-      view="wizard"
-      showViewToggle={setupBoardFlag.status === "enabled"}
-    >
+    <SetupShell>
       <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
         <div className="flex w-full max-w-5xl gap-24">
           <div className="order-first hidden w-64 flex-shrink-0 md:block">

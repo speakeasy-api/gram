@@ -293,12 +293,9 @@ describe("SetupBoard", () => {
         .getAllByRole("button", { name: /Confirm traffic/ })
         .every((button) => button.hasAttribute("disabled")),
     ).toBe(true);
-    expect(screen.getByText("1 of 4 complete")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Organization setup progress" })
-        .getAttribute("aria-valuenow"),
-    ).toBe("25");
+    expect(screen.getByText("1 of 4 tasks complete")).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByText("4 tasks")).toBeNull();
 
     fireEvent.click(
       within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {

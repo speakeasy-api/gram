@@ -35,7 +35,7 @@ type FailedInvite = { email: string; roleId: string };
 
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <SetupShell view="board">
+    <SetupShell>
       <main className="flex min-h-0 flex-1 overflow-hidden">
         <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 p-8 pb-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
           <Page.Section>
@@ -274,34 +274,14 @@ function SetupBoardInner(): JSX.Element {
       )
     : tasks;
   const completedCount = tasks.filter((task) => task.status === "done").length;
-  const progress =
-    tasks.length === 0 ? 0 : (completedCount / tasks.length) * 100;
   return (
     <BoardPage>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <Page.Toolbar>
           <Page.Toolbar.Leading>
-            <div className="flex min-w-0 flex-wrap items-center gap-4">
-              <div className="flex min-w-36 items-center gap-3">
-                <Text small className="whitespace-nowrap">
-                  {completedCount} of {tasks.length} complete
-                </Text>
-                <div
-                  role="progressbar"
-                  aria-label="Organization setup progress"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(progress)}
-                  className="h-1 w-20 overflow-hidden bg-muted"
-                >
-                  <div
-                    aria-hidden="true"
-                    className="h-full bg-success-default"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+            <Text small className="whitespace-nowrap">
+              {completedCount} of {tasks.length} tasks complete
+            </Text>
           </Page.Toolbar.Leading>
           <Page.Toolbar.Actions>
             <div className="flex items-center gap-3">
@@ -313,10 +293,6 @@ function SetupBoardInner(): JSX.Element {
                 onCheckedChange={setShowMine}
                 aria-labelledby="my-tasks-label"
               />
-              <Text small muted className="whitespace-nowrap">
-                {visibleTasks.length}{" "}
-                {visibleTasks.length === 1 ? "task" : "tasks"}
-              </Text>
             </div>
           </Page.Toolbar.Actions>
           {isPlatformAdmin ? (
