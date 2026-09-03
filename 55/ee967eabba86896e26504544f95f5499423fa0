@@ -1,0 +1,20 @@
+.changeset/data-exports-bounded-loading.md
+  h_2620cc60cfd1e9 1-6
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 16,21,28,116,119-128,221,300,339
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 153-158
+server/internal/dataexports/list_for_org_test.go
+  h_2620cc60cfd1e9 55-79,88-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "55ee967eabba86896e26504544f95f5499423fa0",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
