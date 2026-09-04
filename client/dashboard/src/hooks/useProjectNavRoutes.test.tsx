@@ -46,7 +46,7 @@ const routes = {
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
-  shadowMCP: route("Shadow MCP", "shadow-mcp"),
+  shadowMCP: route("Shadow MCP Inventory", "shadow-mcp"),
   sources: route("Sources", "sources"),
 };
 
@@ -93,12 +93,13 @@ describe("useProjectNavRoutes", () => {
     ).toBe(false);
   });
 
-  it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
+  it("does not include Shadow MCP in primary project navigation", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const navTitles = result.current.map((entry) => entry.route.title);
 
-    expect(navTitles).toContain("Shadow MCP");
+    expect(navTitles).not.toContain("Shadow MCP");
+    expect(navTitles).not.toContain("Shadow MCP Inventory");
     expect(navTitles).not.toContain("Approval Requests");
   });
 

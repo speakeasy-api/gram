@@ -1,4 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
+import { ShadowMCPGatewayUseCaseSection } from "@/components/shadow-mcp/ShadowMCPGatewayUseCaseSection";
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
@@ -517,6 +518,18 @@ function MCPOverview() {
   ) {
     return (
       <>
+        <Page.Section>
+          <Page.Section.Title area="" className="text-display-xs">
+            Shadow MCP distribution
+          </Page.Section.Title>
+          <Page.Section.Description>
+            External MCP servers observed in this project that may benefit from
+            broader distribution through managed gateways.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <ShadowMCPGatewayUseCaseSection compact />
+          </Page.Section.Body>
+        </Page.Section>
         <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
         {newMcpServerDialog}
@@ -527,6 +540,18 @@ function MCPOverview() {
 
   return (
     <>
+      <Page.Section>
+        <Page.Section.Title area="" className="text-display-xs">
+          Shadow MCP distribution
+        </Page.Section.Title>
+        <Page.Section.Description>
+          External MCP servers observed in this project that may benefit from
+          broader distribution through managed gateways.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <ShadowMCPGatewayUseCaseSection compact />
+        </Page.Section.Body>
+      </Page.Section>
       <Page.Section>
         <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
         {hasRefreshError ? (
