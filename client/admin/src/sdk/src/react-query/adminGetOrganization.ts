@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminGetOrganizationQueryData,
+  buildAdminGetOrganizationQuery,
+  prefetchAdminGetOrganization,
+  queryKeyAdminGetOrganization,
+} from "./adminGetOrganization.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminGetOrganizationQueryData,
+  buildAdminGetOrganizationQuery,
+  prefetchAdminGetOrganization,
+  queryKeyAdminGetOrganization,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminGetOrganizationQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * getOrganization admin
+ *
+ * @remarks
+ * Returns full admin details for a single organization by id or slug.
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetOrganization(
+  request: AdminGetOrganizationRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetOrganizationQueryData,
+    AdminGetOrganizationQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetOrganizationQueryData,
+  AdminGetOrganizationQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetOrganizationQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * getOrganization admin
+ *
+ * @remarks
+ * Returns full admin details for a single organization by id or slug.
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetOrganizationSuspense(
+  request: AdminGetOrganizationRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetOrganizationQueryData,
+    AdminGetOrganizationQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetOrganizationQueryData,
+  AdminGetOrganizationQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetOrganizationQuery(
       client,
       request,
       options,
@@ -100,19 +106,19 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminGetOrganizationData(
   client: QueryClient,
-  queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  queryKeyBase: [parameters: { idOrSlug: string }],
+  data: AdminGetOrganizationQueryData,
+): AdminGetOrganizationQueryData | undefined {
+  const key = queryKeyAdminGetOrganization(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminGetOrganizationQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminGetOrganization(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
+  queryKeyBase: TupleToPrefixes<[parameters: { idOrSlug: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "getOrganization",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminGetOrganization(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "getOrganization"],
   });
 }

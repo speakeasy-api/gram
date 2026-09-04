@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
+import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminCancelStripeSubscriptionMutationVariables = {
+  request: CancelStripeSubscriptionRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminCancelStripeSubscriptionMutationData = AdminStripeSubscription;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminCancelStripeSubscriptionMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +47,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * cancelStripeSubscription admin
+ *
+ * @remarks
+ * Schedules an organization's PAYG subscription to cancel at period end.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminCancelStripeSubscriptionMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminCancelStripeSubscriptionMutationData,
+    AdminCancelStripeSubscriptionMutationError,
+    AdminCancelStripeSubscriptionMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminCancelStripeSubscriptionMutationData,
+  AdminCancelStripeSubscriptionMutationError,
+  AdminCancelStripeSubscriptionMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminCancelStripeSubscriptionMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminCancelStripeSubscription(): MutationKey {
+  return ["@gram/admin-client", "admin", "cancelStripeSubscription"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminCancelStripeSubscriptionMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminCancelStripeSubscriptionMutationVariables,
+  ) => Promise<AdminCancelStripeSubscriptionMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminCancelStripeSubscription(),
+    mutationFn: function adminCancelStripeSubscriptionMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminCancelStripeSubscriptionMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +101,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminCancelStripeSubscription(
         client$,
         request,
         mergedOptions,

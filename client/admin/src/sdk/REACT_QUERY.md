@@ -50,10 +50,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAdminAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminAdminGetOrganizationChatAnalysisSettings.js";
+import { useAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
 
 export function Example() {
-  const { data, error, status } = useAdminAdminGetOrganizationChatAnalysisSettings({
+  const { data, error, status } = useAdminGetOrganizationChatAnalysisSettings({
     organizationId: "<id>",
   });
 
@@ -68,11 +68,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAdminAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminAdminGetOrganizationChatAnalysisSettings.js";
+import { useAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useAdminAdminGetOrganizationChatAnalysisSettings(
+  const { data, error, status } = useAdminGetOrganizationChatAnalysisSettings(
     {
       organizationId: "<id>",
     },
@@ -112,10 +112,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useAdminAdminLogoutMutation } from "@gram/admin-client/react-query/adminAdminLogout.js";
+import { useAdminLogoutMutation } from "@gram/admin-client/react-query/adminLogout.js";
 
 export function Example() {
-  const { mutate, status } = useAdminAdminLogoutMutation();
+  const { mutate, status } = useAdminLogoutMutation();
 
   return (
     <form
@@ -140,10 +140,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useAdminAdminLogoutMutation } from "@gram/admin-client/react-query/adminAdminLogout.js";
+import { useAdminLogoutMutation } from "@gram/admin-client/react-query/adminLogout.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useAdminAdminLogoutMutation({
+  const { mutate, status } = useAdminLogoutMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -175,7 +175,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAdminAdminGetOrganizationChatAnalysisSettings, invalidateAllAdminAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminAdminGetOrganizationChatAnalysisSettings.js";
+import { invalidateAdminGetOrganizationChatAnalysisSettings, invalidateAllAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/admin-client/react-query/example.js";
 
@@ -193,9 +193,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateAdminAdminGetOrganizationChatAnalysisSettings(queryClient, /* ... arguments ... */);
+            invalidateAdminGetOrganizationChatAnalysisSettings(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllAdminAdminGetOrganizationChatAnalysisSettings(queryClient);
+            invalidateAllAdminGetOrganizationChatAnalysisSettings(queryClient);
           },
         });
       }}
@@ -222,10 +222,10 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useAdminAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminAdminListOrganizationActivity.js";
+import { useAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useAdminAdminListOrganizationActivityInfinite({
+  const { data, error, status, fetchNextPage, hasNextPage } = useAdminListOrganizationActivityInfinite({
     organizationId: "<id>",
   });
 
@@ -258,7 +258,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/admin-client";
 import { GramProvider } from "@gram/admin-client/react-query";
-import { useAdminAdminGetOrganizationChatAnalysisSettingsSuspense } from "@gram/admin-client/react-query/adminAdminGetOrganizationChatAnalysisSettings.js";
+import { useAdminGetOrganizationChatAnalysisSettingsSuspense } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -293,7 +293,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useAdminAdminGetOrganizationChatAnalysisSettingsSuspense({
+  const { data } = useAdminGetOrganizationChatAnalysisSettingsSuspense({
     organizationId: "<id>",
   });
 
@@ -315,7 +315,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/admin-client";
-import { prefetchAdminAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminAdminGetOrganizationChatAnalysisSettings.js";
+import { prefetchAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
@@ -323,7 +323,7 @@ export default async function Page() {
     serverURL: "https://api.example.com",
   });
 
-  await prefetchAdminAdminGetOrganizationChatAnalysisSettings(queryClient, gram, {
+  await prefetchAdminGetOrganizationChatAnalysisSettings(queryClient, gram, {
     organizationId: "<id>",
   });
 

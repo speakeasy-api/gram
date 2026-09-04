@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
+import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminSetOrganizationChatAnalysisSettingsMutationVariables = {
+  request: SetOrganizationChatAnalysisSettingsRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminSetOrganizationChatAnalysisSettingsMutationData =
+  AdminChatAnalysisSettings;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminSetOrganizationChatAnalysisSettingsMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +48,45 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * setOrganizationChatAnalysisSettings admin
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminSetOrganizationChatAnalysisSettingsMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminSetOrganizationChatAnalysisSettingsMutationData,
+    AdminSetOrganizationChatAnalysisSettingsMutationError,
+    AdminSetOrganizationChatAnalysisSettingsMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminSetOrganizationChatAnalysisSettingsMutationData,
+  AdminSetOrganizationChatAnalysisSettingsMutationError,
+  AdminSetOrganizationChatAnalysisSettingsMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminSetOrganizationChatAnalysisSettingsMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminSetOrganizationChatAnalysisSettings(): MutationKey {
+  return ["@gram/admin-client", "admin", "setOrganizationChatAnalysisSettings"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminSetOrganizationChatAnalysisSettingsMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminSetOrganizationChatAnalysisSettingsMutationVariables,
+  ) => Promise<AdminSetOrganizationChatAnalysisSettingsMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminSetOrganizationChatAnalysisSettings(),
+    mutationFn: function adminSetOrganizationChatAnalysisSettingsMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminSetOrganizationChatAnalysisSettingsMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +99,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminSetOrganizationChatAnalysisSettings(
         client$,
         request,
         mergedOptions,

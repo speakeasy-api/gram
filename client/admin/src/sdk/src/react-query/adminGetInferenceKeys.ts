@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminGetInferenceKeysQueryData,
+  buildAdminGetInferenceKeysQuery,
+  prefetchAdminGetInferenceKeys,
+  queryKeyAdminGetInferenceKeys,
+} from "./adminGetInferenceKeys.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminGetInferenceKeysQueryData,
+  buildAdminGetInferenceKeysQuery,
+  prefetchAdminGetInferenceKeys,
+  queryKeyAdminGetInferenceKeys,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminGetInferenceKeysQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * getInferenceKeys admin
+ *
+ * @remarks
+ * Returns the configured state of every materialized platform-managed OpenRouter key for an organization.
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetInferenceKeys(
+  request: AdminGetInferenceKeysRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetInferenceKeysQueryData,
+    AdminGetInferenceKeysQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetInferenceKeysQueryData,
+  AdminGetInferenceKeysQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetInferenceKeysQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * getInferenceKeys admin
+ *
+ * @remarks
+ * Returns the configured state of every materialized platform-managed OpenRouter key for an organization.
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetInferenceKeysSuspense(
+  request: AdminGetInferenceKeysRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetInferenceKeysQueryData,
+    AdminGetInferenceKeysQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetInferenceKeysQueryData,
+  AdminGetInferenceKeysQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetInferenceKeysQuery(
       client,
       request,
       options,
@@ -100,17 +106,17 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminGetInferenceKeysData(
   client: QueryClient,
   queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  data: AdminGetInferenceKeysQueryData,
+): AdminGetInferenceKeysQueryData | undefined {
+  const key = queryKeyAdminGetInferenceKeys(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminGetInferenceKeysQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminGetInferenceKeys(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "getInferenceKeys",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminGetInferenceKeys(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "getInferenceKeys"],
   });
 }

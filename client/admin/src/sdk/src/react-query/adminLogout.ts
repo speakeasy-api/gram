@@ -8,11 +8,9 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminLogout } from "../funcs/adminLogout.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +26,13 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminLogoutMutationVariables = {
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminLogoutMutationData = void;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminLogoutMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +44,44 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * logout admin
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminLogoutMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminLogoutMutationData,
+    AdminLogoutMutationError,
+    AdminLogoutMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminLogoutMutationData,
+  AdminLogoutMutationError,
+  AdminLogoutMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminLogoutMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminLogout(): MutationKey {
+  return ["@gram/admin-client", "admin", "logout"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminLogoutMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminLogoutMutationVariables,
+  ) => Promise<AdminLogoutMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
-      request,
+    mutationKey: mutationKeyAdminLogout(),
+    mutationFn: function adminLogoutMutationFn({
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminLogoutMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,9 +94,8 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminLogout(
         client$,
-        request,
         mergedOptions,
       ));
     },

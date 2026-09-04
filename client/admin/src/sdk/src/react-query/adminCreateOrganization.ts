@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminOrganization } from "../models/components/adminorganization.js";
+import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminCreateOrganizationMutationVariables = {
+  request: CreateOrganizationRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminCreateOrganizationMutationData = AdminOrganization;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminCreateOrganizationMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +47,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * createOrganization admin
+ *
+ * @remarks
+ * Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminCreateOrganizationMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminCreateOrganizationMutationData,
+    AdminCreateOrganizationMutationError,
+    AdminCreateOrganizationMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminCreateOrganizationMutationData,
+  AdminCreateOrganizationMutationError,
+  AdminCreateOrganizationMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminCreateOrganizationMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminCreateOrganization(): MutationKey {
+  return ["@gram/admin-client", "admin", "createOrganization"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminCreateOrganizationMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminCreateOrganizationMutationVariables,
+  ) => Promise<AdminCreateOrganizationMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminCreateOrganization(),
+    mutationFn: function adminCreateOrganizationMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminCreateOrganizationMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +101,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminCreateOrganization(
         client$,
         request,
         mergedOptions,

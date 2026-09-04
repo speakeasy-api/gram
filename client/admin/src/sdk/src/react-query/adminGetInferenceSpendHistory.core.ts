@@ -8,22 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
+import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminOrganizationFeaturesQueryData = ProductFeatures;
+export type AdminGetInferenceSpendHistoryQueryData = Array<
+  AdminInferenceSpendMonth
+>;
 
-export function prefetchAdminOrganizationFeatures(
+export function prefetchAdminGetInferenceSpendHistory(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetInferenceSpendHistoryRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetInferenceSpendHistoryQuery(
       client$,
       request,
       options,
@@ -31,23 +33,23 @@ export function prefetchAdminOrganizationFeatures(
   });
 }
 
-export function buildAdminOrganizationFeaturesQuery(
+export function buildAdminGetInferenceSpendHistoryQuery(
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetInferenceSpendHistoryRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminOrganizationFeaturesQueryData>;
+  ) => Promise<AdminGetInferenceSpendHistoryQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminOrganizationFeatures({
+    queryKey: queryKeyAdminGetInferenceSpendHistory({
       organizationId: request.organizationId,
     }),
-    queryFn: async function adminOrganizationFeaturesQueryFn(
+    queryFn: async function adminGetInferenceSpendHistoryQueryFn(
       ctx,
-    ): Promise<AdminOrganizationFeaturesQueryData> {
+    ): Promise<AdminGetInferenceSpendHistoryQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -59,7 +61,7 @@ export function buildAdminOrganizationFeaturesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminGetOrganizationFeatures(
+      return unwrapAsync(adminGetInferenceSpendHistory(
         client$,
         request,
         mergedOptions,
@@ -68,8 +70,13 @@ export function buildAdminOrganizationFeaturesQuery(
   };
 }
 
-export function queryKeyAdminOrganizationFeatures(
+export function queryKeyAdminGetInferenceSpendHistory(
   parameters: { organizationId: string },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "getOrganizationFeatures", parameters];
+  return [
+    "@gram/admin-client",
+    "admin",
+    "getInferenceSpendHistory",
+    parameters,
+  ];
 }

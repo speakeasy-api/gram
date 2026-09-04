@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminGetStripeSubscriptionQueryData,
+  buildAdminGetStripeSubscriptionQuery,
+  prefetchAdminGetStripeSubscription,
+  queryKeyAdminGetStripeSubscription,
+} from "./adminGetStripeSubscription.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminGetStripeSubscriptionQueryData,
+  buildAdminGetStripeSubscriptionQuery,
+  prefetchAdminGetStripeSubscription,
+  queryKeyAdminGetStripeSubscription,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminGetStripeSubscriptionQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * getStripeSubscription admin
+ *
+ * @remarks
+ * Returns the live Stripe subscription and payment state for an organization.
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetStripeSubscription(
+  request: AdminGetStripeSubscriptionRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetStripeSubscriptionQueryData,
+    AdminGetStripeSubscriptionQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetStripeSubscriptionQueryData,
+  AdminGetStripeSubscriptionQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetStripeSubscriptionQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * getStripeSubscription admin
+ *
+ * @remarks
+ * Returns the live Stripe subscription and payment state for an organization.
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetStripeSubscriptionSuspense(
+  request: AdminGetStripeSubscriptionRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetStripeSubscriptionQueryData,
+    AdminGetStripeSubscriptionQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetStripeSubscriptionQueryData,
+  AdminGetStripeSubscriptionQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetStripeSubscriptionQuery(
       client,
       request,
       options,
@@ -100,17 +106,17 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminGetStripeSubscriptionData(
   client: QueryClient,
   queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  data: AdminGetStripeSubscriptionQueryData,
+): AdminGetStripeSubscriptionQueryData | undefined {
+  const key = queryKeyAdminGetStripeSubscription(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminGetStripeSubscriptionQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminGetStripeSubscription(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "getStripeSubscription",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminGetStripeSubscription(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "getStripeSubscription"],
   });
 }

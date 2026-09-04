@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminOrganization } from "../models/components/adminorganization.js";
+import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminRearmTrialMutationVariables = {
+  request: RearmTrialRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminRearmTrialMutationData = AdminOrganization;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminRearmTrialMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +47,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * rearmTrial admin
+ *
+ * @remarks
+ * Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminRearmTrialMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminRearmTrialMutationData,
+    AdminRearmTrialMutationError,
+    AdminRearmTrialMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminRearmTrialMutationData,
+  AdminRearmTrialMutationError,
+  AdminRearmTrialMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminRearmTrialMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminRearmTrial(): MutationKey {
+  return ["@gram/admin-client", "admin", "rearmTrial"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminRearmTrialMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminRearmTrialMutationVariables,
+  ) => Promise<AdminRearmTrialMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminRearmTrial(),
+    mutationFn: function adminRearmTrialMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminRearmTrialMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +101,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminRearmTrial(
         client$,
         request,
         mergedOptions,

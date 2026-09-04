@@ -7,7 +7,7 @@ import {
 
 import { GramCore } from "@gram/admin-client/core";
 import { HTTPClient } from "@gram/admin-client/lib/http";
-import { buildAdminAdminGetSessionQuery } from "@gram/admin-client/react-query/adminAdminGetSession.core";
+import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
@@ -71,7 +71,7 @@ async function redirecting<T>(operation: Promise<T>): Promise<T> {
 }
 
 function createAdminSessionQuery() {
-  const generated = buildAdminAdminGetSessionQuery(redirectingClient);
+  const generated = buildAdminGetSessionQuery(redirectingClient);
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),

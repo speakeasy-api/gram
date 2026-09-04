@@ -8,22 +8,22 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
+import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminOrganizationFeaturesQueryData = ProductFeatures;
+export type AdminGetPaygBillingSummaryQueryData = AdminPaygBillingSummary;
 
-export function prefetchAdminOrganizationFeatures(
+export function prefetchAdminGetPaygBillingSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetPaygBillingSummaryRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetPaygBillingSummaryQuery(
       client$,
       request,
       options,
@@ -31,23 +31,23 @@ export function prefetchAdminOrganizationFeatures(
   });
 }
 
-export function buildAdminOrganizationFeaturesQuery(
+export function buildAdminGetPaygBillingSummaryQuery(
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetPaygBillingSummaryRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminOrganizationFeaturesQueryData>;
+  ) => Promise<AdminGetPaygBillingSummaryQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminOrganizationFeatures({
+    queryKey: queryKeyAdminGetPaygBillingSummary({
       organizationId: request.organizationId,
     }),
-    queryFn: async function adminOrganizationFeaturesQueryFn(
+    queryFn: async function adminGetPaygBillingSummaryQueryFn(
       ctx,
-    ): Promise<AdminOrganizationFeaturesQueryData> {
+    ): Promise<AdminGetPaygBillingSummaryQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -59,7 +59,7 @@ export function buildAdminOrganizationFeaturesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminGetOrganizationFeatures(
+      return unwrapAsync(adminGetPaygBillingSummary(
         client$,
         request,
         mergedOptions,
@@ -68,8 +68,8 @@ export function buildAdminOrganizationFeaturesQuery(
   };
 }
 
-export function queryKeyAdminOrganizationFeatures(
+export function queryKeyAdminGetPaygBillingSummary(
   parameters: { organizationId: string },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "getOrganizationFeatures", parameters];
+  return ["@gram/admin-client", "admin", "getPaygBillingSummary", parameters];
 }

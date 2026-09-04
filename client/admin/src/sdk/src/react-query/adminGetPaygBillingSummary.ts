@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminGetPaygBillingSummaryQueryData,
+  buildAdminGetPaygBillingSummaryQuery,
+  prefetchAdminGetPaygBillingSummary,
+  queryKeyAdminGetPaygBillingSummary,
+} from "./adminGetPaygBillingSummary.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminGetPaygBillingSummaryQueryData,
+  buildAdminGetPaygBillingSummaryQuery,
+  prefetchAdminGetPaygBillingSummary,
+  queryKeyAdminGetPaygBillingSummary,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminGetPaygBillingSummaryQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * getPaygBillingSummary admin
+ *
+ * @remarks
+ * Returns current PAYG usage and estimated cost for an organization.
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetPaygBillingSummary(
+  request: AdminGetPaygBillingSummaryRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetPaygBillingSummaryQueryData,
+    AdminGetPaygBillingSummaryQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetPaygBillingSummaryQueryData,
+  AdminGetPaygBillingSummaryQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetPaygBillingSummaryQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * getPaygBillingSummary admin
+ *
+ * @remarks
+ * Returns current PAYG usage and estimated cost for an organization.
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetPaygBillingSummarySuspense(
+  request: AdminGetPaygBillingSummaryRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetPaygBillingSummaryQueryData,
+    AdminGetPaygBillingSummaryQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetPaygBillingSummaryQueryData,
+  AdminGetPaygBillingSummaryQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetPaygBillingSummaryQuery(
       client,
       request,
       options,
@@ -100,17 +106,17 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminGetPaygBillingSummaryData(
   client: QueryClient,
   queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  data: AdminGetPaygBillingSummaryQueryData,
+): AdminGetPaygBillingSummaryQueryData | undefined {
+  const key = queryKeyAdminGetPaygBillingSummary(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminGetPaygBillingSummaryQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminGetPaygBillingSummary(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "getPaygBillingSummary",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminGetPaygBillingSummary(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "getPaygBillingSummary"],
   });
 }

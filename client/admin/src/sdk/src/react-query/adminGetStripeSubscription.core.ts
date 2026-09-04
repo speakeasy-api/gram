@@ -8,22 +8,22 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
+import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminOrganizationFeaturesQueryData = ProductFeatures;
+export type AdminGetStripeSubscriptionQueryData = AdminStripeSubscription;
 
-export function prefetchAdminOrganizationFeatures(
+export function prefetchAdminGetStripeSubscription(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetStripeSubscriptionRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetStripeSubscriptionQuery(
       client$,
       request,
       options,
@@ -31,23 +31,23 @@ export function prefetchAdminOrganizationFeatures(
   });
 }
 
-export function buildAdminOrganizationFeaturesQuery(
+export function buildAdminGetStripeSubscriptionQuery(
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminGetStripeSubscriptionRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminOrganizationFeaturesQueryData>;
+  ) => Promise<AdminGetStripeSubscriptionQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminOrganizationFeatures({
+    queryKey: queryKeyAdminGetStripeSubscription({
       organizationId: request.organizationId,
     }),
-    queryFn: async function adminOrganizationFeaturesQueryFn(
+    queryFn: async function adminGetStripeSubscriptionQueryFn(
       ctx,
-    ): Promise<AdminOrganizationFeaturesQueryData> {
+    ): Promise<AdminGetStripeSubscriptionQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -59,7 +59,7 @@ export function buildAdminOrganizationFeaturesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminGetOrganizationFeatures(
+      return unwrapAsync(adminGetStripeSubscription(
         client$,
         request,
         mergedOptions,
@@ -68,8 +68,8 @@ export function buildAdminOrganizationFeaturesQuery(
   };
 }
 
-export function queryKeyAdminOrganizationFeatures(
+export function queryKeyAdminGetStripeSubscription(
   parameters: { organizationId: string },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "getOrganizationFeatures", parameters];
+  return ["@gram/admin-client", "admin", "getStripeSubscription", parameters];
 }

@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminListOrganizationProjectsRequest } from "../models/operations/adminlistorganizationprojects.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminListOrganizationProjectsQueryData,
+  buildAdminListOrganizationProjectsQuery,
+  prefetchAdminListOrganizationProjects,
+  queryKeyAdminListOrganizationProjects,
+} from "./adminListOrganizationProjects.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminListOrganizationProjectsQueryData,
+  buildAdminListOrganizationProjectsQuery,
+  prefetchAdminListOrganizationProjects,
+  queryKeyAdminListOrganizationProjects,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminListOrganizationProjectsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * listOrganizationProjects admin
+ *
+ * @remarks
+ * Lists projects belonging to an organization (admin view, no auth scoping).
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminListOrganizationProjects(
+  request: AdminListOrganizationProjectsRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminListOrganizationProjectsQueryData,
+    AdminListOrganizationProjectsQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminListOrganizationProjectsQueryData,
+  AdminListOrganizationProjectsQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminListOrganizationProjectsQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * listOrganizationProjects admin
+ *
+ * @remarks
+ * Lists projects belonging to an organization (admin view, no auth scoping).
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminListOrganizationProjectsSuspense(
+  request: AdminListOrganizationProjectsRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminListOrganizationProjectsQueryData,
+    AdminListOrganizationProjectsQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminListOrganizationProjectsQueryData,
+  AdminListOrganizationProjectsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminListOrganizationProjectsQuery(
       client,
       request,
       options,
@@ -100,17 +106,17 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminListOrganizationProjectsData(
   client: QueryClient,
   queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  data: AdminListOrganizationProjectsQueryData,
+): AdminListOrganizationProjectsQueryData | undefined {
+  const key = queryKeyAdminListOrganizationProjects(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminListOrganizationProjectsQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminListOrganizationProjects(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "listOrganizationProjects",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminListOrganizationProjects(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "listOrganizationProjects"],
   });
 }

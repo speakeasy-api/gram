@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminOrganization } from "../models/components/adminorganization.js";
+import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminUpdateOrganizationMutationVariables = {
+  request: UpdateOrganizationRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminUpdateOrganizationMutationData = AdminOrganization;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminUpdateOrganizationMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +47,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * updateOrganization admin
+ *
+ * @remarks
+ * Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminUpdateOrganizationMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminUpdateOrganizationMutationData,
+    AdminUpdateOrganizationMutationError,
+    AdminUpdateOrganizationMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminUpdateOrganizationMutationData,
+  AdminUpdateOrganizationMutationError,
+  AdminUpdateOrganizationMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminUpdateOrganizationMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminUpdateOrganization(): MutationKey {
+  return ["@gram/admin-client", "admin", "updateOrganization"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminUpdateOrganizationMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminUpdateOrganizationMutationVariables,
+  ) => Promise<AdminUpdateOrganizationMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminUpdateOrganization(),
+    mutationFn: function adminUpdateOrganizationMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminUpdateOrganizationMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +101,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminUpdateOrganization(
         client$,
         request,
         mergedOptions,

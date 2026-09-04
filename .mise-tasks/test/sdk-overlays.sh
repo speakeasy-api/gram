@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
-#MISE description="Prove Admin operations cannot affect the Dashboard SDK input"
+#MISE description="Prove SDK overlays isolate and name Admin operations"
 
 set -euo pipefail
 
 raw_spec="server/gen/http/openapi3.yaml"
 common_overlay="overlays/goa-common.yaml"
 dashboard_overlay="overlays/dashboard-sdk.yaml"
+admin_overlay="overlays/admin-sdk.yaml"
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -59,3 +60,25 @@ if grep -q 'admin_auth_header_Authorization' "$output"; then
   echo "Dashboard input contains Admin auth" >&2
   exit 1
 fi
+
+speakeasy overlay apply \
+  --schema "$tmpdir/baseline.common.yaml" \
+  --overlay "$admin_overlay" \
+  --out "$tmpdir/admin.yaml" >/dev/null 2>&1
+
+while IFS=$'\t' read -r operation_id sdk_name; do
+  if [[ $operation_id != admin* ]]; then
+    echo "Expected stable admin-prefixed operation ID, found $operation_id" >&2
+    exit 1
+  fi
+  local_name=${operation_id#admin}
+  first_letter=$(printf '%s' "${local_name:0:1}" | tr '[:upper:]' '[:lower:]')
+  expected_name="$first_letter${local_name:1}"
+  if [ "$sdk_name" != "$expected_name" ]; then
+    echo "Expected $operation_id to have SDK name $expected_name, found ${sdk_name:-none}" >&2
+    exit 1
+  fi
+done < <(
+  yq -o=json "$tmpdir/admin.yaml" |
+    jq -r '.paths[][] | select(.operationId and (."x-speakeasy-ignore" != true)) | [.operationId, (."x-speakeasy-name-override" // "")] | @tsv'
+)

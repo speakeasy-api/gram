@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
+import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminMarkEnterpriseTrialConvertedMutationVariables = {
+  request: MarkEnterpriseTrialConvertedRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminMarkEnterpriseTrialConvertedMutationData =
+  MarkEnterpriseTrialConvertedResult;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminMarkEnterpriseTrialConvertedMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +48,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * markEnterpriseTrialConverted admin
+ *
+ * @remarks
+ * Records that an organization's enterprise trial converted to a signed contract.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminMarkEnterpriseTrialConvertedMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminMarkEnterpriseTrialConvertedMutationData,
+    AdminMarkEnterpriseTrialConvertedMutationError,
+    AdminMarkEnterpriseTrialConvertedMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminMarkEnterpriseTrialConvertedMutationData,
+  AdminMarkEnterpriseTrialConvertedMutationError,
+  AdminMarkEnterpriseTrialConvertedMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminMarkEnterpriseTrialConvertedMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminMarkEnterpriseTrialConverted(): MutationKey {
+  return ["@gram/admin-client", "admin", "markEnterpriseTrialConverted"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminMarkEnterpriseTrialConvertedMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminMarkEnterpriseTrialConvertedMutationVariables,
+  ) => Promise<AdminMarkEnterpriseTrialConvertedMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminMarkEnterpriseTrialConverted(),
+    mutationFn: function adminMarkEnterpriseTrialConvertedMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminMarkEnterpriseTrialConvertedMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +102,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminMarkEnterpriseTrialConverted(
         client$,
         request,
         mergedOptions,

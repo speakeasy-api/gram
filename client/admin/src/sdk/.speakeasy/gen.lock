@@ -27,35 +27,35 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/adminAdminBulkUpdateAccountType.ts: {}
-  src/funcs/adminAdminCancelStripeSubscription.ts: {}
-  src/funcs/adminAdminCreateOrganization.ts: {}
-  src/funcs/adminAdminDisableOrganization.ts: {}
-  src/funcs/adminAdminEnableOrganization.ts: {}
-  src/funcs/adminAdminExtendTrial.ts: {}
-  src/funcs/adminAdminGetInferenceKeys.ts: {}
-  src/funcs/adminAdminGetInferenceSpendHistory.ts: {}
-  src/funcs/adminAdminGetOrganization.ts: {}
-  src/funcs/adminAdminGetOrganizationChatAnalysisSettings.ts: {}
-  src/funcs/adminAdminGetOrganizationFeatures.ts: {}
-  src/funcs/adminAdminGetOrganizationStats.ts: {}
-  src/funcs/adminAdminGetPaygBillingSummary.ts: {}
-  src/funcs/adminAdminGetProject.ts: {}
-  src/funcs/adminAdminGetSession.ts: {}
-  src/funcs/adminAdminGetStripeSubscription.ts: {}
-  src/funcs/adminAdminListOrganizationActivity.ts: {}
-  src/funcs/adminAdminListOrganizationMembers.ts: {}
-  src/funcs/adminAdminListOrganizationProjects.ts: {}
-  src/funcs/adminAdminListOrganizations.ts: {}
-  src/funcs/adminAdminLogout.ts: {}
-  src/funcs/adminAdminMarkEnterpriseTrialConverted.ts: {}
-  src/funcs/adminAdminRearmTrial.ts: {}
-  src/funcs/adminAdminResumeStripeSubscription.ts: {}
-  src/funcs/adminAdminSetInferenceKeyMonthlyLimit.ts: {}
-  src/funcs/adminAdminSetOrganizationChatAnalysisSettings.ts: {}
-  src/funcs/adminAdminSetOrganizationFeature.ts: {}
-  src/funcs/adminAdminTriggerOrganizationChatAnalysis.ts: {}
-  src/funcs/adminAdminUpdateOrganization.ts: {}
+  src/funcs/adminBulkUpdateAccountType.ts: {}
+  src/funcs/adminCancelStripeSubscription.ts: {}
+  src/funcs/adminCreateOrganization.ts: {}
+  src/funcs/adminDisableOrganization.ts: {}
+  src/funcs/adminEnableOrganization.ts: {}
+  src/funcs/adminExtendTrial.ts: {}
+  src/funcs/adminGetInferenceKeys.ts: {}
+  src/funcs/adminGetInferenceSpendHistory.ts: {}
+  src/funcs/adminGetOrganization.ts: {}
+  src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationStats.ts: {}
+  src/funcs/adminGetPaygBillingSummary.ts: {}
+  src/funcs/adminGetProject.ts: {}
+  src/funcs/adminGetSession.ts: {}
+  src/funcs/adminGetStripeSubscription.ts: {}
+  src/funcs/adminListOrganizationActivity.ts: {}
+  src/funcs/adminListOrganizationMembers.ts: {}
+  src/funcs/adminListOrganizationProjects.ts: {}
+  src/funcs/adminListOrganizations.ts: {}
+  src/funcs/adminLogout.ts: {}
+  src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
+  src/funcs/adminRearmTrial.ts: {}
+  src/funcs/adminResumeStripeSubscription.ts: {}
+  src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
+  src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminSetOrganizationFeature.ts: {}
+  src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/funcs/adminUpdateOrganization.ts: {}
   src/hooks/hooks.ts: {}
   src/hooks/types.ts: {}
   src/index.ts: {}
@@ -128,48 +128,48 @@ trackedFiles:
   src/models/operations/adminlistorganizations.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
-  src/react-query/adminAdminBulkUpdateAccountType.ts: {}
-  src/react-query/adminAdminCancelStripeSubscription.ts: {}
-  src/react-query/adminAdminCreateOrganization.ts: {}
-  src/react-query/adminAdminDisableOrganization.ts: {}
-  src/react-query/adminAdminEnableOrganization.ts: {}
-  src/react-query/adminAdminExtendTrial.ts: {}
-  src/react-query/adminAdminGetInferenceKeys.core.ts: {}
-  src/react-query/adminAdminGetInferenceKeys.ts: {}
-  src/react-query/adminAdminGetInferenceSpendHistory.core.ts: {}
-  src/react-query/adminAdminGetInferenceSpendHistory.ts: {}
-  src/react-query/adminAdminGetOrganization.core.ts: {}
-  src/react-query/adminAdminGetOrganization.ts: {}
-  src/react-query/adminAdminGetOrganizationChatAnalysisSettings.core.ts: {}
-  src/react-query/adminAdminGetOrganizationChatAnalysisSettings.ts: {}
-  src/react-query/adminAdminGetOrganizationStats.core.ts: {}
-  src/react-query/adminAdminGetOrganizationStats.ts: {}
-  src/react-query/adminAdminGetPaygBillingSummary.core.ts: {}
-  src/react-query/adminAdminGetPaygBillingSummary.ts: {}
-  src/react-query/adminAdminGetProject.core.ts: {}
-  src/react-query/adminAdminGetProject.ts: {}
-  src/react-query/adminAdminGetSession.core.ts: {}
-  src/react-query/adminAdminGetSession.ts: {}
-  src/react-query/adminAdminGetStripeSubscription.core.ts: {}
-  src/react-query/adminAdminGetStripeSubscription.ts: {}
-  src/react-query/adminAdminListOrganizationActivity.core.ts: {}
-  src/react-query/adminAdminListOrganizationActivity.ts: {}
-  src/react-query/adminAdminListOrganizationMembers.core.ts: {}
-  src/react-query/adminAdminListOrganizationMembers.ts: {}
-  src/react-query/adminAdminListOrganizationProjects.core.ts: {}
-  src/react-query/adminAdminListOrganizationProjects.ts: {}
-  src/react-query/adminAdminListOrganizations.core.ts: {}
-  src/react-query/adminAdminListOrganizations.ts: {}
-  src/react-query/adminAdminLogout.ts: {}
-  src/react-query/adminAdminMarkEnterpriseTrialConverted.ts: {}
-  src/react-query/adminAdminRearmTrial.ts: {}
-  src/react-query/adminAdminResumeStripeSubscription.ts: {}
-  src/react-query/adminAdminSetInferenceKeyMonthlyLimit.ts: {}
-  src/react-query/adminAdminSetOrganizationChatAnalysisSettings.ts: {}
-  src/react-query/adminAdminTriggerOrganizationChatAnalysis.ts: {}
-  src/react-query/adminAdminUpdateOrganization.ts: {}
+  src/react-query/adminBulkUpdateAccountType.ts: {}
+  src/react-query/adminCancelStripeSubscription.ts: {}
+  src/react-query/adminCreateOrganization.ts: {}
+  src/react-query/adminDisableOrganization.ts: {}
+  src/react-query/adminEnableOrganization.ts: {}
+  src/react-query/adminExtendTrial.ts: {}
+  src/react-query/adminGetInferenceKeys.core.ts: {}
+  src/react-query/adminGetInferenceKeys.ts: {}
+  src/react-query/adminGetInferenceSpendHistory.core.ts: {}
+  src/react-query/adminGetInferenceSpendHistory.ts: {}
+  src/react-query/adminGetOrganization.core.ts: {}
+  src/react-query/adminGetOrganization.ts: {}
+  src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}
+  src/react-query/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminGetOrganizationStats.core.ts: {}
+  src/react-query/adminGetOrganizationStats.ts: {}
+  src/react-query/adminGetPaygBillingSummary.core.ts: {}
+  src/react-query/adminGetPaygBillingSummary.ts: {}
+  src/react-query/adminGetProject.core.ts: {}
+  src/react-query/adminGetProject.ts: {}
+  src/react-query/adminGetSession.core.ts: {}
+  src/react-query/adminGetSession.ts: {}
+  src/react-query/adminGetStripeSubscription.core.ts: {}
+  src/react-query/adminGetStripeSubscription.ts: {}
+  src/react-query/adminListOrganizationActivity.core.ts: {}
+  src/react-query/adminListOrganizationActivity.ts: {}
+  src/react-query/adminListOrganizationMembers.core.ts: {}
+  src/react-query/adminListOrganizationMembers.ts: {}
+  src/react-query/adminListOrganizationProjects.core.ts: {}
+  src/react-query/adminListOrganizationProjects.ts: {}
+  src/react-query/adminListOrganizations.core.ts: {}
+  src/react-query/adminListOrganizations.ts: {}
+  src/react-query/adminLogout.ts: {}
+  src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
   src/react-query/adminOrganizationFeatures.core.ts: {}
   src/react-query/adminOrganizationFeatures.ts: {}
+  src/react-query/adminRearmTrial.ts: {}
+  src/react-query/adminResumeStripeSubscription.ts: {}
+  src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
+  src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/react-query/adminUpdateOrganization.ts: {}
   src/react-query/index.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
   src/sdk/admin.ts: {}

@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
+import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminBulkUpdateAccountTypeMutationVariables = {
+  request: BulkUpdateAccountTypeRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminBulkUpdateAccountTypeMutationData =
+  AdminBulkUpdateAccountTypeResult;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminBulkUpdateAccountTypeMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +48,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * bulkUpdateAccountType admin
+ *
+ * @remarks
+ * Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminBulkUpdateAccountTypeMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminBulkUpdateAccountTypeMutationData,
+    AdminBulkUpdateAccountTypeMutationError,
+    AdminBulkUpdateAccountTypeMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminBulkUpdateAccountTypeMutationData,
+  AdminBulkUpdateAccountTypeMutationError,
+  AdminBulkUpdateAccountTypeMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminBulkUpdateAccountTypeMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminBulkUpdateAccountType(): MutationKey {
+  return ["@gram/admin-client", "admin", "bulkUpdateAccountType"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminBulkUpdateAccountTypeMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminBulkUpdateAccountTypeMutationVariables,
+  ) => Promise<AdminBulkUpdateAccountTypeMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminBulkUpdateAccountType(),
+    mutationFn: function adminBulkUpdateAccountTypeMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminBulkUpdateAccountTypeMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +102,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminBulkUpdateAccountType(
         client$,
         request,
         mergedOptions,

@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
+import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,14 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationFeatureMutationVariables = {
-  request: SetOrganizationFeatureRequestBody;
+export type AdminSetInferenceKeyMonthlyLimitMutationVariables = {
+  request: SetInferenceKeyMonthlyLimitRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationFeatureMutationData = ProductFeatures;
+export type AdminSetInferenceKeyMonthlyLimitMutationData =
+  AdminInferenceKeyLimit;
 
-export type SetAdminOrganizationFeatureMutationError =
+export type AdminSetInferenceKeyMonthlyLimitMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -47,45 +48,48 @@ export type SetAdminOrganizationFeatureMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationFeature admin
+ * setInferenceKeyMonthlyLimit admin
+ *
+ * @remarks
+ * Sets the monthly limit for one materialized platform-managed OpenRouter key.
  */
-export function useSetAdminOrganizationFeatureMutation(
+export function useAdminSetInferenceKeyMonthlyLimitMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationFeatureMutationData,
-    SetAdminOrganizationFeatureMutationError,
-    SetAdminOrganizationFeatureMutationVariables
+    AdminSetInferenceKeyMonthlyLimitMutationData,
+    AdminSetInferenceKeyMonthlyLimitMutationError,
+    AdminSetInferenceKeyMonthlyLimitMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationFeatureMutationData,
-  SetAdminOrganizationFeatureMutationError,
-  SetAdminOrganizationFeatureMutationVariables
+  AdminSetInferenceKeyMonthlyLimitMutationData,
+  AdminSetInferenceKeyMonthlyLimitMutationError,
+  AdminSetInferenceKeyMonthlyLimitMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationFeatureMutation(client, options),
+    ...buildAdminSetInferenceKeyMonthlyLimitMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationFeature(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationFeature"];
+export function mutationKeyAdminSetInferenceKeyMonthlyLimit(): MutationKey {
+  return ["@gram/admin-client", "admin", "setInferenceKeyMonthlyLimit"];
 }
 
-export function buildSetAdminOrganizationFeatureMutation(
+export function buildAdminSetInferenceKeyMonthlyLimitMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationFeatureMutationVariables,
-  ) => Promise<SetAdminOrganizationFeatureMutationData>;
+    variables: AdminSetInferenceKeyMonthlyLimitMutationVariables,
+  ) => Promise<AdminSetInferenceKeyMonthlyLimitMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationFeature(),
-    mutationFn: function setAdminOrganizationFeatureMutationFn({
+    mutationKey: mutationKeyAdminSetInferenceKeyMonthlyLimit(),
+    mutationFn: function adminSetInferenceKeyMonthlyLimitMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationFeatureMutationData> {
+    }): Promise<AdminSetInferenceKeyMonthlyLimitMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -98,7 +102,7 @@ export function buildSetAdminOrganizationFeatureMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationFeature(
+      return unwrapAsync(adminSetInferenceKeyMonthlyLimit(
         client$,
         request,
         mergedOptions,

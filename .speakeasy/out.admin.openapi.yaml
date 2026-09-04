@@ -272,6 +272,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: logout
   /admin/organization.activity:
     get:
       description: Lists activity belonging to an organization for admin operators.
@@ -364,6 +365,7 @@ paths:
         outputs:
           nextCursor: $.next_cursor
         type: cursor
+      x-speakeasy-name-override: listOrganizationActivity
   /admin/organization.cancelStripeSubscription:
     post:
       tags:
@@ -444,6 +446,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: cancelStripeSubscription
   /admin/organization.chatAnalysisSettings:
     get:
       tags:
@@ -518,6 +521,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getOrganizationChatAnalysisSettings
     post:
       tags:
         - admin
@@ -590,6 +594,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setOrganizationChatAnalysisSettings
   /admin/organization.chatAnalysisTrigger:
     post:
       tags:
@@ -663,6 +668,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: triggerOrganizationChatAnalysis
   /admin/organization.create:
     post:
       tags:
@@ -737,6 +743,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: createOrganization
   /admin/organization.disable:
     post:
       tags:
@@ -811,6 +818,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: disableOrganization
   /admin/organization.enable:
     post:
       tags:
@@ -885,6 +893,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: enableOrganization
   /admin/organization.features:
     get:
       operationId: adminGetOrganizationFeatures
@@ -961,6 +970,7 @@ paths:
         - admin
       x-speakeasy-react-hook:
         name: AdminOrganizationFeatures
+      x-speakeasy-name-override: getOrganizationFeatures
     post:
       operationId: adminSetOrganizationFeature
       requestBody:
@@ -1035,6 +1045,7 @@ paths:
         - admin
       x-speakeasy-react-hook:
         name: SetAdminOrganizationFeature
+      x-speakeasy-name-override: setOrganizationFeature
   /admin/organization.get:
     get:
       tags:
@@ -1112,6 +1123,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getOrganization
   /admin/organization.inferenceKeys:
     get:
       tags:
@@ -1189,6 +1201,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getInferenceKeys
   /admin/organization.inferenceSpendHistory:
     get:
       tags:
@@ -1266,6 +1279,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getInferenceSpendHistory
   /admin/organization.members:
     get:
       tags:
@@ -1343,6 +1357,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listOrganizationMembers
   /admin/organization.open-dashboard:
     post:
       tags:
@@ -1502,6 +1517,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getPaygBillingSummary
   /admin/organization.projects:
     get:
       tags:
@@ -1579,6 +1595,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listOrganizationProjects
   /admin/organization.resumeStripeSubscription:
     post:
       tags:
@@ -1659,6 +1676,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: resumeStripeSubscription
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -1733,6 +1751,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setInferenceKeyMonthlyLimit
   /admin/organization.stripeSubscription:
     get:
       tags:
@@ -1814,6 +1833,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getStripeSubscription
   /admin/organization.update:
     post:
       tags:
@@ -1888,6 +1908,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: updateOrganization
   /admin/organizations.bulkUpdateAccountType:
     post:
       tags:
@@ -1962,6 +1983,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: bulkUpdateAccountType
   /admin/organizations.list:
     get:
       description: Lists organizations for admin operations with optional search and filters.
@@ -2124,6 +2146,7 @@ paths:
         outputs:
           nextCursor: $.next_cursor
         type: cursor
+      x-speakeasy-name-override: listOrganizations
   /admin/organizations.stats:
     get:
       tags:
@@ -2192,6 +2215,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getOrganizationStats
   /admin/project.get:
     get:
       tags:
@@ -2276,6 +2300,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getProject
   /admin/session.get:
     get:
       tags:
@@ -2343,6 +2368,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getSession
   /admin/trial.convert:
     post:
       tags:
@@ -2417,6 +2443,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: markEnterpriseTrialConverted
   /admin/trial.extend:
     post:
       tags:
@@ -2491,6 +2518,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: extendTrial
   /admin/trial.rearm:
     post:
       tags:
@@ -2565,6 +2593,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: rearmTrial
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:

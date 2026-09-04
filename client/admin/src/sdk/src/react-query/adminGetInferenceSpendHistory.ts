@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
-} from "./adminOrganizationFeatures.core.js";
+  AdminGetInferenceSpendHistoryQueryData,
+  buildAdminGetInferenceSpendHistoryQuery,
+  prefetchAdminGetInferenceSpendHistory,
+  queryKeyAdminGetInferenceSpendHistory,
+} from "./adminGetInferenceSpendHistory.core.js";
 export {
-  type AdminOrganizationFeaturesQueryData,
-  buildAdminOrganizationFeaturesQuery,
-  prefetchAdminOrganizationFeatures,
-  queryKeyAdminOrganizationFeatures,
+  type AdminGetInferenceSpendHistoryQueryData,
+  buildAdminGetInferenceSpendHistoryQuery,
+  prefetchAdminGetInferenceSpendHistory,
+  queryKeyAdminGetInferenceSpendHistory,
 };
 
-export type AdminOrganizationFeaturesQueryError =
+export type AdminGetInferenceSpendHistoryQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,21 +53,24 @@ export type AdminOrganizationFeaturesQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationFeatures admin
+ * getInferenceSpendHistory admin
+ *
+ * @remarks
+ * Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.
  */
-export function useAdminOrganizationFeatures(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetInferenceSpendHistory(
+  request: AdminGetInferenceSpendHistoryRequest,
   options?: QueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetInferenceSpendHistoryQueryData,
+    AdminGetInferenceSpendHistoryQueryError
   >,
 ): UseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetInferenceSpendHistoryQueryData,
+  AdminGetInferenceSpendHistoryQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetInferenceSpendHistoryQuery(
       client,
       request,
       options,
@@ -77,21 +80,24 @@ export function useAdminOrganizationFeatures(
 }
 
 /**
- * getOrganizationFeatures admin
+ * getInferenceSpendHistory admin
+ *
+ * @remarks
+ * Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.
  */
-export function useAdminOrganizationFeaturesSuspense(
-  request: AdminGetOrganizationFeaturesRequest,
+export function useAdminGetInferenceSpendHistorySuspense(
+  request: AdminGetInferenceSpendHistoryRequest,
   options?: SuspenseQueryHookOptions<
-    AdminOrganizationFeaturesQueryData,
-    AdminOrganizationFeaturesQueryError
+    AdminGetInferenceSpendHistoryQueryData,
+    AdminGetInferenceSpendHistoryQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminOrganizationFeaturesQueryData,
-  AdminOrganizationFeaturesQueryError
+  AdminGetInferenceSpendHistoryQueryData,
+  AdminGetInferenceSpendHistoryQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminGetInferenceSpendHistoryQuery(
       client,
       request,
       options,
@@ -100,17 +106,17 @@ export function useAdminOrganizationFeaturesSuspense(
   });
 }
 
-export function setAdminOrganizationFeaturesData(
+export function setAdminGetInferenceSpendHistoryData(
   client: QueryClient,
   queryKeyBase: [parameters: { organizationId: string }],
-  data: AdminOrganizationFeaturesQueryData,
-): AdminOrganizationFeaturesQueryData | undefined {
-  const key = queryKeyAdminOrganizationFeatures(...queryKeyBase);
+  data: AdminGetInferenceSpendHistoryQueryData,
+): AdminGetInferenceSpendHistoryQueryData | undefined {
+  const key = queryKeyAdminGetInferenceSpendHistory(...queryKeyBase);
 
-  return client.setQueryData<AdminOrganizationFeaturesQueryData>(key, data);
+  return client.setQueryData<AdminGetInferenceSpendHistoryQueryData>(key, data);
 }
 
-export function invalidateAdminOrganizationFeatures(
+export function invalidateAdminGetInferenceSpendHistory(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<[parameters: { organizationId: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -120,18 +126,18 @@ export function invalidateAdminOrganizationFeatures(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "getOrganizationFeatures",
+      "getInferenceSpendHistory",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminOrganizationFeatures(
+export function invalidateAllAdminGetInferenceSpendHistory(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getOrganizationFeatures"],
+    queryKey: ["@gram/admin-client", "admin", "getInferenceSpendHistory"],
   });
 }

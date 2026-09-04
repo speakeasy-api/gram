@@ -20,7 +20,7 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/admin-client/core.js";
-import { adminAdminLogout } from "@gram/admin-client/funcs/adminAdminLogout.js";
+import { adminLogout } from "@gram/admin-client/funcs/adminLogout.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -29,12 +29,12 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await adminAdminLogout(gram);
+  const res = await adminLogout(gram);
   if (res.ok) {
     const { value: result } = res;
     
   } else {
-    console.log("adminAdminLogout failed:", res.error);
+    console.log("adminLogout failed:", res.error);
   }
 }
 

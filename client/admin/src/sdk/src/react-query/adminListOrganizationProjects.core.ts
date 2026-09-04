@@ -8,22 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ProductFeatures } from "../models/components/productfeatures.js";
-import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
+import { AdminListOrganizationProjectsRequest } from "../models/operations/adminlistorganizationprojects.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminOrganizationFeaturesQueryData = ProductFeatures;
+export type AdminListOrganizationProjectsQueryData =
+  AdminListOrganizationProjectsResult;
 
-export function prefetchAdminOrganizationFeatures(
+export function prefetchAdminListOrganizationProjects(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminListOrganizationProjectsRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminOrganizationFeaturesQuery(
+    ...buildAdminListOrganizationProjectsQuery(
       client$,
       request,
       options,
@@ -31,23 +32,23 @@ export function prefetchAdminOrganizationFeatures(
   });
 }
 
-export function buildAdminOrganizationFeaturesQuery(
+export function buildAdminListOrganizationProjectsQuery(
   client$: GramCore,
-  request: AdminGetOrganizationFeaturesRequest,
+  request: AdminListOrganizationProjectsRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminOrganizationFeaturesQueryData>;
+  ) => Promise<AdminListOrganizationProjectsQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminOrganizationFeatures({
+    queryKey: queryKeyAdminListOrganizationProjects({
       organizationId: request.organizationId,
     }),
-    queryFn: async function adminOrganizationFeaturesQueryFn(
+    queryFn: async function adminListOrganizationProjectsQueryFn(
       ctx,
-    ): Promise<AdminOrganizationFeaturesQueryData> {
+    ): Promise<AdminListOrganizationProjectsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -59,7 +60,7 @@ export function buildAdminOrganizationFeaturesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminGetOrganizationFeatures(
+      return unwrapAsync(adminListOrganizationProjects(
         client$,
         request,
         mergedOptions,
@@ -68,8 +69,13 @@ export function buildAdminOrganizationFeaturesQuery(
   };
 }
 
-export function queryKeyAdminOrganizationFeatures(
+export function queryKeyAdminListOrganizationProjects(
   parameters: { organizationId: string },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "getOrganizationFeatures", parameters];
+  return [
+    "@gram/admin-client",
+    "admin",
+    "listOrganizationProjects",
+    parameters,
+  ];
 }
