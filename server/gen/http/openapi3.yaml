@@ -68186,6 +68186,7 @@ components:
                         - user
                         - api_key
                         - assistant
+                        - agent
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -68730,6 +68731,7 @@ components:
                         - user
                         - api_key
                         - assistant
+                        - agent
                 principal_urn:
                     type: string
                     description: Principal URN e.g. user:<uuid> or api_key:<id>.

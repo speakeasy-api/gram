@@ -205,6 +205,45 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 	return i, err
 }
 
+const getActivePrincipalAPIKeyForAdmission = `-- name: GetActivePrincipalAPIKeyForAdmission :one
+SELECT id
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND cardinality(scopes) = 0
+  AND subject_urn = $3
+  AND created_by_user_id = $4
+  AND delegated_grants = $5::jsonb
+  AND delegated_grants_version = $6
+  AND expires_at > statement_timestamp()
+  AND expires_at > created_at
+  AND expires_at <= created_at + INTERVAL '365 days'
+`
+
+type GetActivePrincipalAPIKeyForAdmissionParams struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	SubjectUrn             pgtype.Text
+	AuthorizerUserID       string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+}
+
+func (q *Queries) GetActivePrincipalAPIKeyForAdmission(ctx context.Context, arg GetActivePrincipalAPIKeyForAdmissionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActivePrincipalAPIKeyForAdmission,
+		arg.ID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const isAPIKeyManagedByActiveLiteLLMInstance = `-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (
   SELECT 1

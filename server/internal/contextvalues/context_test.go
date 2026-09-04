@@ -111,6 +111,16 @@ func TestAuthenticatedActorAndCredentialProvenanceAreIndependent(t *testing.T) {
 	admittedActor, ok := AuthenticatedActor(admitted)
 	require.True(t, ok)
 	require.Equal(t, agent, admittedActor)
+
+	admittedAuth, ok := GetAuthContext(admitted)
+	require.True(t, ok)
+	replaced := WithPrincipalCredentialAuthorization(admitted, admittedAuth, agent, PrincipalCredential{
+		AuthorizerUserID:       "user_new_authorizer",
+		DelegatedGrants:        []byte(`{"requested":[],"effective":[]}`),
+		DelegatedGrantsVersion: 1,
+	})
+	_, _, ok = PrincipalCredentialProvenance(replaced)
+	require.False(t, ok, "a new credential must not retain the previously admitted owner")
 }
 
 func TestValidatedGramSessionSetsCanonicalUserActor(t *testing.T) {

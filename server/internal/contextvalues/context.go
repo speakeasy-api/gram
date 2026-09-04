@@ -112,6 +112,7 @@ func WithPrincipalCredentialAuthorization(ctx context.Context, authCtx *AuthCont
 	validated.actor = actor
 	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
 	validated.principalCredential = &credential
+	validated.principalCredentialOwner = ""
 	return SetAuthContext(ctx, &validated)
 }
 
