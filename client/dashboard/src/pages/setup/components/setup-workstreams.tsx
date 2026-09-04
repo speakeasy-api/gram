@@ -103,7 +103,7 @@ export function SetupWorkstreams({
     <div
       role="region"
       aria-label="Setup workstreams"
-      className="grid min-h-0 flex-1 items-start gap-4 overflow-y-auto pb-1 pr-1 lg:grid-cols-2"
+      className="grid min-h-0 flex-1 items-start gap-4 overflow-y-auto pr-1 lg:grid-cols-2"
     >
       {tasks.length === 0 ? (
         <p className="border p-6 text-sm text-muted-foreground lg:col-span-2">
@@ -111,7 +111,7 @@ export function SetupWorkstreams({
         </p>
       ) : null}
       {[0, 1].map((column) => (
-        <div key={column} className="flex flex-col gap-4">
+        <div key={column} className="flex flex-col gap-2">
           {workstreams
             .filter((_, index) => index % 2 === column)
             .map((workstream) => {
