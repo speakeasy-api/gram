@@ -104,16 +104,20 @@ func (v vendorCodeMessage) normalized() vendorCodeMessage {
 }
 
 // vendorDeadGrantCodes maps RFC-shaped extension codes that a provider sends
-// only when a refresh grant can never succeed again onto CodeInvalidGrant.
-// GitHub's token endpoint (https://github.com/login/oauth/access_token)
-// answers a revoked or expired refresh token with "bad_refresh_token" under
-// HTTP 200. Matching is exact: any other extension code is returned as is.
+// only when a grant can never succeed again onto CodeInvalidGrant, which RFC
+// 6749 §5.2 defines for an invalid, expired or revoked authorization code or
+// refresh token alike. GitHub's token endpoint
+// (https://github.com/login/oauth/access_token) answers a revoked or expired
+// refresh token with "bad_refresh_token" and a spent or unknown authorization
+// code with "bad_verification_code", both under HTTP 200. Matching is exact:
+// any other extension code is returned as is.
 var vendorDeadGrantCodes = map[string]string{
-	"bad_refresh_token": CodeInvalidGrant,
+	"bad_refresh_token":     CodeInvalidGrant,
+	"bad_verification_code": CodeInvalidGrant,
 }
 
 // CanonicalTokenErrorCode maps a vendor extension code that means a dead
-// refresh grant onto CodeInvalidGrant and returns every other code unchanged.
+// grant onto CodeInvalidGrant and returns every other code unchanged.
 // ParseTokenError keeps extension codes verbatim, so callers that act on
 // invalid_grant apply this before deciding.
 func CanonicalTokenErrorCode(code string) string {

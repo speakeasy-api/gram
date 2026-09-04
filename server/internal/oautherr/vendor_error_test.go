@@ -147,12 +147,13 @@ func TestSplitFlattenedError(t *testing.T) {
 	require.False(t, ok)
 }
 
-// Only the exact vendor code is canonicalized; every other code, registered or
-// extension, passes through untouched.
+// Only the exact vendor codes are canonicalized; every other code, registered
+// or extension, passes through untouched.
 func TestCanonicalTokenErrorCode(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, CodeInvalidGrant, CanonicalTokenErrorCode("bad_refresh_token"))
+	require.Equal(t, CodeInvalidGrant, CanonicalTokenErrorCode("bad_verification_code"))
 	require.Equal(t, CodeInvalidGrant, CanonicalTokenErrorCode(CodeInvalidGrant))
 	require.Equal(t, CodeInvalidClient, CanonicalTokenErrorCode(CodeInvalidClient))
 	require.Equal(t, "bad_refresh_token_format", CanonicalTokenErrorCode("bad_refresh_token_format"))
