@@ -510,6 +510,13 @@ func newStreamsCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("parse site url: %w", err)
 				}
+				// url.Parse accepts a bare path or a custom scheme, and either
+				// would produce a link Slack rejects. A site URL that cannot
+				// address the dashboard is a misconfiguration worth failing on
+				// rather than discovering one dead button at a time.
+				if (siteURL.Scheme != "http" && siteURL.Scheme != "https") || siteURL.Host == "" {
+					return fmt.Errorf("site url must be an absolute http(s) URL, got %q", raw)
+				}
 			}
 			growthSignalHandler := growthsignals.NewEventHandler(logger, growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL))
 

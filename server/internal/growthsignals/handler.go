@@ -22,6 +22,11 @@ import (
 // services add later, without a list here to extend.
 const auditEventTypePrefix = "audit_log."
 
+// propertyInsertID is PostHog's deduplication key. Two captures carrying the
+// same value describe one occurrence, which is what makes an at-least-once
+// topic safe to report from.
+const propertyInsertID = "$insert_id"
+
 // EventHandler turns audited mutations into growth activities.
 //
 // It reads the webhook stream the audit logger already publishes, so every
@@ -86,6 +91,10 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 	action := audit.Action(payload.Action)
 	mapping := ActivityForAction(action)
 	if mapping.Activity == ActivitySkip {
+		h.logger.DebugContext(ctx, "growth signal excluded by action",
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogEvent(event.GetEventType()),
+		)
 		return nil
 	}
 
@@ -110,8 +119,25 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 		// Audit records address subjects by id and type rather than by page, so
 		// the event takes the emitter's organization-level fallback link.
 		DashboardURL: "",
-		Extra:        mapping.Extra,
+		Extra:        withInsertID(mapping.Extra, eventID),
 	})
 
 	return nil
+}
+
+// withInsertID stamps the outbox event id as PostHog's deduplication key.
+//
+// The topic is at-least-once and this handler shares a message with its
+// siblings: when any of them fails, the whole message nacks and every handler
+// sees the event again. Without a stable key that is a duplicate Slack line for
+// something that happened once. The outbox id is stable across redeliveries,
+// which is exactly what the key needs to be.
+func withInsertID(extra map[string]string, eventID string) map[string]string {
+	stamped := make(map[string]string, len(extra)+1)
+	for key, value := range extra {
+		stamped[key] = value
+	}
+	stamped[propertyInsertID] = eventID
+
+	return stamped
 }
