@@ -56,7 +56,7 @@ func (f *recordingM1Features) EvaluateFlag(_ context.Context, flag feature.Flag,
 	return f.evaluation, f.err
 }
 
-func TestM1RolloutGateRequiresAuthoritativeEnablement(t *testing.T) {
+func TestAgentManagementRolloutGateRequiresAuthoritativeEnablement(t *testing.T) {
 	t.Parallel()
 
 	backendFailure := errors.New("feature provider unavailable")
@@ -81,7 +81,7 @@ func TestM1RolloutGateRequiresAuthoritativeEnablement(t *testing.T) {
 				OrganizationSlug:     "organization-slug",
 			})
 
-			err := service.requireM1Enabled(ctx)
+			err := service.requireAgentManagementEnabled(ctx)
 			if test.wantErr {
 				requireOopsCode(t, err, oops.CodeNotFound)
 			} else {
@@ -94,14 +94,14 @@ func TestM1RolloutGateRequiresAuthoritativeEnablement(t *testing.T) {
 				return
 			}
 			require.True(t, ok)
-			require.Equal(t, feature.FlagAgentManagementM1, flags.flag)
+			require.Equal(t, feature.FlagAgentManagement, flags.flag)
 			require.Equal(t, "organization", flags.distinctID)
 			require.Equal(t, feature.OrgProjectGroups("organization-slug", ""), flags.groups)
 		})
 	}
 }
 
-func TestGeneratedM1EndpointsCannotBypassRolloutGate(t *testing.T) {
+func TestGeneratedAgentManagementEndpointsCannotBypassRolloutGate(t *testing.T) {
 	t.Parallel()
 
 	backendFailure := errors.New("feature provider unavailable")
@@ -134,13 +134,13 @@ func TestGeneratedM1EndpointsCannotBypassRolloutGate(t *testing.T) {
 	}
 }
 
-func TestM1RolloutGateRejectsMissingTenantContextBeforeEvaluation(t *testing.T) {
+func TestAgentManagementRolloutGateRejectsMissingTenantContextBeforeEvaluation(t *testing.T) {
 	t.Parallel()
 
 	features := &recordingM1Features{evaluation: feature.EvaluationEnabled}
 	service := &Service{logger: testenv.NewLogger(t), features: features}
 
-	requireOopsCode(t, service.requireM1Enabled(t.Context()), oops.CodeNotFound)
-	requireOopsCode(t, service.requireM1Enabled(contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{})), oops.CodeNotFound)
+	requireOopsCode(t, service.requireAgentManagementEnabled(t.Context()), oops.CodeNotFound)
+	requireOopsCode(t, service.requireAgentManagementEnabled(contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{})), oops.CodeNotFound)
 	require.Empty(t, features.flag)
 }
