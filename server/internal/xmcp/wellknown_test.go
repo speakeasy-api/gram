@@ -328,10 +328,11 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 	require.NotNil(t, authCtx.ProjectID)
 
 	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-pr-cd-"+uuid.NewString()[:8]+".example.com")
+	upstreamIssuer := "https://issuer.example.com/Tenant/CaseSensitive"
 	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug:     "xmcp-pr-cd",
-		IsPublic: true,
-		Metadata: nil,
+		Slug:                      "xmcp-pr-cd",
+		IsPublic:                  true,
+		AuthorizationServerIssuer: &upstreamIssuer,
 	})
 	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
 
@@ -353,7 +354,7 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 
 	authServers, ok := metadata["authorization_servers"].([]any)
 	require.True(t, ok)
-	require.Equal(t, []any{expectedResource}, authServers)
+	require.Equal(t, []any{upstreamIssuer}, authServers)
 }
 
 func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExternalOAuth(t *testing.T) {
@@ -377,7 +378,9 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExterna
 
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "http://0.0.0.0/x/mcp/"+slug, metadata["resource"])
+	resourceURL := "http://0.0.0.0/x/mcp/" + slug
+	require.Equal(t, resourceURL, metadata["resource"])
+	require.Equal(t, []any{resourceURL}, metadata["authorization_servers"])
 }
 
 // TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend
