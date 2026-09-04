@@ -1496,6 +1496,26 @@ func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, a
 	return err
 }
 
+const setOrganizationUserWorkOSID = `-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND user_id = $3
+  AND deleted_at IS NULL
+`
+
+type SetOrganizationUserWorkOSIDParams struct {
+	WorkosUserID   pgtype.Text
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) SetOrganizationUserWorkOSID(ctx context.Context, arg SetOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserWorkOSID, arg.WorkosUserID, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const setSCIMEnabled = `-- name: SetSCIMEnabled :exec
 UPDATE organization_metadata
 SET scim_enabled = $1,

@@ -611,6 +611,14 @@ WHERE user_id = @user_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = @workos_user_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL;
+
 -- name: ReassignOrganizationUserWorkOSID :exec
 -- Login reuses a Gram user after WorkOS delete-and-signup, so membership
 -- rows still pointing at a previous WorkOS user id must follow the new one.
