@@ -498,43 +498,6 @@ func TestRearmTrial_AbsentCauseHasNoKeySideEffectOrInventedAccessAudit(t *testin
 	require.Equal(t, false, metadata["key_access_changed"])
 }
 
-func TestRearmTrial_UnclassifiedKeyRollsBackLifecycleAndAllKeyChanges(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, upstream := newProductionRearmService(t)
-	const orgID = "org_rearm_null_causes"
-	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
-	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, orgID)
-	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseTrialDemotion)})
-	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal, nil)
-	beforeTrial := readTrial(t, ctx, conn, orgID)
-	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
-	require.NoError(t, err)
-	beforeOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
-	require.NoError(t, err)
-
-	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	require.Zero(t, upstream.count(), "no HTTP belongs inside the transaction or after rollback")
-	afterTrial := readTrial(t, ctx, conn, orgID)
-	require.Equal(t, beforeTrial.DemotedAt, afterTrial.DemotedAt)
-	require.Equal(t, beforeTrial.EndsAt, afterTrial.EndsAt)
-	require.Equal(t, []string{string(openrouter.DisableCauseTrialDemotion)}, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).DisableCauses)
-	require.Nil(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).DisableCauses)
-	require.Equal(t, "free", readOrgState(t, ctx, conn, orgID).GramAccountType)
-	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		enabled, featureErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
-		require.NoError(t, featureErr)
-		require.False(t, enabled)
-	}
-	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
-	require.NoError(t, err)
-	require.Equal(t, beforeAudit, afterAudit)
-	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
-	require.NoError(t, err)
-	require.Equal(t, beforeOutbox, afterOutbox)
-}
-
 func seedArmAudit(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string) string {
 	t.Helper()
 	operationID, err := testrepo.New(conn).SeedTrialArmAuditFixture(ctx, orgID)

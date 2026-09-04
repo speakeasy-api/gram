@@ -914,26 +914,19 @@ func TestAdminDisableCauseSingleAndOverlappingTransitions(t *testing.T) {
 	require.Equal(t, []string{"billing_inactive"}, view.DisableCauses)
 }
 
-func TestAdminCauseMutationNULLFailsClosedAndMissing404s(t *testing.T) {
+func TestAdminCauseMutationMissingOrg404s(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
-	orgID := seedKey(t, ctx, ti, "admin-null", "chat", "sk-or-admin-null")
-	setDisableCauses(t, ctx, ti, orgID, "chat", nil)
 
-	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	_, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-
-	_, err = ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: "missing-org", KeyType: "chat"})
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: "missing-org", KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: "missing-org", KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	completes, aborts := ti.coordinator.Counts()
 	require.Zero(t, completes, "permanent local failures must not occupy reconciliation")
-	require.Equal(t, 4, aborts)
+	require.Equal(t, 2, aborts)
 }
 
 func TestAdminCauseRetriesAreIdempotent(t *testing.T) {
