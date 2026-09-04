@@ -541,6 +541,17 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
   AND deleted IS FALSE;
 
+-- name: GetUserSessionPrincipalCredentialByJTI :one
+-- Authoritative serve-path lookup for an agent session's immutable credential
+-- profile. It intentionally bypasses caches so direct session revocation and
+-- expiry remain authoritative on every admission.
+SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp();
+
 -- name: GetLatestLiveUserSessionToolSelection :one
 -- Reauth prefill: the identified subject's newest live restrictive policy
 -- for the same issuer + client + endpoint resource. Filtering by resource in
@@ -821,6 +832,9 @@ INSERT INTO user_sessions (
     user_session_issuer_id,
     user_session_client_id,
     subject_urn,
+    authorizer_user_id,
+    delegated_grants,
+    delegated_grants_version,
     jti,
     refresh_token_hash,
     refresh_expires_at,
@@ -829,10 +843,18 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    (
+        SELECT COALESCE(issuer.organization_id, project.organization_id)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id = @user_session_issuer_id
+    ),
     @user_session_issuer_id,
     @user_session_client_id,
     @subject_urn,
+    @authorizer_user_id,
+    @delegated_grants,
+    @delegated_grants_version,
     @jti,
     @refresh_token_hash,
     @refresh_expires_at,
