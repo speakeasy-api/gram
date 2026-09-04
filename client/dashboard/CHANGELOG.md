@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.115.0
+
+### Minor Changes
+
+- 32500ca: Add the feature-flagged multi-owner organization setup board and generated setup task SDK methods.
+
 ## 0.114.0
 
 ### Minor Changes
