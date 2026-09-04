@@ -15,6 +15,7 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { isValidDataExportEndpointURL } from "@/lib/data-export-validation";
 import {
   blankWriteOnlyHeader,
   editableHeaderFromServer,
@@ -24,15 +25,6 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { Plus } from "lucide-react";
 import type { OtelDataExportDestination } from "./ConfigureExportSheet";
-
-function isValidDataExportEndpointURL(value: string): boolean {
-  try {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
 
 export type ConfigureDestinationValues = {
   destinationName: string;

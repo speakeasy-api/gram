@@ -52,15 +52,26 @@ export function preservesStoredHeaderValue(
   );
 }
 
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const INVALID_HTTP_HEADER_VALUE_PATTERN = /[\u0000-\u0008\u000a-\u001f\u007f]/;
+
 export function hasValidWriteOnlyHeaders(
   headers: EditableWriteOnlyHeader[],
 ): boolean {
   const names = new Set<string>();
   return headers.every((header) => {
-    const name = header.name.trim().toLowerCase();
-    if (name === "" || names.has(name)) return false;
-    names.add(name);
-    return header.value !== "" || preservesStoredHeaderValue(header);
+    const name = header.name.trim();
+    const foldedName = name.toLowerCase();
+    if (!HTTP_HEADER_NAME_PATTERN.test(name) || names.has(foldedName)) {
+      return false;
+    }
+    names.add(foldedName);
+
+    if (preservesStoredHeaderValue(header)) return true;
+    return (
+      header.value !== "" &&
+      !INVALID_HTTP_HEADER_VALUE_PATTERN.test(header.value)
+    );
   });
 }
 
