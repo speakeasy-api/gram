@@ -198,6 +198,37 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
+func TestHandleToken_AgentRefreshHidesDisabledRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+
+	result := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.Error(t, result.err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, result.err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestHandleToken_AgentRefreshReplayHidesDisabledRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	winner := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, winner.err)
+	require.Equal(t, http.StatusOK, winner.code, winner.body)
+
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	replay := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.Error(t, replay.err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, replay.err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
 func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {
 	t.Parallel()
 

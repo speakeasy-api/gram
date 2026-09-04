@@ -595,6 +595,10 @@ func (s *Service) rotateRefreshToken(
 				admittedAgentContext, admissionErr = s.prepareAgentSessionContext(admittedAgentContext, endpoint, refreshSession.SubjectUrn, credential)
 			}
 			if admissionErr != nil {
+				var rolloutErr *oops.ShareableError
+				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+					return true, admissionErr
+				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
@@ -864,6 +868,10 @@ func (s *Service) writeRefreshTokenReplay(
 			_, cerr = s.admitAgentSession(authorizationCtx, endpoint, *payload.Subject, credential)
 		}
 		if cerr != nil {
+			var rolloutErr *oops.ShareableError
+			if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+				return cerr
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}
