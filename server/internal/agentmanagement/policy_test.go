@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
@@ -77,7 +78,6 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-validation")
 	seedOrganizationUser(t, conn, "org-validation", "owner")
-	agent := createAgent(t, conn, "org-validation", "owner", "Validation agent")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-validation", "owner")
 
@@ -85,14 +85,18 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 		name    string
 		payload gen.CreatePolicyGrantPayload
 	}{
-		{name: "deny", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "deny", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
-		{name: "unknown", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: "unknown:scope", Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
-		{name: "root", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeRoot), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "*", ResourceID: "*"}}},
-		{name: "management", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeAgentWrite), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindAgent, ResourceID: "*"}}},
-		{name: "blocklist", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectBlockedRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
-		{name: "malformed selector", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}}},
+		{name: "deny", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeProjectRead), Effect: "deny", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "unknown", payload: gen.CreatePolicyGrantPayload{Scope: "unknown:scope", Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "root", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeRoot), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "*", ResourceID: "*"}}},
+		{name: "management", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeAgentWrite), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindAgent, ResourceID: "*"}}},
+		{name: "blocklist", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeProjectBlockedRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "malformed selector", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}}},
 	}
 	for _, tt := range tests {
+		agent := createAgent(t, conn, "org-validation", "owner", tt.name+" validation agent")
+		tt.payload.AgentID = agent.ID.String()
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -100,7 +104,7 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 			requireOopsCode(t, err, oops.CodeBadRequest)
 
 			var count int
-			require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1`, "org-validation").Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
+			require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, "org-validation", principal).Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
 			require.Zero(t, count)
 		})
 	}
