@@ -28,8 +28,7 @@ var consentToolsScriptHash = func() string {
 	return hex.EncodeToString(sum[:])[:8]
 }()
 
-// consentToolsScriptURL is the path the consent template loads the island
-// from. Hardcoded to the /mcp surface so /x/mcp pages reuse the same route.
+// consentToolsScriptURL is the path the consent template loads the island from.
 var consentToolsScriptURL = "/mcp/consent-tools-" + consentToolsScriptHash + ".js"
 
 // ServeConsentToolsScript serves the island bundle with immutable cache

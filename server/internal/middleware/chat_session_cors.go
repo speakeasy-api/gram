@@ -33,10 +33,9 @@ var chatSessionsAllowedRoutes = []string{
 // This is deliberately an allowlist rather than "every chatSessionsAllowedRoutes
 // entry". The /mcp prefix in that list also covers /mcp/{slug} and the OAuth
 // sub-routes (/token, /register, /authorize, /connect), none of which read
-// Gram-Key at all — nothing under internal/mcp or internal/xmcp consults it,
-// as MCP identity auth reads Authorization or Gram-Chat-Session only. Echoing
-// the origin there authenticated nothing and let any page read a response it
-// should not have been able to: a hostile origin that attached a dummy
+// Gram-Key at all — MCP identity auth reads Authorization or Gram-Chat-Session
+// only. Echoing the origin there authenticated nothing and let any page read a
+// response it should not have been able to: a hostile origin that attached a
 // Gram-Key got Access-Control-Allow-Origin plus Allow-Credentials on a
 // credential-free public MCP server, making tools/list and tools/call results
 // readable cross-site.

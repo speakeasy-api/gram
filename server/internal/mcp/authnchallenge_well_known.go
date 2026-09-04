@@ -159,7 +159,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
-	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	resourceURL, err := url.JoinPath(s.baseURLForRequest(r), "mcp", mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
@@ -218,7 +218,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	// which equals the requested slug on this fallback path. The resource URL
 	// mirrors HandleGetProtectedResource so the served issuer matches the
 	// protected-resource metadata's authorization_servers entry.
-	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	resourceURL, err := url.JoinPath(s.baseURLForRequest(r), "mcp", mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
@@ -226,9 +226,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 }
 
 // ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
-// metadata for an already-resolved (mcp_endpoint, mcp_server) pair. It is the
-// single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
-// (routeBase "x/mcp") well-known surfaces:
+// metadata for an already-resolved (mcp_endpoint, mcp_server) pair:
 //
 //   - Issuer-gated (any backend): emit the Gram-hosted metadata shape rooted
 //     at the resolved endpoint's URL on routeBase's surface.
@@ -270,7 +268,7 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		if err != nil {
 			return err
 		}
-		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		resourceURL, err := url.JoinPath(s.baseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
@@ -316,14 +314,13 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		if err != nil {
 			return err
 		}
-		// The OAuth slug and the resource URL are both keyed on the endpoint
-		// the request arrived at, so a hosted server can carry several
-		// endpoints and none of them has to equal toolsets.mcp_slug. The
-		// resource URL mirrors ServeWellKnownProtectedResourceForServer so the
-		// served issuer matches the protected-resource metadata's
-		// authorization_servers entry.
+		// The OAuth slug and resource URL are both keyed on the endpoint the
+		// request arrived at, so a hosted server can carry several endpoints
+		// and none has to equal toolsets.mcp_slug. The resource URL mirrors
+		// ServeWellKnownProtectedResourceForServer so the served issuer matches
+		// the protected-resource metadata's authorization_servers entry.
 		oauthSlug := mcpEndpoint.Slug
-		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		resourceURL, err := url.JoinPath(s.baseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
@@ -373,7 +370,7 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 // keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
 // surface.
 func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
-	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug, resourceURL)
+	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.baseURLForRequest(r), oauthSlug, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").LogError(ctx, logger)
 	}
@@ -405,15 +402,12 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 	return writeOAuthServerMetadataResponse(ctx, logger, w, r, result)
 }
 
-// ServeGetProtectedResource is the post-resolution entry point for the
-// RFC 9728 protected-resource metadata response, shared by /mcp's
-// HandleGetProtectedResource (toolset-keyed) and /x/mcp's mcp_endpoint-
-// keyed route registration. Emits the issuer-gated metadata shape; the
-// legacy non-issuer-gated fallback stays in HandleGetProtectedResource
-// because it depends on the toolsets row directly.
+// ServeGetProtectedResource emits RFC 9728 protected-resource metadata for an
+// already-resolved endpoint. The legacy non-issuer-gated fallback stays in
+// HandleGetProtectedResource because it depends on the toolsets row directly.
 func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.baseURLForRequest(r)
 	resource, err := endpoint.RootURL(baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
@@ -426,15 +420,12 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// ServeGetAuthorizationServer is the post-resolution entry point for the
-// RFC 8414 authorization-server metadata response, shared by /mcp's
-// HandleGetAuthorizationServer (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration. Emits the issuer-gated
-// metadata shape; the legacy non-issuer-gated fallback stays in
+// ServeGetAuthorizationServer emits RFC 8414 authorization-server metadata for
+// an already-resolved endpoint. The legacy non-issuer-gated fallback stays in
 // HandleGetAuthorizationServer.
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.baseURLForRequest(r)
 	urls, err := endpoint.AuthorizationServerURLs(baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)

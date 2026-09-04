@@ -133,20 +133,16 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
 	return s.ServeToken(w, r, endpoint)
 }
 
-// ServeToken is the post-resolution entry point for the OAuth 2.1
-// token endpoint, shared by /mcp's HandleToken (toolset-keyed) and
-// /x/mcp's mcp_endpoint-keyed route registration. Performs the common
-// upfront work — parse form, authenticate the client — then dispatches
-// on grant_type to handleTokenAuthorizationCodeGrant or
-// handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
-// RFC 6749 §5.1 response through mintSession.
+// ServeToken handles token requests for a resolved endpoint. It parses and
+// authenticates the client before dispatching on grant_type; both grant
+// handlers mint and persist the user-session JWT.
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
@@ -170,7 +166,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// the two sides of the contract stay aligned across custom domains.
 	// Computed before client authentication because an assertion's aud is
 	// checked against URLs derived from it.
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.baseURLForRequest(r)
 	// lookupClientOnly: any CIMD row was persisted at authorize time, and
 	// mid-flow token legs must keep working even if the issuer's admission
 	// policy changes between legs.

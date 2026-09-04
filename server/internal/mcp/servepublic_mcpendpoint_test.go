@@ -740,7 +740,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
-		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Issuer:   ti.serverURL.String() + "/mcp/" + endpointSlug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
@@ -805,7 +805,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
-		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Issuer:   ti.serverURL.String() + "/mcp/" + endpointSlug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)

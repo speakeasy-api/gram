@@ -91,13 +91,9 @@ type OAuthRepo interface {
 // ResolveOAuthServerMetadataFromToolset returns OAuth Authorization Server
 // metadata for a toolset, or nil if the toolset is not OAuth-configured.
 //
-// oauthSlug is the slug used to address the Gram-hosted OAuth endpoints
-// (`/oauth/{oauthSlug}/...`). Today the OAuth machinery is keyed by
-// `toolsets.mcp_slug`, so callers should pass that value. The /x/mcp
-// experimental endpoint uses the same OAuth flow under the hood, so it
-// also passes `toolset.mcp_slug` here even though its protected-resource
-// URL uses an `mcp_endpoints.slug` instead — see the companion
-// resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
+// oauthSlug addresses the Gram-hosted OAuth endpoints
+// (`/oauth/{oauthSlug}/...`). Callers pass the public MCP endpoint slug; the
+// legacy toolset fallback passes its mcp_slug because that is its URL slug.
 //
 // resourceURL is the absolute URL of the protected resource — the same value
 // [ResolveOAuthProtectedResourceFromToolset] emits as `resource` and
@@ -185,12 +181,10 @@ func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage,
 // ResolveOAuthProtectedResourceFromToolset returns OAuth Protected Resource
 // Metadata for a toolset, or nil if the toolset is not OAuth-protected.
 //
-// resourceURL is the absolute URL of the protected resource (the runtime MCP
-// endpoint). For /mcp callers this is `<baseURL>/mcp/<toolset.mcp_slug>`; for
-// /x/mcp callers this is `<baseURL>/x/mcp/<mcp_endpoint.slug>`. It is used
-// verbatim for both `resource` and `authorization_servers` so that the
-// `/.well-known/...` discovery path on the protected resource resolves back
-// to the Gram-hosted authorization server metadata.
+// resourceURL is the absolute URL of the protected runtime MCP endpoint. It is
+// used verbatim for both resource and authorization_servers so the protected
+// resource's well-known discovery path resolves back to the Gram-hosted
+// authorization server metadata.
 func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,

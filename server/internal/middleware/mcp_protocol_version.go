@@ -75,11 +75,6 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
 		// an OAuth or metadata sub-route, not the MCP endpoint itself.
 		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail)
-	case "x":
-		// /x/mcp/{slug} — toolset-backed, remote-backed, and tunneled. Carries
-		// the same OAuth callback siblings as /mcp/ (internal/xmcp/service.go).
-		slug, ok := strings.CutPrefix(tail, "mcp/")
-		return ok && isEndpointSlug(slug) && !isSlugSiblingRoute(slug)
 	case "platform":
 		// /platform/mcp/{toolsetSlug}. Nothing static is registered beside it,
 		// so every one-segment tail here really is a slug.
@@ -106,7 +101,7 @@ func isEndpointSlug(seg string) bool {
 }
 
 // isSlugSiblingRoute reports whether seg names a static route registered
-// directly under /mcp/ or /x/mcp/ rather than an endpoint slug.
+// directly under /mcp/ rather than an endpoint slug.
 //
 // chi resolves a static pattern ahead of a parameterized one, so these paths
 // always reach their own handler and never the MCP endpoint handler. This
@@ -123,12 +118,12 @@ func isEndpointSlug(seg string) bool {
 // original predicate did to production.
 func isSlugSiblingRoute(seg string) bool {
 	switch seg {
-	// GET /mcp/idp_callback and GET /x/mcp/idp_callback: the upstream IdP
-	// redirects the browser here to complete an authorization code exchange.
+	// GET /mcp/idp_callback: the upstream IdP redirects the browser here to
+	// complete an authorization code exchange.
 	case "idp_callback":
 		return true
-	// GET /mcp/remote_login_callback and GET /x/mcp/remote_login_callback: the
-	// same, for the remote-session login flow that writes remote_sessions.
+	// GET /mcp/remote_login_callback: the remote-session login flow writes
+	// remote_sessions before returning to the consent screen.
 	case "remote_login_callback":
 		return true
 	}

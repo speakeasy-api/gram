@@ -131,7 +131,7 @@ type MintUserSessionPayload struct {
 // mintUserSession method.
 type MintUserSessionResult struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
+	// to the bound /mcp/{slug} surface.
 	AccessToken string
 	// Lifetime of the access token in seconds.
 	ExpiresIn int

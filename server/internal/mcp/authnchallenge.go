@@ -70,10 +70,9 @@ type EndpointRef struct {
 	// the server default origin until the 10-min challenge TTL elapses.
 	BaseURL string `json:"base_url,omitempty"`
 
-	// McpServerID, when valid, identifies the mcp_servers row that owns
-	// this challenge. Populated by /x/mcp callers whose endpoint
-	// addresses resolve through mcp_endpoints → mcp_servers; zero for
-	// /mcp callers.
+	// McpServerID, when valid, identifies the mcp_servers row that owns this
+	// challenge. It is populated when the endpoint resolves through
+	// mcp_endpoints → mcp_servers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
 
 	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
@@ -83,14 +82,11 @@ type EndpointRef struct {
 	// challenge before it existed.
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 
-	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
-	// /x/mcp challenges.
+	// McpSlug is the public endpoint address.
 	McpSlug string `json:"mcp_slug"`
 
-	// RouteBase is the URL path prefix the challenge was minted under
-	// ("mcp" or "x/mcp"). Empty value is treated as "mcp" by callers for
-	// backward compatibility with states minted before this field was
-	// added.
+	// RouteBase is the inbound URL path prefix. Empty values from older cached
+	// challenges resolve to "mcp".
 	RouteBase string `json:"route_base,omitempty"`
 }
 
@@ -457,12 +453,10 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
 }
 
-// BaseURLForRequest returns the public base URL the runtime request was
-// addressed at — the custom domain when one is bound to the request
-// context, the server's default origin otherwise. Exposed so /x/mcp
-// callers building post-resolution OAuth URLs see the same origin /mcp
-// callers do.
-func (s *Service) BaseURLForRequest(r *http.Request) string {
+// baseURLForRequest returns the public base URL the runtime request was
+// addressed at: the custom domain when one is bound to the request context,
+// the server's default origin otherwise.
+func (s *Service) baseURLForRequest(r *http.Request) string {
 	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
 		return fmt.Sprintf("https://%s", domainCtx.Domain)
 	}
@@ -477,24 +471,14 @@ type issuerGateAuthentication struct {
 	subject              urn.SessionSubject
 }
 
-// authenticateIssuerGate runs the issuer-gated authentication branch shared by
-// the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
-// paths. It validates the bearer token as a user-session JWT and falls back
-// to an assistant-runtime JWT scoped to the endpoint's project. Upstream
-// remote-session credentials are deliberately resolved by a separate step so
-// hosted tool calls can evaluate kill switches first.
+// authenticateIssuerGate validates issuer-gated requests as user-session JWTs
+// and falls back to an assistant-runtime JWT scoped to the endpoint's project.
+// Upstream remote-session credentials are resolved separately so hosted tool
+// calls can evaluate kill switches first.
 //
-// On success it returns the stamped request context, the authenticated subject
-// needed for deferred credential resolution, and the caller's tool selection.
-// On failure it writes a 401 + WWW-Authenticate and returns the CodeUnauthorized
-// error from WriteAuthenticateChallenge. The resource_metadata URL is built
-// from baseURL + endpoint.RouteBase +
-// endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
-// protected-resource metadata, not /mcp's.
-//
-// /x/mcp uses this to gate requests on mcp_servers.user_session_issuer_id
-// before dispatching to its remote backend or delegating to
-// ServeToolsetResolved with the gate skipped.
+// On success it returns the stamped request context, authenticated subject,
+// and caller tool selection. On failure it writes a 401 + WWW-Authenticate and
+// returns the CodeUnauthorized error from WriteAuthenticateChallenge.
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -651,9 +635,7 @@ var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not m
 // config today, but any future consumer must either route through here or
 // tolerate an unstamped endpoint, which reads as an unset mode.
 //
-// Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same place as the
-// NewResolvedMcpEndpointFromMcpServer construction.
+// Exported constructors use this helper to apply the same live-FK check.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:             endpoint.UserSessionIssuerID,

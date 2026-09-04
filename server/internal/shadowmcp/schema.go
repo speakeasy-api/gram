@@ -11,11 +11,9 @@ import (
 // scopeID. Tool callers must echo the value back so downstream validators
 // can recover which Gram toolset authored the call.
 //
-// Only the toolset-backed `/mcp` path injects today. The remote MCP proxy
-// (`/x/mcp`, plus `/mcp` remote-backed and tunneled servers) stopped
-// injecting and stopped validating the echo in DNO-603, because models
-// routinely failed to echo the value and the proxy already knew which
-// server it had routed to.
+// The toolset-backed path injects this signature. Remote and tunneled proxies
+// stopped injecting and validating the echo in DNO-603 because models routinely
+// failed to echo the value and the proxy already knew which server it routed to.
 //
 // The schema is mutated as a structural map operation: the function
 // unmarshals the schema into [map[string]any], adds the property to

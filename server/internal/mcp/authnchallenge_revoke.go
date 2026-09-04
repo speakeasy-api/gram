@@ -30,16 +30,14 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
 	return s.ServeRevoke(w, r, endpoint)
 }
 
-// ServeRevoke implements RFC 7009 token revocation. Post-resolution entry
-// point shared by /mcp's HandleRevoke (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration.
+// ServeRevoke implements RFC 7009 token revocation for a resolved endpoint.
 //
 // Per RFC 7009 §2.2: the response is HTTP 200 unconditionally on success or
 // when the token is unknown / already revoked / was never valid -- the spec
@@ -93,7 +91,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	// deliberately NOT applied here is the CIMD admission `disabled` check:
 	// revocation is a de-escalation, and a client an operator has just
 	// de-admitted should still be able to kill its own outstanding tokens.
-	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtRevoke, &clientRow, creds, s.BaseURLForRequest(r)); reason != "" {
+	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtRevoke, &clientRow, creds, s.baseURLForRequest(r)); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}

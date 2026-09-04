@@ -14,15 +14,12 @@ import (
 )
 
 // eventMCPInitialized is the PostHog event name emitted for every observed
-// `initialize` request. AGE-1902 tracks unifying this with the equivalent
-// `/mcp` event so both runtimes share a single product-analytics schema.
+// initialize request.
 const eventMCPInitialized = "mcp_initialized"
 
-// InitializePostHogEventInterceptor emits the [eventMCPInitialized] PostHog
-// event for every JSON-RPC `initialize` request observed by `/x/mcp`. It is
-// a [proxy.InitializeRequestInterceptor]: the proxy routes only initialize
-// requests to it, so the interceptor never has to dispatch on method.
-// Analytics emission is best-effort and never rejects.
+// InitializePostHogEventInterceptor emits [eventMCPInitialized] for every
+// JSON-RPC initialize request observed by the remote MCP proxy. The proxy routes
+// only initialize requests to it, and analytics emission is best-effort.
 type InitializePostHogEventInterceptor struct {
 	posthog  *posthog.Posthog
 	identity proxy.ServerIdentity

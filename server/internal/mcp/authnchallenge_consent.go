@@ -69,9 +69,7 @@ var consentScriptHash = func() string {
 	return hex.EncodeToString(sum[:])[:8]
 }()
 
-// consentScriptURL is the path the consent template loads the script from.
-// Hardcoded to the /mcp surface (like the install-page script) so the
-// /x/mcp surface reuses the same route rather than registering its own.
+// consentScriptURL is the canonical consent-page asset route.
 var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
 
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
@@ -308,7 +306,7 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
@@ -333,9 +331,7 @@ func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
-// ServeConsent is the post-resolution entry point for the consent UI
-// (GET) and consent POST handlers, shared by /mcp's HandleConsent
-// (toolset-keyed) and /x/mcp's mcp_endpoint-keyed route registration.
+// ServeConsent handles the post-resolution consent GET and POST endpoints.
 func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	switch r.Method {
 	case http.MethodGet:
@@ -578,7 +574,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// return leg re-enters consent on the platform origin, so a POST carrying
 	// a custom-domain context can still be completing a flow the client
 	// recorded under a different origin (or vice versa).
-	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
+	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.baseURLForRequest(r)))
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)

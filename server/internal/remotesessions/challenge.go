@@ -66,12 +66,8 @@ import (
 // upstream token exchange instead of bouncing back to
 // /<RouteBase>/{slug}/connect.
 //
-// RouteBase is "mcp" or "x/mcp" — the surface the parent challenge was
-// minted under. Drives both the upstream provider's redirect_uri
-// (/<RouteBase>/remote_login_callback) and the post-callback bounce to
-// /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
-// in-flight states minted before this field landed still resume on the
-// original surface.
+// RouteBase is the inbound MCP route stored on the parent challenge. Only
+// "mcp" is accepted; empty values from older cached states resolve to it.
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
@@ -109,9 +105,9 @@ type RemoteLoginState struct {
 	Resource              string              `json:"resource,omitempty"`
 	Subject               *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug               string              `json:"mcp_slug"`
-	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
-	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
-	// for in-flight states minted before this field landed.
+	// RouteBase is the inbound MCP route used for the post-callback redirect.
+	// Only "mcp" is accepted; empty values from older cached states resolve to
+	// it.
 	RouteBase string `json:"route_base,omitempty"`
 	// FinalRedirectURI overrides the default post-callback redirect to
 	// /<RouteBase>/{slug}/connect. Set by dashboard-driven flows that
@@ -492,6 +488,13 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	// Counted at entry, before any validation or the Redis write, so a flow
 	// that dies on an unrelated error here still lands in the census.
 	m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+	routeBase := parent.RouteBase
+	if routeBase == "" {
+		routeBase = canonicalCallbackRouteBase
+	}
+	if routeBase != canonicalCallbackRouteBase {
+		return "", fmt.Errorf("unsupported MCP route base %q", routeBase)
+	}
 
 	if client.AuthorizationEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
@@ -544,7 +547,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		Resource:              parent.Resource,
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
-		RouteBase:             parent.RouteBase,
+		RouteBase:             routeBase,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		AutoRefresh:           parent.AutoRefresh,
 		CreatedAt:             time.Now(),
@@ -804,7 +807,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	routeBase := state.RouteBase
 	if routeBase == "" {
-		routeBase = "mcp"
+		routeBase = canonicalCallbackRouteBase
+	}
+	if routeBase != canonicalCallbackRouteBase {
+		return oops.E(oops.CodeBadRequest, nil, "unsupported MCP route").LogWarn(ctx, logger)
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.FinalRedirectURI != "" {
@@ -814,19 +820,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	return nil
 }
 
-// canonicalCallbackRouteBase is the route base the outbound remote-login
-// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
-// and /x/mcp and recovers the originating slug from the cached login state, so
-// one canonical base serves either surface. A single stable redirect_uri also
-// matches the lone redirect_uri a CIMD client publishes in its metadata
-// document; the originating surface lives in the login state's RouteBase for
-// the post-callback bounce.
+// canonicalCallbackRouteBase is the only route base the outbound remote-login
+// redirect_uri and post-callback consent redirect use.
 const canonicalCallbackRouteBase = "mcp"
 
-// callbackURL is the route-base-scoped path the upstream provider redirects
-// back to after the user authenticates. Empty routeBase falls back to "mcp"
-// for back-compat with callers that haven't been threaded with a RouteBase
-// yet (and for in-flight states minted before this parameter landed).
+// callbackURL is the path the upstream provider redirects back to after the
+// user authenticates. Empty routeBase values resolve to the canonical route for
+// callers and cached states predating this field.
 func (m *ChallengeManager) callbackURL(routeBase string) string {
 	if routeBase == "" {
 		routeBase = canonicalCallbackRouteBase

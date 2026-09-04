@@ -63,7 +63,7 @@ func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(c
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		i.logger.WarnContext(ctx, "skipping resource read usage tracking: missing auth context",
-			attr.SlogComponent("xmcp"))
+			attr.SlogComponent("mcp"))
 		return nil
 	}
 

@@ -32,13 +32,12 @@ var DurationMissingKey = attribute.Key("gram.telemetry.duration_missing")
 // from http.server.request.duration).
 //
 // One instance implements both [proxy.ToolsCallRequestInterceptor] and
-// [proxy.ToolsCallResponseInterceptor]. xmcp constructs a fresh interceptor
-// per HTTP request inside [Service.buildProxy], and [proxy.Proxy.Post] fires
-// the request and response chains sequentially on a single goroutine for at
-// most one tools/call per request — so a single nilable start timestamp is
-// enough state to compute duration, no map or mutex required. If a future
-// refactor makes [proxy.Proxy] (or this interceptor) long-lived across
-// requests, this needs to revert to per-call keying.
+// [proxy.ToolsCallResponseInterceptor]. A fresh interceptor is constructed for
+// each HTTP request, and [proxy.Proxy.Post] runs the request and response chains
+// sequentially on one goroutine for at most one tools/call per request, so a
+// single nilable start timestamp is safe.
+// A future refactor making the proxy or interceptor long-lived across requests
+// would need per-call keying.
 //
 // Emission is fire-and-forget on a goroutine bound to
 // [context.WithoutCancel] so ClickHouse latency never appears in the user's
@@ -96,7 +95,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing auth context",
-			attr.SlogComponent("xmcp"))
+			attr.SlogComponent("mcp"))
 		return nil
 	}
 

@@ -76148,7 +76148,7 @@ components:
       properties:
         access_token:
           type: string
-          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} surface.'
         expires_in:
           type: integer
           description: Lifetime of the access token in seconds.

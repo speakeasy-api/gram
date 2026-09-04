@@ -65,7 +65,7 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		i.logger.WarnContext(ctx, "skipping tool call usage tracking: missing auth context",
-			attr.SlogComponent("xmcp"))
+			attr.SlogComponent("mcp"))
 		return nil
 	}
 

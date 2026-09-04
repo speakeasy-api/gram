@@ -35,14 +35,13 @@ func IsAddressMiss(err error) bool {
 }
 
 // BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
-// and /x/mcp slug handlers, the install-page handlers, and the .well-known
-// routes: it scopes the lookup to the request's customdomains.Context, loads
-// the mcp_endpoint by (slug, custom domain), then loads whichever backend the
-// endpoint addresses. Exactly one of the returned server and metaServer is
-// non-nil, matching the endpoint table's backend-exclusivity check. Disabled
-// backends of either kind and missing rows all surface as oops.CodeNotFound to
-// avoid leaking existence to unauthenticated callers. logger should already
-// carry the slug attribute.
+// slug handler, install-page handlers, and well-known routes. It scopes the
+// lookup to the request's customdomains.Context, loads the mcp_endpoint by
+// (slug, custom domain), then loads whichever backend the endpoint addresses.
+// Exactly one returned server is non-nil, matching the endpoint table's
+// backend-exclusivity check. Disabled backends and missing rows surface as
+// oops.CodeNotFound to avoid leaking existence to unauthenticated callers.
+// logger should already carry the slug attribute.
 //
 // Callers that want to fall back to a legacy lookup (e.g. /mcp's existing
 // toolsets.mcp_slug path) may do so only on a true address miss — a

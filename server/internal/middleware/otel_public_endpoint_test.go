@@ -58,9 +58,7 @@ func TestIsOTelPublicEndpointPublicRoutesArePublic(t *testing.T) {
 		"/mcp/idp_callback",
 		"/oauth/some-slug/token",
 		"/oauth-external/callback",
-		"/x/mcp/some-slug",
 		"/.well-known/oauth-protected-resource/mcp/some-slug",
-		"/.well-known/oauth-authorization-server/x/mcp/some-slug",
 		"/chat/completions",
 		"/openapi.yaml",
 	}
@@ -129,7 +127,6 @@ func TestIsOTelPublicEndpointKnownRouteSurface(t *testing.T) {
 		"/admin/organizations.list": false,
 		// Public untrusted surfaces.
 		"/mcp/some-slug":                                        true,
-		"/x/mcp/some-slug":                                      true,
 		"/oauth/some-slug/authorize":                            true,
 		"/oauth-external/authorize":                             true,
 		"/.well-known/oauth-protected-resource/mcp/some-slug":   true,
