@@ -50,7 +50,8 @@ export function OnboardingStepper({
             key={step.id}
             className={cn(
               "group relative flex gap-4",
-              canJump && "cursor-pointer",
+              canJump &&
+                "focus-visible:ring-ring/50 cursor-pointer outline-none focus-visible:ring-[3px]",
             )}
             aria-current={isCurrent ? "step" : undefined}
             role={canJump ? "button" : undefined}
