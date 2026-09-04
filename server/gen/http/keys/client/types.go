@@ -67,7 +67,7 @@ type CreateKeyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The store prefix of the api key for recognition
 	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
@@ -102,7 +102,7 @@ type RotateKeyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The store prefix of the api key for recognition
 	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
@@ -1115,7 +1115,7 @@ type KeyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The store prefix of the api key for recognition
 	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`

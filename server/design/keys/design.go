@@ -123,7 +123,7 @@ var _ = Service("keys", func() {
 var CreateKeyForm = Type("CreateKeyForm", func() {
 	Required("name")
 
-	Attribute("name", String, "The name of the key")
+	Attribute("name", String, "The name of the key", func() { MaxLength(255) })
 	Attribute("project_id", String, "Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.", func() {
 		Format(FormatUUID)
 	})
@@ -137,7 +137,7 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 var RotateKeyForm = Type("RotateKeyForm", func() {
 	Required("id", "name", "delegated_grants_version", "requested_grants")
 	Attribute("id", String, "API key identifier to replace", func() { Format(FormatUUID) })
-	Attribute("name", String, "The name of the replacement key")
+	Attribute("name", String, "The name of the replacement key", func() { MaxLength(255) })
 	Attribute("scopes", ArrayOf(String), "Legacy transport scopes; agent rotation requires an empty array")
 	Attribute("delegated_grants_version", Int, "Delegated policy format version", func() { Minimum(1) })
 	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "New exact allow grants approved for the replacement credential")
@@ -170,7 +170,7 @@ var KeyModel = Type("Key", func() {
 	Attribute("created_by_user_id", String, "The human creator; immutable authorizer for agent keys")
 	Attribute("name", String, "The name of the key")
 	Attribute("key_prefix", String, "The store prefix of the api key for recognition")
-	Attribute("key", String, "The token of the api key (only returned on key creation)") // this will only be set on key creation
+	Attribute("key", String, "The token of the api key (only returned on key creation or rotation)") // this will only be set on key creation or rotation
 	Attribute("scopes", ArrayOf(String), "Legacy transport scopes; always empty for agent keys")
 	Attribute("subject_urn", String, "Principal authenticated by this key; agent keys use agent:<uuid>")
 	Attribute("delegated_grants", AgentDelegatedPolicy, "Immutable delegated policy approved for this credential")
