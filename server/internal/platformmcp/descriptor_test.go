@@ -184,7 +184,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	for _, name := range []string{
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugin_audiences",
+		"list_plugin_assignments",
 		"list_plugins",
 		"get_plugin",
 		"list_my_sessions",

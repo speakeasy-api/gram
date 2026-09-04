@@ -22,9 +22,9 @@ const SubjectReferenceTTL = 10 * time.Minute
 // Subject reference kinds. A reference minted for one kind cannot be presented
 // as another, so a trace handle can never be spent where a person is expected.
 const (
-	subjectKindUser           = "user"
-	subjectKindTrace          = "trace"
-	subjectKindPluginAudience = "plugin_audience"
+	subjectKindUser             = "user"
+	subjectKindTrace            = "trace"
+	subjectKindPluginAssignment = "plugin_assignment"
 	// subjectKindCursor is separate from subjectKindTrace so a correlation
 	// handle a caller was given to quote cannot be presented back as a page
 	// position, and a cursor cannot be quoted as an occurrence.

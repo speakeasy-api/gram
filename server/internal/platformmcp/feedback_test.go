@@ -43,7 +43,7 @@ func TestValidateFeedbackInputRejectsSensitiveOrOutOfBoundsValues(t *testing.T) 
 func TestValidateFeedbackInputAcceptsRegisteredTools(t *testing.T) {
 	t.Parallel()
 
-	for _, toolName := range []string{"attach_platform_mcp_identity_provider", "list_plugin_audiences"} {
+	for _, toolName := range []string{"attach_platform_mcp_identity_provider", "list_plugin_assignments"} {
 		err := validateFeedbackInput(testPrincipal(), FeedbackInput{
 			Category:       "success",
 			ToolName:       toolName,

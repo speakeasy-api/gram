@@ -3,7 +3,6 @@ package platformmcp
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/directory"
-	pluginaudience "github.com/speakeasy-api/gram/server/internal/plugins/audience"
 )
 
 // TestListPluginsOutput_ProjectsOnlyAllowlistedFields pins the inventory's
@@ -32,7 +30,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:   false,
 			ServerCount: 3,
 			SkillCount:  1,
-			Audience:    PluginAudience{AllMembers: false, Roles: 2, Users: 4},
+			Assignments: PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
 			Publication: PluginPublicationPublished,
 		}},
 		NextCursor: "opaque",
@@ -42,19 +40,19 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"project_id",
 		"plugins", "id", "name", "slug", "description", "is_default",
 		"server_count", "skill_count",
-		"audience", "all_members", "roles", "users",
+		"assignments", "all_members", "roles", "users",
 		"publication",
 		"next_cursor",
 	}, decodeKeys(t, output))
 }
 
-func TestListPluginAudiencesOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
+func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	count := NewSubjectCount(8)
-	output := ListPluginAudiencesOutput{
+	output := ListPluginAssignmentsOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
-		Audiences: []PluginAudienceOption{{
+		Assignments: []PluginAssignmentOption{{
 			Kind:        "role",
 			DisplayName: "Engineering",
 			MemberCount: &count,
@@ -65,7 +63,7 @@ func TestListPluginAudiencesOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	}
 
 	require.ElementsMatch(t, []string{
-		"project_id", "audiences", "kind", "display_name", "member_count", "reference", "references_expire_at", "truncated",
+		"project_id", "assignments", "kind", "display_name", "member_count", "reference", "references_expire_at", "truncated",
 	}, decodeKeys(t, output))
 }
 
@@ -83,7 +81,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:   true,
 			ServerCount: 1,
 			SkillCount:  1,
-			Audience:    PluginAudience{AllMembers: true},
+			Assignments: PluginAssignmentSummary{AllMembers: true},
 			Publication: PluginPublicationUnpublished,
 		},
 		Servers: []PluginServer{{
@@ -98,28 +96,28 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			FollowsLatest: true,
 		}},
 		AssignmentVersion: "opaque-version",
-		Audiences: []PluginAudienceOption{{
+		Assignments: []PluginAssignmentOption{{
 			Kind:        "everyone",
 			DisplayName: "Everyone",
 			Reference:   "opaque-reference",
 		}},
-		AudienceDetailsComplete: true,
-		AudiencesTruncated:      false,
-		ReferencesExpireAt:      "2026-09-04T12:10:00Z",
-		Truncated:               false,
+		AssignmentDetailsComplete: true,
+		AssignmentsTruncated:      false,
+		ReferencesExpireAt:        "2026-09-04T12:10:00Z",
+		Truncated:                 false,
 	}
 
 	require.ElementsMatch(t, []string{
 		"project_id",
 		"plugin", "id", "name", "slug", "is_default",
 		"server_count", "skill_count",
-		"audience", "all_members", "roles", "users",
+		"assignments", "all_members", "roles", "users",
 		"publication",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
 		"assignment_version",
-		"audiences", "kind", "display_name", "reference",
-		"audience_details_complete", "audiences_truncated", "references_expire_at",
+		"assignments", "kind", "display_name", "reference",
+		"assignment_details_complete", "assignments_truncated", "references_expire_at",
 		"truncated",
 	}, decodeKeys(t, output))
 }
@@ -127,7 +125,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 // TestMatchesTargetNameRefusesPartialMatches pins what an exact target means.
 // A prefix or substring match is what turns "the marketing plugin" into
 // someone else's plugin, so only an id, a slug, or a whole name matches.
-func TestPluginAudienceReferenceIsEncryptedAndBound(t *testing.T) {
+func TestPluginAssignmentReferenceIsEncryptedAndBound(t *testing.T) {
 	t.Parallel()
 
 	codec, err := newSubjectReferenceCodec("key-material")
@@ -137,24 +135,24 @@ func TestPluginAudienceReferenceIsEncryptedAndBound(t *testing.T) {
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	principalURN := "role:organization:00000000-0000-0000-0000-0000000000a1"
 
-	reference, err := codec.EncodeScoped(principal, subjectKindPluginAudience, projectID, principalURN, now)
+	reference, err := codec.EncodeScoped(principal, subjectKindPluginAssignment, projectID, principalURN, now)
 	require.NoError(t, err)
 	raw, err := base64.RawURLEncoding.DecodeString(reference)
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), principalURN)
 	require.NotContains(t, string(raw), principal.OrganizationID)
 
-	resolved, err := codec.DecodeScoped(reference, principal, subjectKindPluginAudience, projectID, now)
+	resolved, err := codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, projectID, now)
 	require.NoError(t, err)
 	require.Equal(t, principalURN, resolved)
 
 	otherOrganization := principal
 	otherOrganization.OrganizationID = "org-2"
-	_, err = codec.DecodeScoped(reference, otherOrganization, subjectKindPluginAudience, projectID, now)
+	_, err = codec.DecodeScoped(reference, otherOrganization, subjectKindPluginAssignment, projectID, now)
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
-	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAudience, "00000000-0000-0000-0000-000000000002", now)
+	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, "00000000-0000-0000-0000-000000000002", now)
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
-	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAudience, projectID, now.Add(SubjectReferenceTTL))
+	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, projectID, now.Add(SubjectReferenceTTL))
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 
@@ -173,90 +171,25 @@ func TestPluginAssignmentVersionCoversPluginAndCanonicalAssignmentSet(t *testing
 	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments))
 }
 
-func TestPlatformAudienceDisplayNameRejectsSensitiveDirectoryAttributes(t *testing.T) {
-	t.Parallel()
-
-	visibleURN := directory.AttributePrincipal("department_name", "Engineering")
-	visible, ok := platformAudienceDisplayName(pluginaudience.Audience{
-		Kind:         "directory_attribute",
-		DisplayName:  "department_name: Engineering",
-		MemberCount:  nil,
-		PrincipalURN: visibleURN,
-	})
-	require.True(t, ok)
-	require.Equal(t, "department_name: Engineering", visible)
-
-	sensitiveValue := "manager@example.com"
-	hidden, ok := platformAudienceDisplayName(pluginaudience.Audience{
-		Kind:         "directory_attribute",
-		DisplayName:  "manager_email: " + sensitiveValue,
-		MemberCount:  nil,
-		PrincipalURN: directory.AttributePrincipal("manager_email", sensitiveValue),
-	})
-	require.False(t, ok)
-	require.Empty(t, hidden)
-}
-
-func TestCurrentPluginAudiencesCanonicalizesAndHidesUnreviewedAssignments(t *testing.T) {
+func TestCurrentPluginAssignmentsCanonicalizesAndHidesUnreviewedAssignments(t *testing.T) {
 	t.Parallel()
 
 	groupID := uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
-	available := []resolvedPluginAudience{
-		{option: PluginAudienceOption{Kind: "everyone", DisplayName: "Everyone", Reference: "everyone-ref"}, principalURN: "*"},
-		{option: PluginAudienceOption{Kind: "directory_group", DisplayName: "Engineering", Reference: "group-ref"}, principalURN: directory.GroupPrincipal(groupID)},
+	available := []resolvedPluginAssignment{
+		{option: PluginAssignmentOption{Kind: "everyone", DisplayName: "Everyone", Reference: "everyone-ref"}, principalURN: "*"},
+		{option: PluginAssignmentOption{Kind: "directory_group", DisplayName: "Engineering", Reference: "group-ref"}, principalURN: directory.GroupPrincipal(groupID)},
 	}
-	current, complete := currentPluginAudiences(available, []string{"user:private-user-id", "*", "directory_group:00000000-0000-0000-0000-0000000000B2"})
+	current, complete := currentPluginAssignments(available, []string{"user:private-user-id", "*", "directory_group:00000000-0000-0000-0000-0000000000B2"})
 
 	require.False(t, complete)
-	require.Equal(t, []PluginAudienceOption{
+	require.Equal(t, []PluginAssignmentOption{
 		{Kind: "everyone", DisplayName: "Everyone", Reference: "everyone-ref"},
 		{Kind: "directory_group", DisplayName: "Engineering", Reference: "group-ref"},
-	}, publicAudienceOptions(current))
-	encoded, err := json.Marshal(publicAudienceOptions(current))
+	}, publicAssignmentOptions(current))
+	encoded, err := json.Marshal(publicAssignmentOptions(current))
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "private-user-id")
 	require.NotContains(t, string(encoded), "principal")
-}
-
-func TestProjectPluginAudiencesBoundsResultsAfterFiltering(t *testing.T) {
-	t.Parallel()
-
-	audiences := make([]pluginaudience.Audience, 0, maxPluginMembers+2)
-	for index := range maxPluginMembers + 1 {
-		principalURN := fmt.Sprintf("role:organization:%03d", index)
-		audiences = append(audiences, pluginaudience.Audience{
-			Kind:         "role",
-			DisplayName:  fmt.Sprintf("Role %03d", index),
-			MemberCount:  nil,
-			PrincipalURN: principalURN,
-		})
-	}
-	// A sensitive attribute does not consume an output slot or leak its value.
-	audiences = append(audiences, pluginaudience.Audience{
-		Kind:         "directory_attribute",
-		DisplayName:  "manager_email: private@example.com",
-		MemberCount:  nil,
-		PrincipalURN: directory.AttributePrincipal("manager_email", "private@example.com"),
-	})
-
-	projected, truncated, err := projectPluginAudiences(audiences, nil, func(principalURN string) (string, error) {
-		return "ref:" + principalURN, nil
-	})
-	require.NoError(t, err)
-	require.True(t, truncated)
-	require.Len(t, projected, maxPluginMembers)
-	encoded, err := json.Marshal(publicAudienceOptions(projected))
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "private@example.com")
-
-	selectedURN := audiences[maxPluginMembers].PrincipalURN
-	selected, selectedTruncated, err := projectPluginAudiences(audiences, []string{selectedURN}, func(principalURN string) (string, error) {
-		return "ref:" + principalURN, nil
-	})
-	require.NoError(t, err)
-	require.False(t, selectedTruncated)
-	require.Len(t, selected, 1)
-	require.Equal(t, selectedURN, selected[0].principalURN)
 }
 
 func TestPluginAssignmentVersionCanonicalizesDirectoryPrincipals(t *testing.T) {

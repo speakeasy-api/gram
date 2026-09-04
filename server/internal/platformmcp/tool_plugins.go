@@ -20,13 +20,13 @@ type pluginRefusalResult struct {
 // choose between two tools that answer the same question.
 func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
-		Name:        "list_plugin_audiences",
-		Title:       "List Plugin Audiences",
-		Description: "List up to 100 existing roles and directory audiences that can receive plugins in an explicit project. Each audience has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete audience set.",
+		Name:        "list_plugin_assignments",
+		Title:       "List Plugin Assignments",
+		Description: "List up to 100 existing roles and directory assignment targets that can receive plugins in an explicit project. Each assignment has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete assignment set.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAudiencesInput) (*mcp.CallToolResult, ListPluginAudiencesOutput, error) {
-		return pluginToolCall(ctx, func(principal Principal) (ListPluginAudiencesOutput, error) {
-			return plugins.ListPluginAudiences(ctx, principal, input)
+	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
+		return pluginToolCall(ctx, func(principal Principal) (ListPluginAssignmentsOutput, error) {
+			return plugins.ListPluginAssignments(ctx, principal, input)
 		})
 	})
 
@@ -44,7 +44,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
 		Title:       "Get One Plugin",
-		Description: "Get one plugin — the bundle of MCP servers and skills you share with people — and what it carries: its MCP servers, skills, up to 100 current audience assignments, and an assignment version for safe follow-up edits. Audience references expire at the returned time; if audiences_truncated is true or audience_details_complete is false, use the dashboard before editing assignments. The general truncated field applies only to MCP servers and skills. Constraints: name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
+		Description: "Get one plugin — the bundle of MCP servers and skills you share with people — and what it carries: its MCP servers, skills, up to 100 current assignments, and an assignment version for safe follow-up edits. Assignment references expire at the returned time; if assignments_truncated is true or assignment_details_complete is false, use the dashboard before editing assignments. The general truncated field applies only to MCP servers and skills. Constraints: name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return pluginToolCall(ctx, func(principal Principal) (GetPluginOutput, error) {
@@ -59,7 +59,7 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"list_plugin_audiences", "List Plugin Audiences", "List the roles and directory audiences that can receive plugins. This is not switched on for your organization yet."},
+		{"list_plugin_assignments", "List Plugin Assignments", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet."},
 		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet."},
 		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet."},
 	} {
