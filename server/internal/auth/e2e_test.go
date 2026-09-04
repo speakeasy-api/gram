@@ -986,6 +986,10 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// WorkOS assigns a new membership identity on a genuine rejoin. Reusing the
+	// removed membership ID would be a stale snapshot and must not reactivate it.
+	fetcher.members[workosUserID][0].ID = "om_03REJOINED"
+
 	// Invalidate cache so the next login re-reads from DB.
 	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, gramUserID))
 
