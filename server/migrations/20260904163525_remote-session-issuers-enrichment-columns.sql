@@ -1,0 +1,2 @@
+-- Modify "remote_session_issuers" table
+ALTER TABLE "remote_session_issuers" ADD COLUMN "userinfo_endpoint" text NULL, ADD COLUMN "introspection_endpoint" text NULL, ADD COLUMN "introspection_endpoint_auth_methods_supported" text[] NULL, ADD COLUMN "id_token_signing_alg_values_supported" text[] NULL, ADD COLUMN "claims_supported" text[] NULL, ADD COLUMN "backchannel_logout_supported" boolean NULL, ADD COLUMN "authorization_response_iss_parameter_supported" boolean NULL;

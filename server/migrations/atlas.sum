@@ -1,4 +1,4 @@
-h1:lWgwEDKhJmswhQSNNUz+XbbEegPtMm7g5WD2Dt8vHzk=
+h1:64uv/qGLoQRrzNpkeKPAyovGIUdjftmn1U4viuxbKMI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -387,3 +387,4 @@ h1:lWgwEDKhJmswhQSNNUz+XbbEegPtMm7g5WD2Dt8vHzk=
 20260903214520_organization-setup-tasks.sql h1:VOA01E6IifoXX5dkmwFgU3gskEG6LeSeuP7N9E7eZWo=
 20260903215231_aim-183-agent-principals.sql h1:l7hdBwam2aqT3pIjK2eBBje7J1z8ow8+/gZ7YpRyp7U=
 20260904130247_aim-191-delegated-agent-credential-columns.sql h1:ai8nyCt3GN33WzGoe8iMil/GP1Zw9xSI5ReYhdbM2Fk=
+20260904163525_remote-session-issuers-enrichment-columns.sql h1:/6Gvmw0aMKQf7JwkkwMHwXTqEuO/YgssOKFhYY61xG8=

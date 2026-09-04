@@ -2365,6 +2365,20 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- client_id, which Gram uses to pre-flight whether outbound CIMD is viable.
   client_id_metadata_document_supported BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- OpenID Connect Discovery, RFC 7662, RFC 9207, and OpenID Back-Channel
+  -- Logout fields that tell Gram which session-enrichment interfaces an
+  -- issuer offers. All nullable with no default, following
+  -- code_challenge_methods_supported: NULL means discovery has not captured
+  -- the field for this row yet, which stays distinct from an empty array or
+  -- FALSE written by a refresh ("captured; the upstream advertises nothing").
+  userinfo_endpoint TEXT,
+  introspection_endpoint TEXT,
+  introspection_endpoint_auth_methods_supported TEXT[],
+  id_token_signing_alg_values_supported TEXT[],
+  claims_supported TEXT[],
+  backchannel_logout_supported BOOLEAN,
+  authorization_response_iss_parameter_supported BOOLEAN,
+
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
