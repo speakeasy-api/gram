@@ -6,7 +6,6 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
@@ -82,16 +81,13 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
 
 function InventoryEmptyState() {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Text variant="subheading" className="mb-1">
-        No Shadow MCP servers
+    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <Text variant="body" className="font-medium">
+        No MCP servers observed yet
       </Text>
-      <Text small muted className="mb-4 max-w-md">
-        Inventory URLs will appear here after hook startup captures configured
-        Shadow MCP servers.
+      <Text muted small className="max-w-md">
+        Servers appear here once your AI integration reports activity. Check
+        back after your first agent run.
       </Text>
     </div>
   );

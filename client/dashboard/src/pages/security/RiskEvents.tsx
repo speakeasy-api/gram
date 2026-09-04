@@ -1,3 +1,4 @@
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
 import { LogWorkbench } from "@/components/log-workbench";
@@ -10,6 +11,7 @@ import { Page } from "@/components/page-layout";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
+import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -19,6 +21,7 @@ import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -154,6 +157,14 @@ const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
+  const organization = useOrganization();
+  const featuresQuery = useProductFeatures({
+    organizationId: organization.id,
+  });
+  const isLoggingDisabled =
+    !featuresQuery.isPending &&
+    !featuresQuery.isError &&
+    featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -370,6 +381,29 @@ export default function RiskEvents(): JSX.Element {
     },
     [resultsQuery],
   );
+
+  if (isLoggingDisabled) {
+    return (
+      <LogWorkbench
+        eyebrow="Secure"
+        title="Risk Events"
+        stage="beta"
+        description="Review policy findings across recent analyzed chats."
+      >
+        <div>
+          <EnableLoggingOverlay
+            onEnabled={() => {
+              void featuresQuery.refetch();
+              void resultsQuery.refetch();
+            }}
+            screenshotSrc="/empty-states/risk_events_empty.png"
+            screenshotAlt="Risk Events dashboard with policy findings"
+            className="border-0"
+          />
+        </div>
+      </LogWorkbench>
+    );
+  }
 
   return (
     <RevealAllProvider>

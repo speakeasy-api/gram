@@ -67,6 +67,14 @@ vi.mock("@gram/client/react-query/riskCreateExclusion.js", () => ({
   useRiskCreateExclusionMutation: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    isPending: false,
+    isError: false,
+    data: { logsEnabled: true },
+  }),
+}));
+
 // Only the client accessor needs standing in for — the rest of the module
 // (slug helpers used by routing) works fine as-is.
 vi.mock("@/contexts/Sdk", async (importOriginal) => ({

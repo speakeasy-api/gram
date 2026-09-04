@@ -98,8 +98,7 @@ function ModeSegment({
 }
 
 /**
- * Out-of-canvas mode switcher at the very top of the app chrome, spanning the
- * full window above both the sidebar and the content pane. Swaps between the
+ * Mode switcher overlaid on the app's top navigation row. Swaps between the
  * normal dashboard and headless mode (Platform MCP setup, no sidebar).
  */
 export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
@@ -131,23 +130,23 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   const onInk = mode === "headless" || phase !== "idle";
 
   return (
+    // Full-width transparent overlay so the pill stays geometrically centred
+    // in the header without knowing the widths of the controls on either side.
+    // pointer-events-none on the container means clicks pass straight through
+    // to any header controls that happen to be underneath at very narrow sizes;
+    // only the pill itself (pointer-events-auto) intercepts interaction.
+    // Hidden below sm (640 px) where the pill would overlap the workspace
+    // switcher and command controls with no room to breathe.
     <nav
       aria-label="Interface mode"
-      // Read by computeGrid to measure where the panes actually start.
-      data-mode-switcher=""
-      // The bar matches whatever sits under it: light over the dashboard, ink
-      // once the tab grid or headless mode is showing, so the chrome and the
-      // starfield read as one dark surface.
       className={cn(
-        "relative z-30 flex h-14 shrink-0 items-center justify-center transition-colors duration-500",
-        onInk
-          ? "bg-surface-tertiary-fixed-dark"
-          : "bg-background border-border border-b",
+        "pointer-events-none absolute inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
+        mode === "canvas" ? "top-(--header-offset)" : "top-0",
       )}
     >
       <div
         className={cn(
-          "relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
+          "pointer-events-auto relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
           onInk ? "border-neutral-softest" : "border-border",
         )}
       >

@@ -167,7 +167,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     gram_deployment_id SimpleAggregateFunction(any, Nullable(UUID)),
     gram_function_id SimpleAggregateFunction(any, Nullable(UUID)),
     gram_urn SimpleAggregateFunction(any, String),
-    tool_name SimpleAggregateFunction(any, String),
+    -- Preserve populated names when sibling spans omit the tool name.
+    tool_name SimpleAggregateFunction(max, String),
     tool_source SimpleAggregateFunction(any, String),
     event_source SimpleAggregateFunction(any, String),
     user_email SimpleAggregateFunction(any, String),
@@ -259,7 +260,7 @@ SELECT
     any(gram_deployment_id) AS gram_deployment_id,
     any(gram_function_id) AS gram_function_id,
     any(gram_urn) AS gram_urn,
-    any(tool_name) AS tool_name,
+    max(tool_name) AS tool_name,
     any(tool_source) AS tool_source,
     any(event_source) AS event_source,
     any(user_email) AS user_email,

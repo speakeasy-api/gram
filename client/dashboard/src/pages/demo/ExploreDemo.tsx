@@ -1,4 +1,9 @@
-import { DEMO_LANDING_PATH, DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
+import {
+  DEMO_LANDING_PATH,
+  DEMO_ORG_SLUG,
+  DEMO_REDIRECT_PARAM,
+  PRE_DEMO_ORG_KEY,
+} from "@/lib/demo";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -18,6 +23,30 @@ export default function ExploreDemo(): JSX.Element {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+
+    // A ?redirect= param lets callers deep-link into a specific demo page.
+    // Validate it stays within the demo org so we can't be used as an open
+    // redirect to an arbitrary destination. Normalize via URL so path traversal
+    // like /acme-demo/../login cannot bypass the prefix check.
+    const rawRedirect = new URLSearchParams(window.location.search).get(
+      DEMO_REDIRECT_PARAM,
+    );
+    const destination = (() => {
+      if (!rawRedirect) return DEMO_LANDING_PATH;
+      try {
+        const url = new URL(rawRedirect, window.location.origin);
+        if (
+          url.origin === window.location.origin &&
+          url.pathname.startsWith(`/${DEMO_ORG_SLUG}/`)
+        ) {
+          return `${url.pathname}${url.search}${url.hash}`;
+        }
+      } catch {
+        // Ignore malformed redirects.
+      }
+      return DEMO_LANDING_PATH;
+    })();
+
     void (async () => {
       // Remember where the user came from so Exit demo can return them to
       // the same org. Best-effort: a failed info call just skips the stash.
@@ -35,17 +64,19 @@ export default function ExploreDemo(): JSX.Element {
       }
       return client.auth.enterDemo();
     })().then(
-      // Land on the default project, not org home: a bare "/" gets
-      // reconciled against the last-visited org and would switch the
-      // session back, and org home has nothing interesting for a new
-      // visitor. The org slug must stay in the URL so AuthProvider does
+      // Land on the requested page (or the default project if none given):
+      // a bare "/" gets reconciled against the last-visited org and would
+      // switch the session back, and org home has nothing interesting for a
+      // new visitor. The org slug must stay in the URL so AuthProvider does
       // not bounce them out of the demo session.
-      () => window.location.replace(DEMO_LANDING_PATH),
+      () => window.location.replace(destination),
       (err: unknown) => {
-        // No session yet — bounce through login and come back here.
+        // No session yet — bounce through login, preserving the redirect so
+        // /explore-demo picks it back up after authentication.
         if (err instanceof GramError && err.statusCode === 401) {
+          const here = `/explore-demo${window.location.search}`;
           window.location.replace(
-            `/login?redirect=${encodeURIComponent("/explore-demo")}`,
+            `/login?redirect=${encodeURIComponent(here)}`,
           );
           return;
         }

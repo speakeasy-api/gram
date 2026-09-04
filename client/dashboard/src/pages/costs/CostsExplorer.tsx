@@ -24,7 +24,6 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -1319,14 +1318,12 @@ export function CostsExplorer(): JSX.Element {
               agent, and model.
             </p>
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={() => void refetch()} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={() => void refetch()}
+              screenshotSrc="/empty-states/cost_empty.png"
+              screenshotAlt="Costs dashboard with attributed AI spend"
+            />
           </div>
         </div>
       </>

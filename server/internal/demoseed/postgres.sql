@@ -403,9 +403,11 @@ BEGIN
   -- metadata, endpoints, and tool metadata) cascade. mcp_servers in turn pins
   -- its toolset with RESTRICT, so it must still go before the toolsets delete.
   DELETE FROM assistant_mcp_servers WHERE project_id = proj_a;
+  -- Toolsets are cleared across the organization, including other projects.
+  -- Clear their plugin attachments across the same scope before deleting them.
   DELETE FROM plugin_servers WHERE plugin_id IN
     (SELECT id FROM plugins
-     WHERE organization_id = demo_org AND project_id = proj_a);
+     WHERE organization_id = demo_org);
   DELETE FROM mcp_servers WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
@@ -425,7 +427,8 @@ BEGIN
   DELETE FROM environments WHERE organization_id = demo_org;
   DELETE FROM deployment_statuses WHERE deployment_id IN
     (SELECT id FROM deployments WHERE organization_id = demo_org);
-  DELETE FROM deployment_logs WHERE project_id = proj_a;
+  DELETE FROM deployment_logs WHERE deployment_id IN
+    (SELECT id FROM deployments WHERE organization_id = demo_org);
   DELETE FROM deployments WHERE organization_id = demo_org;
   DELETE FROM assets WHERE project_id = proj_a;
   -- api_keys.project_id is ON DELETE SET NULL, so the projects delete below
@@ -439,6 +442,7 @@ BEGIN
   DELETE FROM litellm_instances WHERE organization_id = demo_org;
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
+  DELETE FROM business_memories WHERE organization_id = demo_org;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so

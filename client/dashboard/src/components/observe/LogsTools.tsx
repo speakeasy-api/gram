@@ -1,3 +1,4 @@
+import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
 import { AccountTypeIcon } from "@/components/account-type-icon";
@@ -5,7 +6,6 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -51,7 +51,7 @@ import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
@@ -453,13 +453,50 @@ export function LogsTools(): JSX.Element {
     }
   };
 
-  const handleLogClick = useCallback((log: TelemetryLogRecord) => {
-    setSelectedLog(log);
-  }, []);
+  const [selectedHostedToolsetSlug, setSelectedHostedToolsetSlug] =
+    useState<string>();
+  const handleLogClick = useCallback(
+    (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => {
+      setSelectedLog(log);
+      setSelectedHostedToolsetSlug(
+        trace?.targetType === "hosted_mcp_server" ? trace.targetId : undefined,
+      );
+    },
+    [],
+  );
 
-  const toggleExpand = useCallback((traceId: string) => {
-    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  }, []);
+  const [openingTraceId, setOpeningTraceId] = useState<string | null>(null);
+  const traceOpenRequest = useRef(0);
+  const toggleExpand = useCallback(
+    async (trace: ToolUsageTraceSummary) => {
+      const request = ++traceOpenRequest.current;
+      setOpeningTraceId(null);
+      if (expandedTraceId === trace.id) {
+        setExpandedTraceId(null);
+        return;
+      }
+      const options = traceLogsQueryOptions(client, trace.logGroup, from, to);
+      if (trace.logCount === 1 && options.enabled) {
+        setOpeningTraceId(trace.id);
+        try {
+          const result = await queryClient.fetchQuery(options);
+          if (request !== traceOpenRequest.current) return;
+          const log = result.logs[0];
+          if (log && result.logs.length === 1 && !result.nextCursor) {
+            setExpandedTraceId(null);
+            handleLogClick(log, trace);
+            return;
+          }
+        } catch {
+          // Expand to expose the normal span-loading error and retry behavior.
+        } finally {
+          if (request === traceOpenRequest.current) setOpeningTraceId(null);
+        }
+      }
+      if (request === traceOpenRequest.current) setExpandedTraceId(trace.id);
+    },
+    [client, expandedTraceId, from, handleLogClick, queryClient, to],
+  );
 
   const refetch = useCallback(() => {
     void refetchLogs();
@@ -496,14 +533,12 @@ export function LogsTools(): JSX.Element {
             title="Tool Logs"
             description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
           />
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={refetch}
+              screenshotSrc="/empty-states/tool_logs_empty.png"
+              screenshotAlt="Tool Logs dashboard with captured tool calls"
+            />
           </div>
         </div>
       ) : (
@@ -534,8 +569,10 @@ export function LogsTools(): JSX.Element {
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={handleRoleSelectionChange}
             expandedTraceId={expandedTraceId}
+            openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
+            selectedHostedToolsetSlug={selectedHostedToolsetSlug}
             handleLogClick={handleLogClick}
             setSelectedLog={setSelectedLog}
             containerRef={containerRef}
@@ -591,8 +628,10 @@ function LogsToolsContent({
   selectedRoleIds,
   onRoleSelectionChange,
   expandedTraceId,
+  openingTraceId,
   toggleExpand,
   selectedLog,
+  selectedHostedToolsetSlug,
   handleLogClick,
   setSelectedLog,
   containerRef,
@@ -643,9 +682,14 @@ function LogsToolsContent({
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
   expandedTraceId: string | null;
-  toggleExpand: (traceId: string) => void;
+  openingTraceId: string | null;
+  toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
   selectedLog: TelemetryLogRecord | null;
-  handleLogClick: (log: TelemetryLogRecord) => void;
+  selectedHostedToolsetSlug?: string;
+  handleLogClick: (
+    log: TelemetryLogRecord,
+    trace?: ToolUsageTraceSummary,
+  ) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -827,6 +871,7 @@ function LogsToolsContent({
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
+                    openingTraceId={openingTraceId}
                     isFetchingNextPage={isFetchingNextPage}
                     onToggleExpand={toggleExpand}
                     onLogClick={handleLogClick}
@@ -852,6 +897,7 @@ function LogsToolsContent({
 
       <LogDetailSheet
         log={selectedLog}
+        hostedToolsetSlug={selectedHostedToolsetSlug}
         open={!!selectedLog}
         onOpenChange={(open) => {
           void (!open && setSelectedLog(null));
@@ -868,6 +914,7 @@ function LogsToolsTableContent({
   traces,
   hasActiveFilters,
   expandedTraceId,
+  openingTraceId,
   isFetchingNextPage,
   onToggleExpand,
   onLogClick,
@@ -880,9 +927,10 @@ function LogsToolsTableContent({
   traces: ToolUsageTraceSummary[];
   hasActiveFilters: boolean;
   expandedTraceId: string | null;
+  openingTraceId: string | null;
   isFetchingNextPage: boolean;
-  onToggleExpand: (traceId: string) => void;
-  onLogClick: (log: TelemetryLogRecord) => void;
+  onToggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
+  onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
@@ -957,7 +1005,8 @@ function LogsToolsTableContent({
           key={trace.id}
           trace={trace}
           isExpanded={expandedTraceId === trace.id}
-          onToggle={() => onToggleExpand(trace.id)}
+          isOpening={openingTraceId === trace.id}
+          onToggle={() => void onToggleExpand(trace)}
           onLogClick={onLogClick}
           serverNameMappings={serverNameMappings}
           from={from}
@@ -978,6 +1027,7 @@ function LogsToolsTableContent({
 function LogsToolsTraceRow({
   trace,
   isExpanded,
+  isOpening,
   onToggle,
   onLogClick,
   serverNameMappings,
@@ -986,12 +1036,14 @@ function LogsToolsTraceRow({
 }: {
   trace: ToolUsageTraceSummary;
   isExpanded: boolean;
+  isOpening: boolean;
   onToggle: () => void;
-  onLogClick: (log: TelemetryLogRecord) => void;
+  onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
 }) {
+  const routes = useRoutes();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const timestamp = new Date(
     Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
@@ -1038,6 +1090,7 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
+  const expandIcon = isExpanded ? "chevron-down" : "chevron-right";
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
   const userLabel = trace.userLabel || "—";
@@ -1048,12 +1101,16 @@ function LogsToolsTraceRow({
         role="button"
         tabIndex={0}
         onClick={onToggle}
+        aria-busy={isOpening}
         onKeyDown={(e) => {
           // The row holds focusable children (the identity link): a key press
           // aimed at one of those must act on it alone rather than also
           // toggling the row it bubbles through.
           if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") onToggle();
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
         }}
         className="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left"
       >
@@ -1066,8 +1123,11 @@ function LogsToolsTraceRow({
 
         <div className="flex w-5 shrink-0 items-center justify-center">
           <Icon
-            name={isExpanded ? "chevron-down" : "chevron-right"}
-            className="text-muted-foreground size-4"
+            name={isOpening ? "loader-circle" : expandIcon}
+            className={cn(
+              "text-muted-foreground size-4",
+              isOpening && "animate-spin",
+            )}
           />
         </div>
 
@@ -1093,7 +1153,17 @@ function LogsToolsTraceRow({
           <div className="flex min-w-0 items-baseline gap-2">
             {showTargetLabel && (
               <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                {targetLabel}
+                {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
+                  <Link
+                    to={routes.mcp.details.overview.href(trace.targetId)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {targetLabel}
+                  </Link>
+                ) : (
+                  targetLabel
+                )}
                 {" /"}
               </span>
             )}
@@ -1170,7 +1240,7 @@ function LogsToolsTraceRow({
             logGroup={trace.logGroup}
             toolName={trace.toolName}
             isExpanded={isExpanded}
-            onLogClick={onLogClick}
+            onLogClick={(log) => onLogClick(log, trace)}
             parentTimestamp={trace.startTimeUnixNano}
             from={from}
             to={to}
