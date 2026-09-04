@@ -45,16 +45,22 @@ function useCalBranding(namespace: string) {
 }
 
 export type BookingFormDefaults = Record<string, string | undefined>;
+export type BookingTelemetrySource =
+  | "book_demo"
+  | "trial_upgrade"
+  | "inference_cap";
 
 export type BookingCalendarProps = {
   eventLabel?: string;
   formDefaults?: BookingFormDefaults;
+  telemetrySource?: BookingTelemetrySource;
   className?: string;
 };
 
 export function BookingCalendar({
   eventLabel = "AI transformation — 30 min",
   formDefaults,
+  telemetrySource = "book_demo",
   className,
 }: BookingCalendarProps): JSX.Element {
   const { session } = useSessionData();
@@ -84,6 +90,7 @@ export function BookingCalendar({
             first_name: firstName,
             last_name: lastName,
             email,
+            source: telemetrySource,
           });
         }
       } catch {
@@ -92,7 +99,7 @@ export function BookingCalendar({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [firstName, lastName, email, telemetry]);
+  }, [firstName, lastName, email, telemetry, telemetrySource]);
 
   const prefill = [email, companyName].filter(Boolean).join(" · ");
 

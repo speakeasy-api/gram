@@ -1,5 +1,8 @@
 import { BookingCalendar } from "./booking-calendar/BookingCalendar";
-import type { BookingFormDefaults } from "./booking-calendar/BookingCalendar";
+import type {
+  BookingFormDefaults,
+  BookingTelemetrySource,
+} from "./booking-calendar/BookingCalendar";
 
 const DEFAULT_INTRO = (
   <div className="text-center mb-4">
@@ -16,10 +19,12 @@ export function DemoBookingFlow({
   intro = DEFAULT_INTRO,
   eventLabel = "AI transformation — 30 min",
   formDefaults,
+  telemetrySource = "book_demo",
 }: {
   intro?: React.ReactNode;
   eventLabel?: string;
   formDefaults?: BookingFormDefaults;
+  telemetrySource?: BookingTelemetrySource;
 } = {}): JSX.Element {
   return (
     <div className="flex w-full max-w-4xl flex-col items-center gap-2">
@@ -27,6 +32,7 @@ export function DemoBookingFlow({
       <BookingCalendar
         eventLabel={eventLabel}
         formDefaults={formDefaults}
+        telemetrySource={telemetrySource}
         className="border"
       />
     </div>

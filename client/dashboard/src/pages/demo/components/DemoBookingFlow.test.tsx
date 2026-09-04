@@ -175,6 +175,7 @@ describe("DemoBookingFlow", () => {
         first_name: "Jane",
         last_name: "Smith",
         email: "jane@acme.com",
+        source: "book_demo",
       }),
     );
   });

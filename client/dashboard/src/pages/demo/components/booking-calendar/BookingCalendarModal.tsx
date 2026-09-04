@@ -17,13 +17,18 @@ export function BookingCalendarModal({
   onOpenChange,
   eventLabel,
   formDefaults,
+  telemetrySource,
   footer,
 }: BookingCalendarModalProps): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="auth-brand w-full max-w-4xl gap-0 overflow-hidden p-0">
         <Dialog.Title className="sr-only">Book a call</Dialog.Title>
-        <BookingCalendar eventLabel={eventLabel} formDefaults={formDefaults} />
+        <BookingCalendar
+          eventLabel={eventLabel}
+          formDefaults={formDefaults}
+          telemetrySource={telemetrySource}
+        />
         {footer ? (
           <Dialog.Footer className="border-t p-4">{footer}</Dialog.Footer>
         ) : null}

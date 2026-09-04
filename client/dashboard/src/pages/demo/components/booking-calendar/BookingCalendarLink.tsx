@@ -4,6 +4,10 @@ import { useTrialNow } from "@/hooks/useTrialNow";
 import { cn } from "@/lib/utils";
 import { getGateCopy } from "@/pages/demo/upgrade-gate-copy";
 import type { ComponentPropsWithoutRef } from "react";
+import type {
+  BookingFormDefaults,
+  BookingTelemetrySource,
+} from "./BookingCalendar";
 import { BookingCalendarModal } from "./BookingCalendarModal";
 import { useBookingCalendarModal } from "./useBookingCalendarModal";
 
@@ -12,11 +16,18 @@ const SALES_EMAIL = "sales@speakeasy.com";
 type BookingCalendarLinkProps = Omit<
   ComponentPropsWithoutRef<"button">,
   "onClick" | "type"
->;
+> & {
+  eventLabel?: string;
+  formDefaults?: BookingFormDefaults;
+  telemetrySource?: BookingTelemetrySource;
+};
 
 export function BookingCalendarLink({
   children,
   className,
+  eventLabel = "Upgrade Trial — 30 min",
+  formDefaults,
+  telemetrySource = "trial_upgrade",
   ...props
 }: BookingCalendarLinkProps): JSX.Element {
   const session = useSession();
@@ -26,8 +37,9 @@ export function BookingCalendarLink({
   const handleClick = () => {
     const copy = getGateCopy(session.trial, now);
     openBookingCalendar({
-      eventLabel: "Upgrade Trial — 30 min",
-      formDefaults: { source: copy.source, notes: copy.notes },
+      eventLabel,
+      formDefaults: formDefaults ?? { source: copy.source, notes: copy.notes },
+      telemetrySource,
       footer: (
         <Button variant="secondary" size="md" href={`mailto:${SALES_EMAIL}`}>
           Email {SALES_EMAIL}

@@ -92,6 +92,7 @@ function ExpiredTrialEnded(): JSX.Element {
     openBookingCalendar({
       eventLabel: "Upgrade Trial — 30 min",
       formDefaults: { source: gateCopy.source, notes: gateCopy.notes },
+      telemetrySource: "trial_upgrade",
       footer: (
         <Button variant="secondary" size="md" href={`mailto:${SALES_EMAIL}`}>
           Email {SALES_EMAIL}

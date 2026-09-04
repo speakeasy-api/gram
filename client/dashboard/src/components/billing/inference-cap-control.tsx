@@ -326,7 +326,17 @@ function CapForm({
               admin who just had a larger amount rejected. */}
           <Text muted small>
             Need a cap above {MAX_LABEL}?{" "}
-            <BookingCalendarLink>Talk to us</BookingCalendarLink>.
+            <BookingCalendarLink
+              eventLabel="Inference caps — 30 min"
+              formDefaults={{
+                source: "Dashboard: Inference caps",
+                notes: `Request inference cap above ${MAX_LABEL}`,
+              }}
+              telemetrySource="inference_cap"
+            >
+              Talk to us
+            </BookingCalendarLink>
+            .
           </Text>
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
