@@ -1176,26 +1176,31 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 	if err != nil {
 		return nil, err
 	}
-	externalOAuthServerID, err := uuid.Parse(existingToolset.ExternalOauthServer.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid stored external OAuth server ID").LogError(ctx, s.logger)
-	}
-	toolsetID, err := uuid.Parse(existingToolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid stored toolset ID").LogError(ctx, s.logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external OAuth server configuration").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	tr := s.repo.WithTx(dbtx)
+	lockedToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, s.logger)
+	case !lockedToolset.ExternalOauthServerID.Valid:
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+
 	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).UpdateExternalOAuthServerSource(ctx, oauthRepo.UpdateExternalOAuthServerSourceParams{
 		Metadata:                  metadataBytes,
 		AuthorizationServerIssuer: authorizationServerIssuer,
 		ProjectID:                 *authCtx.ProjectID,
-		ID:                        externalOAuthServerID,
+		ID:                        lockedToolset.ExternalOauthServerID.UUID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeConflict, err, "external OAuth server is not attached").LogError(ctx, s.logger)
@@ -1214,9 +1219,9 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:             authCtx.Email,
 		ActorSlug:                    nil,
-		ToolsetURN:                   urn.NewToolset(toolsetID),
-		ToolsetName:                  existingToolset.Name,
-		ToolsetSlug:                  string(existingToolset.Slug),
+		ToolsetURN:                   urn.NewToolset(lockedToolset.ID),
+		ToolsetName:                  lockedToolset.Name,
+		ToolsetSlug:                  lockedToolset.Slug,
 		ToolsetVersionAfter:          updatedToolset.ToolsetVersion,
 		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
 		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
@@ -1248,8 +1253,8 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 
 	tr := s.repo.WithTx(dbtx)
 
-	// Get the current toolset to find which OAuth server to remove
-	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	// Lock the toolset before reading or changing its OAuth association.
+	existingToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})

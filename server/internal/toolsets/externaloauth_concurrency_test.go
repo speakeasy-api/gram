@@ -91,6 +91,68 @@ SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
 	}
 }
 
+func TestToolsetsService_ExternalOAuthWritersTakeToolsetLock(t *testing.T) {
+	t.Parallel()
+
+	for _, operation := range []string{"update external OAuth", "remove external OAuth"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestToolsetsService(t)
+			ctx = withAccountType(t, ctx, "pro")
+			toolset := createMinimalPublicToolset(t, ctx, ti, "Lock "+operation)
+
+			attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
+				Slug: toolset.Slug,
+				ExternalOauthServer: &types.ExternalOAuthServerForm{
+					Metadata: map[string]any{"issuer": "https://example.com"},
+				},
+			})
+			require.NoError(t, err)
+
+			blocker := testenv.BeginTx(t, ctx, ti.conn)
+			t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(ctx)) })
+			var blockerPID int32
+			//nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive
+			require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
+			//nolint:glint // notestingrawsql: intentionally holds the row lock shared by external OAuth writers
+			_, err = blocker.Exec(ctx, `
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
+`, toolset.ProjectID, toolset.Slug)
+			require.NoError(t, err)
+
+			result := make(chan error, 1)
+			go func() {
+				if operation == "update external OAuth" {
+					_, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
+						Slug: toolset.Slug, Metadata: map[string]any{"issuer": "https://updated.example.com"},
+					})
+					result <- err
+					return
+				}
+				_, err := ti.service.RemoveOAuthServer(ctx, &gen.RemoveOAuthServerPayload{Slug: toolset.Slug})
+				result <- err
+			}()
+
+			waitForLockWaiters(t, ctx, ti, blockerPID, 1)
+			requireMetadataUnlocked(t, ctx, ti, attached.ExternalOauthServer.ID)
+			require.NoError(t, blocker.Commit(ctx))
+			require.NoError(t, <-result)
+		})
+	}
+}
+
+func requireMetadataUnlocked(t *testing.T, ctx context.Context, ti *testInstance, externalOAuthServerID string) {
+	t.Helper()
+	probe := testenv.BeginTx(t, ctx, ti.conn)
+	defer func() { require.NoError(t, probe.Rollback(ctx)) }()
+
+	var id string
+	//nolint:glint // notestingrawsql: NOWAIT verifies that the blocked writer has not mutated metadata before locking the toolset
+	require.NoError(t, probe.QueryRow(ctx, `
+SELECT id FROM external_oauth_server_metadata WHERE id = $1 FOR UPDATE NOWAIT
+`, externalOAuthServerID).Scan(&id))
+}
+
 func waitForLockWaiters(t *testing.T, ctx context.Context, ti *testInstance, blockerPID int32, want int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
