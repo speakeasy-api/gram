@@ -57,6 +57,7 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
+import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import {
   invalidateAllRiskListPolicies,
   useRiskListPolicies,
@@ -97,7 +98,7 @@ import {
   ACTION_OPTIONS,
   ALL_POLICY_MESSAGE_TYPES,
   categoriesToPayload,
-  policyMessageTypesForForm,
+  policyToCategories,
 } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
@@ -109,6 +110,7 @@ import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
+import { effectivePolicyScopeKinds } from "./policy-scope";
 import {
   togglePolicyEnabledVariables,
   useTogglePolicyEnabled,
@@ -387,10 +389,15 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_response",
 ]);
 
-function policyMessageTypesForDisplay(
-  messageTypes?: string[],
-): PolicyMessageType[] {
-  return [...policyMessageTypesForForm(messageTypes)];
+function policyCategoriesForScope(policy: RiskPolicy): Set<RuleCategory> {
+  if (isPromptPolicy(policy)) return new Set(["prompt_policy"]);
+
+  const categories = policyToCategories(
+    policy.sources,
+    policy.presidioEntities,
+  );
+  if (policy.customRuleIds?.length) categories.add("custom");
+  return categories;
 }
 
 function policyAudienceSummary(row: PolicyRow): string {
@@ -631,6 +638,7 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
+  const { data: categoriesData } = useRiskCategories();
   const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
@@ -895,31 +903,37 @@ function PolicyCenterContent() {
       header: "Applies To",
       width: "2.1fr",
       render: (row) => {
-        const types = policyMessageTypesForDisplay(row.policy.messageTypes);
+        const scope = effectivePolicyScopeKinds({
+          categories: policyCategoriesForScope(row.policy),
+          detectionScopes: row.policy.detectionScopes,
+          categoryDefinitions: categoriesData?.categories,
+          messageTypes: row.policy.messageTypes,
+        });
+        const types = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
+          scope.kinds.has(type),
+        );
         const typeSet = new Set(types);
-        const tooltip = types
-          .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-          .join(", ");
+        const labels = types.map(
+          (type) => POLICY_MESSAGE_TYPE_META[type].label,
+        );
+        let summary =
+          types.length === 0
+            ? "Nothing in scope"
+            : typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
+                hasOnlyToolCallMessageTypes(typeSet)
+              ? messageTypesSummary(typeSet)
+              : labels.join(", ");
+        if (scope.custom) summary += " + custom CEL";
 
-        if (
-          typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
-          hasOnlyToolCallMessageTypes(typeSet)
-        ) {
-          return (
-            <SimpleTooltip tooltip={tooltip}>
-              <span className="text-muted-foreground text-sm">
-                {messageTypesSummary(typeSet)}
-              </span>
-            </SimpleTooltip>
-          );
-        }
+        const tooltip = [
+          labels.length > 0 ? labels.join(", ") : "No message types in scope",
+          ...(scope.custom ? ["Custom CEL scope also applies"] : []),
+        ].join(". ");
 
         return (
-          <span className="text-muted-foreground text-sm">
-            {types
-              .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-              .join(", ")}
-          </span>
+          <SimpleTooltip tooltip={tooltip}>
+            <span className="text-muted-foreground text-sm">{summary}</span>
+          </SimpleTooltip>
         );
       },
     },
