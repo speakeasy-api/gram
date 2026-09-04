@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -182,7 +183,9 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, true)
 
 	_, err = agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
@@ -190,7 +193,9 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	oopsErr = nil
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
 func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {
