@@ -94,6 +94,10 @@ func TestInventoryModelRecognizesEveryDashboardBackend(t *testing.T) {
 	require.Equal(t, "dashboard_managed", inventoryModel(uuid.NullUUID{}, backend, uuid.NullUUID{}))
 	require.Equal(t, "dashboard_managed", inventoryModel(uuid.NullUUID{}, uuid.NullUUID{}, backend))
 	require.Equal(t, "legacy", inventoryModel(uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}))
+	zero := uuid.NullUUID{UUID: uuid.Nil, Valid: true}
+	require.Equal(t, "legacy", inventoryModel(zero, uuid.NullUUID{}, uuid.NullUUID{}))
+	require.Equal(t, "legacy", inventoryModel(uuid.NullUUID{}, zero, uuid.NullUUID{}))
+	require.Equal(t, "legacy", inventoryModel(uuid.NullUUID{}, uuid.NullUUID{}, zero))
 }
 
 func TestInventoryRowProjectsHostedBackendWithLegacyOwnership(t *testing.T) {

@@ -186,7 +186,7 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 }
 
 func inventoryModel(remote, tunneled, unproxied uuid.NullUUID) string {
-	if remote.Valid || tunneled.Valid || unproxied.Valid {
+	if validInventoryBackend(remote) || validInventoryBackend(tunneled) || validInventoryBackend(unproxied) {
 		return "dashboard_managed"
 	}
 	// Toolset-backed hosted servers retain the existing legacy ownership model.
@@ -195,15 +195,19 @@ func inventoryModel(remote, tunneled, unproxied uuid.NullUUID) string {
 	return "legacy"
 }
 
+func validInventoryBackend(backend uuid.NullUUID) bool {
+	return backend.Valid && backend.UUID != uuid.Nil
+}
+
 func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID) MCPBackendKind {
 	switch {
-	case remote.Valid && remote.UUID != uuid.Nil:
+	case validInventoryBackend(remote):
 		return MCPBackendRemote
-	case tunneled.Valid && tunneled.UUID != uuid.Nil:
+	case validInventoryBackend(tunneled):
 		return MCPBackendTunneled
-	case toolset.Valid && toolset.UUID != uuid.Nil:
+	case validInventoryBackend(toolset):
 		return MCPBackendHosted
-	case unproxied.Valid && unproxied.UUID != uuid.Nil:
+	case validInventoryBackend(unproxied):
 		return MCPBackendUnproxied
 	default:
 		return MCPBackendLegacy
