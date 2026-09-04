@@ -1,0 +1,1063 @@
+{
+  "version": 1,
+  "dimensions": [
+    {
+      "name": "project",
+      "type": "id",
+      "legacy_key": "project_id",
+      "description": "Gram project the traffic was recorded under."
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "legacy_key": "email",
+      "description": "User identity: email, falling back to the device hostname for identity-less sessions."
+    },
+    {
+      "name": "hostname",
+      "type": "string",
+      "legacy_key": "hostname",
+      "description": "Device hostname reported by the Go hooks (gram.hook.hostname)."
+    },
+    {
+      "name": "department",
+      "type": "string",
+      "legacy_key": "department_name",
+      "description": "Directory department of the user."
+    },
+    {
+      "name": "division",
+      "type": "string",
+      "legacy_key": "division_name",
+      "description": "Directory division of the user."
+    },
+    {
+      "name": "job_title",
+      "type": "string",
+      "legacy_key": "job_title",
+      "description": "Directory job title of the user."
+    },
+    {
+      "name": "employee_type",
+      "type": "string",
+      "legacy_key": "employee_type",
+      "description": "Directory employee type of the user."
+    },
+    {
+      "name": "cost_center",
+      "type": "string",
+      "legacy_key": "cost_center_name",
+      "description": "Directory cost center of the user."
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "legacy_key": "model",
+      "description": "Effective model of the response. Source-aware: Claude api_request rows carry it on attributes.model / gen_ai.request.model, everyone else on gen_ai.response.model."
+    },
+    {
+      "name": "surface",
+      "type": "string",
+      "legacy_key": "hook_source",
+      "description": "Consuming agent surface (claude-code, cursor, codex, cowork, ...)."
+    },
+    {
+      "name": "account_type",
+      "type": "string",
+      "legacy_key": "account_type",
+      "description": "AI account classification: team | personal | '' (unclassified)."
+    },
+    {
+      "name": "provider",
+      "type": "string",
+      "legacy_key": "provider",
+      "description": "AI provider for the account: anthropic | openai | cursor | ''."
+    },
+    {
+      "name": "billing_mode",
+      "type": "string",
+      "legacy_key": "billing_mode",
+      "description": "How the account is billed: metered (real spend) | flat_rate (estimate) | unknown | ''."
+    },
+    {
+      "name": "query_source",
+      "type": "string",
+      "legacy_key": "query_source",
+      "empty_means": "not_applicable",
+      "description": "Claude attribution: where the query originated. Empty means the attribute does not apply to the row."
+    },
+    {
+      "name": "skill",
+      "type": "string",
+      "legacy_key": "skill_name",
+      "empty_means": "not_applicable",
+      "description": "Claude attribution: skill active for the turn."
+    },
+    {
+      "name": "subagent",
+      "type": "string",
+      "legacy_key": "agent_name",
+      "empty_means": "not_applicable",
+      "description": "Claude attribution: subagent that ran the turn."
+    },
+    {
+      "name": "mcp_server",
+      "type": "string",
+      "legacy_key": "mcp_server_name",
+      "empty_means": "not_applicable",
+      "description": "Claude attribution: MCP server used by the turn."
+    },
+    {
+      "name": "mcp_tool",
+      "type": "string",
+      "legacy_key": "mcp_tool_name",
+      "empty_means": "not_applicable",
+      "description": "Claude attribution: MCP tool used by the turn."
+    },
+    {
+      "name": "role",
+      "type": "string_array",
+      "legacy_key": "role",
+      "description": "Directory roles of the user (multi-valued)."
+    },
+    {
+      "name": "group",
+      "type": "string_array",
+      "legacy_key": "group",
+      "description": "Directory groups of the user (multi-valued)."
+    },
+    {
+      "name": "session",
+      "type": "id",
+      "description": "The chat/session id: one agent conversation."
+    },
+    {
+      "name": "turn",
+      "type": "id",
+      "description": "The turn identity within a session: Claude prompt.id, Codex row-id fallback, generic gen_ai.response.id."
+    }
+  ],
+  "models": [
+    {
+      "name": "usage",
+      "description": "one provider response observed from an agent surface at response time",
+      "dimensions": [
+        "project",
+        "user",
+        "hostname",
+        "department",
+        "division",
+        "job_title",
+        "employee_type",
+        "cost_center",
+        "model",
+        "surface",
+        "account_type",
+        "provider",
+        "billing_mode",
+        "query_source",
+        "skill",
+        "subagent",
+        "mcp_server",
+        "mcp_tool",
+        "role",
+        "group",
+        "session",
+        "turn"
+      ],
+      "time": {
+        "min_granularity_seconds": 1
+      },
+      "exclusive_with": ["sessions", "provider_reports"],
+      "measures": [
+        {
+          "name": "cost_usd",
+          "legacy_key": "total_cost",
+          "unit": "usd",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64",
+          "null_semantics": "unavailable",
+          "unavailable_for": {
+            "provider": ["cursor"]
+          }
+        },
+        {
+          "name": "input_tokens",
+          "legacy_key": "total_input_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "output_tokens",
+          "legacy_key": "total_output_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "tokens_total",
+          "legacy_key": "total_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_read_tokens",
+          "legacy_key": "cache_read_input_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_write_tokens",
+          "legacy_key": "cache_creation_input_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "tool_calls",
+          "legacy_key": "total_tool_calls",
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64"
+        },
+        {
+          "name": "chats",
+          "legacy_key": "total_chats",
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64"
+        },
+        {
+          "name": "total_work_units",
+          "legacy_key": "total_work_units",
+          "description": "work units delivered by scored sessions (chat_analysis score rows)",
+          "unit": "count",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64"
+        },
+        {
+          "name": "scored_cost",
+          "legacy_key": "scored_cost",
+          "description": "cost in USD of the sessions that carry a work-units score",
+          "unit": "usd",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64"
+        },
+        {
+          "name": "scored_tokens",
+          "legacy_key": "scored_tokens",
+          "description": "tokens of the sessions that carry a work-units score",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        }
+      ],
+      "bindings": [
+        {
+          "source": "attribute_metrics_summaries",
+          "precedence": 100,
+          "row_filter": "is_active = 1",
+          "time": {
+            "kind": "hour_bucket",
+            "column": "time_bucket",
+            "min_granularity_seconds": 3600
+          },
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "user": {
+              "sql": "if(user_email != '', user_email, hook_hostname)"
+            },
+            "hostname": {
+              "sql": "hook_hostname"
+            },
+            "department": {
+              "sql": "department_name"
+            },
+            "division": {
+              "sql": "division_name"
+            },
+            "job_title": {
+              "sql": "job_title"
+            },
+            "employee_type": {
+              "sql": "employee_type"
+            },
+            "cost_center": {
+              "sql": "cost_center_name"
+            },
+            "model": {
+              "sql": "model"
+            },
+            "surface": {
+              "sql": "hook_source"
+            },
+            "account_type": {
+              "sql": "account_type"
+            },
+            "provider": {
+              "sql": "provider"
+            },
+            "billing_mode": {
+              "sql": "billing_mode"
+            },
+            "query_source": {
+              "sql": "query_source"
+            },
+            "skill": {
+              "sql": "skill_name"
+            },
+            "subagent": {
+              "sql": "agent_name"
+            },
+            "mcp_server": {
+              "sql": "mcp_server_name"
+            },
+            "mcp_tool": {
+              "sql": "mcp_tool_name"
+            },
+            "role": {
+              "sql": "roles"
+            },
+            "group": {
+              "sql": "groups"
+            }
+          },
+          "measures": {
+            "cost_usd": {
+              "sql": "sumIfMerge(total_cost)"
+            },
+            "input_tokens": {
+              "sql": "sumIfMerge(total_input_tokens)"
+            },
+            "output_tokens": {
+              "sql": "sumIfMerge(total_output_tokens)"
+            },
+            "tokens_total": {
+              "sql": "sumIfMerge(total_tokens)"
+            },
+            "cache_read_tokens": {
+              "sql": "sumIfMerge(cache_read_input_tokens)"
+            },
+            "cache_write_tokens": {
+              "sql": "sumIfMerge(cache_creation_input_tokens)"
+            },
+            "tool_calls": {
+              "sql": "if(uniqExactIfMerge(unique_tool_calls) = 0, countIfMerge(total_tool_calls), uniqExactIfMerge(unique_tool_calls))"
+            },
+            "chats": {
+              "sql": "uniqExactIfMerge(total_chats)"
+            },
+            "total_work_units": {
+              "sql": "sumIfMerge(total_work_units)"
+            },
+            "scored_cost": {
+              "sql": "sumIfMerge(scored_cost)"
+            },
+            "scored_tokens": {
+              "sql": "sumIfMerge(scored_tokens)"
+            }
+          },
+          "caveats": [
+            "This table conflates locally-observed and provider-settled usage rows: the Cursor hook and the Admin-API poller both stamp cursor:usage:metrics rows and the MV merges them, so a workspace observed through both double-counts here. Declared, not fixed (DNO follow-up); the provider_reports model serves the settled complement and the MV fix is a separate change.",
+            "tool_calls carries a transitional fallback (expand-contract): rows written before the unique_tool_calls column existed hold only the default empty state, so uniqExactIfMerge resolves to 0 on them even when total_tool_calls counted calls. The if() falls back to the legacy row count for such groups until the backfiller rebuilds history; groups mixing pre- and post-migration buckets undercount (accepted as transitional)."
+          ]
+        },
+        {
+          "source": "telemetry_logs",
+          "precedence": 10,
+          "row_filter": "(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'claude-code:otel:logs') AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) != 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) != 'api'))",
+          "time": {
+            "kind": "unix_nano",
+            "column": "time_unix_nano",
+            "min_granularity_seconds": 1
+          },
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "user": {
+              "sql": "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))"
+            },
+            "hostname": {
+              "sql": "toString(attributes.gram.hook.hostname)"
+            },
+            "department": {
+              "sql": "toString(attributes.user.attributes.department_name)"
+            },
+            "division": {
+              "sql": "toString(attributes.user.attributes.division_name)"
+            },
+            "job_title": {
+              "sql": "toString(attributes.user.attributes.job_title)"
+            },
+            "employee_type": {
+              "sql": "toString(attributes.user.attributes.employee_type)"
+            },
+            "cost_center": {
+              "sql": "toString(attributes.user.attributes.cost_center_name)"
+            },
+            "model": {
+              "sql": "multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.model) != '', toString(attributes.model), ((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')), toString(attributes.gen_ai.request.model), toString(attributes.gen_ai.response.model))"
+            },
+            "surface": {
+              "sql": "hook_source"
+            },
+            "account_type": {
+              "sql": "account_type"
+            },
+            "provider": {
+              "sql": "provider"
+            },
+            "billing_mode": {
+              "sql": "billing_mode"
+            },
+            "query_source": {
+              "sql": "toString(attributes.query_source)"
+            },
+            "skill": {
+              "sql": "toString(attributes.skill.name)"
+            },
+            "subagent": {
+              "sql": "toString(attributes.agent.name)"
+            },
+            "mcp_server": {
+              "sql": "toString(attributes.mcp_server.name)"
+            },
+            "mcp_tool": {
+              "sql": "toString(attributes.mcp_tool.name)"
+            },
+            "role": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))"
+            },
+            "group": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))"
+            },
+            "session": {
+              "sql": "chat_id"
+            },
+            "turn": {
+              "sql": "multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toString(attributes.prompt.id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), (((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))), toString(id), toString(attributes.gen_ai.response.id))"
+            }
+          },
+          "measures": {
+            "cost_usd": {
+              "sql": "sumIf(if(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "input_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.input_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "output_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.output_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "tokens_total": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))) + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "cache_read_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.cache_read_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "cache_write_tokens": {
+              "sql": "sumIf(if(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "tool_calls": {
+              "sql": "uniqExactIf(multiIf(toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), toString(id)), (((gram_urn = 'claude-code:otel:logs') AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')) OR (hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure'))))"
+            },
+            "chats": {
+              "sql": "uniqExactIf(chat_id, chat_id != '' AND (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            }
+          },
+          "caveats": [
+            "Admits the locally-OBSERVED population only: Claude/Codex OTEL rows, hook-written cursor:usage and codex:usage rows, opencode hook rows, and LiteLLM proxy OTLP spans. Provider-reported rows are excluded — claude_chat:usage/claude_chat:cost and chatgpt:usage URNs entirely, and cursor:usage/codex:usage rows stamped gram.event.source = 'api' by the Cursor Admin-API poller and the OpenAI compliance COSTS import. The provider_reports model serves that settled complement."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "description": "one agent session's usage, rolled up from observed responses",
+      "rollup_of": "usage",
+      "dimensions": [
+        "project",
+        "user",
+        "hostname",
+        "department",
+        "division",
+        "job_title",
+        "employee_type",
+        "cost_center",
+        "model",
+        "surface",
+        "account_type",
+        "provider",
+        "billing_mode",
+        "query_source",
+        "skill",
+        "subagent",
+        "mcp_server",
+        "mcp_tool",
+        "role",
+        "group",
+        "session"
+      ],
+      "time": {
+        "min_granularity_seconds": 1
+      },
+      "exclusive_with": ["usage", "provider_reports"],
+      "measures": [
+        {
+          "name": "cost_usd",
+          "unit": "usd",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64",
+          "null_semantics": "unavailable",
+          "unavailable_for": {
+            "provider": ["cursor"]
+          }
+        },
+        {
+          "name": "input_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "output_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "tokens_total",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_read_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_write_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "tool_calls",
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64"
+        },
+        {
+          "name": "chats",
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64"
+        }
+      ],
+      "bindings": [
+        {
+          "source": "chat_session_summaries",
+          "precedence": 100,
+          "time": {
+            "kind": "hour_bucket",
+            "column": "time_bucket",
+            "min_granularity_seconds": 3600
+          },
+          "min_window_seconds": 172800,
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "session": {
+              "sql": "chat_id"
+            }
+          },
+          "measures": {
+            "cost_usd": {
+              "sql": "sum(total_cost)"
+            },
+            "input_tokens": {
+              "sql": "sum(total_input_tokens)"
+            },
+            "output_tokens": {
+              "sql": "sum(total_output_tokens)"
+            },
+            "tokens_total": {
+              "sql": "sum(total_tokens)"
+            },
+            "cache_read_tokens": {
+              "sql": "sum(cache_read_input_tokens)"
+            },
+            "cache_write_tokens": {
+              "sql": "sum(cache_creation_input_tokens)"
+            },
+            "tool_calls": {
+              "sql": "uniqExactIfMerge(tool_call_count)"
+            },
+            "chats": {
+              "sql": "uniqExact(chat_id)"
+            }
+          },
+          "caveats": [
+            "chat_session_summaries carries the identity/request dimensions only as merged per-chat arrays (department_names, emails, models, ...) whose ListSessions semantics are per-chat HAVING matches, not per-row WHERE/GROUP BY — so this binding deliberately does not expose them. Queries grouping or filtering on identity dimensions fall through to the raw telemetry_logs binding."
+          ]
+        },
+        {
+          "source": "telemetry_logs",
+          "precedence": 10,
+          "row_filter": "(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'claude-code:otel:logs') AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) != 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) != 'api'))",
+          "time": {
+            "kind": "unix_nano",
+            "column": "time_unix_nano",
+            "min_granularity_seconds": 1
+          },
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "user": {
+              "sql": "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))"
+            },
+            "hostname": {
+              "sql": "toString(attributes.gram.hook.hostname)"
+            },
+            "department": {
+              "sql": "toString(attributes.user.attributes.department_name)"
+            },
+            "division": {
+              "sql": "toString(attributes.user.attributes.division_name)"
+            },
+            "job_title": {
+              "sql": "toString(attributes.user.attributes.job_title)"
+            },
+            "employee_type": {
+              "sql": "toString(attributes.user.attributes.employee_type)"
+            },
+            "cost_center": {
+              "sql": "toString(attributes.user.attributes.cost_center_name)"
+            },
+            "model": {
+              "sql": "multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.model) != '', toString(attributes.model), ((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')), toString(attributes.gen_ai.request.model), toString(attributes.gen_ai.response.model))"
+            },
+            "surface": {
+              "sql": "hook_source"
+            },
+            "account_type": {
+              "sql": "account_type"
+            },
+            "provider": {
+              "sql": "provider"
+            },
+            "billing_mode": {
+              "sql": "billing_mode"
+            },
+            "query_source": {
+              "sql": "toString(attributes.query_source)"
+            },
+            "skill": {
+              "sql": "toString(attributes.skill.name)"
+            },
+            "subagent": {
+              "sql": "toString(attributes.agent.name)"
+            },
+            "mcp_server": {
+              "sql": "toString(attributes.mcp_server.name)"
+            },
+            "mcp_tool": {
+              "sql": "toString(attributes.mcp_tool.name)"
+            },
+            "role": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))"
+            },
+            "group": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))"
+            },
+            "session": {
+              "sql": "chat_id"
+            }
+          },
+          "measures": {
+            "cost_usd": {
+              "sql": "sumIf(if(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "input_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.input_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "output_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.output_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "tokens_total": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))) + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "cache_read_tokens": {
+              "sql": "sumIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.cache_read_tokens)), ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')), least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "cache_write_tokens": {
+              "sql": "sumIf(if(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            },
+            "tool_calls": {
+              "sql": "uniqExactIf(multiIf(toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), toString(id)), (((gram_urn = 'claude-code:otel:logs') AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')) OR (hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure'))))"
+            },
+            "chats": {
+              "sql": "uniqExactIf(chat_id, chat_id != '' AND (((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))))"
+            }
+          },
+          "caveats": [
+            "Admits the locally-OBSERVED population only: Claude/Codex OTEL rows, hook-written cursor:usage and codex:usage rows, opencode hook rows, and LiteLLM proxy OTLP spans. Provider-reported rows are excluded — claude_chat:usage/claude_chat:cost and chatgpt:usage URNs entirely, and cursor:usage/codex:usage rows stamped gram.event.source = 'api' by the Cursor Admin-API poller and the OpenAI compliance COSTS import. The provider_reports model serves that settled complement."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "provider_reports",
+      "description": "one provider-settled usage or spend record from a provider API",
+      "internal": true,
+      "dimensions": [
+        "project",
+        "user",
+        "provider",
+        "model",
+        "surface",
+        "account_type",
+        "billing_mode",
+        "department",
+        "division",
+        "job_title",
+        "employee_type",
+        "cost_center",
+        "role",
+        "group"
+      ],
+      "time": {
+        "min_granularity_seconds": 1
+      },
+      "exclusive_with": ["usage", "sessions"],
+      "measures": [
+        {
+          "name": "input_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "output_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_read_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cache_write_tokens",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "tokens_total",
+          "unit": "tokens",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "int64"
+        },
+        {
+          "name": "cost_usd",
+          "unit": "usd",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64",
+          "null_semantics": "unavailable"
+        },
+        {
+          "name": "charged_usd",
+          "description": "provider-charged amount, kept deliberately distinct from the computed model cost (Cursor only)",
+          "unit": "usd",
+          "aggregation": "sum",
+          "additivity": "full",
+          "type": "float64",
+          "null_semantics": "unavailable"
+        }
+      ],
+      "bindings": [
+        {
+          "source": "telemetry_logs",
+          "precedence": 10,
+          "row_filter": "(startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) = 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) = 'api'))",
+          "time": {
+            "kind": "unix_nano",
+            "column": "time_unix_nano",
+            "min_granularity_seconds": 1
+          },
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "user": {
+              "sql": "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))"
+            },
+            "provider": {
+              "sql": "provider"
+            },
+            "model": {
+              "sql": "multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.model) != '', toString(attributes.model), ((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')), toString(attributes.gen_ai.request.model), toString(attributes.gen_ai.response.model))"
+            },
+            "surface": {
+              "sql": "hook_source"
+            },
+            "account_type": {
+              "sql": "account_type"
+            },
+            "billing_mode": {
+              "sql": "billing_mode"
+            },
+            "department": {
+              "sql": "toString(attributes.user.attributes.department_name)"
+            },
+            "division": {
+              "sql": "toString(attributes.user.attributes.division_name)"
+            },
+            "job_title": {
+              "sql": "toString(attributes.user.attributes.job_title)"
+            },
+            "employee_type": {
+              "sql": "toString(attributes.user.attributes.employee_type)"
+            },
+            "cost_center": {
+              "sql": "toString(attributes.user.attributes.cost_center_name)"
+            },
+            "role": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))"
+            },
+            "group": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))"
+            }
+          },
+          "measures": {
+            "input_tokens": {
+              "sql": "sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)))"
+            },
+            "output_tokens": {
+              "sql": "sum(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)))"
+            },
+            "cache_read_tokens": {
+              "sql": "sum(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)))"
+            },
+            "cache_write_tokens": {
+              "sql": "sum(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)))"
+            },
+            "tokens_total": {
+              "sql": "sum(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)))"
+            },
+            "cost_usd": {
+              "sql": "sum(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)))"
+            },
+            "charged_usd": {
+              "sql": "sum(toFloat64OrZero(toString(attributes.cursor.charged_cents)) / 100)"
+            }
+          },
+          "caveats": [
+            "Admits exactly the provider-reported rows the observed raw bindings exclude: claude_chat:usage/claude_chat:cost (Anthropic Admin Analytics poller), chatgpt:usage (OpenAI compliance COSTS import), and cursor:usage/codex:usage rows stamped gram.event.source = 'api' (Cursor Admin-API poller, OpenAI compliance import). No attribute_metrics_summaries binding exists: the summaries table cannot discriminate provider-reported from observed rows (the declared Cursor double-count gap; the MV discriminator + backfill is a follow-up)."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "messages",
+      "description": "one observed chat message on an agent surface",
+      "dimensions": [
+        "project",
+        "user",
+        "hostname",
+        "department",
+        "division",
+        "job_title",
+        "employee_type",
+        "cost_center",
+        "model",
+        "surface",
+        "account_type",
+        "provider",
+        "billing_mode",
+        "query_source",
+        "skill",
+        "subagent",
+        "mcp_server",
+        "mcp_tool",
+        "role",
+        "group",
+        "session"
+      ],
+      "time": {
+        "min_granularity_seconds": 1
+      },
+      "exclusive_with": [],
+      "measures": [
+        {
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64",
+          "name": "messages"
+        },
+        {
+          "unit": "count",
+          "aggregation": "count_distinct",
+          "additivity": "non_additive_across_time",
+          "type": "uint64",
+          "name": "chats"
+        }
+      ],
+      "bindings": [
+        {
+          "source": "chat_session_summaries",
+          "precedence": 100,
+          "time": {
+            "kind": "hour_bucket",
+            "column": "time_bucket",
+            "min_granularity_seconds": 3600
+          },
+          "min_window_seconds": 172800,
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "session": {
+              "sql": "chat_id"
+            }
+          },
+          "measures": {
+            "messages": {
+              "sql": "uniqExactIfMerge(message_count)"
+            },
+            "chats": {
+              "sql": "uniqExact(chat_id)"
+            }
+          },
+          "caveats": [
+            "chat_session_summaries carries the identity/request dimensions only as merged per-chat arrays (department_names, emails, models, ...) whose ListSessions semantics are per-chat HAVING matches, not per-row WHERE/GROUP BY — so this binding deliberately does not expose them. Queries grouping or filtering on identity dimensions fall through to the raw telemetry_logs binding."
+          ]
+        },
+        {
+          "source": "telemetry_logs",
+          "precedence": 10,
+          "row_filter": "(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) OR ((gram_urn = 'claude-code:otel:logs') AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')) OR ((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) != 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) != 'api'))",
+          "time": {
+            "kind": "unix_nano",
+            "column": "time_unix_nano",
+            "min_granularity_seconds": 1
+          },
+          "dimensions": {
+            "project": {
+              "sql": "gram_project_id"
+            },
+            "user": {
+              "sql": "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))"
+            },
+            "hostname": {
+              "sql": "toString(attributes.gram.hook.hostname)"
+            },
+            "department": {
+              "sql": "toString(attributes.user.attributes.department_name)"
+            },
+            "division": {
+              "sql": "toString(attributes.user.attributes.division_name)"
+            },
+            "job_title": {
+              "sql": "toString(attributes.user.attributes.job_title)"
+            },
+            "employee_type": {
+              "sql": "toString(attributes.user.attributes.employee_type)"
+            },
+            "cost_center": {
+              "sql": "toString(attributes.user.attributes.cost_center_name)"
+            },
+            "model": {
+              "sql": "multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.model) != '', toString(attributes.model), ((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')) AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')), toString(attributes.gen_ai.request.model), toString(attributes.gen_ai.response.model))"
+            },
+            "surface": {
+              "sql": "hook_source"
+            },
+            "account_type": {
+              "sql": "account_type"
+            },
+            "provider": {
+              "sql": "provider"
+            },
+            "billing_mode": {
+              "sql": "billing_mode"
+            },
+            "query_source": {
+              "sql": "toString(attributes.query_source)"
+            },
+            "skill": {
+              "sql": "toString(attributes.skill.name)"
+            },
+            "subagent": {
+              "sql": "toString(attributes.agent.name)"
+            },
+            "mcp_server": {
+              "sql": "toString(attributes.mcp_server.name)"
+            },
+            "mcp_tool": {
+              "sql": "toString(attributes.mcp_tool.name)"
+            },
+            "role": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))"
+            },
+            "group": {
+              "sql": "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))"
+            },
+            "session": {
+              "sql": "chat_id"
+            }
+          },
+          "measures": {
+            "messages": {
+              "sql": "uniqExactIf(multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toString(attributes.prompt.id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), (((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))), toString(id), toString(attributes.gen_ai.response.id)), multiIf(((gram_urn = 'claude-code:otel:logs') AND chat_id != '' AND toString(attributes.prompt.id) != '' AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')), toString(attributes.prompt.id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')) AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), (((gram_urn = 'codex:otel:logs') AND toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed' AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')) OR (hook_source = 'opencode' AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')) OR (gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion'))), toString(id), toString(attributes.gen_ai.response.id)) != '')"
+            },
+            "chats": {
+              "sql": "uniqExactIf(chat_id, chat_id != '')"
+            }
+          },
+          "caveats": [
+            "Admits the locally-OBSERVED population only: Claude/Codex OTEL rows, hook-written cursor:usage and codex:usage rows, opencode hook rows, and LiteLLM proxy OTLP spans. Provider-reported rows are excluded — claude_chat:usage/claude_chat:cost and chatgpt:usage URNs entirely, and cursor:usage/codex:usage rows stamped gram.event.source = 'api' by the Cursor Admin-API poller and the OpenAI compliance COSTS import. The provider_reports model serves that settled complement."
+          ]
+        }
+      ]
+    }
+  ]
+}
