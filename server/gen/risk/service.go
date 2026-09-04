@@ -390,8 +390,13 @@ type CreateRiskPolicyPayload struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Required when policy_type is prompt_based.
 	Prompt *string
-	// For prompt_based policies: per-policy LLM-judge model configuration.
-	ModelConfig *types.RiskPolicyModelConfig
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts.
+	JudgeTemperature *float64
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open.
+	JudgeFailOpen *bool
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64
@@ -474,9 +479,12 @@ type EvaluatePromptGuardrailPayload struct {
 	ChatID string
 	// The guardrail prompt the LLM judge evaluates each in-scope message against.
 	Prompt string
-	// Optional per-policy LLM-judge model configuration. Omit for the default
-	// judge model.
-	ModelConfig *types.RiskPolicyModelConfig
+	// Sampling temperature for the LLM judge. Defaults to a low value for
+	// deterministic verdicts.
+	JudgeTemperature *float64
+	// When the LLM judge errors or times out: true allows the message (fail-open),
+	// false blocks it (fail-closed). Defaults to fail-open.
+	JudgeFailOpen *bool
 	// Message types to judge (user_message, assistant_message, tool_request,
 	// tool_response, prompt_attachment), matching a policy's message_types. When
 	// empty or omitted, judges all supported types.
@@ -1586,9 +1594,14 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Omit to preserve the current value.
 	Prompt *string
-	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
-	// preserve the current value.
-	ModelConfig *types.RiskPolicyModelConfig
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Omit to preserve the current
+	// value.
+	JudgeTemperature *float64
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Omit to preserve the current value.
+	JudgeFailOpen *bool
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64

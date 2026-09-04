@@ -11529,21 +11529,6 @@ func unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDete
 	return res
 }
 
-// unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
-// a value of type *types.RiskPolicyModelConfig from a value of type
-// *RiskPolicyModelConfigRequestBody.
-func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigRequestBody) *types.RiskPolicyModelConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyModelConfig{
-		Temperature: v.Temperature,
-		FailOpen:    v.FailOpen,
-	}
-
-	return res
-}
-
 // marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody builds a
 // value of type *RiskDetectionScopeResponseBody from a value of type
 // *types.RiskDetectionScope.
@@ -11555,21 +11540,6 @@ func marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(v *types.Ris
 		Category:     v.Category,
 		ScopeInclude: v.ScopeInclude,
 		ScopeExempt:  v.ScopeExempt,
-	}
-
-	return res
-}
-
-// marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody builds
-// a value of type *RiskPolicyModelConfigResponseBody from a value of type
-// *types.RiskPolicyModelConfig.
-func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v *types.RiskPolicyModelConfig) *RiskPolicyModelConfigResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &RiskPolicyModelConfigResponseBody{
-		Temperature: v.Temperature,
-		FailOpen:    v.FailOpen,
 	}
 
 	return res
@@ -11593,6 +11563,8 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		AutoName:               v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,
+		JudgeTemperature:       v.JudgeTemperature,
+		JudgeFailOpen:          v.JudgeFailOpen,
 		Score:                  v.Score,
 		Version:                v.Version,
 		CreatedAt:              v.CreatedAt,
@@ -11661,9 +11633,6 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		}
 	} else {
 		res.AudiencePrincipalUrns = []string{}
-	}
-	if v.ModelConfig != nil {
-		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)
 	}
 
 	return res

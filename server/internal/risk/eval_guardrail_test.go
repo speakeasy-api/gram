@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -190,12 +189,10 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 	}
 	failOpen := false
 	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
-		ChatID: chatID.String(),
-		Prompt: "Flag destructive production changes.",
-		ModelConfig: &types.RiskPolicyModelConfig{
-			Temperature: nil,
-			FailOpen:    &failOpen,
-		},
+		ChatID:           chatID.String(),
+		Prompt:           "Flag destructive production changes.",
+		JudgeTemperature: nil,
+		JudgeFailOpen:    &failOpen,
 	})
 	require.NoError(t, err)
 	require.True(t, res.Flagged)

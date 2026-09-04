@@ -348,7 +348,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
 			return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
 		}
-		p, mc, err := validatePromptPolicyFields(payload.Prompt, payload.ModelConfig)
+		p, mc, err := validatePromptPolicyFields(payload.Prompt, payload.JudgeTemperature, payload.JudgeFailOpen)
 		if err != nil {
 			return nil, err
 		}
@@ -756,8 +756,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
 	}
-	if current.PolicyType == ra.PolicyTypeStandard && (payload.Prompt != nil || payload.ModelConfig != nil) {
-		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
+	if current.PolicyType == ra.PolicyTypeStandard && (payload.Prompt != nil || payload.JudgeTemperature != nil || payload.JudgeFailOpen != nil) {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt and judge settings are only supported for prompt-based policies")
 	}
 	if current.PolicyType == ra.PolicyTypePromptBased && payloadHasPromptPolicyDetectionConfig(payload) {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
@@ -955,9 +955,19 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		prompt = pgtype.Text{String: p, Valid: p != ""}
 	}
+	// Each judge setting is preserved independently when omitted. The previous
+	// nested model_config replaced the whole object, so sending only one field
+	// silently reset the other.
 	modelConfig := current.ModelConfig
-	if payload.ModelConfig != nil {
-		mc, err := marshalModelConfig(payload.ModelConfig)
+	if payload.JudgeTemperature != nil || payload.JudgeFailOpen != nil {
+		merged := unmarshalModelConfig(current.ModelConfig)
+		if payload.JudgeTemperature != nil {
+			merged.Temperature = payload.JudgeTemperature
+		}
+		if payload.JudgeFailOpen != nil {
+			merged.FailOpen = payload.JudgeFailOpen
+		}
+		mc, err := marshalModelConfig(merged)
 		if err != nil {
 			return nil, err
 		}
@@ -3050,7 +3060,7 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	}
 	projectID := *authCtx.ProjectID
 
-	modelConfig, err := marshalModelConfig(payload.ModelConfig)
+	modelConfig, err := marshalModelConfig(promptModelConfig{Temperature: payload.JudgeTemperature, FailOpen: payload.JudgeFailOpen})
 	if err != nil {
 		return nil, err
 	}
@@ -3849,10 +3859,10 @@ func createPolicyDetectionField(policyType string, values []string) []string {
 // per-message judge calls bounded.
 const maxPromptPolicyPromptLength = 8000
 
-// validatePromptPolicyFields validates the prompt + model config supplied for a
-// prompt_based policy and returns the normalized prompt plus the JSON-encoded
-// model config (nil when none was supplied).
-func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConfig) (string, []byte, error) {
+// validatePromptPolicyFields validates the prompt + judge settings supplied for
+// a prompt_based policy and returns the normalized prompt plus the JSON-encoded
+// judge config (nil when neither setting was supplied).
+func validatePromptPolicyFields(promptPtr *string, temperature *float64, failOpen *bool) (string, []byte, error) {
 	prompt := strings.TrimSpace(conv.PtrValOr(promptPtr, ""))
 	if prompt == "" {
 		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt is required for prompt-based policies")
@@ -3860,7 +3870,7 @@ func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConf
 	if len([]rune(prompt)) > maxPromptPolicyPromptLength {
 		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt must be at most %d characters", maxPromptPolicyPromptLength)
 	}
-	encoded, err := marshalModelConfig(mc)
+	encoded, err := marshalModelConfig(promptModelConfig{Temperature: temperature, FailOpen: failOpen})
 	if err != nil {
 		return "", nil, err
 	}
@@ -3869,26 +3879,38 @@ func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConf
 
 // promptModelConfig is the JSONB storage shape for a prompt_based policy's
 // model_config column. Stored with stable snake_case keys independent of the
-// generated API type.
+// generated API types.
 type promptModelConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
-// marshalModelConfig encodes an API model config into the JSONB column value.
-// Returns nil (SQL NULL) when no config was supplied.
-func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
-	if mc == nil {
+// marshalModelConfig encodes judge settings into the JSONB column value.
+// Returns nil (SQL NULL) when neither setting is set, so a policy that never
+// overrides a judge default stores NULL rather than an empty object.
+func marshalModelConfig(cfg promptModelConfig) ([]byte, error) {
+	if cfg.Temperature == nil && cfg.FailOpen == nil {
 		return nil, nil
 	}
-	raw, err := json.Marshal(promptModelConfig{
-		Temperature: mc.Temperature,
-		FailOpen:    mc.FailOpen,
-	})
+	raw, err := json.Marshal(cfg)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid model_config")
+		return nil, oops.E(oops.CodeInvalid, err, "invalid judge configuration")
 	}
 	return raw, nil
+}
+
+// unmarshalModelConfig decodes a stored model_config column. An absent or
+// unparseable value yields the zero config, matching the read path's tolerance
+// (policycore.Project) rather than failing an unrelated update.
+func unmarshalModelConfig(raw []byte) promptModelConfig {
+	var cfg promptModelConfig
+	if len(raw) == 0 {
+		return cfg
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return promptModelConfig{Temperature: nil, FailOpen: nil}
+	}
+	return cfg
 }
 
 // fallbackPromptPolicyName is used when the LLM naming call is unavailable

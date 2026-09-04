@@ -84,8 +84,13 @@ type CreateRiskPolicyRequestBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Required when policy_type is prompt_based.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration.
-	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64 `form:"score" json:"score" xml:"score"`
@@ -164,9 +169,14 @@ type UpdateRiskPolicyRequestBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Omit to preserve the current value.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
-	// preserve the current value.
-	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Omit to preserve the current
+	// value.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Omit to preserve the current value.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
@@ -408,9 +418,12 @@ type EvaluatePromptGuardrailRequestBody struct {
 	ChatID string `form:"chat_id" json:"chat_id" xml:"chat_id"`
 	// The guardrail prompt the LLM judge evaluates each in-scope message against.
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// Optional per-policy LLM-judge model configuration. Omit for the default
-	// judge model.
-	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// Sampling temperature for the LLM judge. Defaults to a low value for
+	// deterministic verdicts.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// When the LLM judge errors or times out: true allows the message (fail-open),
+	// false blocks it (fail-closed). Defaults to fail-open.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// Message types to judge (user_message, assistant_message, tool_request,
 	// tool_response, prompt_attachment), matching a policy's message_types. When
 	// empty or omitted, judges all supported types.
@@ -510,9 +523,13 @@ type CreateRiskPolicyResponseBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Null for standard policies.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration. Null
-	// for standard policies.
-	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Null for standard policies.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Null for standard policies.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -623,9 +640,13 @@ type GetRiskPolicyResponseBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Null for standard policies.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration. Null
-	// for standard policies.
-	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Null for standard policies.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Null for standard policies.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -720,9 +741,13 @@ type UpdateRiskPolicyResponseBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Null for standard policies.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration. Null
-	// for standard policies.
-	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Null for standard policies.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Null for standard policies.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -10548,17 +10573,6 @@ type RiskDetectionScopeRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 }
 
-// RiskPolicyModelConfigRequestBody is used to define fields on request body
-// types.
-type RiskPolicyModelConfigRequestBody struct {
-	// Sampling temperature for the judge. Defaults to a low value for
-	// deterministic verdicts.
-	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
-	// When the judge errors or times out: true allows the message (fail-open),
-	// false blocks it (fail-closed). Defaults to fail-open.
-	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
-}
-
 // RiskDetectionScopeResponseBody is used to define fields on response body
 // types.
 type RiskDetectionScopeResponseBody struct {
@@ -10570,17 +10584,6 @@ type RiskDetectionScopeResponseBody struct {
 	// CEL exemption predicate: the category skips a message when this boolean
 	// expression is true. Empty means no exemption.
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
-}
-
-// RiskPolicyModelConfigResponseBody is used to define fields on response body
-// types.
-type RiskPolicyModelConfigResponseBody struct {
-	// Sampling temperature for the judge. Defaults to a low value for
-	// deterministic verdicts.
-	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
-	// When the judge errors or times out: true allows the message (fail-open),
-	// false blocks it (fail-closed). Defaults to fail-open.
-	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
 // RiskPolicyResponseBody is used to define fields on response body types.
@@ -10657,9 +10660,13 @@ type RiskPolicyResponseBody struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Null for standard policies.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// For prompt_based policies: per-policy LLM-judge model configuration. Null
-	// for standard policies.
-	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Null for standard policies.
+	JudgeTemperature *float64 `form:"judge_temperature,omitempty" json:"judge_temperature,omitempty" xml:"judge_temperature,omitempty"`
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Null for standard policies.
+	JudgeFailOpen *bool `form:"judge_fail_open,omitempty" json:"judge_fail_open,omitempty" xml:"judge_fail_open,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -11214,6 +11221,8 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
+		JudgeTemperature:       p.JudgeTemperature,
+		JudgeFailOpen:          p.JudgeFailOpen,
 		Score:                  p.Score,
 	}
 	{
@@ -11304,9 +11313,6 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.ShadowMcpBlockedUrls[i] = val
 		}
 	}
-	if p.ModelConfig != nil {
-		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
-	}
 	{
 		var zero float64
 		if body.Score == zero {
@@ -11333,6 +11339,8 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
+		JudgeTemperature:       p.JudgeTemperature,
+		JudgeFailOpen:          p.JudgeFailOpen,
 		Score:                  p.Score,
 	}
 	if p.Sources != nil {
@@ -11404,9 +11412,6 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		for i, val := range p.ShadowMcpBlockedUrls {
 			body.ShadowMcpBlockedUrls[i] = val
 		}
-	}
-	if p.ModelConfig != nil {
-		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
 	return body
 }
@@ -11722,13 +11727,12 @@ func NewTestDetectionRuleRequestBody(p *risk.TestDetectionRulePayload) *TestDete
 // payload of the "evaluatePromptGuardrail" endpoint of the "risk" service.
 func NewEvaluatePromptGuardrailRequestBody(p *risk.EvaluatePromptGuardrailPayload) *EvaluatePromptGuardrailRequestBody {
 	body := &EvaluatePromptGuardrailRequestBody{
-		ChatID:       p.ChatID,
-		Prompt:       p.Prompt,
-		ScopeInclude: p.ScopeInclude,
-		ScopeExempt:  p.ScopeExempt,
-	}
-	if p.ModelConfig != nil {
-		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
+		ChatID:           p.ChatID,
+		Prompt:           p.Prompt,
+		JudgeTemperature: p.JudgeTemperature,
+		JudgeFailOpen:    p.JudgeFailOpen,
+		ScopeInclude:     p.ScopeInclude,
+		ScopeExempt:      p.ScopeExempt,
 	}
 	if p.MessageTypes != nil {
 		body.MessageTypes = make([]string, len(p.MessageTypes))
@@ -11768,6 +11772,8 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		JudgeTemperature:       body.JudgeTemperature,
+		JudgeFailOpen:          body.JudgeFailOpen,
 		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
@@ -11828,9 +11834,6 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
-	}
-	if body.ModelConfig != nil {
-		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v
@@ -12338,6 +12341,8 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		JudgeTemperature:       body.JudgeTemperature,
+		JudgeFailOpen:          body.JudgeFailOpen,
 		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
@@ -12398,9 +12403,6 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
-	}
-	if body.ModelConfig != nil {
-		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v
@@ -12574,6 +12576,8 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
+		JudgeTemperature:       body.JudgeTemperature,
+		JudgeFailOpen:          body.JudgeFailOpen,
 		Score:                  *body.Score,
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
@@ -12634,9 +12638,6 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
-	}
-	if body.ModelConfig != nil {
-		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v

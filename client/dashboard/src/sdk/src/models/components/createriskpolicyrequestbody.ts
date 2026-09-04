@@ -10,11 +10,6 @@ import {
   RiskDetectionScope$Outbound,
   RiskDetectionScope$outboundSchema,
 } from "./riskdetectionscope.js";
-import {
-  RiskPolicyModelConfig,
-  RiskPolicyModelConfig$Outbound,
-  RiskPolicyModelConfig$outboundSchema,
-} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
@@ -106,10 +101,17 @@ export type CreateRiskPolicyRequestBody = {
    */
   enabled?: boolean | undefined;
   /**
+   * For prompt_based policies: When the LLM judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.
+   */
+  judgeFailOpen?: boolean | undefined;
+  /**
+   * For prompt_based policies: Sampling temperature for the LLM judge. Defaults to a low value for deterministic verdicts.
+   */
+  judgeTemperature?: number | undefined;
+  /**
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
   messageTypes?: Array<string> | undefined;
-  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
    */
@@ -197,8 +199,9 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  judge_fail_open?: boolean | undefined;
+  judge_temperature?: number | undefined;
   message_types?: Array<string> | undefined;
-  model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
   policy_type: string;
   presidio_entities?: Array<string> | undefined;
@@ -233,8 +236,9 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    judgeFailOpen: z.optional(z.boolean()),
+    judgeTemperature: z.optional(z.number()),
     messageTypes: z.optional(z.array(z.string())),
-    modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
     policyType: z._default(PolicyType$outboundSchema, "standard"),
     presidioEntities: z.optional(z.array(z.string())),
@@ -259,8 +263,9 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
+      judgeFailOpen: "judge_fail_open",
+      judgeTemperature: "judge_temperature",
       messageTypes: "message_types",
-      modelConfig: "model_config",
       policyType: "policy_type",
       presidioEntities: "presidio_entities",
       presidioScoreThreshold: "presidio_score_threshold",

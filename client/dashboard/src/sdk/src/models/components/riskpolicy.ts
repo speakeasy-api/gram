@@ -12,10 +12,6 @@ import {
   RiskDetectionScope,
   RiskDetectionScope$inboundSchema,
 } from "./riskdetectionscope.js";
-import {
-  RiskPolicyModelConfig,
-  RiskPolicyModelConfig$inboundSchema,
-} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
@@ -115,10 +111,17 @@ export type RiskPolicy = {
    */
   id: string;
   /**
+   * For prompt_based policies: When the LLM judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open. Null for standard policies.
+   */
+  judgeFailOpen?: boolean | undefined;
+  /**
+   * For prompt_based policies: Sampling temperature for the LLM judge. Defaults to a low value for deterministic verdicts. Null for standard policies.
+   */
+  judgeTemperature?: number | undefined;
+  /**
    * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.
    */
   messageTypes?: Array<string> | undefined;
-  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
    */
@@ -230,8 +233,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      judge_fail_open: z.optional(z.boolean()),
+      judge_temperature: z.optional(z.number()),
       message_types: z.optional(z.array(z.string())),
-      model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
       pending_messages: z.optional(z.int()),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
@@ -265,8 +269,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "custom_rule_ids": "customRuleIds",
         "detection_scopes": "detectionScopes",
         "disabled_rules": "disabledRules",
+        "judge_fail_open": "judgeFailOpen",
+        "judge_temperature": "judgeTemperature",
         "message_types": "messageTypes",
-        "model_config": "modelConfig",
         "pending_messages": "pendingMessages",
         "policy_type": "policyType",
         "presidio_entities": "presidioEntities",

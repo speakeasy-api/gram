@@ -81,9 +81,13 @@ type RiskPolicy struct {
 	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
 	// in-scope message against. Null for standard policies.
 	Prompt *string
-	// For prompt_based policies: per-policy LLM-judge model configuration. Null
-	// for standard policies.
-	ModelConfig *RiskPolicyModelConfig
+	// For prompt_based policies: Sampling temperature for the LLM judge. Defaults
+	// to a low value for deterministic verdicts. Null for standard policies.
+	JudgeTemperature *float64
+	// For prompt_based policies: When the LLM judge errors or times out: true
+	// allows the message (fail-open), false blocks it (fail-closed). Defaults to
+	// fail-open. Null for standard policies.
+	JudgeFailOpen *bool
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.

@@ -735,12 +735,8 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [temperature, setTemperature] = useState(
-    policy?.modelConfig?.temperature ?? 0,
-  );
-  const [failOpen, setFailOpen] = useState(
-    policy?.modelConfig?.failOpen ?? true,
-  );
+  const [temperature, setTemperature] = useState(policy?.judgeTemperature ?? 0);
+  const [failOpen, setFailOpen] = useState(policy?.judgeFailOpen ?? true);
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
@@ -764,8 +760,8 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      temperature !== (policy.modelConfig?.temperature ?? 0) ||
-      failOpen !== (policy.modelConfig?.failOpen ?? true) ||
+      temperature !== (policy.judgeTemperature ?? 0) ||
+      failOpen !== (policy.judgeFailOpen ?? true) ||
       !sameScopeOverrides(
         scopeOverrides,
         scopeOverridesFromPolicy(policy.detectionScopes),
@@ -840,10 +836,8 @@ function PromptPolicyEditor({
           id: policy.id,
           name: name.trim() || policy.name,
           prompt,
-          modelConfig: {
-            temperature,
-            failOpen,
-          },
+          judgeTemperature: temperature,
+          judgeFailOpen: failOpen,
           detectionScopes: detectionScopesPayloadForPrompt(),
           ...actionPayload(),
           userMessage,
@@ -863,7 +857,8 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { temperature, failOpen },
+          judgeTemperature: temperature,
+          judgeFailOpen: failOpen,
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -2015,10 +2010,8 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
     evaluatePromptGuardrailRequestBody: {
       chatId,
       prompt: guardrail.prompt,
-      modelConfig: {
-        temperature: guardrail.temperature,
-        failOpen: guardrail.failOpen,
-      },
+      judgeTemperature: guardrail.temperature,
+      judgeFailOpen: guardrail.failOpen,
       messageTypes: guardrail.messageTypes.length
         ? guardrail.messageTypes
         : undefined,

@@ -20,12 +20,11 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		detectionScopes = nil
 	}
 
-	var modelConfig *types.RiskPolicyModelConfig
+	var judgeTemperature *float64
+	var judgeFailOpen *bool
 	if policy.ModelConfig != nil {
-		modelConfig = &types.RiskPolicyModelConfig{
-			Temperature: policy.ModelConfig.Temperature,
-			FailOpen:    policy.ModelConfig.FailOpen,
-		}
+		judgeTemperature = policy.ModelConfig.Temperature
+		judgeFailOpen = policy.ModelConfig.FailOpen
 	}
 
 	return &types.RiskPolicy{
@@ -52,7 +51,8 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		AutoName:               policy.AutoName,
 		UserMessage:            policy.UserMessage,
 		Prompt:                 policy.Prompt,
-		ModelConfig:            modelConfig,
+		JudgeTemperature:       judgeTemperature,
+		JudgeFailOpen:          judgeFailOpen,
 		Score:                  policy.Score,
 		Version:                policy.Version,
 		CreatedAt:              policy.CreatedAt.Format(time.RFC3339),

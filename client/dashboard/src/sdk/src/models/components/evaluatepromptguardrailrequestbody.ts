@@ -4,11 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  RiskPolicyModelConfig,
-  RiskPolicyModelConfig$Outbound,
-  RiskPolicyModelConfig$outboundSchema,
-} from "./riskpolicymodelconfig.js";
 
 export type EvaluatePromptGuardrailRequestBody = {
   /**
@@ -16,10 +11,17 @@ export type EvaluatePromptGuardrailRequestBody = {
    */
   chatId: string;
   /**
+   * When the LLM judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.
+   */
+  judgeFailOpen?: boolean | undefined;
+  /**
+   * Sampling temperature for the LLM judge. Defaults to a low value for deterministic verdicts.
+   */
+  judgeTemperature?: number | undefined;
+  /**
    * Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
    */
   messageTypes?: Array<string> | undefined;
-  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The guardrail prompt the LLM judge evaluates each in-scope message against.
    */
@@ -37,8 +39,9 @@ export type EvaluatePromptGuardrailRequestBody = {
 /** @internal */
 export type EvaluatePromptGuardrailRequestBody$Outbound = {
   chat_id: string;
+  judge_fail_open?: boolean | undefined;
+  judge_temperature?: number | undefined;
   message_types?: Array<string> | undefined;
-  model_config?: RiskPolicyModelConfig$Outbound | undefined;
   prompt: string;
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
@@ -51,8 +54,9 @@ export const EvaluatePromptGuardrailRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     chatId: z.string(),
+    judgeFailOpen: z.optional(z.boolean()),
+    judgeTemperature: z.optional(z.number()),
     messageTypes: z.optional(z.array(z.string())),
-    modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     prompt: z.string(),
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
@@ -60,8 +64,9 @@ export const EvaluatePromptGuardrailRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       chatId: "chat_id",
+      judgeFailOpen: "judge_fail_open",
+      judgeTemperature: "judge_temperature",
       messageTypes: "message_types",
-      modelConfig: "model_config",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
     });

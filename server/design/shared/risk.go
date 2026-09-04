@@ -47,17 +47,6 @@ func RiskPolicyTypeEnum() {
 	Enum("standard", "prompt_based")
 }
 
-// RiskPolicyModelConfig is the per-policy LLM-judge configuration for
-// `prompt_based` policies. All fields are optional; unset fields fall back to
-// judge defaults (low temperature, fail-open on judge error). The judge model
-// itself is not configurable - every policy runs on the one benchmarked model.
-var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
-	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
-})
-
 // RiskPolicyAudienceTypeEnum applies the allowed-values constraint to a policy
 // audience type. `everyone` means the policy applies to every user in the org;
 // `targeted` means the policy applies only to users or roles granted
@@ -174,7 +163,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
-	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
+	Attribute("judge_temperature", Float64, "For prompt_based policies: Sampling temperature for the LLM judge. Defaults to a low value for deterministic verdicts. Null for standard policies.")
+	Attribute("judge_fail_open", Boolean, "For prompt_based policies: When the LLM judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open. Null for standard policies.")
 	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
 		Minimum(0.1)
 		Maximum(10)

@@ -11863,21 +11863,6 @@ func marshalTypesRiskDetectionScopeToRiskDetectionScopeRequestBody(v *types.Risk
 	return res
 }
 
-// marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody builds a
-// value of type *RiskPolicyModelConfigRequestBody from a value of type
-// *types.RiskPolicyModelConfig.
-func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(v *types.RiskPolicyModelConfig) *RiskPolicyModelConfigRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &RiskPolicyModelConfigRequestBody{
-		Temperature: v.Temperature,
-		FailOpen:    v.FailOpen,
-	}
-
-	return res
-}
-
 // marshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope builds a value
 // of type *types.RiskDetectionScope from a value of type
 // *RiskDetectionScopeRequestBody.
@@ -11894,21 +11879,6 @@ func marshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDetect
 	return res
 }
 
-// marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds a
-// value of type *types.RiskPolicyModelConfig from a value of type
-// *RiskPolicyModelConfigRequestBody.
-func marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigRequestBody) *types.RiskPolicyModelConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyModelConfig{
-		Temperature: v.Temperature,
-		FailOpen:    v.FailOpen,
-	}
-
-	return res
-}
-
 // unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope builds a
 // value of type *types.RiskDetectionScope from a value of type
 // *RiskDetectionScopeResponseBody.
@@ -11920,21 +11890,6 @@ func unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope(v *RiskDet
 		Category:     *v.Category,
 		ScopeInclude: v.ScopeInclude,
 		ScopeExempt:  v.ScopeExempt,
-	}
-
-	return res
-}
-
-// unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig
-// builds a value of type *types.RiskPolicyModelConfig from a value of type
-// *RiskPolicyModelConfigResponseBody.
-func unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigResponseBody) *types.RiskPolicyModelConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyModelConfig{
-		Temperature: v.Temperature,
-		FailOpen:    v.FailOpen,
 	}
 
 	return res
@@ -11958,6 +11913,8 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		AutoName:               *v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,
+		JudgeTemperature:       v.JudgeTemperature,
+		JudgeFailOpen:          v.JudgeFailOpen,
 		Score:                  *v.Score,
 		Version:                *v.Version,
 		CreatedAt:              *v.CreatedAt,
@@ -12018,9 +11975,6 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	res.AudiencePrincipalUrns = make([]string, len(v.AudiencePrincipalUrns))
 	for i, val := range v.AudiencePrincipalUrns {
 		res.AudiencePrincipalUrns[i] = val
-	}
-	if v.ModelConfig != nil {
-		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
 	}
 
 	return res
