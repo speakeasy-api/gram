@@ -106,17 +106,17 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if payload.AgentID != nil || payload.DelegatedGrantsVersion != nil || payload.RequestedGrants != nil || payload.ExpiresAt != nil {
-		return s.createAgentKey(ctx, payload)
-	}
 	// Plugin distribution reserves plugins- names and LiteLLM instance minting
 	// reserves litellm- names; both prefixes act as provenance discriminators
 	// during ingestion, so reserving the namespaces prevents user-created keys
 	// from becoming ambiguous with server-minted key purposes.
 	for _, reserved := range []string{auth.PluginAPIKeyNamePrefix, auth.LiteLLMAPIKeyNamePrefix} {
-		if strings.HasPrefix(payload.Name, reserved) {
+		if strings.HasPrefix(strings.TrimSpace(payload.Name), reserved) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", reserved).LogError(ctx, s.logger)
 		}
+	}
+	if payload.AgentID != nil || payload.DelegatedGrantsVersion != nil || payload.RequestedGrants != nil || payload.ExpiresAt != nil {
+		return s.createAgentKey(ctx, payload)
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {

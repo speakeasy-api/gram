@@ -119,7 +119,7 @@ type Key struct {
 	Name string
 	// The store prefix of the api key for recognition
 	KeyPrefix string
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string

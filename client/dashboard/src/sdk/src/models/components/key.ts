@@ -35,7 +35,7 @@ export type Key = {
    */
   id: string;
   /**
-   * The token of the api key (only returned on key creation)
+   * The token of the api key (only returned on key creation or rotation)
    */
   key?: string | undefined;
   /**

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,6 +31,7 @@ import (
 const (
 	defaultAgentAPIKeyLifetime = 90 * 24 * time.Hour
 	maxAgentAPIKeyLifetime     = 365 * 24 * time.Hour
+	maxAPIKeyNameRunes         = 255
 )
 
 type preparedAgentKey struct {
@@ -214,6 +216,9 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 	if name == "" {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not be empty")
 	}
+	if utf8.RuneCountInString(name) > maxAPIKeyNameRunes {
+		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not exceed %d characters", maxAPIKeyNameRunes)
+	}
 	if versionRaw != int(authz.CurrentDelegatedPolicyVersion) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, authz.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
 	}
@@ -253,16 +258,15 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 }
 
 func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, policy authz.DelegatedPolicy) (agentmanagement.HumanContext, error) {
-	human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
+	human, observedAgent, err := s.authorizer.RequireAgent(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
 		return agentmanagement.HumanContext{}, fmt.Errorf("authorize agent API key issuance: %w", err)
 	}
-	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
-	}
 
+	// Owner-loss paths lock the owner membership before the agent. Pin the
+	// observed owner in the same order, then lock and reauthorize the agent.
 	_, err = orgrepo.New(tx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(agent.OwnerUserID),
+		UserID:         conv.ToPGText(observedAgent.OwnerUserID),
 		OrganizationID: human.Auth.ActiveOrganizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -270,6 +274,14 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 	}
 	if err != nil {
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "lock active agent owner").LogError(ctx, s.logger)
+	}
+
+	human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
+	if err != nil {
+		return agentmanagement.HumanContext{}, fmt.Errorf("reauthorize agent API key issuance: %w", err)
+	}
+	if agent.OwnerUserID != observedAgent.OwnerUserID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
@@ -415,7 +427,7 @@ func checksForDelegatedPolicy(policy authz.DelegatedPolicy) []authz.Check {
 		}
 		checks = append(checks, authz.Check{
 			Scope: grant.Scope, ResourceKind: grant.Selector[authz.SelectorKeyResourceKind], ResourceID: grant.Selector[authz.SelectorKeyResourceID], Dimensions: dimensions,
-		})
+		}.WithStrictSelectorMatch())
 	}
 	return checks
 }

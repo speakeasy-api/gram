@@ -68090,6 +68090,7 @@ components:
         name:
           type: string
           description: The name of the key
+          maxLength: 255
         requested_grants:
           type: array
           items:
@@ -74150,7 +74151,7 @@ components:
           description: The ID of the key
         key:
           type: string
-          description: The token of the api key (only returned on key creation)
+          description: The token of the api key (only returned on key creation or rotation)
         key_prefix:
           type: string
           description: The store prefix of the api key for recognition
@@ -82396,6 +82397,7 @@ components:
         name:
           type: string
           description: The name of the replacement key
+          maxLength: 255
         requested_grants:
           type: array
           items:
