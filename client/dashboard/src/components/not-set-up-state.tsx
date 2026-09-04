@@ -70,8 +70,8 @@ export function NotSetUpState({
       <div className="border-border mt-10 flex w-full max-w-[1400px] items-center justify-center overflow-hidden border bg-white shadow-sm">
         {screenshot ?? (
           <div
+            aria-hidden="true"
             className="text-muted-foreground flex flex-col items-center gap-2"
-            aria-label="Feature screenshot placeholder"
           >
             <Icon name="image" className="size-6" aria-hidden="true" />
             <Text small muted>
