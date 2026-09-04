@@ -1235,7 +1235,8 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     project_id UUID COMMENT 'Project that owns the workload.',
     meter_id LowCardinality(String) COMMENT 'Registered workload meter identifier.',
     operation_id String COMMENT 'Domain operation that produced the reading.',
-    unit LowCardinality(String) COMMENT 'Measurement unit, currently stokens.',
+    unit LowCardinality(String) COMMENT 'Measurement unit.',
+    measurement_method LowCardinality(String) DEFAULT if(unit = 'stokens', 'tiktoken_o200k_base', '') COMMENT 'Rating-critical measurement implementation.',
     value Int64 COMMENT 'Signed workload value where usage is positive and adjustments may be positive or negative.',
     occurred_at DateTime64(9, 'UTC') COMMENT 'Usage-effective UTC time when the metered work executed and the timestamp used for billing periods.',
     produced_at DateTime64(9, 'UTC') COMMENT 'UTC time when the producer created this reading variant and the ReplacingMergeTree version.',
@@ -1247,14 +1248,13 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
     CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
     CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
-    CONSTRAINT measurement_valid CHECK unit = 'stokens' AND tokenizer_codec = 'tiktoken_o200k_base',
     INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(produced_at)
 PARTITION BY cityHash64(toString(id)) % 64
 PRIMARY KEY (organization_id, meter_id, project_id)
 ORDER BY (organization_id, meter_id, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Raw s-token usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
+COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
