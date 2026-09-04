@@ -363,10 +363,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
-	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
+	upsertResult, err := s.identity.UpsertUserFromIDPWithResult(ctx, idpUser)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	userID := upsertResult.UserID
 
 	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
@@ -381,7 +382,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if supportOrgID == "" && idpUser.Sub != "" {
-		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+		syncMemberships := s.identity.SyncMembershipsFromWorkOS
+		if upsertResult.Reactivated {
+			syncMemberships = s.identity.SyncMembershipsFromWorkOSPreservingExisting
+		}
+		if err := syncMemberships(ctx, userID, idpUser.Sub); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
 		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
@@ -513,7 +518,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
-	if intent != nil && intent.OrgName != "" {
+	if upsertResult.Reactivated && intent != nil && intent.OrgName != "" {
 		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
 		if err != nil {
 			return s.redirectSignupError(ctx, payload, err)

@@ -187,9 +187,9 @@ WHERE organization_user_relationships.deleted_at IS NULL;
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 -- (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
--- the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
--- other relationships where the org has a non-NULL workos_id. Orgs without a
--- workos_id are unaffected. Other users' memberships are never modified.
+-- the provided (workos_org_id, workos_membership_id) pairs and, unless
+-- preserve_existing is true, soft-deletes any other relationships where the org
+-- has a non-NULL workos_id. Other users' memberships are never modified.
 WITH input_memberships AS (
     SELECT unnest(@workos_org_ids::text[]) AS workos_org_id,
            unnest(@workos_membership_ids::text[]) AS workos_membership_id
@@ -238,6 +238,7 @@ UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = @user_id
+  AND NOT @preserve_existing::boolean
   AND organization_user_relationships.deleted_at IS NULL
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
