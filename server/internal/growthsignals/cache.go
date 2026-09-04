@@ -56,7 +56,15 @@ func (c *lookupCache[K, V]) resolve(ctx context.Context, key K) (V, error) {
 	// The key is stringified for the flight group only; the cache itself stays
 	// typed. Callers that arrive while a load is in progress wait for it rather
 	// than issuing their own.
-	loaded, err, _ := c.inflight.Do(fmt.Sprint(key), func() (any, error) {
+	flight := c.inflight.DoChan(fmt.Sprint(key), func() (any, error) {
+		// Re-read inside the flight. A caller that missed the cache before an
+		// earlier flight finished can still reach this point after that flight
+		// was removed from the group, and without this it would issue a second
+		// query for a row already cached.
+		if cached, ok := c.entries.Get(key); ok {
+			return cached, nil
+		}
+
 		value, err := c.load(ctx, key)
 		if err != nil {
 			return nil, err
@@ -66,6 +74,18 @@ func (c *lookupCache[K, V]) resolve(ctx context.Context, key K) (V, error) {
 
 		return value, nil
 	})
+
+	var result singleflight.Result
+	select {
+	case <-ctx.Done():
+		// Waiting on somebody else's query must not outlive this caller. The
+		// flight continues for whoever else is waiting on it.
+		var zero V
+		return zero, fmt.Errorf("growth signal lookup for %v: %w", key, ctx.Err())
+	case result = <-flight:
+	}
+
+	loaded, err := result.Val, result.Err
 	if err != nil {
 		var zero V
 		return zero, err

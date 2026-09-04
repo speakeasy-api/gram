@@ -231,17 +231,17 @@ func TestBuildEventExtrasCannotOccupyReservedKeys(t *testing.T) {
 		Activity:       growthsignals.ActivityUserSignedUp,
 		OrganizationID: "org_placeholder",
 		Extra: map[string]string{
-			"organization_slug": "attacker-owned",
-			"project_slug":      "claimed",
-			"activity":          "something_else",
-			"signup_source":     growthsignals.SignupSourceOrganic,
+			"organization_slug":                "attacker-owned",
+			"project_slug":                     "claimed",
+			"activity":                         "something_else",
+			growthsignals.PropertySignupSource: growthsignals.SignupSourceOrganic,
 		},
 	}, growthsignals.Enrichment{}, testSiteURL())
 
 	require.Equal(t, "user_signed_up", built.Properties["activity"])
 	require.NotContains(t, built.Properties, "organization_slug")
 	require.NotContains(t, built.Properties, "project_slug")
-	require.Equal(t, growthsignals.SignupSourceOrganic, built.Properties["signup_source"])
+	require.Equal(t, growthsignals.SignupSourceOrganic, built.Properties[growthsignals.PropertySignupSource])
 }
 
 // With no site URL configured there is no link to report. Reporting an empty
