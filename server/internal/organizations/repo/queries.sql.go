@@ -1323,6 +1323,40 @@ func (q *Queries) RetireCollidingOrganizationRoleAssignments(ctx context.Context
 	return err
 }
 
+const retireDuplicateLeftoverOrganizationRoleAssignments = `-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = $1
+      AND leftover.workos_user_id <> $2
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id
+`
+
+type RetireDuplicateLeftoverOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete extra leftover assignments that share org+role so remapping
+// them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+func (q *Queries) RetireDuplicateLeftoverOrganizationRoleAssignments(ctx context.Context, arg RetireDuplicateLeftoverOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireDuplicateLeftoverOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :exec
 UPDATE organization_invitations
 SET state = 'revoked',

@@ -648,6 +648,29 @@ WHERE old.user_id = @user_id
         AND neu.deleted_at IS NULL
   );
 
+-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+-- Soft-delete extra leftover assignments that share org+role so remapping
+-- them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = sqlc.arg(user_id)
+      AND leftover.workos_user_id <> sqlc.arg(new_workos_user_id)
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id;
+
 -- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
 -- Move leftover assignments onto the new WorkOS id after colliding rows
 -- have been retired.

@@ -330,11 +330,23 @@ func (r *Resolver) reassignWorkOSIdentity(ctx context.Context, gramUserID, newWo
 		return fmt.Errorf("reassign organization memberships to workos user: %w", err)
 	}
 
+	if err := r.orgRepo.LinkRoleAssignmentsToUser(ctx, orgRepo.LinkRoleAssignmentsToUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("link organization role assignments to user: %w", err)
+	}
 	if err := r.orgRepo.RetireCollidingOrganizationRoleAssignments(ctx, orgRepo.RetireCollidingOrganizationRoleAssignmentsParams{
 		UserID:          conv.ToPGText(gramUserID),
 		NewWorkosUserID: newWorkosID,
 	}); err != nil {
 		return fmt.Errorf("retire colliding organization role assignments: %w", err)
+	}
+	if err := r.orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignments(ctx, orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignmentsParams{
+		UserID:          conv.ToPGText(gramUserID),
+		NewWorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("retire duplicate leftover organization role assignments: %w", err)
 	}
 	if err := r.orgRepo.ReassignOrganizationRoleAssignmentWorkOSID(ctx, orgRepo.ReassignOrganizationRoleAssignmentWorkOSIDParams{
 		NewWorkosUserID: newWorkosID,
