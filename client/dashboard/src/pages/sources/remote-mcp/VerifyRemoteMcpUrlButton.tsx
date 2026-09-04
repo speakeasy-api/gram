@@ -13,11 +13,18 @@ export function VerifyRemoteMcpUrlAlert({
   // so the field reads consistently without inventing new wording.
   const text = message.charAt(0).toUpperCase() + message.slice(1);
 
-  // "Try /mcp" is the right nudge when something answered but wasn't an MCP
-  // endpoint. Offered against a DNS failure or a timeout it sends people to
-  // edit a path that was never the problem.
+  // "Try /mcp" is the right nudge when something answered and wasn't an MCP
+  // endpoint. Transport failures are excluded first: a TLS or DNS error says
+  // nothing about the path, and the message often carries the hostname — which
+  // frequently contains "mcp" — so a keyword search alone points people at the
+  // wrong thing.
+  const isTransportFailure =
+    /\b(tls|ssl|handshake|certificate|dns|timeout|timed out|refused|unreachable|network|resolve)\b/i.test(
+      message,
+    );
   const looksLikeWrongEndpoint =
-    /\b(mcp|endpoint|404|not found|protocol|handshake|initialize)\b/i.test(
+    !isTransportFailure &&
+    /(not an mcp|no mcp|404|not found|invalid response|unexpected (content|response)|initialize)/i.test(
       message,
     );
 

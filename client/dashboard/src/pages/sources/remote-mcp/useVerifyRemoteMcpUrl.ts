@@ -25,9 +25,12 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
   // for another: edit the field mid-flight and the reply would otherwise land
   // as a verdict on what is now a different, unverified URL.
   const latestUrlRef = useRef(url);
+  // Written during render, not in an effect: a reply can land between the
+  // keystroke and the effect, and would find the ref still holding the URL the
+  // user has already moved off.
+  latestUrlRef.current = url;
 
   useEffect(() => {
-    latestUrlRef.current = url;
     if (resultUrlRef.current !== null && resultUrlRef.current !== url) {
       setResult(null);
       resultUrlRef.current = null;

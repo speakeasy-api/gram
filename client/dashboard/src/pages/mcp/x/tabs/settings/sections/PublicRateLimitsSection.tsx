@@ -71,8 +71,11 @@ export function PublicRateLimitsSection({
   projectId,
 }: {
   tunneledMcpServerId: string;
-  /** The server's own project, so the gate matches what saving will target. */
-  projectId?: string;
+  /**
+   * The server's own project, so the gate matches what saving will target.
+   * Required: an omitted id would leave the write ungated by project.
+   */
+  projectId: string;
 }): JSX.Element | null {
   const { data: tunneledMcpServer } = useGetTunneledMcpServer(
     getTunneledMcpServerArgs(tunneledMcpServerId),
@@ -90,7 +93,7 @@ function PublicRateLimits({
   tunneledMcpServer,
   projectId,
 }: {
-  projectId?: string;
+  projectId: string;
   tunneledMcpServer: TunneledMcpServer;
 }) {
   const update = useUpdateTunneledMcpServerMutation();
