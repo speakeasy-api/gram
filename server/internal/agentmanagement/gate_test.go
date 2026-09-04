@@ -19,8 +19,14 @@ type staticSessionAuthorizer struct {
 	authCtx *contextvalues.AuthContext
 }
 
-func (a staticSessionAuthorizer) Authorize(ctx context.Context, _ string, _ *security.APIKeyScheme) (context.Context, error) {
-	return contextvalues.SetAuthContext(ctx, a.authCtx), nil
+func (a staticSessionAuthorizer) AuthorizeWithPostAuthenticationCheck(
+	ctx context.Context,
+	_ string,
+	_ *security.APIKeyScheme,
+	check func(context.Context) error,
+) (context.Context, error) {
+	ctx = contextvalues.SetAuthContext(ctx, a.authCtx)
+	return ctx, check(ctx)
 }
 
 type recordingM1Features struct {
