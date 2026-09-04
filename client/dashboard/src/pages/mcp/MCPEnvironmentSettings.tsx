@@ -940,10 +940,10 @@ type OAuthSectionProps = {
 };
 
 /**
- * Dispatches between the user-sessions surface and the legacy OAuth section
+ * Dispatches between the user-sessions surface and the External OAuth section
  * by the toolset's auth state (see toolsetAuthSurface). A wired issuer or a
- * clean slate gets the shared section; legacy OAuth keeps the old UI plus a
- * convert path.
+ * clean slate gets the shared section; External OAuth keeps its configuration
+ * UI plus a convert path.
  */
 function OAuthSection({ toolset }: OAuthSectionProps) {
   const oauthParadigm = getOAuthParadigm(toolset);
@@ -955,10 +955,10 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   if (surface === "manage" || surface === "attach") {
     return <ToolsetAuthenticationSection toolset={toolset} />;
   }
-  return <LegacyOAuthSection toolset={toolset} />;
+  return <ExternalOAuthSection toolset={toolset} />;
 }
 
-function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
+function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -1006,10 +1006,10 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
     : "This MCP server does not require the OAuth authorization code flow";
 
   // The dispatcher sends wired issuers to the manage surface. Keep this
-  // defensive check aligned in case the legacy section is reused directly.
+  // defensive check aligned in case the External OAuth section is reused directly.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
   // Once wired, the external OAuth config is inert — hide Configure so
-  // operators aren't steered back into the legacy paradigm.
+  // operators aren't steered back into the External OAuth flow.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (

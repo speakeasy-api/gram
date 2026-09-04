@@ -5,8 +5,7 @@ import type { Toolset } from "@/lib/toolTypes";
  * page shows. React-free so the matrix stays unit testable.
  */
 
-// OAuth proxy has been retired, so external OAuth is the only remaining legacy
-// paradigm.
+// External OAuth is the only remaining direct OAuth configuration.
 export type OAuthParadigm = "external";
 
 export function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
@@ -27,8 +26,8 @@ export function isUserSessionIssuerWired(toolset: Toolset): boolean {
 export type ToolsetAuthSurface =
   // user_session_issuer wired → shared section, manage state.
   | "manage"
-  // legacy OAuth configured, unwired → legacy UI plus a convert path.
-  | "legacy"
+  // External OAuth configured, unwired → its UI plus a convert path.
+  | "external"
   // nothing configured → shared section, attach state.
   | "attach";
 
@@ -40,16 +39,16 @@ export function toolsetAuthSurface({
   oauthParadigm: OAuthParadigm | null;
 }): ToolsetAuthSurface {
   // A wired issuer always wins: the serve path gates on it and any leftover
-  // legacy OAuth config is inert.
+  // External OAuth config is inert.
   if (userSessionIssuerWired) return "manage";
-  if (oauthParadigm) return "legacy";
+  if (oauthParadigm) return "external";
   return "attach";
 }
 
 /**
  * External OAuth is supported for enabled, public toolset servers whose tools
  * advertise OAuth or whose attached external MCP source requires it. Keep this
- * aligned with the legacy OAuth section so the user-sessions surface does not
+ * aligned with the External OAuth section so the user-sessions surface does not
  * expose a configuration the serve path cannot use.
  */
 export function canConfigureExternalOAuth(

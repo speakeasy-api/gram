@@ -714,7 +714,7 @@ BEGIN
             tool_names[i] <> 'process_refund');
   END LOOP;
 
-  -- Keep a legacy Gram-hosted metadata row so the authentication page can
+  -- Keep a metadata-based External OAuth row so the authentication page can
   -- demonstrate the proactive recommendation without contacting a provider.
   INSERT INTO external_oauth_server_metadata
     (id, project_id, slug, metadata, authorization_server_issuer)
@@ -2367,7 +2367,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
   END IF;
 
-  -- This legacy row drives the OAuth metadata recommendation. Keep its count
+  -- This External OAuth row drives the metadata recommendation. Keep its count
   -- stable so a rerun cannot duplicate it or silently drop the demo surface.
   SELECT count(*) INTO stray FROM external_oauth_server_metadata
   WHERE project_id = proj_a AND deleted IS FALSE;
