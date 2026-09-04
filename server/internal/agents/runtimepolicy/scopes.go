@@ -38,7 +38,10 @@ type runtimeScopeDefinition struct {
 }
 
 func activeRuntimeScope() runtimeScopeDefinition {
-	return runtimeScopeDefinition{lifecycle: RuntimeScopeLifecycleActive}
+	return runtimeScopeDefinition{
+		lifecycle: RuntimeScopeLifecycleActive,
+		safeSince: 0,
+	}
 }
 
 func safeRuntimeScope() runtimeScopeDefinition {
@@ -49,7 +52,10 @@ func safeRuntimeScope() runtimeScopeDefinition {
 }
 
 func retiredRuntimeScope() runtimeScopeDefinition {
-	return runtimeScopeDefinition{lifecycle: RuntimeScopeLifecycleRetired}
+	return runtimeScopeDefinition{
+		lifecycle: RuntimeScopeLifecycleRetired,
+		safeSince: 0,
+	}
 }
 
 // runtimeScopeDefinitions is the application-owned overlay that determines
