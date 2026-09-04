@@ -121,20 +121,17 @@ const TOGGLE_FEATURES = [
 
 type ToggleFeatureName = (typeof TOGGLE_FEATURES)[number]["featureName"];
 
-const MANAGED_FEATURES = {
-  logs: "managed-elsewhere",
-  tool_io_logs: "managed-elsewhere",
-  session_capture: "managed-elsewhere",
-  hooks_browser_login: "managed-elsewhere",
-  hooks_fail_open: "managed-elsewhere",
-  skills: "managed-elsewhere",
-  skill_capture_metadata_only: "managed-elsewhere",
-  remote_session_auto_refresh_enforced: "managed-elsewhere",
-  consent_tool_filtering: "managed-elsewhere",
-} as const satisfies Record<
-  Exclude<FeatureName, ToggleFeatureName>,
-  "managed-elsewhere"
->;
+const OMITTED_FEATURES = {
+  logs: "omitted",
+  tool_io_logs: "omitted",
+  session_capture: "omitted",
+  hooks_browser_login: "omitted",
+  hooks_fail_open: "omitted",
+  skills: "omitted",
+  skill_capture_metadata_only: "omitted",
+  remote_session_auto_refresh_enforced: "omitted",
+  consent_tool_filtering: "omitted",
+} as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -210,8 +207,8 @@ describe("Features", () => {
       ),
     ).toEqual(switches);
     expect(
-      Object.values(MANAGED_FEATURES).filter(
-        (classification) => classification === "managed-elsewhere",
+      Object.values(OMITTED_FEATURES).filter(
+        (classification) => classification === "omitted",
       ),
     ).toHaveLength(9);
   });

@@ -37,7 +37,7 @@ type ProductFeatureDecision =
       label: string;
       description: string;
     }
-  | { kind: "managed-elsewhere"; where: string };
+  | { kind: "omitted"; where: string };
 
 const PRODUCT_FEATURES = {
   ai_platform_push_integrations: {
@@ -103,47 +103,47 @@ const PRODUCT_FEATURES = {
   },
   // reason: managed in dashboard log settings
   logs: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard log settings",
   },
   // reason: managed in dashboard log settings
   tool_io_logs: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard log settings",
   },
   // reason: managed in dashboard session capture settings
   session_capture: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard session capture settings",
   },
   // reason: managed in dashboard hook settings
   hooks_browser_login: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard hook settings",
   },
   // reason: managed in dashboard hook settings
   hooks_fail_open: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard hook settings",
   },
   // reason: managed in dashboard Skills settings
   skills: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard Skills settings",
   },
   // reason: managed in dashboard Skills settings
   skill_capture_metadata_only: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard Skills settings",
   },
   // reason: managed in dashboard remote session settings
   remote_session_auto_refresh_enforced: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard remote session settings",
   },
   // reason: managed in dashboard consent settings
   consent_tool_filtering: {
-    kind: "managed-elsewhere",
+    kind: "omitted",
     where: "Dashboard consent settings",
   },
 } satisfies Record<FeatureName, ProductFeatureDecision>;
@@ -253,7 +253,7 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
         </div>
         <div className="divide-border divide-y">
           {Object.entries(PRODUCT_FEATURES).map(([featureName, feature]) => {
-            if (feature.kind === "managed-elsewhere") return null;
+            if (feature.kind === "omitted") return null;
             const typedFeatureName = featureName as FeatureName;
             const rowError =
               mutation.isError &&
