@@ -863,6 +863,22 @@ func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePr
 	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
 }
 
+func TestPluginsService_SetPluginAssignments_ZeroPluginIDReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      uuid.Nil.String(),
+		PrincipalUrns: []string{"*"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -1531,7 +1547,7 @@ func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
 	// the default — so a plugin created here is seeded with the org wildcard.
 	inDefault, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Default"})
 	require.NoError(t, err)
-	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inDefault.ID))
+	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: uuid.MustParse(inDefault.ID), OrganizationID: orgID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, defaultAssignments, 1)
 	require.Equal(t, "*", defaultAssignments[0].PrincipalUrn)
@@ -1548,7 +1564,7 @@ func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
 
 	inOther, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Other"})
 	require.NoError(t, err)
-	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inOther.ID))
+	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: uuid.MustParse(inOther.ID), OrganizationID: orgID, ProjectID: other.ID})
 	require.NoError(t, err)
 	require.Empty(t, otherAssignments,
 		"a plugin in a non-default project starts with no audience")

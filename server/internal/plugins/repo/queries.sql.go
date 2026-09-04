@@ -927,13 +927,25 @@ func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationI
 }
 
 const listPluginAssignments = `-- name: ListPluginAssignments :many
-SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
-FROM plugin_assignments
-WHERE plugin_id = $1
+SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.created_at, pa.updated_at
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID) ([]PluginAssignment, error) {
-	rows, err := q.db.Query(ctx, listPluginAssignments, pluginID)
+type ListPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssignmentsParams) ([]PluginAssignment, error) {
+	rows, err := q.db.Query(ctx, listPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1621,12 +1633,23 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 }
 
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
-DELETE FROM plugin_assignments
-WHERE plugin_id = $1
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, pluginID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, removeAllPluginAssignments, pluginID)
+type RemoveAllPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, arg RemoveAllPluginAssignmentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeAllPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

@@ -187,6 +187,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_plugin_assignments",
 		"list_plugins",
 		"get_plugin",
+		operationSetPluginAssignments,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",

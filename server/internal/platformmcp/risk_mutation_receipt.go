@@ -5,18 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
 const maxRiskMutationReceiptPayloadBytes = 16 << 10
@@ -134,68 +129,30 @@ func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Princi
 	if err != nil {
 		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
 	}
-	connectionID, generation, err := principalConnection(principal)
-	if err != nil {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: ErrRiskMutationInvalid}
-	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("begin risk mutation receipt: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := platformrepo.New(tx)
-	lock := platformrepo.LockPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID.String(), Operation: request.Operation, IdempotencyKey: request.IdempotencyKey}
-	if err := q.LockPlatformMCPOperationReceipt(ctx, lock); err != nil {
-		return OperationReceipt{}, fmt.Errorf("lock risk mutation receipt: %w", err)
-	}
-	lookup := platformrepo.GetPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey}
-	if _, err := q.DeleteExpiredPlatformMCPOperationReceipt(ctx, platformrepo.DeleteExpiredPlatformMCPOperationReceiptParams(lookup)); err != nil {
-		return OperationReceipt{}, fmt.Errorf("reclaim expired risk mutation receipt: %w", err)
-	}
-	stored, err := q.GetPlatformMCPOperationReceipt(ctx, lookup)
-	switch {
-	case err == nil:
-		if stored.InputHash != inputHash {
-			return OperationReceipt{}, riskMutationConflict("The idempotency key was already used with different risk mutation input.")
-		}
-		if stored.Status != receiptStatusSucceeded || len(stored.ResultPayload) == 0 {
-			return OperationReceipt{}, riskMutationConflict("The matching risk mutation has no completed replay result.")
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return OperationReceipt{}, fmt.Errorf("commit risk mutation replay: %w", err)
-		}
-		return operationReceiptFromRow(stored, true), nil
-	case !errors.Is(err, pgx.ErrNoRows):
-		return OperationReceipt{}, fmt.Errorf("load risk mutation receipt: %w", err)
-	}
-
-	created, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, RegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ConnectionID: connectionID, ConnectionGeneration: generation,
-		UserID: conv.ToPGText(principal.UserID), ActingSurface: conv.ToPGText(string(principal.surface())), Operation: request.Operation, IdempotencyKey: request.IdempotencyKey,
-		InputHash: inputHash, Status: receiptStatusPending, ResultCode: pgtype.Text{String: "", Valid: false}, ResultPayload: nil, ExpiresAt: timestamp(s.now().UTC().Add(receiptLifetime)),
+	return executeMutationReceipt(ctx, mutationReceiptExecution[RiskMutationReceiptResult]{
+		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey, InputHash: inputHash, Label: "risk mutation",
+		Invalid: func(cause error) error {
+			return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationInvalid, cause)}
+		},
+		Conflict: riskMutationConflict,
+		Unavailable: func(cause error) error {
+			return &RiskMutationError{Code: unavailableCode, Message: "The risk mutation is temporarily unavailable.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationUnavailable, cause)}
+		},
+		ValidateReplay: func(payload []byte) bool {
+			var result any
+			return len(payload) <= maxRiskMutationReceiptPayloadBytes && json.Unmarshal(payload, &result) == nil
+		},
+		EncodeResult: func(result RiskMutationReceiptResult) ([]byte, error) {
+			return encodeRiskMutationResult(request.Operation, result)
+		},
+		Mutate: func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+			result, err := mutate(ctx, tx)
+			if err != nil {
+				return nil, fmt.Errorf("apply risk mutation transaction: %w", err)
+			}
+			return result, nil
+		},
 	})
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("create risk mutation receipt: %w", err)
-	}
-	result, err := mutate(ctx, tx)
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("apply risk mutation transaction: %w", err)
-	}
-	payload, err := encodeRiskMutationResult(request.Operation, result)
-	if err != nil {
-		return OperationReceipt{}, err
-	}
-	completed, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
-		RegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Status: receiptStatusSucceeded, ResultCode: conv.ToPGText("succeeded"), ResultPayload: payload, ID: created.ID, OrganizationID: principal.OrganizationID,
-	})
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("complete risk mutation receipt: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return OperationReceipt{}, fmt.Errorf("commit risk mutation: %w", err)
-	}
-	return operationReceiptFromRow(completed, false), nil
 }
 
 func riskMutationInputHash(operation string, normalized any) (string, error) {

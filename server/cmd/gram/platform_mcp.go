@@ -219,6 +219,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -297,7 +298,12 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, err
 	}
-	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey)
+	pluginAssignmentMutationBudget := platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	}
+	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 
 	registryHandler := localfixture.NewRegistryHTTP(fixtureConfig).Handler()
@@ -559,6 +565,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -637,7 +644,12 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, err
 	}
-	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey)
+	pluginAssignmentMutationBudget := platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	}
+	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).

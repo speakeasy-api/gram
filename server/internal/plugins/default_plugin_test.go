@@ -39,7 +39,7 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	// A freshly-created Default plugin in the org's default project (the test's
 	// only, and thus oldest, project) is assigned to the org wildcard so it
 	// delivers to everyone under agent.getPlugins' per-principal scoping.
-	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: result.Plugin.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, "*", assignments[0].PrincipalUrn)
@@ -72,7 +72,7 @@ func TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Created)
 
-	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: result.Plugin.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: other.ID})
 	require.NoError(t, err)
 	require.Empty(t, assignments,
 		"a non-default project's Default plugin starts with no audience")
