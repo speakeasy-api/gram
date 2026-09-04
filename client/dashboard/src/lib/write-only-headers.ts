@@ -52,15 +52,29 @@ export function preservesStoredHeaderValue(
   );
 }
 
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+function hasInvalidHTTPHeaderValue(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export function hasValidWriteOnlyHeaders(
   headers: EditableWriteOnlyHeader[],
 ): boolean {
   const names = new Set<string>();
   return headers.every((header) => {
-    const name = header.name.trim().toLowerCase();
-    if (name === "" || names.has(name)) return false;
-    names.add(name);
-    return header.value !== "" || preservesStoredHeaderValue(header);
+    const name = header.name.trim();
+    const foldedName = name.toLowerCase();
+    if (!HTTP_HEADER_NAME_PATTERN.test(name) || names.has(foldedName)) {
+      return false;
+    }
+    names.add(foldedName);
+
+    if (preservesStoredHeaderValue(header)) return true;
+    return header.value !== "" && !hasInvalidHTTPHeaderValue(header.value);
   });
 }
 

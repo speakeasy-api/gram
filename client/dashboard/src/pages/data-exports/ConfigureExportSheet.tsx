@@ -24,6 +24,7 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { isValidDataExportEndpointURL } from "@/lib/data-export-validation";
 import {
   blankWriteOnlyHeader,
   hasValidWriteOnlyHeaders,
@@ -65,15 +66,6 @@ export type ConfigureExportValues = {
   headers: EditableWriteOnlyHeader[];
 };
 
-function isValidEndpointURL(value: string): boolean {
-  try {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function initialDestinationID(
   route: DataExportRoute | undefined,
   destinations: OtelDataExportDestination[],
@@ -100,7 +92,7 @@ function destinationSelectionIsValid(
   }
   return (
     values.destinationName.trim() !== "" &&
-    isValidEndpointURL(values.endpointUrl.trim()) &&
+    isValidDataExportEndpointURL(values.endpointUrl.trim()) &&
     hasValidWriteOnlyHeaders(values.headers)
   );
 }
@@ -471,7 +463,7 @@ export function ConfigureExportSheet({
                   <div className="space-y-1">
                     <Label>Start exporting</Label>
                     <Text muted className="text-sm">
-                      Turn off to save this export paused.
+                      When enabled, data starts exporting as soon as you save.
                     </Text>
                   </div>
                   <Switch

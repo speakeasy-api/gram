@@ -62,6 +62,36 @@ describe("write-only header form helpers", () => {
     expect(hasValidWriteOnlyHeaders([first, duplicate])).toBe(false);
   });
 
+  it.each(["Bad Header", "Bad:Header", "Bad(Header)"])(
+    "rejects invalid HTTP header name %s",
+    (name) => {
+      const header = blankWriteOnlyHeader();
+      header.name = name;
+      header.value = "value";
+
+      expect(hasValidWriteOnlyHeaders([header])).toBe(false);
+    },
+  );
+
+  it.each(["Bearer\nexample", "Bearer\u0000example", "Bearer\u007fexample"])(
+    "rejects HTTP header values containing control characters",
+    (value) => {
+      const header = blankWriteOnlyHeader();
+      header.name = "Authorization";
+      header.value = value;
+
+      expect(hasValidWriteOnlyHeaders([header])).toBe(false);
+    },
+  );
+
+  it("allows horizontal tabs in HTTP header values", () => {
+    const header = blankWriteOnlyHeader();
+    header.name = "X-Trace-Context";
+    header.value = "one\ttwo";
+
+    expect(hasValidWriteOnlyHeaders([header])).toBe(true);
+  });
+
   it("trims submitted names and includes replacement values", () => {
     const header = blankWriteOnlyHeader();
     header.name = "  Authorization  ";
