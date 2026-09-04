@@ -66540,7 +66540,6 @@ components:
                     description: Grant effect; direct agent policy is allow-only
                     enum:
                         - allow
-                        - deny
                 scope:
                     type: string
                     description: Agent-runtime-safe scope to grant
