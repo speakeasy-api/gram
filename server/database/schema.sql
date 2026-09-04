@@ -2365,6 +2365,20 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- client_id, which Gram uses to pre-flight whether outbound CIMD is viable.
   client_id_metadata_document_supported BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- OpenID Connect Discovery, RFC 7662, RFC 9207, and OpenID Back-Channel
+  -- Logout fields that tell Gram which session-enrichment interfaces an
+  -- issuer offers. All nullable with no default, following
+  -- code_challenge_methods_supported: NULL means discovery has not captured
+  -- the field for this row yet, which stays distinct from an empty array or
+  -- FALSE written by a refresh ("captured; the upstream advertises nothing").
+  userinfo_endpoint TEXT,
+  introspection_endpoint TEXT,
+  introspection_endpoint_auth_methods_supported TEXT[],
+  id_token_signing_alg_values_supported TEXT[],
+  claims_supported TEXT[],
+  backchannel_logout_supported BOOLEAN,
+  authorization_response_iss_parameter_supported BOOLEAN,
+
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -2384,6 +2398,20 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- columns above model only what Gram acts on, so re-serving from them would
   -- drop the OIDC fields they omit.
   metadata JSONB,
+
+  -- When discovery last wrote the discovered endpoint, capability, and
+  -- metadata columns. NULL for rows created from the form or predating
+  -- capture. updated_at cannot serve: it also moves on operator edits.
+  metadata_fetched_at timestamptz,
+  -- The well-known URL the last refresh could not read, whose members were
+  -- kept from the previously stored document instead. NULL when the last
+  -- refresh read every candidate.
+  metadata_unreadable_url TEXT,
+  -- The public-safe reason the most recent metadata refresh failed, and when.
+  -- NULL when the row has never failed a refresh; cleared by the next
+  -- successful one.
+  metadata_last_error TEXT,
+  metadata_last_error_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
