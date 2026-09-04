@@ -28,7 +28,6 @@ const (
 	relayNonSensitiveDestinationCacheTTL = 60 * time.Second
 	relayDestinationCacheMaxEntries      = 1024
 	maxRelayErrorBodyBytes               = 4 * 1024
-	relayDataSourceProductTelemetry      = "product_telemetry"
 )
 
 type relayReason string
@@ -41,6 +40,9 @@ const (
 	relayReasonHTTP4xx            relayReason = "http-4xx"
 	relayReasonHTTP5xx            relayReason = "http-5xx"
 	relayReasonPermanentHTTPError relayReason = "permanent-http-error"
+	relayReasonExcluded           relayReason = "excluded"
+	relayReasonDeadLetter         relayReason = "dead-letter"
+	relayReasonStateChange        relayReason = "state-change"
 )
 
 // signalRelay resolves and caches customer-defined OTLP destinations, then
@@ -49,6 +51,7 @@ type signalRelay struct {
 	db               *pgxpool.Pool
 	encryptionClient *encryption.Client
 	policy           *guardian.Policy
+	dataSource       string
 	endpointPath     string
 	signalName       string
 	now              func() time.Time
@@ -98,6 +101,7 @@ func newSignalRelay(
 	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
+	dataSource string,
 	endpointPath string,
 	signalName string,
 ) *signalRelay {
@@ -105,6 +109,7 @@ func newSignalRelay(
 		db:               db,
 		encryptionClient: encryptionClient,
 		policy:           policy,
+		dataSource:       dataSource,
 		endpointPath:     endpointPath,
 		signalName:       signalName,
 		now:              time.Now,
@@ -163,7 +168,7 @@ func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*
 	config, err := dataexportsrepo.New(r.db).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
 		OrganizationID: key.organizationID,
 		ProjectID:      key.projectID,
-		DataSource:     relayDataSourceProductTelemetry,
+		DataSource:     r.dataSource,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

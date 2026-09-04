@@ -69,7 +69,7 @@ func TestRouteRejectsEnabledWithoutUsableDestinationAndUnsupportedSource(t *test
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "risk_findings", Enabled: false, OtelDestinationID: nil})
+		DataSource: "unsupported", Enabled: false, OtelDestinationID: nil})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -100,6 +100,38 @@ func TestRouteRejectsSecondRouteForSameSource(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Equal(t, "a route already exists for this data source", err.Error())
+}
+
+func TestRouteAllowsOneRoutePerSupportedSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	productDestination := createDestination(t, ctx, ti, "https://product.example.test", "exclude")
+	riskDestination := createDestination(t, ctx, ti, "https://risk.example.test", "exclude")
+
+	productRoute, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "product_telemetry",
+		Enabled:           true,
+		OtelDestinationID: &productDestination.ID,
+	})
+	require.NoError(t, err)
+
+	riskRoute, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "risk_findings",
+		Enabled:           true,
+		OtelDestinationID: &riskDestination.ID,
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListRoutes(ctx, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []*gen.DataExportRoute{productRoute, riskRoute}, listed.Routes)
 }
 
 func TestDestinationlessRouteReservesSource(t *testing.T) {

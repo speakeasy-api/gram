@@ -67919,6 +67919,7 @@ components:
                     description: Class of data exported by this route.
                     enum:
                         - product_telemetry
+                        - risk_findings
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -69679,6 +69680,7 @@ components:
                     description: Class of data exported by this route.
                     enum:
                         - product_telemetry
+                        - risk_findings
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -88631,6 +88633,7 @@ components:
                     description: Class of data exported by this route.
                     enum:
                         - product_telemetry
+                        - risk_findings
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -89524,6 +89527,7 @@ components:
                     description: Class of data exported by this route.
                     enum:
                         - product_telemetry
+                        - risk_findings
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.

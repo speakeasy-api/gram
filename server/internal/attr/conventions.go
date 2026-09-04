@@ -507,6 +507,15 @@ const (
 	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
 	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
+	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
+	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
+	RiskTagsKey                    = attribute.Key("gram.risk.tags")
+	RiskSurfaceKey                 = attribute.Key("gram.risk.surface")
+	RiskFieldKey                   = attribute.Key("gram.risk.field")
+	RiskPathKey                    = attribute.Key("gram.risk.path")
+	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
+	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2120,6 +2129,37 @@ func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
 func SlogRiskScanGateReason(v string) slog.Attr {
 	return slog.String(string(RiskScanGateReasonKey), v)
 }
+
+func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
+func SlogRiskFindingID(v string) slog.Attr      { return slog.String(string(RiskFindingIDKey), v) }
+
+func RiskPolicyVersion(v int64) attribute.KeyValue { return RiskPolicyVersionKey.Int64(v) }
+func SlogRiskPolicyVersion(v int64) slog.Attr {
+	return slog.Int64(string(RiskPolicyVersionKey), v)
+}
+
+func RiskConfidence(v float64) attribute.KeyValue { return RiskConfidenceKey.Float64(v) }
+func SlogRiskConfidence(v float64) slog.Attr {
+	return slog.Float64(string(RiskConfidenceKey), v)
+}
+
+func RiskTags(v []string) attribute.KeyValue { return RiskTagsKey.StringSlice(v) }
+func SlogRiskTags(v []string) slog.Attr      { return slog.Any(string(RiskTagsKey), v) }
+
+func RiskSurface(v string) attribute.KeyValue { return RiskSurfaceKey.String(v) }
+func SlogRiskSurface(v string) slog.Attr      { return slog.String(string(RiskSurfaceKey), v) }
+
+func RiskField(v string) attribute.KeyValue { return RiskFieldKey.String(v) }
+func SlogRiskField(v string) slog.Attr      { return slog.String(string(RiskFieldKey), v) }
+
+func RiskPath(v string) attribute.KeyValue { return RiskPathKey.String(v) }
+func SlogRiskPath(v string) slog.Attr      { return slog.String(string(RiskPathKey), v) }
+
+func RiskStartPos(v int64) attribute.KeyValue { return RiskStartPosKey.Int64(v) }
+func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskStartPosKey), v) }
+
+func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
+func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
