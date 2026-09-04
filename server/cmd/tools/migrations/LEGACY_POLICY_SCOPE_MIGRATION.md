@@ -45,6 +45,23 @@ An enforcing policy whose categories cannot be resolved aborts the run
 (`ErrNoCategories`) rather than being folded, because folding it would drop its
 narrowing and silently widen enforcement.
 
+## Prerequisite: risk-recommended-scopes must be on
+
+Both scan paths ignore per-category detection scopes entirely while the
+`risk-recommended-scopes` feature flag is off, which is still the rollout
+default: `CategoryScope.InScope` returns true before consulting them, and
+`CategoryScopes.Masks` returns an empty category mask. Only the legacy
+policy-level scope is honoured in that state.
+
+Applying the fold to a project whose flag is off therefore does the opposite of
+what the preserve path intends: it moves an enforcing policy's narrowing into
+scopes nothing reads, and the policy widens to every message surface. Apply
+refuses to run without `-confirm-recommended-scopes-enabled` for this reason.
+
+Roll the flag out first, or land a scanner change that honours policy-specified
+detection scopes independently of the flag (the flag gates the recommendation
+registry, not a user's explicit scope).
+
 ## Safety properties
 
 - Every emitted expression is compiled against the real `celenv` engine before
@@ -68,7 +85,8 @@ go run ./server/cmd/tools/migrations legacy-policy-scope -environment=dev
 
 # 2. Apply.
 go run ./server/cmd/tools/migrations legacy-policy-scope \
-  -environment=dev -apply -confirm-environment=dev
+  -environment=dev -apply -confirm-environment=dev \
+  -confirm-recommended-scopes-enabled
 
 # 3. Prove the population is empty.
 go run ./server/cmd/tools/migrations legacy-policy-scope -environment=dev -validate
@@ -79,7 +97,8 @@ Production writes need the extra confirmation flag:
 ```bash
 go run ./server/cmd/tools/migrations legacy-policy-scope \
   -environment=production -apply \
-  -confirm-environment=production -confirm-production=production
+  -confirm-environment=production -confirm-production=production \
+  -confirm-recommended-scopes-enabled
 ```
 
 Flags: `-batch-size` (default 100), `-lock-timeout` (default 2s),

@@ -42,6 +42,8 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	environment := fs.String("environment", "", "explicit target environment")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for every write")
 	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")
+	confirmScopesEnforced := fs.Bool("confirm-recommended-scopes-enabled", false,
+		"assert risk-recommended-scopes is enabled for every project in this environment")
 	batchSize := fs.Int("batch-size", 100, "keyset batch size")
 	lockTimeout := fs.Duration("lock-timeout", 2*time.Second, "per-transaction lock timeout")
 	statementTimeout := fs.Duration("statement-timeout", 30*time.Second, "per-transaction statement timeout")
@@ -65,6 +67,15 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	}
 	if *apply && *environment == "production" && *confirmProduction != "production" {
 		return legacyPolicyScopeConfig{}, errors.New("production writes require -confirm-production=production")
+	}
+	// Both scanners ignore per-category detection scopes entirely while
+	// risk-recommended-scopes is off (risk_analysis.CategoryScope.InScope and
+	// CategoryScopes.Masks both short-circuit on it). Folding an enforcing
+	// policy into scopes nothing reads would drop its narrowing outright, so
+	// applying requires the operator to assert the flag is on.
+	if *apply && !*confirmScopesEnforced {
+		return legacyPolicyScopeConfig{}, errors.New(
+			"writes require -confirm-recommended-scopes-enabled: folded scopes are not enforced while risk-recommended-scopes is off")
 	}
 
 	mode := legacypolicyscope.ModeDryRun
