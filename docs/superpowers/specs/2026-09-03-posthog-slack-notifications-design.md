@@ -277,7 +277,7 @@ points at a different channel.
 
 ### New destinations
 
-All six are created on Slack workspace integration 57009, which already posts
+All five are created on Slack workspace integration 57009, which already posts
 successfully to all three channels. Each is created disabled, tested with a
 sample invocation, then enabled.
 
@@ -285,20 +285,21 @@ sample invocation, then enabled.
 | ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Gram significant          | `#ops-significant-events` | `gram_activity` where `activity` is one of `organization_created`, `user_signed_up`, `member_joined_organization`, `project_created`, `mcp_server_created`, `security_policy_created` |
 | Gram firehose             | `#ops-aicp-events`        | every `gram_activity`                                                                                                                                                                 |
-| Gram MCP settings         | `#ops-all-events`         | `gram_activity` where `activity` is `mcp_server_updated`                                                                                                                              |
 | Gram subscription changes | `#ops-significant-events` | `gram_subscription_changed`                                                                                                                                                           |
 | Gram feature requests     | `#ops-significant-events` | `feature_requested`                                                                                                                                                                   |
 | Gram enterprise gate      | `#ops-significant-events` | `enterprise_gate_viewed`                                                                                                                                                              |
 
 Every MCP server creation reaches the significant channel, not only the first per
-project. MCP settings changes reach both `#ops-aicp-events` (via the firehose)
-and `#ops-all-events` (via its own destination).
+project. MCP settings changes ride the firehose into `#ops-aicp-events` and get
+no destination of their own: the firehose already carries every activity, so a
+second destination would only duplicate them into a channel nobody watches for
+this. `#ops-all-events` therefore receives nothing from this design.
 
 The last three carry over today's behaviour on their own events; they are
 recreated cleanly rather than folded into `gram_activity` because they are
 genuinely different events with different properties.
 
-All six share one message template: actor, activity, org and project, and a
+All five share one message template: actor, activity, org and project, and a
 button linking to the subject in the Gram dashboard.
 
 ## Testing
@@ -322,7 +323,7 @@ button linking to the subject in the Gram dashboard.
 1. Ship the Go change. Events begin flowing to PostHog with no destinations
    consuming them yet, so Slack stays quiet.
 2. Confirm `gram_activity` volume and shape in PostHog over a day.
-3. Create the six new destinations disabled, test-invoke each, enable them.
+3. Create the five new destinations disabled, test-invoke each, enable them.
 4. Disable the eleven old destinations in the same sitting, so there is no
    window of doubled notifications.
 5. After a week of clean signal, delete the eleven disabled destinations.
@@ -340,7 +341,7 @@ button linking to the subject in the Gram dashboard.
 
 ## Appendix: the shared Slack message template
 
-All six destinations use one template, so every Gram notification reads the same
+All five destinations use one template, so every Gram notification reads the same
 way regardless of channel. PostHog's Slack destination templates support hog
 expressions, including `??` and ternaries, which today's destinations already use.
 
