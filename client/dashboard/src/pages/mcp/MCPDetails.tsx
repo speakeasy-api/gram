@@ -1744,10 +1744,12 @@ export function PageSection({
 export function OAuthDetailsModal({
   isOpen,
   onClose,
+  onManageMetadata,
   toolset,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onManageMetadata?: () => void;
   toolset: Toolset;
 }): React.JSX.Element {
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -1772,21 +1774,34 @@ export function OAuthDetailsModal({
               <Stack gap={2}>
                 <div className="flex items-center justify-between">
                   <Text className="font-medium">External OAuth Server</Text>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Button.LeftIcon>
-                      <Trash2 className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Remove OAuth</Button.Text>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {onManageMetadata && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={onManageMetadata}
+                      >
+                        Manage metadata source
+                      </Button>
+                    )}
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive hover:border-destructive"
+                      onClick={() =>
+                        removeOAuthMutation.mutate({
+                          request: { slug: toolset.slug },
+                        })
+                      }
+                    >
+                      <Button.LeftIcon>
+                        <Trash2 className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text className="sr-only">
+                        Remove OAuth
+                      </Button.Text>
+                    </Button>
+                  </div>
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>

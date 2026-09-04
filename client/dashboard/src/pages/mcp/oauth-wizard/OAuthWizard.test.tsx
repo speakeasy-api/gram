@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -299,7 +300,11 @@ describe("OAuthWizard - external OAuth sources", () => {
       screen.getByRole("button", { name: /Gram-hosted metadata/ }),
     );
 
-    expect(screen.getByText(/multiple origins/i)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Gram hosts authorization-server metadata in this mode. Modern clients may reject multi-origin OAuth configurations without issuer-bound responses.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByLabelText("OAuth Metadata JSON")).toBeTruthy();
   });
 });
@@ -315,6 +320,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       issuer: existingConfig.issuer,
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
+      authorizationResponseIssParameterSupported: true,
     });
     renderWizard({ existingConfig });
 
@@ -324,6 +330,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
     await screen.findByText(/auth\.example\.com\/authorize/);
     expect(mocks.fetchRemoteSessionIssuerMetadata).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/RFC 9207 support: Supported/)).toBeTruthy();
     expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
 
     fireEvent.click(
@@ -334,6 +341,79 @@ describe("OAuthWizard — existing external OAuth config", () => {
     );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
+  });
+
+  it("changes a provider-hosted issuer after reviewing the replacement", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
+      issuer: "https://replacement.example.com",
+      authorizationEndpoint: "https://replacement.example.com/authorize",
+      authorizationResponseIssParameterSupported: false,
+    });
+    renderWizard({
+      existingConfig: { ...existingConfig, providerHosted: true },
+    });
+
+    fireEvent.change(screen.getByLabelText("Issuer URL"), {
+      target: { value: "https://replacement.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+    await screen.findByText(/replacement\.example\.com\/authorize/);
+    expect(screen.getByText(/RFC 9207 support: Not advertised/)).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use provider-hosted metadata" }),
+    );
+    await waitFor(() => expect(mocks.updateExternalOAuth).toHaveBeenCalled());
+    expect(mocks.updateExternalOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateExternalOAuthServerRequestBody: {
+            authorizationServerIssuer: "https://replacement.example.com",
+          },
+        }),
+      }),
+    );
+  });
+
+  it("ignores discovery from a closed session after a rapid reopen", async () => {
+    let resolveDiscovery!: (value: Record<string, unknown>) => void;
+    mocks.fetchRemoteSessionIssuerMetadata.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDiscovery = resolve;
+      }),
+    );
+    const rendered = renderWizard({ existingConfig });
+
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+    const modal = (isOpen: boolean) => (
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <ConnectOAuthModal
+            isOpen={isOpen}
+            onClose={() => {}}
+            toolsetSlug="mytoolset"
+            toolset={toolset}
+            existingConfig={existingConfig}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>
+    );
+    rendered.rerender(modal(false));
+    expect(
+      mocks.fetchRemoteSessionIssuerMetadata.mock.calls[0]![0].options
+        .fetchOptions.signal.aborted,
+    ).toBe(true);
+    rendered.rerender(modal(true));
+
+    await act(async () => {
+      resolveDiscovery({
+        issuer: existingConfig.issuer,
+        authorizationEndpoint: "https://stale.example.com/authorize",
+      });
+    });
+
+    expect(screen.queryByText(/stale\.example\.com/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Review update" })).toBeTruthy();
   });
 
   it("cancels without discovery or mutation", () => {
@@ -372,6 +452,30 @@ describe("OAuthWizard — existing external OAuth config", () => {
     await waitFor(() =>
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
     );
+    expect(mocks.updateExternalOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateExternalOAuthServerRequestBody: {
+            metadata: existingConfig.metadata,
+          },
+        }),
+      }),
+    );
+    expect(mocks.fetchRemoteSessionIssuerMetadata).not.toHaveBeenCalled();
+  });
+
+  it("clears a provider-hosted issuer without discovery", async () => {
+    renderWizard({
+      existingConfig: { ...existingConfig, providerHosted: true },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use Gram-hosted metadata" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+    );
+
+    await waitFor(() => expect(mocks.updateExternalOAuth).toHaveBeenCalled());
     expect(mocks.updateExternalOAuth).toHaveBeenCalledWith(
       expect.objectContaining({
         request: expect.objectContaining({

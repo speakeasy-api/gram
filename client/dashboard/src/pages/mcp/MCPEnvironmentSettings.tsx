@@ -969,6 +969,17 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
   const storedMetadata = toolset.externalOauthServer?.metadata as
     | Record<string, unknown>
     | undefined;
+  const providerIssuer =
+    toolset.externalOauthServer?.authorizationServerIssuer ?? undefined;
+  const storedIssuer =
+    typeof storedMetadata?.issuer === "string" ? storedMetadata.issuer : "";
+  const existingConfig = storedMetadata
+    ? {
+        issuer: providerIssuer ?? metadataUpdateIssuer ?? storedIssuer,
+        metadata: storedMetadata,
+        providerHosted: providerIssuer != null,
+      }
+    : undefined;
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!toolset?.externalOauthServer;
@@ -1061,6 +1072,10 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
+        onManageMetadata={() => {
+          setIsOAuthDetailsModalOpen(false);
+          setIsOAuthModalOpen(true);
+        }}
         toolset={toolset}
       />
       <ConnectOAuthModal
@@ -1068,11 +1083,7 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
-        existingConfig={
-          metadataUpdateIssuer && storedMetadata
-            ? { issuer: metadataUpdateIssuer, metadata: storedMetadata }
-            : undefined
-        }
+        existingConfig={existingConfig}
       />
     </PageSection>
   );

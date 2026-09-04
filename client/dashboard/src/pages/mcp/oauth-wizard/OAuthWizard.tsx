@@ -2,6 +2,8 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
@@ -11,6 +13,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
 import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -18,18 +21,19 @@ import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { buildUpdateExternalOAuthServerMutation } from "@gram/client/react-query/updateExternalOAuthServer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AutoConfigureLoader } from "./AutoConfigureLoader";
 import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
+import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
 import { FatalErrorStep } from "./FatalErrorStep";
 import {
   oauthWizardMachine,
   selectWizardTitle,
   WizardContext,
 } from "./machine";
-import type { DiscoveredOAuth, Input } from "./machine-types";
+import type { DiscoveredOAuth, Input as WizardInput } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
@@ -43,6 +47,7 @@ import { createWizardServices } from "./services";
 export type ExistingExternalOAuthConfig = {
   issuer: string;
   metadata: Record<string, unknown>;
+  providerHosted?: boolean;
 };
 
 function OAuthWizard({
@@ -57,7 +62,7 @@ function OAuthWizard({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  initialPath?: Input["initialPath"];
+  initialPath?: WizardInput["initialPath"];
   existingConfig?: ExistingExternalOAuthConfig;
 }) {
   // Force the inner machine to remount after the modal close animation
@@ -78,6 +83,7 @@ function OAuthWizard({
           <ExistingConfigReview
             key={resetKey}
             config={existingConfig}
+            isOpen={isOpen}
             onClose={onClose}
             toolsetSlug={toolsetSlug}
           />
@@ -97,10 +103,12 @@ function OAuthWizard({
 
 function ExistingConfigReview({
   config,
+  isOpen,
   onClose,
   toolsetSlug,
 }: {
   config: ExistingExternalOAuthConfig;
+  isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
 }) {
@@ -109,32 +117,69 @@ function ExistingConfigReview({
   const [stage, setStage] = useState<"intro" | "review" | "clear" | "success">(
     "intro",
   );
-  const [verified, setVerified] = useState<{
-    authorizationEndpoint?: string;
-    tokenEndpoint?: string;
-  } | null>(null);
+  const [issuer, setIssuer] = useState(config.issuer);
+  const [verified, setVerified] = useState<RemoteSessionIssuerDraft | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const requestRef = useRef<{
+    generation: number;
+    controller?: AbortController;
+  }>({
+    generation: 0,
+  });
+
+  useEffect(() => {
+    if (isOpen) return;
+    requestRef.current.controller?.abort();
+    requestRef.current = { generation: requestRef.current.generation + 1 };
+    setStage("intro");
+    setIssuer(config.issuer);
+    setVerified(null);
+    setError(null);
+    setPending(false);
+  }, [config.issuer, isOpen]);
+
+  useEffect(
+    () => () => {
+      requestRef.current.controller?.abort();
+    },
+    [],
+  );
 
   const review = async () => {
+    const validationError = validateProviderIssuerUrl(issuer);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    requestRef.current.controller?.abort();
+    const controller = new AbortController();
+    const generation = requestRef.current.generation + 1;
+    requestRef.current = { generation, controller };
     setPending(true);
     setError(null);
     try {
       const result = await buildFetchRemoteSessionIssuerMetadataMutation(
         client,
       ).mutationFn({
-        request: { fetchIssuerMetadataRequestBody: { issuer: config.issuer } },
+        request: { fetchIssuerMetadataRequestBody: { issuer: issuer.trim() } },
+        options: { fetchOptions: { signal: controller.signal } },
       });
+      if (requestRef.current.generation !== generation) return;
       setVerified(result);
       setStage("review");
     } catch (err) {
+      if (requestRef.current.generation !== generation) return;
       setError(
         err instanceof Error
           ? err.message
           : "Could not verify provider metadata",
       );
     } finally {
-      setPending(false);
+      if (requestRef.current.generation === generation) setPending(false);
     }
   };
 
@@ -146,7 +191,7 @@ function ExistingConfigReview({
         request: {
           slug: toolsetSlug,
           updateExternalOAuthServerRequestBody: providerHosted
-            ? { authorizationServerIssuer: config.issuer }
+            ? { authorizationServerIssuer: verified?.issuer }
             : { metadata: config.metadata },
         },
       });
@@ -178,15 +223,36 @@ function ExistingConfigReview({
             Switching authorization-server metadata keeps existing tokens and
             registrations. Some clients may ask users to authenticate again.
           </Text>
+          {stage === "intro" && (
+            <Stack gap={2}>
+              <Label htmlFor="existing-oauth-issuer">Issuer URL</Label>
+              <Input
+                id="existing-oauth-issuer"
+                value={issuer}
+                onChange={(value) => {
+                  setIssuer(value);
+                  setVerified(null);
+                  setError(null);
+                }}
+                validate={(value) => validateProviderIssuerUrl(value) ?? true}
+              />
+            </Stack>
+          )}
           {stage === "review" && verified && (
             <Stack gap={2}>
-              <Text small>Issuer: {config.issuer}</Text>
+              <Text small>Issuer: {verified.issuer}</Text>
               <Text small>
                 Authorization endpoint:{" "}
                 {verified.authorizationEndpoint ?? "Not advertised"}
               </Text>
               <Text small>
                 Token endpoint: {verified.tokenEndpoint ?? "Not advertised"}
+              </Text>
+              <Text small>
+                RFC 9207 support:{" "}
+                {verified.authorizationResponseIssParameterSupported
+                  ? "Supported"
+                  : "Not advertised"}
               </Text>
             </Stack>
           )}
@@ -216,7 +282,9 @@ function ExistingConfigReview({
               {stage === "intro" && (
                 <>
                   <Button variant="secondary" onClick={() => setStage("clear")}>
-                    Keep Gram-hosted metadata
+                    {config.providerHosted
+                      ? "Use Gram-hosted metadata"
+                      : "Keep Gram-hosted metadata"}
                   </Button>
                   <Button onClick={() => void review()} disabled={pending}>
                     {pending ? "Reviewing..." : "Review update"}
@@ -255,7 +323,7 @@ function WizardBody({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  initialPath?: Input["initialPath"];
+  initialPath?: WizardInput["initialPath"];
 }) {
   const client = useSdkClient();
   const queryClient = useQueryClient();
@@ -295,7 +363,7 @@ function WizardBody({
     [client, queryClient, telemetry, toolsetSlug, authedFetch],
   );
 
-  const input: Input = {
+  const input: WizardInput = {
     discovered,
     initialPath,
     toolsetSlug,
@@ -419,7 +487,7 @@ export function ConnectOAuthModal({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  initialPath?: Input["initialPath"];
+  initialPath?: WizardInput["initialPath"];
   existingConfig?: ExistingExternalOAuthConfig;
 }): JSX.Element {
   const productTier = useProductTier();

@@ -149,8 +149,9 @@ export function ExternalOAuthForm({
             <Alert variant="warning">
               <AlertTitle>Compatibility mode</AlertTitle>
               <AlertDescription>
-                Use Gram-hosted metadata only when clients must reach the same
-                OAuth server through multiple origins.
+                Gram hosts authorization-server metadata in this mode. Modern
+                clients may reject multi-origin OAuth configurations without
+                issuer-bound responses.
               </AlertDescription>
             </Alert>
             <Stack gap={2}>

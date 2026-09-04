@@ -1,8 +1,8 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/sources/sources-hooks", () => ({
   useExternalMcpOAuthConfigStatus: () => "configured",
@@ -73,7 +73,16 @@ vi.mock("./MCPDetails", () => ({
       {children}
     </section>
   ),
-  OAuthDetailsModal: () => null,
+  OAuthDetailsModal: ({
+    isOpen,
+    onManageMetadata,
+  }: {
+    isOpen: boolean;
+    onManageMetadata?: () => void;
+  }) =>
+    isOpen ? (
+      <button onClick={onManageMetadata}>Manage metadata source</button>
+    ) : null,
   ConnectOAuthModal: ({
     isOpen,
     existingConfig,
@@ -96,6 +105,8 @@ vi.mock(
 );
 
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
+
+afterEach(cleanup);
 
 describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
   it("renders the eligible recommendation and opens its review entry point", () => {
@@ -123,6 +134,38 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
 
     expect(screen.getByTestId("oauth-review-dialog").textContent).toBe(
       "https://auth.example.com",
+    );
+  });
+
+  it("opens metadata management for an existing provider-hosted config", () => {
+    const queryClient = new QueryClient();
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 1 },
+      externalOauthServer: {
+        authorizationServerIssuer: "https://current.example.com",
+        metadata: { issuer: "https://original.example.com" },
+      },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Manage metadata source" }),
+    );
+
+    expect(screen.getByTestId("oauth-review-dialog").textContent).toBe(
+      "https://current.example.com",
     );
   });
 });
