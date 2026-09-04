@@ -136,7 +136,10 @@ func TestKeysService_AgentKeyAllowsExactAuthorizeGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, authCtx.UserID, created.CreatedByUserID, "caller remains the immutable authorizer")
 
-	_, err = ti.conn.Exec(ctx, "DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3", authCtx.ActiveOrganizationID, "user:"+authCtx.UserID, string(authz.ScopeAgentAuthorize))
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+	})
 	require.NoError(t, err)
 	_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agent.ID.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -186,6 +189,7 @@ func TestKeysService_AgentKeyParentAdmission(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
+//nolint:paralleltest,tparallel // Subtests share mutable feature-flag state.
 func TestKeysService_AgentKeyValidation(t *testing.T) {
 	t.Parallel()
 
@@ -267,17 +271,11 @@ func agentAPIKeyScheme() *security.APIKeyScheme {
 	return &security.APIKeyScheme{Name: constants.KeySecurityScheme, RequiredScopes: []string{auth.APIKeyScopeConsumer.String()}}
 }
 
-//go:fix inline
-func stringPtr(value string) *string { return new(value) }
-
-//go:fix inline
-func intPtr(value int) *int { return new(value) }
-
 func cloneGrant(grant *gen.AgentPolicyGrantForm) *gen.AgentPolicyGrantForm {
-	copy := *grant
+	cloned := *grant
 	selector := *grant.Selector
-	copy.Selector = &selector
-	return &copy
+	cloned.Selector = &selector
+	return &cloned
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
