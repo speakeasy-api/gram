@@ -137,11 +137,16 @@ func TestKeysService_AgentKeyAllowsExactAuthorizeGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, authCtx.UserID, created.CreatedByUserID, "caller remains the immutable authorizer")
 
-	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+	authorizeSelector, err := authz.NewSelector(authz.ScopeAgentAuthorize, agent.ID.String()).MarshalJSON()
+	require.NoError(t, err)
+	deleted, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		Scope:          string(authz.ScopeAgentAuthorize),
+		Selectors:      authorizeSelector,
 	})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
 	_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agent.ID.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
