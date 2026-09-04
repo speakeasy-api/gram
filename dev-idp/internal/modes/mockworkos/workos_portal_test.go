@@ -91,7 +91,7 @@ func TestPortalPageLinksThroughCompleteEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/portal?intent=sso&organization=org_devidp_acme&success_url=https%3A%2F%2Fdashboard.example.com%2Fcb%3Fa%3D1%26b%3D2", nil)
 	h.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `href="/mock-workos/portal/complete?intent=sso&amp;organization=org_devidp_acme&amp;success_url=https%3A%2F%2Fdashboard.example.com%2Fcb%3Fa%3D1%26b%3D2"`)
+	require.Contains(t, rec.Body.String(), `href="/workos/portal/complete?intent=sso&amp;organization=org_devidp_acme&amp;success_url=https%3A%2F%2Fdashboard.example.com%2Fcb%3Fa%3D1%26b%3D2"`)
 }
 
 func TestGeneratePortalLinkUsesExternalURL(t *testing.T) {
@@ -109,6 +109,6 @@ func TestGeneratePortalLinkUsesExternalURL(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	require.Equal(t,
-		"http://idp.example.com/mock-workos/portal?intent=sso&organization=org_devidp_acme&success_url=https%3A%2F%2Fdashboard.example.com%2Fcb%3Fa%3D1%26b%3D2",
+		"http://idp.example.com/workos/portal?intent=sso&organization=org_devidp_acme&success_url=https%3A%2F%2Fdashboard.example.com%2Fcb%3Fa%3D1%26b%3D2",
 		out.Link)
 }

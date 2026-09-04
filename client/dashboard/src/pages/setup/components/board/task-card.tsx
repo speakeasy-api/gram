@@ -1,4 +1,4 @@
-import type { DragEvent, KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { formatRelativeTime } from "@/lib/dates";
@@ -7,9 +7,6 @@ import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
 import { RemindButton } from "./remind-button";
 import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
-
-/** Drag payload type: the task id travels as this custom MIME type. */
-export const TASK_DRAG_TYPE = "application/x-gram-onboarding-task";
 
 // Inline controls sit inside a card whose own click opens the task dialog.
 const stopPropagation = (event: MouseEvent) => event.stopPropagation();
@@ -69,14 +66,6 @@ export function TaskCard({
   onToggleHidden,
   onRemind,
 }: TaskCardProps): JSX.Element {
-  // Server-verified tasks are pinned to Done, so there is nowhere to drag them.
-  const draggable = !task.verified;
-
-  const handleDragStart = (event: DragEvent<HTMLElement>) => {
-    event.dataTransfer.setData(TASK_DRAG_TYPE, task.id);
-    event.dataTransfer.effectAllowed = "move";
-  };
-
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Keys pressed inside the assignee picker or menu belong to them.
     if (event.target !== event.currentTarget) return;
@@ -91,19 +80,25 @@ export function TaskCard({
       role="button"
       tabIndex={0}
       aria-label={`${task.title}, ${TASK_STATUS_META[task.status].label}`}
-      draggable={draggable}
-      onDragStart={draggable ? handleDragStart : undefined}
       onClick={onOpen}
       onKeyDown={handleKeyDown}
       className={cn(
         "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex cursor-pointer flex-col gap-2 border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
-        draggable && "cursor-grab active:cursor-grabbing",
         task.hidden && "opacity-60",
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="text-eyebrow pt-1">{task.suggestedOwner}</span>
         <div className="flex items-center gap-1" onClick={stopPropagation}>
+          <span className="text-muted-foreground mr-1 flex items-center gap-1.5 text-xs">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                TASK_STATUS_META[task.status].dotClassName,
+              )}
+            />
+            {TASK_STATUS_META[task.status].label}
+          </span>
           {task.badge && <Badge size="sm">{task.badge}</Badge>}
           {task.verified && (
             <Badge variant="success" size="sm">

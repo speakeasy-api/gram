@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { OnboardingBoard } from "./onboarding-board";
+import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -59,19 +60,34 @@ describe("OnboardingBoard", () => {
     );
   });
 
-  it("puts server-verified tasks in Done and the rest in To Do", () => {
+  it("groups Quinn's consolidated steps into workstreams", () => {
     renderBoard();
 
-    const done = within(screen.getByRole("region", { name: "Done column" }));
-    expect(done.getByText("Connect identity provider")).toBeTruthy();
-    expect(done.getByText("Verified")).toBeTruthy();
+    const expectedTasks = {
+      "Connect identity": ["Connect identity provider", "Directory sync"],
+      "Observe agents": [
+        "Instrument agents",
+        "Additional agent configuration",
+        "Confirm traffic",
+      ],
+      "MCP Gateway": [
+        "Create plugin marketplace",
+        "Distribute MCP servers",
+        "Set up Platform MCP",
+      ],
+      "Secure agent traffic": ["Configure policies"],
+    };
 
-    const todo = within(screen.getByRole("region", { name: "To Do column" }));
-    expect(todo.getByText("Directory sync")).toBeTruthy();
-    expect(todo.getByText("Set up Platform MCP")).toBeTruthy();
-    expect(todo.queryByText("Connect identity provider")).toBeNull();
+    for (const [workstream, tasks] of Object.entries(expectedTasks)) {
+      const region = within(screen.getByRole("region", { name: workstream }));
+      for (const task of tasks) expect(region.getByText(task)).toBeTruthy();
+    }
 
-    expect(screen.getByText("1 of 9 done")).toBeTruthy();
+    const connect = within(
+      screen.getByRole("region", { name: "Connect identity" }),
+    );
+    expect(connect.getByText("Verified")).toBeTruthy();
+    expect(screen.getByText("1 of 8 required tasks complete")).toBeTruthy();
   });
 
   it("restores board state saved for the org", () => {
@@ -87,10 +103,21 @@ describe("OnboardingBoard", () => {
 
     renderBoard();
 
-    const awaiting = within(
-      screen.getByRole("region", { name: "Awaiting Support column" }),
+    const observe = within(
+      screen.getByRole("region", { name: "Observe agents" }),
     );
-    expect(awaiting.getByText("Confirm traffic")).toBeTruthy();
-    expect(awaiting.getByText("security@example.com")).toBeTruthy();
+    expect(observe.getByText("Confirm traffic")).toBeTruthy();
+    expect(observe.getByText("Awaiting Support")).toBeTruthy();
+    expect(observe.getByText("security@example.com")).toBeTruthy();
+  });
+
+  it("places every consolidated step in exactly one workstream", () => {
+    const configuredIds = ONBOARDING_WORKSTREAMS.flatMap(
+      (workstream) => workstream.taskIds,
+    );
+    expect(new Set(configuredIds).size).toBe(configuredIds.length);
+    expect(new Set(configuredIds)).toEqual(
+      new Set(ONBOARDING_TASKS.map((task) => task.id)),
+    );
   });
 });

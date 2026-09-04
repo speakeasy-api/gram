@@ -5,18 +5,17 @@ import { Switch } from "@/components/ui/Switch";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
-import { BoardColumn } from "./board-column";
 import { TaskCard } from "./task-card";
 import { TaskDialog } from "./task-dialog";
 import {
   isOnboardingTaskId,
   type OnboardingTaskId,
-  TASK_STATUSES,
+  ONBOARDING_WORKSTREAMS,
 } from "./tasks";
 import { useOnboardingBoard } from "./use-onboarding-board";
+import { WorkstreamColumn } from "./workstream-column";
 
-const COLUMN_GRID_CLASS =
-  "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4";
+const WORKSTREAM_GRID_CLASS = "grid grid-cols-1 gap-4 lg:grid-cols-2";
 
 function BoardHeader({
   doneCount,
@@ -65,7 +64,7 @@ function BoardHeader({
               />
             </div>
             <span className="text-foreground text-sm tabular-nums">
-              {doneCount} of {totalCount} done
+              {doneCount} of {totalCount} required tasks complete
             </span>
           </div>
         </div>
@@ -86,9 +85,9 @@ function BoardHeader({
 
 function BoardSkeleton(): JSX.Element {
   return (
-    <div className={COLUMN_GRID_CLASS}>
-      {TASK_STATUSES.map((status) => (
-        <Skeleton key={status}>
+    <div className={WORKSTREAM_GRID_CLASS}>
+      {ONBOARDING_WORKSTREAMS.map((workstream) => (
+        <Skeleton key={workstream.id}>
           <div className="h-6 w-2/3" />
           <div className="h-28 w-full" />
           <div className="h-28 w-full" />
@@ -99,9 +98,9 @@ function BoardSkeleton(): JSX.Element {
 }
 
 /**
- * The organization setup flow as a board: one card per setup task, grouped by
- * status. Cards open the original setup step in a dialog; `?task=<id>` deep
- * links straight to one, which is what reminder emails will point at.
+ * The organization setup flow as a board: Quinn's consolidated setup tasks,
+ * grouped into outcome-oriented workstreams. Cards open the matching setup
+ * step in a dialog; `?task=<id>` deep links straight to one.
  */
 export function OnboardingBoard(): JSX.Element {
   const navigate = useNavigate();
@@ -145,7 +144,12 @@ export function OnboardingBoard(): JSX.Element {
 
   const activeTasks = board.tasks.filter((task) => !task.hidden);
   const hiddenCount = board.tasks.length - activeTasks.length;
-  const doneCount = activeTasks.filter((task) => task.status === "done").length;
+  const requiredTasks = activeTasks.filter(
+    (task) => task.id !== "platform-mcp",
+  );
+  const doneCount = requiredTasks.filter(
+    (task) => task.status === "done",
+  ).length;
   const visibleTasks =
     board.canHideTasks && showHidden ? board.tasks : activeTasks;
 
@@ -161,7 +165,7 @@ export function OnboardingBoard(): JSX.Element {
         <div className="flex w-full max-w-7xl flex-col gap-8">
           <BoardHeader
             doneCount={doneCount}
-            totalCount={activeTasks.length}
+            totalCount={requiredTasks.length}
             hiddenCount={hiddenCount}
             canHide={board.canHideTasks}
             showHidden={showHidden}
@@ -171,19 +175,22 @@ export function OnboardingBoard(): JSX.Element {
           {board.isLoading ? (
             <BoardSkeleton />
           ) : (
-            <div className={COLUMN_GRID_CLASS}>
-              {TASK_STATUSES.map((status) => {
-                const columnTasks = visibleTasks.filter(
-                  (task) => task.status === status,
-                );
+            <div
+              role="region"
+              aria-label="Setup workstreams"
+              className={WORKSTREAM_GRID_CLASS}
+            >
+              {ONBOARDING_WORKSTREAMS.map((workstream) => {
+                const workstreamTasks = workstream.taskIds
+                  .map((id) => visibleTasks.find((task) => task.id === id))
+                  .filter((task) => task !== undefined);
                 return (
-                  <BoardColumn
-                    key={status}
-                    status={status}
-                    count={columnTasks.length}
-                    onDropTask={(id) => board.setStatus(id, status)}
+                  <WorkstreamColumn
+                    key={workstream.id}
+                    workstream={workstream}
+                    tasks={workstreamTasks}
                   >
-                    {columnTasks.map((task) => (
+                    {workstreamTasks.map((task) => (
                       <TaskCard
                         key={task.id}
                         task={task}
@@ -198,7 +205,7 @@ export function OnboardingBoard(): JSX.Element {
                         onRemind={() => board.remind(task.id)}
                       />
                     ))}
-                  </BoardColumn>
+                  </WorkstreamColumn>
                 );
               })}
             </div>

@@ -38,7 +38,13 @@ export function TaskStep({
     case "connect-idp":
       return <ConnectIdpStep onSkip={onClose} onComplete={onComplete} />;
     case "directory-sync":
-      return <DirectorySyncStep onComplete={onComplete} onBack={onClose} />;
+      return (
+        <DirectorySyncStep
+          onComplete={onComplete}
+          onSkip={onClose}
+          onBack={onClose}
+        />
+      );
     case "create-marketplace":
       return <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />;
     case "instrument-agents":

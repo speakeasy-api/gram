@@ -121,6 +121,45 @@ export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
   },
 ];
 
+export interface OnboardingWorkstreamDefinition {
+  id: "connect" | "observe" | "distribute" | "secure";
+  title: string;
+  description: string;
+  taskIds: OnboardingTaskId[];
+}
+
+/** Outcome-oriented groups for the consolidated onboarding tasks. */
+export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
+  {
+    id: "connect",
+    title: "Connect identity",
+    description: "Authenticate people and agents. Sync IDP roles.",
+    taskIds: ["connect-idp", "directory-sync"],
+  },
+  {
+    id: "observe",
+    title: "Observe agents",
+    description: "Instrument agents, add integrations, and verify traffic.",
+    taskIds: [
+      "instrument-agents",
+      "additional-agent-config",
+      "confirm-traffic",
+    ],
+  },
+  {
+    id: "distribute",
+    title: "MCP Gateway",
+    description: "Publish and distribute approved MCP servers.",
+    taskIds: ["create-marketplace", "distribute-servers", "platform-mcp"],
+  },
+  {
+    id: "secure",
+    title: "Secure agent traffic",
+    description: "Apply the initial policy controls.",
+    taskIds: ["configure-policies"],
+  },
+];
+
 export function isOnboardingTaskId(value: string): value is OnboardingTaskId {
   return ONBOARDING_TASKS.some((task) => task.id === value);
 }
