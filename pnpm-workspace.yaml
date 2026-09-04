@@ -20,7 +20,7 @@ catalog:
   "@tanstack/react-query": 5.101.4
   "@types/react": ^19.2.18
   "@types/react-dom": ^19.2.4
-  "@assistant-ui/react": ^0.15.13
+  "@assistant-ui/react": ^0.15.16
   "@vitejs/plugin-react": ^6.0.5
   ai: ^7.0.66
   "lucide-react": ^1.28.0
