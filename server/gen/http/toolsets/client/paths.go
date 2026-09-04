@@ -62,6 +62,11 @@ func AddExternalOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.addExternalOAuthServer"
 }
 
+// UpdateExternalOAuthServerToolsetsPath returns the URL path to the toolsets service updateExternalOAuthServer HTTP endpoint.
+func UpdateExternalOAuthServerToolsetsPath() string {
+	return "/rpc/toolsets.updateExternalOAuthServer"
+}
+
 // RemoveOAuthServerToolsetsPath returns the URL path to the toolsets service removeOAuthServer HTTP endpoint.
 func RemoveOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.removeOAuthServer"

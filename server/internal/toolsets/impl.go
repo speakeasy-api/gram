@@ -33,6 +33,7 @@ import (
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
@@ -53,6 +55,7 @@ type Service struct {
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
+	policy               *guardian.Policy
 	repo                 *repo.Queries
 	environmentRepo      *environmentsRepo.Queries
 	auth                 *auth.Auth
@@ -73,6 +76,7 @@ var _ gen.Service = (*Service)(nil)
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	policy *guardian.Policy,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cacheAdapter cache.Cache,
@@ -87,6 +91,7 @@ func NewService(
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
 		logger:               logger,
 		db:                   db,
+		policy:               policy,
 		repo:                 repo.New(db),
 		auth:                 auth.New(logger, db, sessions, authzEngine),
 		authz:                authzEngine,
@@ -950,6 +955,79 @@ func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.Che
 	return taken.Bool, nil
 }
 
+const (
+	externalOAuthServerSlugMaxLength = 40
+	externalOAuthServerSlugAttempts  = 5
+)
+
+func generatedExternalOAuthServerSlug(toolsetSlug, randomSuffix string) string {
+	suffix := "-oauth"
+	if randomSuffix != "" {
+		suffix += "-" + randomSuffix
+	}
+
+	return toolsetSlug[:min(len(toolsetSlug), externalOAuthServerSlugMaxLength-len(suffix))] + suffix
+}
+
+func createGeneratedExternalOAuthServerMetadata(
+	ctx context.Context,
+	queries *oauthRepo.Queries,
+	projectID uuid.UUID,
+	toolsetSlug string,
+	metadata []byte,
+	authorizationServerIssuer pgtype.Text,
+) (oauthRepo.ExternalOauthServerMetadatum, error) {
+	for attempt := range externalOAuthServerSlugAttempts {
+		randomSuffix := ""
+		if attempt > 0 {
+			var err error
+			randomSuffix, err = conv.GenerateRandomSlug(5)
+			if err != nil {
+				return oauthRepo.ExternalOauthServerMetadatum{}, fmt.Errorf("generate external OAuth server slug suffix: %w", err)
+			}
+		}
+
+		row, err := queries.CreateGeneratedExternalOAuthServerMetadata(ctx, oauthRepo.CreateGeneratedExternalOAuthServerMetadataParams{
+			ProjectID:                 projectID,
+			Slug:                      generatedExternalOAuthServerSlug(toolsetSlug, randomSuffix),
+			Metadata:                  metadata,
+			AuthorizationServerIssuer: authorizationServerIssuer,
+		})
+		if err == nil {
+			return row, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return row, fmt.Errorf("create generated external OAuth server metadata: %w", err)
+		}
+	}
+
+	return oauthRepo.ExternalOauthServerMetadatum{}, fmt.Errorf("generated external OAuth server slug retries exhausted: %w", pgx.ErrNoRows)
+}
+
+func prepareExternalOAuthSource(ctx context.Context, policy *guardian.Policy, metadata any, issuer *string) ([]byte, pgtype.Text, error) {
+	nullIssuer := pgtype.Text{String: "", Valid: false}
+	if (metadata == nil) == (issuer == nil) {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, nil, "exactly one of metadata and authorization_server_issuer is required")
+	}
+
+	if issuer != nil {
+		if _, err := wellknown.DiscoverAuthorizationServerMetadata(ctx, policy, *issuer); err != nil {
+			return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "invalid authorization server issuer")
+		}
+		return nil, conv.ToPGText(*issuer), nil
+	}
+
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "invalid metadata format")
+	}
+	var metadataObject map[string]any
+	if err := json.Unmarshal(metadataBytes, &metadataObject); err != nil || metadataObject == nil {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "external OAuth metadata must be a JSON object")
+	}
+	return metadataBytes, nullIssuer, nil
+}
+
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -960,20 +1038,12 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").LogError(ctx, s.logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external oauth server configuration").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tr := s.repo.WithTx(dbtx)
-
-	existingToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	existingToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: existingToolset.ID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID, authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -989,19 +1059,43 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").LogError(ctx, s.logger)
 	}
 
-	// Marshal metadata to JSON bytes
-	metadataBytes, err := json.Marshal(payload.ExternalOauthServer.Metadata)
+	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.ExternalOauthServer.Metadata, payload.ExternalOauthServer.AuthorizationServerIssuer)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid metadata format").LogError(ctx, s.logger)
+		return nil, err
 	}
 
-	// Create the external OAuth server metadata entry
-	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      conv.ToLower(payload.ExternalOauthServer.Slug),
-		Metadata:  metadataBytes,
-	})
+	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external oauth server configuration").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	// Create the external OAuth server metadata entry. Generated slugs use a
+	// conflict-safe insert so a collision does not abort the transaction.
+	oauthQueries := s.oauthRepo.WithTx(dbtx)
+	var externalOAuthServer oauthRepo.ExternalOauthServerMetadatum
+	if payload.ExternalOauthServer.Slug == nil {
+		externalOAuthServer, err = createGeneratedExternalOAuthServerMetadata(
+			ctx, oauthQueries, *authCtx.ProjectID, conv.ToLower(payload.Slug), metadataBytes, authorizationServerIssuer,
+		)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "could not generate a unique external OAuth server slug").LogError(ctx, s.logger)
+		}
+	} else {
+		externalOAuthServer, err = oauthQueries.CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
+			ProjectID:                 *authCtx.ProjectID,
+			Slug:                      conv.ToLower(*payload.ExternalOauthServer.Slug),
+			Metadata:                  metadataBytes,
+			AuthorizationServerIssuer: authorizationServerIssuer,
+		})
+	}
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "external OAuth server slug already exists").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create external OAuth server").LogError(ctx, s.logger)
 	}
 
@@ -1024,23 +1118,100 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	}
 
 	if err := s.audit.LogToolsetAttachExternalOAuth(ctx, dbtx, audit.LogToolsetAttachExternalOAuthEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		ToolsetURN:              urn.NewToolset(row.ID),
-		ToolsetName:             existingToolset.Name,
-		ToolsetSlug:             row.Slug,
-		ToolsetVersionAfter:     updatedToolset.ToolsetVersion,
-		ExternalOAuthServerID:   externalOAuthServer.ID.String(),
-		ExternalOAuthServerSlug: externalOAuthServer.Slug,
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ProjectID:                    *authCtx.ProjectID,
+		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:             authCtx.Email,
+		ActorSlug:                    nil,
+		ToolsetURN:                   urn.NewToolset(row.ID),
+		ToolsetName:                  existingToolset.Name,
+		ToolsetSlug:                  row.Slug,
+		ToolsetVersionAfter:          updatedToolset.ToolsetVersion,
+		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
+		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
+		AuthorizationServerIssuerSet: authorizationServerIssuer.Valid,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding external OAuth server").LogError(ctx, s.logger)
+	}
+
+	return updatedToolset, nil
+}
+
+func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.UpdateExternalOAuthServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	existingToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID, authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+	if existingToolset.ExternalOauthServer == nil {
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+
+	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.Metadata, payload.AuthorizationServerIssuer)
+	if err != nil {
+		return nil, err
+	}
+	externalOAuthServerID, err := uuid.Parse(existingToolset.ExternalOauthServer.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid stored external OAuth server ID").LogError(ctx, s.logger)
+	}
+	toolsetID, err := uuid.Parse(existingToolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid stored toolset ID").LogError(ctx, s.logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external OAuth server configuration").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).UpdateExternalOAuthServerSource(ctx, oauthRepo.UpdateExternalOAuthServerSourceParams{
+		Metadata:                  metadataBytes,
+		AuthorizationServerIssuer: authorizationServerIssuer,
+		ProjectID:                 *authCtx.ProjectID,
+		ID:                        externalOAuthServerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, err, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update external OAuth server").LogError(ctx, s.logger)
+	}
+
+	updatedToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.audit.LogToolsetUpdateExternalOAuthIssuer(ctx, dbtx, audit.LogToolsetUpdateExternalOAuthIssuerEvent{
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ProjectID:                    *authCtx.ProjectID,
+		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:             authCtx.Email,
+		ActorSlug:                    nil,
+		ToolsetURN:                   urn.NewToolset(toolsetID),
+		ToolsetName:                  existingToolset.Name,
+		ToolsetSlug:                  string(existingToolset.Slug),
+		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
+		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
+		AuthorizationServerIssuerSet: authorizationServerIssuer.Valid,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log external OAuth server update").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating external OAuth server").LogError(ctx, s.logger)
 	}
 
 	return updatedToolset, nil

@@ -177,7 +177,7 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Attribute("project_id", String, "The project ID this external OAuth server belongs to")
 	Attribute("slug", Slug, "The slug of the external OAuth server")
 	Attribute("metadata", Any, "The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
-	Attribute("authorization_server_issuer", String, "The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present.", func() {
+	Attribute("authorization_server_issuer", String, "The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.", func() {
 		Format(FormatURI)
 		MaxLength(500)
 	})
@@ -195,7 +195,10 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 var ExternalOAuthServerForm = Type("ExternalOAuthServerForm", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("slug", Slug, "The slug of the external OAuth server")
-	Attribute("metadata", Any, "The metadata for the external OAuth server")
-	Required("slug", "metadata")
+	Attribute("slug", Slug, "Optional external OAuth server slug retained for compatibility. Gram generates one from the toolset slug when omitted.")
+	Attribute("metadata", Any, "Validated RFC 8414 metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.", func() {
+		Format(FormatURI)
+		MaxLength(500)
+	})
 })

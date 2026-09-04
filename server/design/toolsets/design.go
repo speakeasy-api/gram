@@ -300,6 +300,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddExternalOAuthServer"}`)
 	})
 
+	Method("updateExternalOAuthServer", func() {
+		Description("Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
+
+		Payload(func() {
+			Extend(UpdateExternalOAuthServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.updateExternalOAuthServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateExternalOAuthServer"}`)
+	})
+
 	Method("removeOAuthServer", func() {
 		Description("Remove OAuth server association from a toolset")
 
@@ -443,6 +468,17 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 	Attribute("external_oauth_server", shared.ExternalOAuthServerForm, "The external OAuth server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "external_oauth_server")
+})
+
+var UpdateExternalOAuthServerForm = Type("UpdateExternalOAuthServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset whose attached external OAuth server is updated")
+	Attribute("metadata", Any, "Validated RFC 8414 metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
+		Format(FormatURI)
+		MaxLength(500)
+	})
+	security.ProjectPayload()
+	Required("slug")
 })
 
 var SetUserSessionIssuerForm = Type("SetUserSessionIssuerForm", func() {

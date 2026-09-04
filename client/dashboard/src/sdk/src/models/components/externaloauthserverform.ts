@@ -3,32 +3,46 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ExternalOAuthServerForm = {
   /**
-   * The metadata for the external OAuth server
+   * Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
    */
-  metadata: any;
+  authorizationServerIssuer?: string | undefined;
+  /**
+   * Validated RFC 8414 metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+   */
+  metadata?: any | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
-  slug: string;
+  slug?: string | undefined;
 };
 
 /** @internal */
 export type ExternalOAuthServerForm$Outbound = {
-  metadata: any;
-  slug: string;
+  authorization_server_issuer?: string | undefined;
+  metadata?: any | undefined;
+  slug?: string | undefined;
 };
 
 /** @internal */
 export const ExternalOAuthServerForm$outboundSchema: z.ZodMiniType<
   ExternalOAuthServerForm$Outbound,
   ExternalOAuthServerForm
-> = z.object({
-  metadata: z.any(),
-  slug: z.string(),
-});
+> = z.pipe(
+  z.object({
+    authorizationServerIssuer: z.optional(z.string()),
+    metadata: z.optional(z.any()),
+    slug: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      authorizationServerIssuer: "authorization_server_issuer",
+    });
+  }),
+);
 
 export function externalOAuthServerFormToJSON(
   externalOAuthServerForm: ExternalOAuthServerForm,

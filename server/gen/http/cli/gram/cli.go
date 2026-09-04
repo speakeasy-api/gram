@@ -171,7 +171,7 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
@@ -3486,6 +3486,13 @@ func ParseEndpoint(
 		toolsetsAddExternalOAuthServerApikeyTokenFlag      = toolsetsAddExternalOAuthServerFlags.String("apikey-token", "", "")
 		toolsetsAddExternalOAuthServerProjectSlugInputFlag = toolsetsAddExternalOAuthServerFlags.String("project-slug-input", "", "")
 
+		toolsetsUpdateExternalOAuthServerFlags                = flag.NewFlagSet("update-externaloauth-server", flag.ExitOnError)
+		toolsetsUpdateExternalOAuthServerBodyFlag             = toolsetsUpdateExternalOAuthServerFlags.String("body", "REQUIRED", "")
+		toolsetsUpdateExternalOAuthServerSlugFlag             = toolsetsUpdateExternalOAuthServerFlags.String("slug", "REQUIRED", "")
+		toolsetsUpdateExternalOAuthServerSessionTokenFlag     = toolsetsUpdateExternalOAuthServerFlags.String("session-token", "", "")
+		toolsetsUpdateExternalOAuthServerApikeyTokenFlag      = toolsetsUpdateExternalOAuthServerFlags.String("apikey-token", "", "")
+		toolsetsUpdateExternalOAuthServerProjectSlugInputFlag = toolsetsUpdateExternalOAuthServerFlags.String("project-slug-input", "", "")
+
 		toolsetsRemoveOAuthServerFlags                = flag.NewFlagSet("removeoauth-server", flag.ExitOnError)
 		toolsetsRemoveOAuthServerSlugFlag             = toolsetsRemoveOAuthServerFlags.String("slug", "REQUIRED", "")
 		toolsetsRemoveOAuthServerSessionTokenFlag     = toolsetsRemoveOAuthServerFlags.String("session-token", "", "")
@@ -4581,6 +4588,7 @@ func ParseEndpoint(
 	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
+	toolsetsUpdateExternalOAuthServerFlags.Usage = toolsetsUpdateExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
 	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
@@ -6885,6 +6893,9 @@ func ParseEndpoint(
 
 			case "add-externaloauth-server":
 				epf = toolsetsAddExternalOAuthServerFlags
+
+			case "update-externaloauth-server":
+				epf = toolsetsUpdateExternalOAuthServerFlags
 
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
@@ -9206,6 +9217,9 @@ func ParseEndpoint(
 			case "add-externaloauth-server":
 				endpoint = c.AddExternalOAuthServer()
 				data, err = toolsetsc.BuildAddExternalOAuthServerPayload(*toolsetsAddExternalOAuthServerBodyFlag, *toolsetsAddExternalOAuthServerSlugFlag, *toolsetsAddExternalOAuthServerSessionTokenFlag, *toolsetsAddExternalOAuthServerApikeyTokenFlag, *toolsetsAddExternalOAuthServerProjectSlugInputFlag)
+			case "update-externaloauth-server":
+				endpoint = c.UpdateExternalOAuthServer()
+				data, err = toolsetsc.BuildUpdateExternalOAuthServerPayload(*toolsetsUpdateExternalOAuthServerBodyFlag, *toolsetsUpdateExternalOAuthServerSlugFlag, *toolsetsUpdateExternalOAuthServerSessionTokenFlag, *toolsetsUpdateExternalOAuthServerApikeyTokenFlag, *toolsetsUpdateExternalOAuthServerProjectSlugInputFlag)
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerApikeyTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
@@ -23759,6 +23773,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is available`)
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
+	fmt.Fprintln(os.Stderr, `    update-externaloauth-server: Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
 	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
@@ -24025,7 +24040,33 @@ func toolsetsAddExternalOAuthServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets add-externaloauth-server --body '{\n      \"external_oauth_server\": {\n         \"metadata\": \"abc123\",\n         \"slug\": \"aaa\"\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets add-externaloauth-server --body '{\n      \"external_oauth_server\": {\n         \"authorization_server_issuer\": \"aaa\",\n         \"metadata\": \"abc123\",\n         \"slug\": \"aaa\"\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsUpdateExternalOAuthServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets update-externaloauth-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets update-externaloauth-server --body '{\n      \"authorization_server_issuer\": \"aaa\",\n      \"metadata\": \"abc123\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsRemoveOAuthServerUsage() {
