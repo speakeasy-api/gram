@@ -147,7 +147,6 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
       oauthEnablementMetadata: { oauth2SecurityCount: 1 },
       externalOauthServer: {
         authorizationServerIssuer: "https://current.example.com",
-        metadata: { issuer: "https://original.example.com" },
       },
     } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
 

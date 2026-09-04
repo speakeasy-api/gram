@@ -973,13 +973,14 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
     toolset.externalOauthServer?.authorizationServerIssuer ?? undefined;
   const storedIssuer =
     typeof storedMetadata?.issuer === "string" ? storedMetadata.issuer : "";
-  const existingConfig = storedMetadata
-    ? {
-        issuer: providerIssuer ?? metadataUpdateIssuer ?? storedIssuer,
-        metadata: storedMetadata,
-        providerHosted: providerIssuer != null,
-      }
-    : undefined;
+  const existingConfig =
+    providerIssuer || storedMetadata
+      ? {
+          issuer: providerIssuer ?? metadataUpdateIssuer ?? storedIssuer,
+          metadata: storedMetadata,
+          providerHosted: providerIssuer != null,
+        }
+      : undefined;
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!toolset?.externalOauthServer;

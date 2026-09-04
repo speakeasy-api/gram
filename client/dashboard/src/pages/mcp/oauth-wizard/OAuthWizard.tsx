@@ -46,7 +46,7 @@ import { createWizardServices } from "./services";
 
 export type ExistingExternalOAuthConfig = {
   issuer: string;
-  metadata: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   providerHosted?: boolean;
 };
 
@@ -184,6 +184,7 @@ function ExistingConfigReview({
   };
 
   const update = async (providerHosted: boolean) => {
+    if (!providerHosted && !config.metadata) return;
     setPending(true);
     setError(null);
     try {
@@ -254,6 +255,13 @@ function ExistingConfigReview({
                   ? "Supported"
                   : "Not advertised"}
               </Text>
+              {!!verified.discoveryWarnings?.length && (
+                <Alert variant="warning">
+                  <AlertDescription>
+                    {verified.discoveryWarnings.join(" ")}
+                  </AlertDescription>
+                </Alert>
+              )}
             </Stack>
           )}
           {stage === "clear" && (
@@ -281,11 +289,16 @@ function ExistingConfigReview({
             <div className="flex gap-2">
               {stage === "intro" && (
                 <>
-                  <Button variant="secondary" onClick={() => setStage("clear")}>
-                    {config.providerHosted
-                      ? "Use Gram-hosted metadata"
-                      : "Keep Gram-hosted metadata"}
-                  </Button>
+                  {config.metadata && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setStage("clear")}
+                    >
+                      {config.providerHosted
+                        ? "Use Gram-hosted metadata"
+                        : "Keep Gram-hosted metadata"}
+                    </Button>
+                  )}
                   <Button onClick={() => void review()} disabled={pending}>
                     {pending ? "Reviewing..." : "Review update"}
                   </Button>

@@ -270,7 +270,9 @@ describe("OAuthWizard - external OAuth sources", () => {
       tokenEndpoint: "https://auth.example.com/token",
       authorizationResponseIssParameterSupported: true,
       clientIdMetadataDocumentSupported: false,
-      discoveryWarnings: [],
+      discoveryWarnings: [
+        'discovery issuer "https://other.example.com" does not match requested "https://auth.example.com"',
+      ],
       oidc: false,
       passthrough: true,
     });
@@ -291,6 +293,9 @@ describe("OAuthWizard - external OAuth sources", () => {
     expect(screen.getByText("https://auth.example.com/token")).toBeTruthy();
     expect(screen.getByText("RFC 9207 support")).toBeTruthy();
     expect(screen.getByText("Supported")).toBeTruthy();
+    expect(
+      screen.getByText(/discovery issuer .* does not match requested/),
+    ).toBeTruthy();
   });
 
   it("warns that Gram-hosted metadata is for multi-origin compatibility", () => {
@@ -321,6 +326,9 @@ describe("OAuthWizard — existing external OAuth config", () => {
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
       authorizationResponseIssParameterSupported: true,
+      discoveryWarnings: [
+        'discovery issuer "https://other.example.com" does not match requested "https://auth.example.com"',
+      ],
     });
     renderWizard({ existingConfig });
 
@@ -331,6 +339,9 @@ describe("OAuthWizard — existing external OAuth config", () => {
     await screen.findByText(/auth\.example\.com\/authorize/);
     expect(mocks.fetchRemoteSessionIssuerMetadata).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/RFC 9207 support: Supported/)).toBeTruthy();
+    expect(
+      screen.getByText(/discovery issuer .* does not match requested/),
+    ).toBeTruthy();
     expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
 
     fireEvent.click(

@@ -286,7 +286,10 @@ export const oauthWizardMachine = setup({
                 }),
               },
             ],
-            BACK: "source",
+            BACK: {
+              target: "source",
+              actions: assign({ error: () => null }),
+            },
           },
         },
         verifying: {

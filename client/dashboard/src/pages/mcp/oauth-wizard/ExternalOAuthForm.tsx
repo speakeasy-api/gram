@@ -114,6 +114,14 @@ export function ExternalOAuthForm({
             <Text muted small>
               Review the metadata discovered from your provider.
             </Text>
+            {!!external.verifiedMetadata.discoveryWarnings?.length && (
+              <Alert variant="warning">
+                <AlertTitle>Metadata warnings</AlertTitle>
+                <AlertDescription>
+                  {external.verifiedMetadata.discoveryWarnings.join(" ")}
+                </AlertDescription>
+              </Alert>
+            )}
             <ReviewRow
               label="Issuer"
               value={external.verifiedMetadata.issuer}

@@ -326,7 +326,9 @@ describe("checkCreds", () => {
 describe("guard boolean wrappers", () => {
   it("validExternal mirrors checkExternal", () => {
     expect(validExternal(withExternal())).toBe(true);
-    expect(validExternal(withExternal())).toBe(true);
+    expect(validExternal(withExternal({ metadataJson: "{not json" }))).toBe(
+      false,
+    );
   });
 
   it("validProxyMeta mirrors checkProxyMeta", () => {
@@ -600,7 +602,7 @@ describe("oauthWizardMachine - external happy path", () => {
     );
   });
 
-  it("failed discovery cannot submit", async () => {
+  it("failed discovery cannot submit and clears when leaving", async () => {
     const services = {
       ...happyServices(),
       discoverExternalOAuth: fromPromise<
@@ -628,6 +630,10 @@ describe("oauthWizardMachine - external happy path", () => {
     expect(actor.getSnapshot().matches({ external: "providerIssuer" })).toBe(
       true,
     );
+
+    actor.send({ type: "BACK" });
+    expect(actor.getSnapshot().matches({ external: "source" })).toBe(true);
+    expect(actor.getSnapshot().context.error).toBeNull();
   });
 
   it("keeps invalid manual JSON in the Gram-hosted editor", () => {
