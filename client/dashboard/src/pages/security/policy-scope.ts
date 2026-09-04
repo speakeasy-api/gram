@@ -18,6 +18,9 @@ type CategoryScopeRecommendation = {
 };
 
 type AdditionalPolicyMessageType = "prompt_attachment";
+type EffectivePolicyMessageType =
+  | PolicyMessageType
+  | AdditionalPolicyMessageType;
 
 type EffectivePolicyScopeInput = Scope & {
   categories: Iterable<string>;
@@ -60,13 +63,19 @@ export function kindScopeForMessageTypes(types: PolicyMessageType[]): Scope {
   return { scopeInclude: allKinds, scopeExempt: allKinds };
 }
 
-function decodeKindEquality(cel: string): PolicyMessageType | null {
+function isEffectivePolicyMessageType(
+  value: string,
+): value is EffectivePolicyMessageType {
+  return isPolicyMessageType(value) || value === "prompt_attachment";
+}
+
+function decodeKindEquality(cel: string): EffectivePolicyMessageType | null {
   if (!cel.startsWith("kind == ")) return null;
 
   try {
     const parsed: unknown = JSON.parse(cel.slice("kind == ".length));
     return typeof parsed === "string" &&
-      isPolicyMessageType(parsed) &&
+      isEffectivePolicyMessageType(parsed) &&
       `kind == ${JSON.stringify(parsed)}` === cel
       ? parsed
       : null;
@@ -75,7 +84,9 @@ function decodeKindEquality(cel: string): PolicyMessageType | null {
   }
 }
 
-export function decodeKindScope(cel: string): PolicyMessageType[] | null {
+function decodeEffectiveKindScope(
+  cel: string,
+): EffectivePolicyMessageType[] | null {
   if (cel.startsWith("kind in ")) {
     try {
       const parsed: unknown = JSON.parse(cel.slice("kind in ".length));
@@ -83,13 +94,14 @@ export function decodeKindScope(cel: string): PolicyMessageType[] | null {
         !Array.isArray(parsed) ||
         parsed.length === 0 ||
         !parsed.every(
-          (value): value is PolicyMessageType =>
-            typeof value === "string" && isPolicyMessageType(value),
+          (value): value is EffectivePolicyMessageType =>
+            typeof value === "string" && isEffectivePolicyMessageType(value),
         )
       ) {
         return null;
       }
-      return encodeKindScope(parsed) === cel ? parsed : null;
+      const canonical = `kind in ${JSON.stringify([...new Set(parsed)].sort())}`;
+      return canonical === cel ? parsed : null;
     } catch {
       return null;
     }
@@ -102,7 +114,9 @@ export function decodeKindScope(cel: string): PolicyMessageType[] | null {
   if (terms.length > 1) {
     const values = terms.map(decodeKindEquality);
     if (
-      values.every((value): value is PolicyMessageType => value !== null) &&
+      values.every(
+        (value): value is EffectivePolicyMessageType => value !== null,
+      ) &&
       new Set(values).size === values.length
     ) {
       return values;
@@ -112,34 +126,14 @@ export function decodeKindScope(cel: string): PolicyMessageType[] | null {
   return null;
 }
 
+export function decodeKindScope(cel: string): PolicyMessageType[] | null {
+  const decoded = decodeEffectiveKindScope(cel);
+  return decoded?.every(isPolicyMessageType) ? decoded : null;
+}
+
 function promptAttachmentScopeMatch(cel: string): boolean | null {
-  if (cel === 'kind == "prompt_attachment"') return true;
-  if (decodeKindScope(cel)) return false;
-
-  if (cel.startsWith("kind in ")) {
-    try {
-      const parsed: unknown = JSON.parse(cel.slice("kind in ".length));
-      if (
-        !Array.isArray(parsed) ||
-        !parsed.every((value) => typeof value === "string")
-      ) {
-        return null;
-      }
-      return parsed.includes("prompt_attachment");
-    } catch {
-      return null;
-    }
-  }
-
-  const terms = cel.split(" || ");
-  if (terms.length > 1) {
-    if (terms.every((term) => decodeKindEquality(term) !== null)) return false;
-    if (terms.every((term) => term.startsWith("kind == "))) {
-      return terms.includes('kind == "prompt_attachment"');
-    }
-  }
-
-  return null;
+  const decoded = decodeEffectiveKindScope(cel);
+  return decoded ? decoded.includes("prompt_attachment") : null;
 }
 
 function scopeAllowsPromptAttachment({
@@ -164,7 +158,7 @@ export function effectiveScopeKinds({ scopeInclude, scopeExempt }: Scope): {
   let custom = false;
 
   if (scopeInclude) {
-    const included = decodeKindScope(scopeInclude);
+    const included = decodeEffectiveKindScope(scopeInclude);
     if (included) {
       const includedKinds = new Set(included);
       for (const kind of kinds) {
@@ -176,9 +170,11 @@ export function effectiveScopeKinds({ scopeInclude, scopeExempt }: Scope): {
   }
 
   if (scopeExempt) {
-    const exempted = decodeKindScope(scopeExempt);
+    const exempted = decodeEffectiveKindScope(scopeExempt);
     if (exempted) {
-      for (const kind of exempted) kinds.delete(kind);
+      for (const kind of exempted) {
+        if (isPolicyMessageType(kind)) kinds.delete(kind);
+      }
     } else {
       custom = true;
     }
