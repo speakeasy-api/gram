@@ -416,18 +416,12 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	qtx := orgRepo.New(tx)
-	lost, err := qtx.LockWorkOSMembershipsMissingFromSet(ctx, orgRepo.LockWorkOSMembershipsMissingFromSetParams{
-		UserID:       pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
-		WorkosOrgIds: workosOrgIDs,
-	})
-	if err != nil {
-		return fmt.Errorf("lock memberships removed by reconciliation: %w", err)
-	}
-	if err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+	lost, err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("set user workos memberships: %w", err)
 	}
 	for _, membership := range lost {

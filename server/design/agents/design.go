@@ -2,6 +2,8 @@
 package agents
 
 import (
+	"fmt"
+
 	. "goa.design/goa/v3/dsl"
 
 	"github.com/speakeasy-api/gram/server/design/security"
@@ -152,17 +154,24 @@ var _ = Service("agents", func() {
 		})
 	})
 
-	for _, operation := range []string{"transfer", "reassign"} {
-		Method(operation, func() {
-			Meta("openapi:operationId", operation+"Agent")
-			Meta("openapi:extension:x-speakeasy-name-override", operation)
+	for _, operation := range []struct {
+		name string
+		hook string
+	}{
+		{name: "transfer", hook: "TransferAgent"},
+		{name: "reassign", hook: "ReassignAgent"},
+	} {
+		Method(operation.name, func() {
+			Meta("openapi:operationId", operation.name+"Agent")
+			Meta("openapi:extension:x-speakeasy-name-override", operation.name)
+			Meta("openapi:extension:x-speakeasy-react-hook", fmt.Sprintf(`{"name": %q}`, operation.hook))
 			Payload(func() {
 				security.SessionPayload()
 				Extend(OwnerAssignmentForm)
 			})
 			Result(Agent)
 			HTTP(func() {
-				POST("/rpc/agents." + operation)
+				POST("/rpc/agents." + operation.name)
 				security.SessionHeader()
 				Body(OwnerAssignmentForm)
 				Response(StatusOK)
