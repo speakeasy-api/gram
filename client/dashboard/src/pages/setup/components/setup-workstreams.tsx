@@ -110,81 +110,93 @@ export function SetupWorkstreams({
           No setup tasks match this view.
         </p>
       ) : null}
-      {workstreams.map((workstream) => {
-        const workstreamTasks = workstream.taskKeys
-          .map((key) => visibleTasks.get(key))
-          .filter((task): task is SetupTask => task !== undefined);
-        if (workstreamTasks.length === 0) return null;
+      {[0, 1].map((column) => (
+        <div key={column} className="flex flex-col gap-4">
+          {workstreams
+            .filter((_, index) => index % 2 === column)
+            .map((workstream) => {
+              const workstreamTasks = workstream.taskKeys
+                .map((key) => visibleTasks.get(key))
+                .filter((task): task is SetupTask => task !== undefined);
+              if (workstreamTasks.length === 0) return null;
 
-        const requiredTasks = workstream.taskKeys
-          .filter((key) => !OPTIONAL_TASK_KEYS.has(key))
-          .map((key) => everyTask.get(key))
-          .filter((task): task is SetupTask => task !== undefined);
-        const completedTasks = requiredTasks.filter(
-          (task) => task.status === "done",
-        ).length;
+              const requiredTasks = workstream.taskKeys
+                .filter((key) => !OPTIONAL_TASK_KEYS.has(key))
+                .map((key) => everyTask.get(key))
+                .filter((task): task is SetupTask => task !== undefined);
+              const completedTasks = requiredTasks.filter(
+                (task) => task.status === "done",
+              ).length;
 
-        return (
-          <section
-            key={workstream.id}
-            className="border bg-card"
-            aria-labelledby={`setup-workstream-${workstream.id}`}
-          >
-            <header className="flex items-start justify-between gap-4 border-b bg-surface-secondary-default px-4 py-4">
-              <div className="min-w-0">
-                <h2
-                  id={`setup-workstream-${workstream.id}`}
-                  className="font-medium text-foreground"
+              return (
+                <section
+                  key={workstream.id}
+                  className="border bg-card"
+                  aria-labelledby={`setup-workstream-${workstream.id}`}
                 >
-                  {workstream.title}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {workstream.description}
-                </p>
-              </div>
-              <p className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                {completedTasks} / {requiredTasks.length}
-              </p>
-            </header>
-            <div>
-              {workstreamTasks.map((task) => {
-                const assignedToCurrentUser =
-                  task.assignee?.userId === currentUserId ||
-                  task.assignee?.email.toLowerCase() ===
-                    currentUserEmail.toLowerCase();
-                const canOpen = canAdmin || assignedToCurrentUser;
+                  <header className="flex items-start justify-between gap-4 border-b bg-surface-secondary-default px-4 py-4">
+                    <div className="min-w-0">
+                      <h2
+                        id={`setup-workstream-${workstream.id}`}
+                        className="font-medium text-foreground"
+                      >
+                        {workstream.title}
+                      </h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {workstream.description}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                      {completedTasks} / {requiredTasks.length}
+                    </p>
+                  </header>
+                  <div>
+                    {workstreamTasks.map((task) => {
+                      const assignedToCurrentUser =
+                        task.assignee?.userId === currentUserId ||
+                        task.assignee?.email.toLowerCase() ===
+                          currentUserEmail.toLowerCase();
+                      const canOpen = canAdmin || assignedToCurrentUser;
 
-                return (
-                  <SetupTaskCard
-                    key={task.key}
-                    task={task}
-                    optional={OPTIONAL_TASK_KEYS.has(task.key)}
-                    blockedTitles={task.blockedBy.map(
-                      (key) => taskTitles.get(key) ?? key,
-                    )}
-                    canChangeStatus={task.blockedBy.length === 0 && canOpen}
-                    canOpen={canOpen}
-                    assignedToCurrentUser={assignedToCurrentUser}
-                    canAssign={canAdmin}
-                    isPlatformAdmin={isPlatformAdmin}
-                    pending={pending}
-                    retryInvite={
-                      retryInviteKeys.has(task.key)
-                        ? () => onRetryInvite(task)
-                        : undefined
-                    }
-                    onOpen={() => onOpen(task)}
-                    onStatusChange={(status) => onStatusChange(task, status)}
-                    onAssign={() => onAssign(task)}
-                    onRemind={() => onRemind(task)}
-                    onHiddenChange={(hidden) => onHiddenChange(task, hidden)}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+                      return (
+                        <SetupTaskCard
+                          key={task.key}
+                          task={task}
+                          optional={OPTIONAL_TASK_KEYS.has(task.key)}
+                          blockedTitles={task.blockedBy.map(
+                            (key) => taskTitles.get(key) ?? key,
+                          )}
+                          canChangeStatus={
+                            task.blockedBy.length === 0 && canOpen
+                          }
+                          canOpen={canOpen}
+                          assignedToCurrentUser={assignedToCurrentUser}
+                          canAssign={canAdmin}
+                          isPlatformAdmin={isPlatformAdmin}
+                          pending={pending}
+                          retryInvite={
+                            retryInviteKeys.has(task.key)
+                              ? () => onRetryInvite(task)
+                              : undefined
+                          }
+                          onOpen={() => onOpen(task)}
+                          onStatusChange={(status) =>
+                            onStatusChange(task, status)
+                          }
+                          onAssign={() => onAssign(task)}
+                          onRemind={() => onRemind(task)}
+                          onHiddenChange={(hidden) =>
+                            onHiddenChange(task, hidden)
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+        </div>
+      ))}
     </div>
   );
 }
