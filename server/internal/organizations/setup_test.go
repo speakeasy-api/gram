@@ -308,6 +308,11 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 // sender so tests can assert on email delivery success/failure paths.
 func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestOrganizationsServiceWithEmailEnabled(t, true)
+}
+
+func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -346,8 +351,9 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	require.NoError(t, err)
 
 	emailService := email.NewService(logger, loopsMock, email.NewTemplateIDs(map[string]string{
-		"team_invite": "team-invite-test-id",
-	}), true)
+		"team_invite":           "team-invite-test-id",
+		"setup_task_assignment": "setup-task-assignment-test-id",
+	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 

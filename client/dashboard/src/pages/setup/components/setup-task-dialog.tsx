@@ -8,6 +8,7 @@ type SetupTaskDialogProps = {
   pending: boolean;
   onClose: () => void;
   onComplete: () => void | Promise<void>;
+  onSupport: () => void | Promise<void>;
   onSkip: () => void;
 };
 
@@ -16,6 +17,7 @@ export function SetupTaskDialog({
   pending,
   onClose,
   onComplete,
+  onSupport,
   onSkip,
 }: SetupTaskDialogProps): JSX.Element {
   const completionInFlight = useRef(false);
@@ -56,6 +58,9 @@ export function SetupTaskDialog({
             taskKey={task.key}
             projectSlug="default"
             onComplete={() => void handleComplete()}
+            onSupport={() => {
+              if (!pending) void onSupport();
+            }}
             onSkip={() => {
               if (!pending) onSkip();
             }}

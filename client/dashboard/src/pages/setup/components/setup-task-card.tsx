@@ -21,6 +21,7 @@ type SetupTaskCardProps = {
   blockedTitles: string[];
   canChangeStatus: boolean;
   canOpen: boolean;
+  assignedToCurrentUser: boolean;
   canAssign: boolean;
   isPlatformAdmin: boolean;
   pending: boolean;
@@ -41,8 +42,12 @@ function initials(label: string): string {
     .toUpperCase();
 }
 
-function taskActionLabel(status: SetupTaskStatus, blocked: boolean): string {
-  if (blocked) return "View task";
+function taskActionLabel(
+  status: SetupTaskStatus,
+  blocked: boolean,
+  ownedByOther: boolean,
+): string {
+  if (blocked || ownedByOther) return "View task";
   if (status === "todo") return "Start";
   if (status === "done") return "Review task";
   return "Continue task";
@@ -53,6 +58,7 @@ export function SetupTaskCard({
   blockedTitles,
   canChangeStatus,
   canOpen,
+  assignedToCurrentUser,
   canAssign,
   isPlatformAdmin,
   pending,
@@ -68,6 +74,7 @@ export function SetupTaskCard({
     "completedByFact" in task && task.completedByFact === true;
   const ownerLabel = task.assignee?.name ?? task.assignee?.email;
   const descriptionId = `setup-task-${task.key}-description`;
+  const ownedByOther = !!task.assignee && !assignedToCurrentUser;
   const actions: Action[] = [];
 
   if (canAssign && ownerLabel) {
@@ -92,7 +99,7 @@ export function SetupTaskCard({
   }
   if (canChangeStatus && !completedByFact) {
     for (const [status, label] of Object.entries(SETUP_TASK_STATUS_LABELS)) {
-      if (status === task.status) continue;
+      if (status === task.status || status === "awaiting_support") continue;
       actions.push({
         label: `Move to ${label.toLowerCase()}`,
         onClick: () => onStatusChange(status as SetupTaskStatus),
@@ -156,9 +163,9 @@ export function SetupTaskCard({
           className="min-w-0 flex-1"
           onClick={onOpen}
           disabled={pending || task.hidden || !canOpen}
-          aria-label={`${taskActionLabel(task.status, blocked)}: ${task.title}`}
+          aria-label={`${taskActionLabel(task.status, blocked, ownedByOther)}: ${task.title}`}
         >
-          {taskActionLabel(task.status, blocked)}
+          {taskActionLabel(task.status, blocked, ownedByOther)}
         </Button>
         {canAssign && !ownerLabel ? (
           <Button

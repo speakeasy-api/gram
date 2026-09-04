@@ -3,7 +3,9 @@ package organizations
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -12,15 +14,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -180,7 +185,7 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		}
 	}
 
-	_, err = repo.UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{
+	updated, err := repo.UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{
 		OrganizationID: stored.OrganizationID,
 		TaskKey:        stored.TaskKey,
 		Status:         stored.Status,
@@ -209,7 +214,51 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		return nil, oops.E(oops.CodeUnexpected, err, "commit setup task update").LogError(ctx, s.logger)
 	}
 
+	if payload.Assignee != nil && !sameSetupTaskAssignee(before.Assignee, after.Assignee) {
+		s.sendSetupTaskAssignmentEmail(ctx, ac, organization.Name, organization.Slug, after, updated.UpdatedAt.Time)
+	}
+
 	return after, nil
+}
+
+func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organizationName, organizationSlug string, task *gen.SetupTask, assignmentTime time.Time) {
+	if s.email == nil || task == nil || task.Assignee == nil || strings.TrimSpace(task.Assignee.Email) == "" {
+		return
+	}
+
+	assignerName := strings.TrimSpace(conv.PtrValOr(ac.Email, ac.UserID))
+	if user, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
+		if displayName := strings.TrimSpace(user.DisplayName); displayName != "" {
+			assignerName = displayName
+		} else if userEmail := strings.TrimSpace(user.Email); userEmail != "" {
+			assignerName = userEmail
+		}
+	}
+
+	recipient := conv.NormalizeEmail(task.Assignee.Email)
+	setupLink := fmt.Sprintf("%s/%s/setup?step=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
+	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
+	tmpl := email.SetupTaskAssignment{
+		AssignerName:     assignerName,
+		OrganizationName: organizationName,
+		TaskTitle:        task.Title,
+		TaskDescription:  task.Description,
+		SetupLink:        setupLink,
+	}
+	if err := s.email.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
+		s.logger.ErrorContext(ctx, "failed to send setup task assignment email", attr.SlogError(err), attr.SlogOrganizationID(ac.ActiveOrganizationID))
+	}
+}
+
+func sameSetupTaskAssignee(before, after *gen.SetupTaskAssignee) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	if before.UserID != nil && after.UserID != nil {
+		return *before.UserID == *after.UserID
+	}
+	return conv.NormalizeEmail(before.Email) == conv.NormalizeEmail(after.Email)
 }
 
 func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
