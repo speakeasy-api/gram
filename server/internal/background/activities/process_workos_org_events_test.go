@@ -2169,6 +2169,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Reactivated owner agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -2190,6 +2198,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 	require.NoError(t, err)
 	require.False(t, relationship.Deleted)
 	require.Equal(t, "event_01HZREACT3", relationship.WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "owner_inactive", latched.OwnerReassignmentReason.String)
 
 	// Deactivation tombstones the original assignment and reactivation
 	// creates a fresh row (same pattern as a membership rejoin), so exactly

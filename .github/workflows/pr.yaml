@@ -1567,6 +1567,9 @@ jobs:
   # Standalone, non-retrying M1 gate. These packages jointly prove the agent
   # identity, management, rollout, audit/event, and tenant-isolation contract.
   m1-agent-gate:
+    permissions:
+      contents: read
+      id-token: none
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'

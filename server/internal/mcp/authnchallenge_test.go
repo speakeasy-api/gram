@@ -775,6 +775,27 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
 }
 
+func TestHandleIDPCallback_RejectsResolvedAuthorizerReplacement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:               challengeID,
+		AuthorizerUserID: "original-authorizer",
+		CreatedAt:        time.Now(),
+	}))
+
+	q := url.Values{"state": {challengeID}, "code": {"replacement-idp-code"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/example/idp_callback?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	err := ti.service.HandleIDPCallback(w, req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identity is already resolved")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+	require.Error(t, err, "the invalid callback state must remain single-use")
+}
+
 // TestHandleIDPCallback_PreservesFlowIDAcrossRotation asserts the stable
 // flow correlation id survives the deliberate cache-key (ID) rotation in
 // HandleIDPCallback. Without preservation, the private-toolset leg of a flow
@@ -841,6 +862,7 @@ func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
 	rotated, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+rotatedID)
 	require.NoError(t, err)
 	require.Equal(t, flowID, rotated.FlowID, "flow id must survive the rotation")
+	require.Equal(t, gramUserID, rotated.AuthorizerUserID, "authorizer must come from the IDP callback")
 }
 
 // TestHandleIDPCallback_UsesBaseURLFromCachedState verifies that the

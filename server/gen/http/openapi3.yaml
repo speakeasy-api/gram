@@ -8684,6 +8684,8 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: reassign
+            x-speakeasy-react-hook:
+                name: ReassignAgent
     /rpc/agents.rename:
         post:
             operationId: renameAgent
@@ -9106,6 +9108,8 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: transfer
+            x-speakeasy-react-hook:
+                name: TransferAgent
     /rpc/agents.updatePolicyGrant:
         post:
             operationId: updateAgentPolicyGrant
@@ -66536,7 +66540,6 @@ components:
                     description: Grant effect; direct agent policy is allow-only
                     enum:
                         - allow
-                        - deny
                 scope:
                     type: string
                     description: Agent-runtime-safe scope to grant

@@ -1158,47 +1158,6 @@ func (q *Queries) LockOrganizationSlug(ctx context.Context, slug string) error {
 	return err
 }
 
-const lockWorkOSMembershipsMissingFromSet = `-- name: LockWorkOSMembershipsMissingFromSet :many
-SELECT our.organization_id, our.user_id
-FROM organization_user_relationships AS our
-JOIN organization_metadata AS om ON om.id = our.organization_id
-WHERE our.user_id = $1
-  AND our.deleted_at IS NULL
-  AND om.workos_id IS NOT NULL
-  AND NOT (om.workos_id = ANY($2::text[]))
-FOR UPDATE OF our
-`
-
-type LockWorkOSMembershipsMissingFromSetParams struct {
-	UserID       pgtype.Text
-	WorkosOrgIds []string
-}
-
-type LockWorkOSMembershipsMissingFromSetRow struct {
-	OrganizationID string
-	UserID         pgtype.Text
-}
-
-func (q *Queries) LockWorkOSMembershipsMissingFromSet(ctx context.Context, arg LockWorkOSMembershipsMissingFromSetParams) ([]LockWorkOSMembershipsMissingFromSetRow, error) {
-	rows, err := q.db.Query(ctx, lockWorkOSMembershipsMissingFromSet, arg.UserID, arg.WorkosOrgIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LockWorkOSMembershipsMissingFromSetRow
-	for rows.Next() {
-		var i LockWorkOSMembershipsMissingFromSetRow
-		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markRoleAssignmentsDeleted = `-- name: MarkRoleAssignmentsDeleted :exec
 UPDATE organization_role_assignments
 SET workos_updated_at = $1,
@@ -1227,20 +1186,24 @@ func (q *Queries) MarkRoleAssignmentsDeleted(ctx context.Context, arg MarkRoleAs
 	return err
 }
 
-const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :exec
+const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :many
 WITH updated_existing_user_relationship AS (
     UPDATE organization_user_relationships
-    SET workos_user_id = $3,
-        workos_membership_id = $4,
-        workos_updated_at = $5,
-        workos_last_event_id = $6,
+    SET workos_user_id = $1,
+        workos_membership_id = $2,
+        workos_updated_at = $3,
+        workos_last_event_id = $4,
         deleted_at = COALESCE(deleted_at, clock_timestamp()),
         updated_at = clock_timestamp()
-    WHERE organization_id = $1
-      AND user_id = $2
-      AND $2::text IS NOT NULL
-    RETURNING id
-)
+    WHERE organization_user_relationships.organization_id = $5
+      AND (
+          ($6::text IS NOT NULL AND organization_user_relationships.user_id = $6)
+          OR ($1::text IS NOT NULL AND organization_user_relationships.workos_user_id = $1)
+          OR ($2::text IS NOT NULL AND organization_user_relationships.workos_membership_id = $2)
+      )
+    RETURNING organization_user_relationships.user_id
+),
+inserted AS (
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
@@ -1251,12 +1214,12 @@ INSERT INTO organization_user_relationships (
     deleted_at
 )
 SELECT
+    $5,
+    $6,
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6,
     clock_timestamp()
 WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
 ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
@@ -1267,29 +1230,49 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
     updated_at = clock_timestamp()
+RETURNING user_id
+)
+SELECT user_id FROM updated_existing_user_relationship
+UNION ALL
+SELECT user_id FROM inserted
 `
 
 type MarkWorkOSMembershipDeletedParams struct {
-	OrganizationID     string
-	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
+	OrganizationID     string
+	UserID             pgtype.Text
 }
 
 // Record a WorkOS membership delete, inserting a tombstone when the local
 // relationship did not exist so stale replayed creates cannot resurrect it.
-func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) error {
-	_, err := q.db.Exec(ctx, markWorkOSMembershipDeleted,
-		arg.OrganizationID,
-		arg.UserID,
+func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, markWorkOSMembershipDeleted,
 		arg.WorkosUserID,
 		arg.WorkosMembershipID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var user_id pgtype.Text
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeInvitation = `-- name: RevokeInvitation :exec
@@ -1507,7 +1490,7 @@ func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) er
 	return err
 }
 
-const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
+const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :many
 WITH input_memberships AS (
     SELECT unnest($2::text[]) AS workos_org_id,
            unnest($3::text[]) AS workos_membership_id
@@ -1550,17 +1533,20 @@ upserted AS (
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
         updated_at = clock_timestamp()
+    WHERE organization_user_relationships.deleted IS FALSE
+       OR organization_user_relationships.workos_membership_id IS DISTINCT FROM EXCLUDED.workos_membership_id
     RETURNING organization_id
 )
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = $1
-  AND organization_user_relationships.deleted_at IS NULL
+  AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
   )
+RETURNING organization_id, user_id
 `
 
 type SetUserWorkOSMembershipsParams struct {
@@ -1569,14 +1555,34 @@ type SetUserWorkOSMembershipsParams struct {
 	WorkosMembershipIds []string
 }
 
+type SetUserWorkOSMembershipsRow struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
 // Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 // (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
 // the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
 // other relationships where the org has a non-NULL workos_id. Orgs without a
 // workos_id are unaffected. Other users' memberships are never modified.
-func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
-	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
-	return err
+func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) ([]SetUserWorkOSMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SetUserWorkOSMembershipsRow
+	for rows.Next() {
+		var i SetUserWorkOSMembershipsRow
+		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setWebhooksEnabled = `-- name: SetWebhooksEnabled :one

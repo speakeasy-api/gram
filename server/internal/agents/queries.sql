@@ -41,6 +41,25 @@ WHERE organization_id = @organization_id
 LIMIT 1
 FOR UPDATE;
 
+-- name: ListActiveAgentsForAuthorization :many
+-- Candidate selection excludes every lifecycle and owner-admission state that
+-- cannot authorize a credential. Caller and live policy checks remain in the
+-- service because they require the normal authorization evaluator.
+SELECT a.*
+FROM agents AS a
+JOIN users AS u ON u.id = a.owner_user_id
+JOIN organization_user_relationships AS our
+  ON our.organization_id = a.organization_id
+ AND our.user_id = a.owner_user_id
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+  AND a.suspended_at IS NULL
+  AND a.revoked_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+  AND u.deleted_at IS NULL
+  AND our.deleted_at IS NULL
+ORDER BY LOWER(a.name), a.id;
+
 -- name: RenameAgent :one
 UPDATE agents
 SET name = @name,

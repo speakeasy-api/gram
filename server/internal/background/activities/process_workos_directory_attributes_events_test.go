@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -372,6 +373,14 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Deactivated directory owner agent",
+	})
+	require.NoError(t, err)
 
 	// The seeded user's email matches the directory user payload so the
 	// deactivation can resolve the Gram user by email.
@@ -418,6 +427,10 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.True(t, assignments[0].DeletedAt.Valid)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "owner_inactive", latched.OwnerReassignmentReason.String)
 
 	// Cached user info is invalidated so org-access checks observe the
 	// deprovisioning without waiting out the cache TTL.

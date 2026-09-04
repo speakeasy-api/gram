@@ -395,6 +395,9 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, "window.close();")
 	require.Contains(t, script, "}, 3000);")
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
+	require.Contains(t, script, `form.elements.namedItem("agent_id")`)
+	require.Contains(t, script, `data-consent-self-ready`)
+	require.Contains(t, script, `button.value = authorizingAgent ? "approve_agent" : "approve"`)
 }
 
 // TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled pins the
@@ -478,6 +481,38 @@ func TestConsentTemplateToolAccessIsland(t *testing.T) {
 	require.NotContains(t, html, `data-scope-tools`)
 	// No inline script or JSON bootstrap beyond escaped data attributes.
 	require.NotContains(t, html, "<script>")
+}
+
+func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:            "Demo",
+		MCPSlug:               "example",
+		MCPRouteBase:          "mcp",
+		State:                 "state",
+		CSRFToken:             "csrf",
+		SubjectDisplay:        "user@example.com",
+		ScriptURL:             "/mcp/consent-page-test.js",
+		ConsentEnabled:        true,
+		AgentSelectionEnabled: true,
+		AgentOptions:          []consentAgentOption{{ID: "01998c1e-0000-7000-8000-000000000001", Name: "Build agent"}},
+		AgentSetupURL:         "https://app.example.com/example/agent-management",
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "Authorize as")
+	require.Contains(t, html, "Myself — user@example.com")
+	require.Contains(t, html, "Agent — Build agent")
+	require.Contains(t, html, "endpoint-scoped")
+	require.Contains(t, html, "mcp:connect")
+	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
+	require.Contains(t, html, `data-agent-label="Authorize agent"`)
+	require.Contains(t, html, `data-consent-self-ready="true"`)
+	require.NotContains(t, html, "Create agent here")
+	require.NotContains(t, html, `name="scope"`)
 }
 
 func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {
