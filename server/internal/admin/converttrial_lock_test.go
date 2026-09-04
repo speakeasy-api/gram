@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -61,7 +62,15 @@ func (h *cancelOnRedisSetHook) ProcessPipelineHook(next redis.ProcessPipelineHoo
 
 func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t *testing.T) {
 	t.Parallel()
-	ctx, svc, conn, _ := newProductionRearmService(t)
+	ctx, svc, shared, _ := newProductionRearmService(t)
+	// This test holds conversion, probe, advisory-lock, and contender
+	// connections at once. The default clone pool is only 4 connections
+	// (max(4, NumCPU)), which starves the blocked-query poll.
+	poolConfig := shared.Config().Copy()
+	poolConfig.MaxConns = 16
+	conn, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	require.NoError(t, err)
+	t.Cleanup(conn.Close)
 	const orgID = "org_convert_lock_order"
 	demotedAt := time.Now().UTC().Add(-time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
@@ -71,7 +80,7 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}
 
 	lifecycleBlocker := testenv.BeginTx(t, ctx, conn)
-	_, err := trialsRepo.New(lifecycleBlocker).LockTrialLifecycle(ctx, orgID)
+	_, err = trialsRepo.New(lifecycleBlocker).LockTrialLifecycle(ctx, orgID)
 	require.NoError(t, err)
 	converted := make(chan error, 1)
 	go func() {

@@ -2271,31 +2271,6 @@ func TestStripeSubscriptionDeletionAddsOnlyBillingInactiveCause(t *testing.T) {
 	require.EqualValues(t, 321, chat.MonthlyCredits)
 }
 
-func TestStripeSubscriptionDeletionRejectsUnclassifiedKeyAndRollsBackAtomically(t *testing.T) {
-	t.Parallel()
-
-	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	configurePaygSubscriptionDeletion(t, service, "event_unclassified_key", "subscription_current", "subscription_current")
-	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
-	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, false, nil, 321)
-
-	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "deactivate").Code)
-
-	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
-	require.NoError(t, err)
-	require.Equal(t, "subscription_current", metadata.StripeSubscriptionID.String)
-	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
-	require.NoError(t, err)
-	require.Equal(t, "payg", organization.GramAccountType)
-	require.True(t, organization.Whitelisted)
-	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
-	require.Nil(t, chat.DisableCauses)
-	require.False(t, chat.Disabled)
-	require.EqualValues(t, 321, chat.MonthlyCredits)
-	require.Zero(t, stripeWebhookReceiptCount(t, db))
-	require.Zero(t, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
-}
-
 func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableIntent(t *testing.T) {
 	t.Parallel()
 

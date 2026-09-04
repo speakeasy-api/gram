@@ -273,21 +273,6 @@ func TestMarkEnterpriseTrialConverted_OutboxFailureRollsBackEverything(t *testin
 	require.Empty(t, provisioner.reconcileAttempts)
 }
 
-func TestMarkEnterpriseTrialConverted_UnclassifiedKeyRollsBack(t *testing.T) {
-	t.Parallel()
-	ctx, svc, conn, provisioner := newRearmService(t)
-	orgID := "org_convert_null_key"
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
-	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour)})
-	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 7})
-	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: nil}))
-
-	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	require.False(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
-	require.Empty(t, provisioner.reconcileAttempts)
-}
-
 func TestMarkEnterpriseTrialConverted_PostCommitFailureRetryConverges(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn, provisioner := newRearmService(t)

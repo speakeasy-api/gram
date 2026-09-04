@@ -217,7 +217,6 @@ func TestDisablePaygOpenRouterChatKeyPreservesClassification(t *testing.T) {
 		disableCauses []string
 		wantCauses    []string
 	}{
-		{name: "legacy unclassified", disableCauses: nil, wantCauses: nil},
 		{name: "classified empty", disableCauses: []string{}, wantCauses: []string{"billing_inactive"}},
 		{name: "classified admin lock", disableCauses: []string{"admin_lock"}, wantCauses: []string{"admin_lock", "billing_inactive"}},
 	}

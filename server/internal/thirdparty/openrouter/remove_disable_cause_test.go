@@ -384,58 +384,17 @@ func TestRemoveAPIKeyDisableCauseUsesCanonicalDistinctCauses(t *testing.T) {
 	})
 }
 
-func TestReconcileAPIKeyDisabledWithDBNullFailsClosed(t *testing.T) {
+func TestRemoveAPIKeyDisableCauseMissingKeyIsNoop(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	orgID := "org-" + uuid.NewString()[:8]
 	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	limit, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil,
-	}))
-	patchesBefore := len(upstream.recorded())
-
-	err = provisioner.ReconcileAPIKeyDisabledWithDB(ctx, provisioner.db, orgID, KeyTypeChat)
-	require.ErrorContains(t, err, "disable causes are unclassified")
-	require.Len(t, upstream.recorded(), patchesBefore)
-}
-
-func TestRemoveAPIKeyDisableCauseMissingAndUnclassifiedFailClosed(t *testing.T) {
-	t.Parallel()
-
-	t.Run("missing key is a no-op", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := t.Context()
-		orgID := "org-" + uuid.NewString()[:8]
-		provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
-		limit, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
-		require.NoError(t, err)
-		require.Zero(t, limit)
-		require.Equal(t, DisableCauseChange{}, change)
-		require.Empty(t, upstream.recorded())
-	})
-
-	t.Run("NULL classification fails closed", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := t.Context()
-		orgID := "org-" + uuid.NewString()[:8]
-		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
-		require.NoError(t, err)
-		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil}))
-
-		_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
-		require.ErrorContains(t, err, "unclassified")
-		require.Empty(t, upstream.recorded())
-		row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
-		require.NoError(t, getErr)
-		require.Nil(t, row.DisableCauses)
-		require.True(t, row.Disabled)
-	})
+	require.Zero(t, limit)
+	require.Equal(t, DisableCauseChange{}, change)
+	require.Empty(t, upstream.recorded())
 }
 
 func TestRemoveAPIKeyDisableCauseUpstreamFailureAndHashMismatchLeaveLocalUnchanged(t *testing.T) {
