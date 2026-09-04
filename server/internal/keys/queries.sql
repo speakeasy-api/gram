@@ -25,6 +25,21 @@ JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
+-- name: GetActivePrincipalAPIKeyForAdmission :one
+SELECT id
+FROM api_keys
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+  AND cardinality(scopes) = 0
+  AND subject_urn = @subject_urn
+  AND created_by_user_id = @authorizer_user_id
+  AND delegated_grants = @delegated_grants::jsonb
+  AND delegated_grants_version = @delegated_grants_version
+  AND expires_at > statement_timestamp()
+  AND expires_at > created_at
+  AND expires_at <= created_at + INTERVAL '365 days';
+
 -- name: ListAPIKeysByOrganization :many
 SELECT *
 FROM api_keys

@@ -55,6 +55,10 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 	}
 
 	canonical := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	return loadResolvedAgentPolicy(ctx, db, organizationID, canonical)
+}
+
+func loadResolvedAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID string, canonical urn.Principal) ([]Grant, error) {
 	rows, err := accessrepo.New(db).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{
 		OrganizationID: organizationID,
 		PrincipalUrns:  []string{canonical.String()},
