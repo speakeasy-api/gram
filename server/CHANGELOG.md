@@ -1,5 +1,11 @@
 # server
 
+## 2.1.0
+
+### Minor Changes
+
+- 32500ca: Add organization-authorized setup task projection and update APIs with durable ownership, dependency state, and audit events.
+
 ## 2.0.0
 
 ### Major Changes

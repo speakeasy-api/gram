@@ -71,7 +71,6 @@ import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -161,6 +160,7 @@ const Killswitches = React.lazy(() =>
 const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
+const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 
 type AppRouteBasic = {
   title: string;
@@ -1427,7 +1427,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupWizard,
+    component: SetupBoard,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

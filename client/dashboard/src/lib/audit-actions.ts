@@ -111,6 +111,7 @@ export const AUDIT_ACTIONS = [
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
   "organization:product_feature_enabled",
+  "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -477,6 +478,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled a product feature for";
     case "organization:product_feature_disabled":
       return "disabled a product feature for";
+    case "organization:setup_task_updated":
+      return "updated setup task for";
 
     case "organization_invitation:create":
       return "invited";

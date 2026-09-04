@@ -46,6 +46,7 @@ var All = []outbox.EventRegistration{
 	OrganizationHooksFailOpenV1,
 	OrganizationInviteV1,
 	OrganizationProductFeatureV1,
+	OrganizationSetupTaskV1,
 	OrganizationWebhooksV1,
 	OtelDestinationV1,
 	OtelForwardingV1,

@@ -848,3 +848,64 @@ LEFT JOIN global_roles gr
 WHERE ora.organization_id = @organization_id
   AND ora.user_id IS NOT NULL
   AND ora.deleted_at IS NULL;
+
+-- name: ListOrganizationSetupTasks :many
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id;
+
+-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT *
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
+-- name: GetOrganizationSetupTask :one
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id
+  AND task_key = @task_key;
+
+-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
+) VALUES (
+    @organization_id,
+    @task_key,
+    @status,
+    sqlc.narg('assignee_user_id')::text,
+    sqlc.narg('assignee_email')::text,
+    sqlc.narg('hidden_at')::timestamptz
+)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetSetupTaskCompletionFacts :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = @organization_id
+      AND deleted IS FALSE
+    ORDER BY created_at, id
+    LIMIT 1
+)
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        JOIN default_project ON default_project.id = plugin_github_connections.project_id
+    ) AS marketplace_published
+FROM organization_metadata
+WHERE organization_metadata.id = @organization_id;
