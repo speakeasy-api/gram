@@ -121,8 +121,12 @@ type RemoteLoginState struct {
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
-	AutoRefresh *bool     `json:"auto_refresh,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	AutoRefresh *bool `json:"auto_refresh,omitempty"`
+	// Nonce is the OpenID Connect nonce sent on the authorize request; an ID
+	// token returned by the exchange must echo it. Empty for in-flight states
+	// minted before this field, which then skip the nonce check.
+	Nonce     string    `json:"nonce,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -154,6 +158,20 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+
+	// idTokens verifies the ID token a code exchange or refresh returns, so
+	// the session records who the grant belongs to. Nil means ID tokens are
+	// ignored and sessions carry no identity.
+	idTokens *IDTokenVerifier
+}
+
+// ChallengeOption configures optional ChallengeManager behaviour.
+type ChallengeOption func(*ChallengeManager)
+
+// WithIDTokenVerifier enables upstream identity capture from ID tokens on
+// both the code exchange and the manager's own refreshes.
+func WithIDTokenVerifier(verifier *IDTokenVerifier) ChallengeOption {
+	return func(m *ChallengeManager) { m.idTokens = verifier }
 }
 
 func NewChallengeManager(
@@ -165,9 +183,10 @@ func NewChallengeManager(
 	policy *guardian.Policy,
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
+	opts ...ChallengeOption,
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
-	return &ChallengeManager{
+	m := &ChallengeManager{
 		logger: logger,
 		db:     db,
 		enc:    enc,
@@ -178,14 +197,21 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:     cacheImpl,
-		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl),
+		refresher: nil,
 		serverURL: serverURL,
 		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
-		metrics: remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		metrics:  remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		idTokens: nil,
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	// The manager's own refreshes restate identity with the same verifier.
+	m.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(m.idTokens))
+	return m
 }
 
 // Client is the joined view of a remote_session_client + its
@@ -310,6 +336,15 @@ type RemoteSessionState struct {
 	CanRefresh             bool
 	// Resource is the RFC 8707 resource recorded on the grant, if any.
 	Resource string
+	// ConnectedAs is who the grant belongs to at the provider, as a
+	// verified enrichment interface reported it: the email when known,
+	// otherwise the display name. Empty when no interface has said.
+	ConnectedAs string
+	// IdentitySource names the interface ConnectedAs came from.
+	IdentitySource string
+
+	// IdentityVerifiedAt is when Gram verified ConnectedAs.
+	IdentityVerifiedAt *time.Time
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -356,6 +391,11 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			expires := row.AuthorizationExpiresAt.Time
 			authorizationExpiresAt = &expires
 		}
+		var identityVerifiedAt *time.Time
+		if row.IdentityVerifiedAt.Valid {
+			verified := row.IdentityVerifiedAt.Time
+			identityVerifiedAt = &verified
+		}
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
 			Status:                 RemoteSessionStatus(row.Status),
 			AutoRefresh:            row.AutoRefresh,
@@ -364,6 +404,9 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			CanRefresh:             row.CanRefresh,
 			Resource:               row.Resource.String,
+			ConnectedAs:            conv.Default(row.UpstreamEmail.String, row.UpstreamDisplayName.String),
+			IdentitySource:         row.IdentitySource.String,
+			IdentityVerifiedAt:     identityVerifiedAt,
 		}
 	}
 	return statuses, nil
@@ -508,6 +551,10 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	if err != nil {
 		return "", fmt.Errorf("generate code verifier: %w", err)
 	}
+	nonce, err := randomToken(16)
+	if err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
 	codeChallenge := s256Challenge(verifier)
 	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
 	stateParam := stateID
@@ -547,6 +594,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		RouteBase:             parent.RouteBase,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		AutoRefresh:           parent.AutoRefresh,
+		Nonce:                 nonce,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -560,6 +608,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	q.Set("state", stateParam)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
+	// Harmless to a plain OAuth server and required for an OpenID one to
+	// bind the ID token to this request.
+	q.Set("nonce", nonce)
 	if scopes := client.resolveScopes(); len(scopes) > 0 {
 		q.Set("scope", strings.Join(scopes, " "))
 	}
@@ -672,7 +723,6 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
-
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Gram, and outside
 	// the reach of every revoke path since no row points at it. So arm the
@@ -686,6 +736,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		}
 		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
 	}()
+
+	identity := m.identityFromExchange(ctx, logger, tok, client.ID, client.ClientID, state.Nonce)
+	identityCols := identity.columns()
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
@@ -789,10 +842,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		AuthorizationExpiresAt: conv.PtrToPGTimestamptz(
 			authorizationExpires,
 		),
-		RefreshExpiresAt: conv.PtrToPGTimestamptz(refreshExpires),
-		Scopes:           scopes,
-		Resource:         conv.ToPGTextEmpty(state.Resource),
-		AutoRefresh:      autoRefresh,
+		RefreshExpiresAt:      conv.PtrToPGTimestamptz(refreshExpires),
+		Scopes:                scopes,
+		Resource:              conv.ToPGTextEmpty(state.Resource),
+		AutoRefresh:           autoRefresh,
+		UpstreamSubject:       identityCols.Subject,
+		UpstreamEmail:         identityCols.Email,
+		UpstreamEmailVerified: identityCols.EmailVerified,
+		UpstreamDisplayName:   identityCols.DisplayName,
+		UpstreamPictureUrl:    identityCols.PictureURL,
+		UpstreamSessionID:     identityCols.SessionID,
+		UpstreamAuthTime:      identityCols.AuthTime,
+		IdentitySource:        identityCols.Source,
+		IdentityVerifiedAt:    identityCols.VerifiedAt,
+		Enrichment:            buildEnrichment(tok, identity),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
@@ -903,7 +966,42 @@ func (m *ChallengeManager) exchangeCode(
 	if tok.AccessToken == "" {
 		return tokenResponse{}, errors.New("token endpoint returned no access_token")
 	}
+	tok.raw = body
 	return tok, nil
+}
+
+// identityFromExchange verifies the ID token a code exchange returned, when
+// there is one and a verifier is configured, and returns the identity it
+// asserts. A rejected token is logged and yields nil: the grant is stored
+// without an identity rather than refused, because the access token is
+// valid regardless of what the ID token said.
+func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slog.Logger, tok tokenResponse, clientRowID uuid.UUID, externalClientID string, nonce string) *UpstreamIdentity {
+	if m.idTokens == nil || tok.IDToken == "" {
+		return nil
+	}
+	issuer, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
+	if err != nil {
+		logIdentityFailure(ctx, logger, fmt.Errorf("load issuer for id token verification: %w", err), attr.SlogRemoteSessionClientID(clientRowID.String()))
+		return nil
+	}
+	// An issuer with no published key set cannot have its tokens verified;
+	// that is a configuration state, not an event worth a warning per grant.
+	if !issuer.JwksUri.Valid || issuer.JwksUri.String == "" {
+		return nil
+	}
+	identity, err := m.idTokens.Verify(ctx, tok.IDToken, idTokenExpectation{
+		issuer:     issuer.IssuerUrl,
+		clientID:   externalClientID,
+		jwksURI:    issuer.JwksUri.String,
+		fetchScope: issuer.RemoteSessionIssuerID.String(),
+		nonce:      nonce,
+		subject:    "",
+	})
+	if err != nil {
+		logIdentityFailure(ctx, logger, err, attr.SlogOAuthIssuer(issuer.IssuerUrl), attr.SlogRemoteSessionClientID(clientRowID.String()))
+		return nil
+	}
+	return &identity
 }
 
 func randomToken(n int) (string, error) {

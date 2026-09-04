@@ -94,6 +94,11 @@
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
                     on{{end}}</span
                   >
+                  {{if .ConnectedAs}}
+                  <span class="truncate text-xs text-muted-foreground"
+                    >Connected as {{.ConnectedAs}}</span
+                  >
+                  {{end}}
                   {{/* Two different deadlines, stated differently. The idle
                   timeout is what auto refresh exists to defeat, so it is only
                   worth raising when nothing is renewing the session. The

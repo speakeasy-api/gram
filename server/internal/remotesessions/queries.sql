@@ -801,7 +801,19 @@ RETURNING *;
 -- name: SoftDeleteRemoteSessionsByClientID :many
 -- Returns the stored credentials of every session it tombstones.
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
@@ -810,7 +822,19 @@ RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encryp
 -- every client one issuer deletion stranded, so it sweeps them in a single
 -- statement rather than a round trip per client while holding their locks.
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
@@ -837,7 +861,17 @@ INSERT INTO remote_sessions (
     refresh_expires_at,
     scopes,
     resource,
-    auto_refresh
+    auto_refresh,
+    upstream_subject,
+    upstream_email,
+    upstream_email_verified,
+    upstream_display_name,
+    upstream_picture_url,
+    upstream_session_id,
+    upstream_auth_time,
+    identity_source,
+    identity_verified_at,
+    enrichment
 )
 VALUES (
     @subject_urn,
@@ -850,7 +884,17 @@ VALUES (
     @refresh_expires_at,
     @scopes,
     @resource,
-    @auto_refresh
+    @auto_refresh,
+    @upstream_subject,
+    @upstream_email,
+    @upstream_email_verified,
+    @upstream_display_name,
+    @upstream_picture_url,
+    @upstream_session_id,
+    @upstream_auth_time,
+    @identity_source,
+    @identity_verified_at,
+    @enrichment
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -861,6 +905,23 @@ DO UPDATE SET
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
     resource = EXCLUDED.resource,
+    -- A new grant is a new statement of who the token belongs to, so the
+    -- identity is replaced wholesale (NULL when this exchange learned
+    -- nothing) rather than merged with an earlier grant's, and the token has
+    -- not been presented anywhere yet, so its observed validity resets.
+    upstream_subject = EXCLUDED.upstream_subject,
+    upstream_email = EXCLUDED.upstream_email,
+    upstream_email_verified = EXCLUDED.upstream_email_verified,
+    upstream_display_name = EXCLUDED.upstream_display_name,
+    upstream_picture_url = EXCLUDED.upstream_picture_url,
+    upstream_session_id = EXCLUDED.upstream_session_id,
+    upstream_auth_time = EXCLUDED.upstream_auth_time,
+    identity_source = EXCLUDED.identity_source,
+    identity_verified_at = EXCLUDED.identity_verified_at,
+    enrichment = EXCLUDED.enrichment,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -883,6 +944,53 @@ SET
     resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
     updated_at = clock_timestamp()
 WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND updated_at = @expected_updated_at
+RETURNING *;
+
+-- name: UpdateRemoteSessionIdentity :one
+-- Restates a session's upstream identity from what a refresh returned, after
+-- the refreshed tokens are stored. Runs outside the token CAS on purpose:
+-- verifying an ID token can wait on the issuer's key set, and that wait must
+-- not sit between consuming the refresh token upstream and persisting the
+-- pair. updated_at is left alone so the CAS token and the keepalive clock
+-- belong to the token write only. Keyed like the token write: by session,
+-- subject, and client, and CAS'd on the token write's updated_at so a grant
+-- re-established while the ID token was being verified keeps its own
+-- identity.
+-- Each identity column keeps its stored value when the refresh omitted the
+-- claim (OpenID Connect Core §12.2 lets a refreshed ID token omit profile
+-- claims; the caller has already required the subject to match), except
+-- that email_verified describes the stored email: a new email takes the
+-- flag the refresh gave it, or none. The enrichment document merges at the
+-- top level, so a refresh that returned no ID token keeps the claims
+-- captured at the exchange. With replace true every column takes the
+-- parameter as given, which is how an identity the refreshed tokens no
+-- longer belong to is cleared.
+UPDATE remote_sessions
+SET
+    upstream_subject = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_subject')::text ELSE COALESCE(sqlc.narg('upstream_subject')::text, upstream_subject) END,
+    upstream_email = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_email')::text ELSE COALESCE(sqlc.narg('upstream_email')::text, upstream_email) END,
+    upstream_email_verified = CASE
+        WHEN @replace::boolean THEN sqlc.narg('upstream_email_verified')::boolean
+        WHEN sqlc.narg('upstream_email')::text IS NULL OR sqlc.narg('upstream_email')::text IS NOT DISTINCT FROM upstream_email
+            THEN COALESCE(sqlc.narg('upstream_email_verified')::boolean, upstream_email_verified)
+        ELSE sqlc.narg('upstream_email_verified')::boolean
+    END,
+    upstream_display_name = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_display_name')::text ELSE COALESCE(sqlc.narg('upstream_display_name')::text, upstream_display_name) END,
+    upstream_picture_url = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_picture_url')::text ELSE COALESCE(sqlc.narg('upstream_picture_url')::text, upstream_picture_url) END,
+    upstream_session_id = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_session_id')::text ELSE COALESCE(sqlc.narg('upstream_session_id')::text, upstream_session_id) END,
+    upstream_auth_time = CASE WHEN @replace::boolean THEN sqlc.narg('upstream_auth_time')::timestamptz ELSE COALESCE(sqlc.narg('upstream_auth_time')::timestamptz, upstream_auth_time) END,
+    identity_source = CASE WHEN @replace::boolean THEN sqlc.narg('identity_source')::text ELSE COALESCE(sqlc.narg('identity_source')::text, identity_source) END,
+    identity_verified_at = CASE WHEN @replace::boolean THEN sqlc.narg('identity_verified_at')::timestamptz ELSE COALESCE(sqlc.narg('identity_verified_at')::timestamptz, identity_verified_at) END,
+    enrichment = CASE
+        WHEN @replace::boolean THEN sqlc.narg('enrichment')::jsonb
+        WHEN sqlc.narg('enrichment')::jsonb IS NULL THEN enrichment
+        ELSE COALESCE(enrichment, '{}'::jsonb) || sqlc.narg('enrichment')::jsonb
+    END
+WHERE id = @id
+  AND subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE
   AND updated_at = @expected_updated_at
@@ -960,6 +1068,10 @@ SELECT
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
+  s.upstream_email,
+  s.upstream_display_name,
+  s.identity_source,
+  s.identity_verified_at,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -996,6 +1108,16 @@ WHERE s.id = @id
   AND s.remote_session_client_id = c.id
   AND c.project_id = @project_id;
 
+-- name: GetRemoteSessionByIDIncludingDeleted :one
+-- Test helper: reads a session row whether or not it has been tombstoned,
+-- scoped through the owning client's project. Used to assert what a
+-- revocation leaves behind.
+SELECT s.*
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE s.id = @id
+  AND c.project_id = @project_id;
+
 -- name: SetRemoteSessionAccessExpiresAt :exec
 -- Test helper for exercising lazy refresh without waiting for a real token
 -- lifetime. Scoped through the owning remote_session_client's project.
@@ -1027,6 +1149,7 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.revocation_endpoint                  AS revocation_endpoint,
+    i.jwks_uri                             AS jwks_uri,
     i.scopes_supported                     AS scopes_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
@@ -1135,7 +1258,19 @@ WHERE s.id = @id AND (usi.project_id = @project_id::uuid OR (usi.project_id IS N
 -- established through an organization-level client bound to their own
 -- user_session_issuer, but not another project's session on a shared one.
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -1191,7 +1326,19 @@ WHERE s.subject_urn = @subject_urn
 -- still tombstone a row minted by another. A revoke that left the upstream
 -- tokens alive would not be a revoke.
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
@@ -1230,7 +1377,19 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- grant's provenance issuer, so a grant minted through a now-soft-deleted
 -- issuer stays reachable — and still RFC 7009'd — from any live bound surface.
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
@@ -1995,7 +2154,19 @@ LIMIT sqlc.arg('limit_value');
 -- organization-level clients). See the ORG REACHABILITY note on
 -- ListOrganizationRemoteSessionClientsByIssuerID.
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- A tombstone keeps its credentials for upstream revocation but not the
+    -- personal data the identity interfaces reported.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_email_verified = NULL,
+    upstream_display_name = NULL,
+    upstream_picture_url = NULL,
+    upstream_session_id = NULL,
+    upstream_auth_time = NULL,
+    identity_source = NULL,
+    identity_verified_at = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c, remote_session_issuers AS i
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id

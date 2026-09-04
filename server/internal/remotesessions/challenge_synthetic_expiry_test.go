@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -170,15 +171,36 @@ type syntheticExpiryEnv struct {
 	session        repo.RemoteSession
 }
 
+// syntheticLoginConfig is what the options to driveSyntheticLogin adjust.
+type syntheticLoginConfig struct {
+	// idTokenIssuer, when set, publishes the issuer's jwks_uri on the fixture
+	// row and wires an ID token verifier that trusts its TLS certificate into
+	// the manager and the refresh service.
+	idTokenIssuer *idTokenIssuer
+	// onAuthorizationURL sees the authorize URL the manager built before the
+	// callback is driven, so a token handler can mint claims that match it.
+	onAuthorizationURL func(*url.URL)
+}
+
+type syntheticLoginOption func(*syntheticLoginConfig)
+
+func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
+	return func(c *syntheticLoginConfig) { c.idTokenIssuer = issuer }
+}
+
+func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
+	return func(c *syntheticLoginConfig) { c.onAuthorizationURL = fn }
+}
+
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
 // endpoint (tokenHandler) and drives BuildAuthorizationUrl →
 // HandleRemoteLoginCallback, returning the request context plus the persisted
 // remote_sessions row and the handles needed to resolve it. slugSuffix keeps
 // fixtures unique per test.
-func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv) {
+func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv) {
 	t.Helper()
 
-	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler)
+	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler, opts...)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, callback.Code)
 
@@ -196,8 +218,13 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 // callback. The callback's recorder and error come back unasserted, so a test
 // can exercise a code exchange the callback is expected to reject; the
 // returned env carries no session row.
-func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
+func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
 	t.Helper()
+
+	var cfg syntheticLoginConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -210,7 +237,13 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	var policyOptions []func(*guardian.Policy)
+	issuerURL, jwksURI := "https://idp.example.com", ""
+	if cfg.idTokenIssuer != nil {
+		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(cfg.idTokenIssuer.pool))
+		issuerURL, jwksURI = cfg.idTokenIssuer.issuerURL, cfg.idTokenIssuer.jwksURI
+	}
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, policyOptions...)
 	require.NoError(t, err)
 
 	// A real Redis-backed cache is required: BuildAuthorizationUrl writes the
@@ -218,6 +251,16 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	// (used by the URL-shape e2e tests) would drop it.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+
+	var managerOptions []remotesessions.ChallengeOption
+	var refreshOptions []remotesessions.RefreshOption
+	if cfg.idTokenIssuer != nil {
+		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), ratelimit.NewRedisStore(redisClient))
+		require.NoError(t, err)
+		verifier := remotesessions.NewIDTokenVerifier(keys)
+		managerOptions = append(managerOptions, remotesessions.WithIDTokenVerifier(verifier))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIDTokenVerifier(verifier))
+	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
 		testenv.NewTracerProvider(t),
@@ -227,20 +270,21 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		policy,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
+		managerOptions...,
 	)
-	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
 
 	q := repo.New(ti.conn)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "synthetic-expiry-issuer-" + slugSuffix,
-		Issuer:                            "https://idp.example.com",
+		Issuer:                            issuerURL,
 		Name:                              pgtype.Text{String: "", Valid: false},
 		LogoAssetID:                       uuid.NullUUID{},
 		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
-		JwksUri:                           pgtype.Text{String: "", Valid: false},
+		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
 		ScopesSupported:                   []string{"channels:history"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
@@ -293,6 +337,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	require.NoError(t, err)
 	state := parsed.Query().Get("state")
 	require.NotEmpty(t, state)
+	if cfg.onAuthorizationURL != nil {
+		cfg.onAuthorizationURL(parsed)
+	}
 
 	// The upstream code is single-use and opaque to the mock; any non-empty
 	// value drives exchangeCode against the token server.
@@ -308,7 +355,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			return remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks)
+			return remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks, refreshOptions...)
 		},
 		q:              q,
 		projectID:      *authCtx.ProjectID,
