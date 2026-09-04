@@ -20,21 +20,11 @@ import {
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 import { ModeSurface } from "./mode-switch-stage.tsx";
-import {
-  MODE_SWITCHER_HEIGHT,
-  useModeSwitcherEnabled,
-} from "./mode-switch-context.ts";
 import { ModeSwitcher } from "./mode-switcher.tsx";
 
-// Height of the fixed chrome above the panes: the mode strip, plus the
-// impersonation banner when it is showing (h-9 / 2.25rem).
-const chromeTopOffset = (
-  isImpersonating: boolean,
-  hasModeSwitcher: boolean,
-): string => {
-  const strip = hasModeSwitcher ? MODE_SWITCHER_HEIGHT : "0px";
-  return isImpersonating ? `calc(${strip} + 2.25rem)` : strip;
-};
+// Height of the impersonation banner above the app surface (h-9 / 2.25rem).
+const chromeTopOffset = (isImpersonating: boolean): string =>
+  isImpersonating ? "2.25rem" : "0px";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -56,19 +46,15 @@ export const LoginCheck = (): JSX.Element => {
 
 export const AppLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
-  const chromeOffset = chromeTopOffset(
-    isImpersonating,
-    useModeSwitcherEnabled(),
-  );
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          // The mode strip and the impersonation banner both sit above the
-          // panes, so the fixed sidebar starts below their combined height and
-          // pages size themselves against it.
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
           "--header-offset": chromeOffset,
           "--banner-offset": chromeOffset,
         } as React.CSSProperties
@@ -167,7 +153,7 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   return (
-    <div className="flex h-screen w-full flex-col">
+    <div className="relative flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <ModeSwitcher mode="canvas" />
       <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-hidden">
@@ -257,25 +243,21 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 
 export const OrgLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
-  const chromeOffset = chromeTopOffset(
-    isImpersonating,
-    useModeSwitcherEnabled(),
-  );
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          // The mode strip and the impersonation banner both sit above the
-          // panes, so the fixed sidebar starts below their combined height and
-          // pages size themselves against it.
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
           "--header-offset": chromeOffset,
           "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
-      <div className="flex h-screen w-full flex-col">
+      <div className="relative flex h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
         <ModeSwitcher mode="canvas" />
         <ModeSurface

@@ -1,3 +1,4 @@
+import { NotSetUpState } from "@/components/not-set-up-state";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
@@ -6,13 +7,16 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { useSlugs } from "@/contexts/Sdk";
+import { DEMO_ORG_SLUG, demoProjectPageHref } from "@/lib/demo";
 import { cn } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
@@ -81,19 +85,29 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
 }
 
 function InventoryEmptyState() {
+  const orgRoutes = useOrgRoutes();
+  const { orgSlug, projectSlug } = useSlugs();
+  const location = useLocation();
+  const demoHref =
+    orgSlug === DEMO_ORG_SLUG
+      ? undefined
+      : demoProjectPageHref(location.pathname, projectSlug);
+
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Text variant="subheading" className="mb-1">
-        No Shadow MCP servers
-      </Text>
-      <Text small muted className="mb-4 max-w-md">
-        Inventory URLs will appear here after hook startup captures configured
-        Shadow MCP servers.
-      </Text>
-    </div>
+    <NotSetUpState
+      heading="Set up Shadow MCP discovery"
+      description="Configure an AI integration to discover the MCP servers used across your organization. Observed servers and access requests will appear here."
+      setupHref={orgRoutes.setup.href()}
+      setupLabel="Open setup"
+      demoHref={demoHref}
+      screenshot={
+        <img
+          src="/empty-states/shadow_mcp_empty.png"
+          alt="Shadow MCP inventory with observed servers"
+          className="block h-auto w-full"
+        />
+      }
+    />
   );
 }
 

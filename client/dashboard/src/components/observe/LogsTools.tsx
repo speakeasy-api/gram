@@ -5,7 +5,6 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -496,14 +495,12 @@ export function LogsTools(): JSX.Element {
             title="Tool Logs"
             description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
           />
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={refetch}
+              screenshotSrc="/empty-states/tool_logs_empty.png"
+              screenshotAlt="Tool Logs dashboard with captured tool calls"
+            />
           </div>
         </div>
       ) : (

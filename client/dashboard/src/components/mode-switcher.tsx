@@ -98,8 +98,7 @@ function ModeSegment({
 }
 
 /**
- * Out-of-canvas mode switcher at the very top of the app chrome, spanning the
- * full window above both the sidebar and the content pane. Swaps between the
+ * Mode switcher overlaid on the app's top navigation row. Swaps between the
  * normal dashboard and headless mode (Platform MCP setup, no sidebar).
  */
 export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
@@ -133,16 +132,9 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   return (
     <nav
       aria-label="Interface mode"
-      // Read by computeGrid to measure where the panes actually start.
-      data-mode-switcher=""
-      // The bar matches whatever sits under it: light over the dashboard, ink
-      // once the tab grid or headless mode is showing, so the chrome and the
-      // starfield read as one dark surface.
       className={cn(
-        "relative z-30 flex h-14 shrink-0 items-center justify-center transition-colors duration-500",
-        onInk
-          ? "bg-surface-tertiary-fixed-dark"
-          : "bg-background border-border border-b",
+        "absolute left-1/2 z-30 flex h-(--header-height) -translate-x-1/2 items-center justify-center",
+        mode === "canvas" ? "top-(--header-offset)" : "top-0",
       )}
     >
       <div
