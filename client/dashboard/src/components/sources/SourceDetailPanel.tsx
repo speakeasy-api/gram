@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
@@ -7,6 +9,8 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
+import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { useRoutes } from "@/routes";
 import type { Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
@@ -89,14 +93,75 @@ function downloadFilename(
   return `${base}.${contentType?.includes("json") ? "json" : "yaml"}`;
 }
 
+const VERSION_LIMIT = 10;
+
+/**
+ * The deployments a source is versioned by.
+ *
+ * Sources are not versioned individually: a push deploys every source in the
+ * project together, so a source's history is the project's deployments. The
+ * listing carries counts rather than each deployment's assets, so this says
+ * which versions exist and links out, and stops short of claiming which of
+ * them changed this particular source.
+ */
+function SourceVersionsPanel({
+  activeDeploymentId,
+}: {
+  activeDeploymentId: string | undefined;
+}): React.JSX.Element | null {
+  const routes = useRoutes();
+  const { data, isLoading } = useListDeployments({}, {});
+  const versions = (data?.items ?? []).slice(0, VERSION_LIMIT);
+
+  if (isLoading || versions.length === 0) return null;
+
+  return (
+    <Card.Dashboard
+      title="Versions"
+      tooltip="Each push deploys every source in the project together, so a source's versions are the project's deployments."
+      bodyClassName="p-0"
+    >
+      <ol className="divide-border divide-y">
+        {versions.map((version) => (
+          <li
+            key={version.id}
+            className="flex items-center justify-between gap-4 px-6 py-3"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <routes.deployments.deployment.Link
+                params={[version.id]}
+                className="truncate font-mono text-xs"
+              >
+                {version.id}
+              </routes.deployments.deployment.Link>
+              {version.id === activeDeploymentId && (
+                <Badge variant="neutral">
+                  <Badge.Text>Active</Badge.Text>
+                </Badge>
+              )}
+            </div>
+            <Text muted className="shrink-0 text-xs">
+              {version.openapiv3AssetCount + version.functionsAssetCount}{" "}
+              sources
+            </Text>
+          </li>
+        ))}
+      </ol>
+    </Card.Dashboard>
+  );
+}
+
 /** One labelled fact: label left, value right, in both surfaces. */
 function SourceFact({
   label,
   isPage,
+  tooltip,
   children,
 }: {
   label: string;
   isPage: boolean;
+  /** Explains a label that names a Gram concept rather than a file fact. */
+  tooltip?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -108,7 +173,20 @@ function SourceFact({
         isPage && "odd:bg-muted/20 px-6 py-3",
       )}
     >
-      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dt className="text-muted-foreground flex items-center gap-1.5 text-xs">
+        {label}
+        {tooltip && (
+          <SimpleTooltip tooltip={tooltip}>
+            <button
+              type="button"
+              aria-label={`About ${label}`}
+              className="hover:text-foreground inline-flex cursor-help items-center"
+            >
+              <Icon name="info" className="size-3.5" />
+            </button>
+          </SimpleTooltip>
+        )}
+      </dt>
       <dd className="min-w-0 truncate font-mono text-xs">{children}</dd>
     </div>
   );
@@ -203,7 +281,11 @@ export function SourceDetail({
         </>
       )}
       {deployment?.id && (
-        <SourceFact label="Active deployment" isPage={isPage}>
+        <SourceFact
+          label="Active deployment"
+          isPage={isPage}
+          tooltip="Every push creates a deployment: a version of all this project's sources and the tools generated from them. This is the newest one, and what the dashboard reads from."
+        >
           {deployment.id}
         </SourceFact>
       )}
@@ -256,6 +338,8 @@ export function SourceDetail({
             </ol>
           )}
         </Card.Dashboard>
+
+        <SourceVersionsPanel activeDeploymentId={deployment?.id} />
       </div>
     );
   }
