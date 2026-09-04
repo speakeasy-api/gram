@@ -20,6 +20,41 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "agent-v1." + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                        code,
+		UserSessionIssuerID:         toolset.UserSessionIssuerID.UUID,
+		UserSessionClientID:         client.ID,
+		ClientID:                    client.ClientID,
+		RedirectURI:                 client.RedirectUris[0],
+		CodeChallenge:               base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod:         "S256",
+		Subject:                     urn.NewUserSubject("agent-authorizer-" + uuid.NewString()),
+		AgentAuthorization:          &mcp.AgentAuthorizationResult{AgentID: uuid.New(), AuthorizerUserID: "agent-authorizer"},
+		DesiredSessionDurationHours: 0,
+		CreatedAt:                   time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", client.RedirectUris[0])
+	form.Set("client_id", client.ClientID)
+	form.Set("code_verifier", verifier)
+	w := postForm(t, ti, toolset.McpSlug.String, "token", form)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "agent sessions are not available")
+}
+
 // TestHandleTokenCode_ResourceIndicator covers the RFC 8707 check on the
 // authorization_code grant: a resource naming another server is invalid_target,
 // the advertised identifier is accepted, and an absent parameter stays legal

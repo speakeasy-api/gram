@@ -109,15 +109,22 @@ type AuthnChallengeState struct {
 	// as attr.OAuthFlowID on every handler in the flow. Empty for in-flight
 	// states minted before this field landed (rolling deploy); callers treat
 	// empty as "unknown" and never depend on its presence.
-	FlowID              string      `json:"flow_id,omitempty"`
-	UserSessionIssuerID uuid.UUID   `json:"user_session_issuer_id"`
-	Endpoint            EndpointRef `json:"endpoint"`
-	ClientID            string      `json:"client_id"`
-	RedirectURI         string      `json:"redirect_uri"`
-	State               string      `json:"state,omitempty"`
-	CodeChallenge       string      `json:"code_challenge"`
-	CodeChallengeMethod string      `json:"code_challenge_method"`
-	CSRFToken           string      `json:"csrf_token"`
+	FlowID              string    `json:"flow_id,omitempty"`
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	// AuthorizerUserID is stamped only from the successful IDP callback. It is
+	// kept separate from the eventual credential subject so selecting an agent
+	// never makes the agent appear to have consented for itself.
+	AuthorizerUserID string `json:"authorizer_user_id,omitempty"`
+	// AgentAuthorizationTarget fixes the only policy an agent selection may
+	// authorize. Older in-flight states omit it and remain self-only.
+	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
+	Endpoint                 EndpointRef               `json:"endpoint"`
+	ClientID                 string                    `json:"client_id"`
+	RedirectURI              string                    `json:"redirect_uri"`
+	State                    string                    `json:"state,omitempty"`
+	CodeChallenge            string                    `json:"code_challenge"`
+	CodeChallengeMethod      string                    `json:"code_challenge_method"`
+	CSRFToken                string                    `json:"csrf_token"`
 	// Subject is stamped exactly once before consent is rendered:
 	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
 	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so
@@ -194,6 +201,10 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
+	// AgentAuthorization is the final, human-approved handoff consumed by the
+	// agent-session lane. Until that lane is present, token redemption rejects
+	// grants carrying this field instead of minting a human session.
+	AgentAuthorization *AgentAuthorizationResult `json:"agent_authorization,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
@@ -208,9 +219,21 @@ type UserSessionGrant struct {
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 
-// CacheKey implements cache.CacheableObject.
+const agentAuthorizationCodePrefix = "agent-v1."
+
+// CacheKey implements cache.CacheableObject. Agent authorization grants use a
+// namespace that older binaries do not read, so a mixed-version deployment
+// cannot silently redeem one as a human session.
 func (g UserSessionGrant) CacheKey() string {
-	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
+	return userSessionGrantCacheKey(g.UserSessionIssuerID, g.Code, g.AgentAuthorization != nil)
+}
+
+func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorization bool) string {
+	prefix := "userSessionGrant:"
+	if agentAuthorization {
+		prefix = "agentUserSessionGrant:"
+	}
+	return prefix + issuerID.String() + ":" + code
 }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code

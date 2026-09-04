@@ -45,6 +45,44 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var agentSelect = form.elements.namedItem("agent_id");
+    var agentPolicy = document.querySelector("[data-agent-policy]");
+    var subjectDisplay = document.querySelector(
+      "[data-consent-subject-display]",
+    );
+    var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
+    if (agentSelect) {
+      var syncAgentSelection = function () {
+        var selected = agentSelect.options[agentSelect.selectedIndex];
+        var authorizingAgent = agentSelect.value !== "";
+        if (agentPolicy) {
+          agentPolicy.hidden = !authorizingAgent;
+        }
+        Array.prototype.forEach.call(selfOnlySections, function (section) {
+          section.hidden = authorizingAgent;
+        });
+        if (subjectDisplay && selected) {
+          subjectDisplay.textContent =
+            selected.getAttribute("data-subject-display") || "";
+        }
+        if (button) {
+          button.textContent = authorizingAgent
+            ? button.getAttribute("data-agent-label")
+            : button.getAttribute("data-self-label");
+          button.setAttribute(
+            "data-agent-selected",
+            authorizingAgent ? "true" : "false",
+          );
+          button.value = authorizingAgent ? "approve_agent" : "approve";
+          button.disabled = authorizingAgent
+            ? false
+            : button.getAttribute("data-consent-self-ready") !== "true";
+        }
+      };
+      agentSelect.addEventListener("change", syncAgentSelection);
+      syncAgentSelection();
+    }
+
     form.addEventListener("submit", function (event) {
       if (submitted) {
         event.preventDefault();
