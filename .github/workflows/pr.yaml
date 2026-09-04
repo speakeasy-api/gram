@@ -903,7 +903,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -930,7 +930,7 @@ jobs:
           ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
           if [ -n "$ch_status" ]; then
             failed=1
-            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql or mart.sql"
             echo "Regenerating ClickHouse migrations produced uncommitted changes."
             echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
             echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
@@ -1024,7 +1024,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
