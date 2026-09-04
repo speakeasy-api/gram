@@ -108,7 +108,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (create|get|rename|suspend|resume|revoke|delete)",
+		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|suspend|resume|revoke|delete)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
@@ -435,6 +435,22 @@ func ParseEndpoint(
 		agentsRenameFlags            = flag.NewFlagSet("rename", flag.ExitOnError)
 		agentsRenameBodyFlag         = agentsRenameFlags.String("body", "REQUIRED", "")
 		agentsRenameSessionTokenFlag = agentsRenameFlags.String("session-token", "", "")
+
+		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
+		agentsListPolicyGrantsAgentIDFlag      = agentsListPolicyGrantsFlags.String("agent-id", "REQUIRED", "")
+		agentsListPolicyGrantsSessionTokenFlag = agentsListPolicyGrantsFlags.String("session-token", "", "")
+
+		agentsCreatePolicyGrantFlags            = flag.NewFlagSet("create-policy-grant", flag.ExitOnError)
+		agentsCreatePolicyGrantBodyFlag         = agentsCreatePolicyGrantFlags.String("body", "REQUIRED", "")
+		agentsCreatePolicyGrantSessionTokenFlag = agentsCreatePolicyGrantFlags.String("session-token", "", "")
+
+		agentsUpdatePolicyGrantFlags            = flag.NewFlagSet("update-policy-grant", flag.ExitOnError)
+		agentsUpdatePolicyGrantBodyFlag         = agentsUpdatePolicyGrantFlags.String("body", "REQUIRED", "")
+		agentsUpdatePolicyGrantSessionTokenFlag = agentsUpdatePolicyGrantFlags.String("session-token", "", "")
+
+		agentsDeletePolicyGrantFlags            = flag.NewFlagSet("delete-policy-grant", flag.ExitOnError)
+		agentsDeletePolicyGrantBodyFlag         = agentsDeletePolicyGrantFlags.String("body", "REQUIRED", "")
+		agentsDeletePolicyGrantSessionTokenFlag = agentsDeletePolicyGrantFlags.String("session-token", "", "")
 
 		agentsSuspendFlags            = flag.NewFlagSet("suspend", flag.ExitOnError)
 		agentsSuspendBodyFlag         = agentsSuspendFlags.String("body", "REQUIRED", "")
@@ -3937,6 +3953,10 @@ func ParseEndpoint(
 	agentsCreateFlags.Usage = agentsCreateUsage
 	agentsGetFlags.Usage = agentsGetUsage
 	agentsRenameFlags.Usage = agentsRenameUsage
+	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
+	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
+	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
+	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
 	agentsSuspendFlags.Usage = agentsSuspendUsage
 	agentsResumeFlags.Usage = agentsResumeUsage
 	agentsRevokeFlags.Usage = agentsRevokeUsage
@@ -5042,6 +5062,18 @@ func ParseEndpoint(
 
 			case "rename":
 				epf = agentsRenameFlags
+
+			case "list-policy-grants":
+				epf = agentsListPolicyGrantsFlags
+
+			case "create-policy-grant":
+				epf = agentsCreatePolicyGrantFlags
+
+			case "update-policy-grant":
+				epf = agentsUpdatePolicyGrantFlags
+
+			case "delete-policy-grant":
+				epf = agentsDeletePolicyGrantFlags
 
 			case "suspend":
 				epf = agentsSuspendFlags
@@ -7355,6 +7387,18 @@ func ParseEndpoint(
 			case "rename":
 				endpoint = c.Rename()
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
+			case "list-policy-grants":
+				endpoint = c.ListPolicyGrants()
+				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
+			case "create-policy-grant":
+				endpoint = c.CreatePolicyGrant()
+				data, err = agentsc.BuildCreatePolicyGrantPayload(*agentsCreatePolicyGrantBodyFlag, *agentsCreatePolicyGrantSessionTokenFlag)
+			case "update-policy-grant":
+				endpoint = c.UpdatePolicyGrant()
+				data, err = agentsc.BuildUpdatePolicyGrantPayload(*agentsUpdatePolicyGrantBodyFlag, *agentsUpdatePolicyGrantSessionTokenFlag)
+			case "delete-policy-grant":
+				endpoint = c.DeletePolicyGrant()
+				data, err = agentsc.BuildDeletePolicyGrantPayload(*agentsDeletePolicyGrantBodyFlag, *agentsDeletePolicyGrantSessionTokenFlag)
 			case "suspend":
 				endpoint = c.Suspend()
 				data, err = agentsc.BuildSuspendPayload(*agentsSuspendBodyFlag, *agentsSuspendSessionTokenFlag)
@@ -10511,6 +10555,10 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
+	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
+	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
+	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
+	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    suspend: Suspend implements suspend.`)
 	fmt.Fprintln(os.Stderr, `    resume: Resume implements resume.`)
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke implements revoke.`)
@@ -10577,6 +10625,86 @@ func agentsRenameUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents rename --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsListPolicyGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list-policy-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListPolicyGrants implements listPolicyGrants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-policy-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsCreatePolicyGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents create-policy-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `CreatePolicyGrant implements createPolicyGrant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsUpdatePolicyGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents update-policy-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `UpdatePolicyGrant implements updatePolicyGrant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"grant_id\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsDeletePolicyGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents delete-policy-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DeletePolicyGrant implements deletePolicyGrant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsSuspendUsage() {
