@@ -9,11 +9,13 @@ import { getServerURL } from "@/lib/utils";
 
 interface DirectorySyncStepProps {
   onComplete: () => void;
+  onSkip: () => void;
   onBack: () => void;
 }
 
 export function DirectorySyncStep({
   onComplete,
+  onSkip,
   onBack,
 }: DirectorySyncStepProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
@@ -89,7 +91,7 @@ export function DirectorySyncStep({
       isLoading={isLoading}
       showBack
       onBack={onBack}
-      onSkip={onComplete}
+      onSkip={onSkip}
       skipLabel="Skip for now"
     >
       <div className="space-y-6">

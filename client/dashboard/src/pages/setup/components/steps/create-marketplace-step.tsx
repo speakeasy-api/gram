@@ -35,6 +35,7 @@ export function CreateMarketplaceStep({
           : "Plugins published to GitHub",
         { description: data.repoUrl },
       );
+      if (dialogMode === "publish") onComplete();
     },
     onError: () => {
       toast.error(

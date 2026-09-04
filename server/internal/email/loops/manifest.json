@@ -71,6 +71,19 @@
         "organization_name"
       ]
     },
+    "setup_task_assignment": {
+      "managed_name": "gram.transactional.v2.setup_task_assignment",
+      "subject": "New setup task for {data.organization_name}",
+      "preview_text": "{data.assigner_name} assigned you: {data.task_title}",
+      "source": "setup_task_assignment.lmx",
+      "variables": [
+        "assigner_name",
+        "organization_name",
+        "task_title",
+        "task_description",
+        "setup_link"
+      ]
+    },
     "trial_ending_soon": {
       "managed_name": "gram.transactional.v2.trial_ending_soon",
       "subject": "Your Speakeasy trial ends on {data.trial_end_date}",

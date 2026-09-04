@@ -9,6 +9,7 @@ import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet"
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -25,6 +26,14 @@ export function InstrumentAgentsStep({
   >(() =>
     Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
   );
+  const [activeTab, setActiveTab] = useState("device-agent");
+
+  // Cowork runs in Claude.ai's cloud sandbox, outside the device agent's
+  // reach, so it always needs a separate manual setup step.
+  const openCoworkManualSetup = () => {
+    setActiveTab("manual");
+    setDrawerPlatformId("claude-cowork");
+  };
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
   );
@@ -49,7 +58,7 @@ export function InstrumentAgentsStep({
       showBack
       onBack={onBack}
     >
-      <Tabs defaultValue="device-agent" className="gap-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-8">
         <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 divide-x-0 border-0 bg-transparent p-0 sm:grid-cols-2">
           <ChoiceTab
             value="device-agent"
@@ -65,7 +74,23 @@ export function InstrumentAgentsStep({
           />
         </TabsList>
 
-        <TabsContent value="device-agent">
+        <TabsContent value="device-agent" className="space-y-4">
+          <Alert variant="info">
+            <AlertTitle>Cowork needs separate setup</AlertTitle>
+            <AlertDescription>
+              The device agent instruments assistants that run on a developer's
+              machine. Cowork runs in Claude.ai's cloud sandbox, so it isn't
+              covered here.{" "}
+              <button
+                type="button"
+                onClick={openCoworkManualSetup}
+                className="text-foreground underline underline-offset-2"
+              >
+                Set it up manually
+              </button>
+              .
+            </AlertDescription>
+          </Alert>
           <DeviceAgentSetup />
         </TabsContent>
 

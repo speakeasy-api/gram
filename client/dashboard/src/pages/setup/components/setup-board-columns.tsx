@@ -257,6 +257,7 @@ export function SetupBoardColumns({
                               )}
                               canChangeStatus={canChangeStatus}
                               canOpen={canOpen}
+                              assignedToCurrentUser={assignedToCurrentUser}
                               canAssign={canAdmin}
                               isPlatformAdmin={isPlatformAdmin}
                               pending={pending}

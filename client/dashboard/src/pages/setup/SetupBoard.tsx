@@ -15,6 +15,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { showPylonChat } from "@/lib/pylon";
 import {
   useIsPlatformAdmin,
   useOrganization,
@@ -34,7 +35,7 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <SetupShell view="board">
       <main className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 p-8 pb-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
+        <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
           <Page.Section>
             <Page.Section.Title area="">Organization setup</Page.Section.Title>
             <Page.Section.Description>
@@ -54,9 +55,14 @@ function BoardLoading(): JSX.Element {
   return (
     <BoardPage>
       <Skeleton>
-        <div className="grid min-w-[1120px] grid-cols-4 gap-4 overflow-hidden">
+        <div className="grid grid-cols-1 gap-4 md:min-w-[1120px] md:grid-cols-4">
           {[0, 1, 2, 3].map((column) => (
-            <div key={column} className="h-80 border" />
+            <div
+              key={column}
+              className={
+                column === 0 ? "h-80 border" : "hidden h-80 border md:block"
+              }
+            />
           ))}
         </div>
       </Skeleton>
@@ -127,6 +133,20 @@ function SetupBoardInner(): JSX.Element {
       toast.success(`${selectedTask.title} completed`);
     } catch (error) {
       handleMutationError(error, "Failed to complete setup task");
+    }
+  };
+
+  const requestSupportForSelectedTask = async () => {
+    if (!selectedTask) return;
+    try {
+      await mutateTask({
+        taskKey: selectedTask.key,
+        status: "awaiting_support",
+      });
+      setSelectedTask(null);
+      showPylonChat();
+    } catch (error) {
+      handleMutationError(error, "Failed to request support");
     }
   };
 
@@ -236,13 +256,11 @@ function SetupBoardInner(): JSX.Element {
   return (
     <BoardPage>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <Page.Toolbar>
-          <Page.Toolbar.Leading>
-            <Text small className="whitespace-nowrap">
-              {completedCount} of {tasks.length} tasks complete
-            </Text>
-          </Page.Toolbar.Leading>
-          <Page.Toolbar.Actions>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text small className="whitespace-nowrap">
+            {completedCount} of {tasks.length} tasks complete
+          </Text>
+          <div className="flex flex-wrap items-center gap-5">
             <div className="flex items-center gap-3">
               <label id="my-tasks-label" className="text-sm font-medium">
                 My tasks
@@ -253,9 +271,7 @@ function SetupBoardInner(): JSX.Element {
                 aria-labelledby="my-tasks-label"
               />
             </div>
-          </Page.Toolbar.Actions>
-          {isPlatformAdmin ? (
-            <Page.Toolbar.Actions>
+            {isPlatformAdmin ? (
               <div className="flex items-center gap-3">
                 <label
                   id="include-hidden-label"
@@ -270,9 +286,9 @@ function SetupBoardInner(): JSX.Element {
                   disabled={pending}
                 />
               </div>
-            </Page.Toolbar.Actions>
-          ) : null}
-        </Page.Toolbar>
+            ) : null}
+          </div>
+        </div>
         <SetupBoardColumns
           tasks={visibleTasks}
           allTasks={tasks}
@@ -300,6 +316,7 @@ function SetupBoardInner(): JSX.Element {
         pending={pending}
         onClose={() => setSelectedTask(null)}
         onComplete={completeSelectedTask}
+        onSupport={requestSupportForSelectedTask}
         onSkip={() => setSelectedTask(null)}
       />
       <SetupTaskAssignmentDialog
