@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
@@ -645,6 +645,33 @@ func ParseEndpoint(
 
 		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
 		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
+
+		adminGetSessionFlags                 = flag.NewFlagSet("get-session", flag.ExitOnError)
+		adminGetSessionAdminSessionTokenFlag = adminGetSessionFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationFeaturesFlags                 = flag.NewFlagSet("get-organization-features", flag.ExitOnError)
+		adminGetOrganizationFeaturesOrganizationIDFlag    = adminGetOrganizationFeaturesFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationFeaturesAdminSessionTokenFlag = adminGetOrganizationFeaturesFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationFeatureFlags                 = flag.NewFlagSet("set-organization-feature", flag.ExitOnError)
+		adminSetOrganizationFeatureBodyFlag              = adminSetOrganizationFeatureFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationFeatureAdminSessionTokenFlag = adminSetOrganizationFeatureFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationChatAnalysisSettingsFlags                 = flag.NewFlagSet("get-organization-chat-analysis-settings", flag.ExitOnError)
+		adminGetOrganizationChatAnalysisSettingsOrganizationIDFlag    = adminGetOrganizationChatAnalysisSettingsFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationChatAnalysisSettingsAdminSessionTokenFlag = adminGetOrganizationChatAnalysisSettingsFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationChatAnalysisSettingsFlags                 = flag.NewFlagSet("set-organization-chat-analysis-settings", flag.ExitOnError)
+		adminSetOrganizationChatAnalysisSettingsBodyFlag              = adminSetOrganizationChatAnalysisSettingsFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationChatAnalysisSettingsAdminSessionTokenFlag = adminSetOrganizationChatAnalysisSettingsFlags.String("admin-session-token", "", "")
+
+		adminTriggerOrganizationChatAnalysisFlags                 = flag.NewFlagSet("trigger-organization-chat-analysis", flag.ExitOnError)
+		adminTriggerOrganizationChatAnalysisBodyFlag              = adminTriggerOrganizationChatAnalysisFlags.String("body", "REQUIRED", "")
+		adminTriggerOrganizationChatAnalysisAdminSessionTokenFlag = adminTriggerOrganizationChatAnalysisFlags.String("admin-session-token", "", "")
+
+		adminOpenOrganizationInDashboardFlags                 = flag.NewFlagSet("open-organization-in-dashboard", flag.ExitOnError)
+		adminOpenOrganizationInDashboardOrganizationIDFlag    = adminOpenOrganizationInDashboardFlags.String("organization-id", "REQUIRED", "")
+		adminOpenOrganizationInDashboardAdminSessionTokenFlag = adminOpenOrganizationInDashboardFlags.String("admin-session-token", "", "")
 
 		adminGetProjectFlags                    = flag.NewFlagSet("get-project", flag.ExitOnError)
 		adminGetProjectIDOrSlugFlag             = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
@@ -3959,6 +3986,13 @@ func ParseEndpoint(
 	adminLoginFlags.Usage = adminLoginUsage
 	adminCallbackFlags.Usage = adminCallbackUsage
 	adminLogoutFlags.Usage = adminLogoutUsage
+	adminGetSessionFlags.Usage = adminGetSessionUsage
+	adminGetOrganizationFeaturesFlags.Usage = adminGetOrganizationFeaturesUsage
+	adminSetOrganizationFeatureFlags.Usage = adminSetOrganizationFeatureUsage
+	adminGetOrganizationChatAnalysisSettingsFlags.Usage = adminGetOrganizationChatAnalysisSettingsUsage
+	adminSetOrganizationChatAnalysisSettingsFlags.Usage = adminSetOrganizationChatAnalysisSettingsUsage
+	adminTriggerOrganizationChatAnalysisFlags.Usage = adminTriggerOrganizationChatAnalysisUsage
+	adminOpenOrganizationInDashboardFlags.Usage = adminOpenOrganizationInDashboardUsage
 	adminGetProjectFlags.Usage = adminGetProjectUsage
 	adminUpdateOrganizationFlags.Usage = adminUpdateOrganizationUsage
 	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
@@ -5135,6 +5169,27 @@ func ParseEndpoint(
 
 			case "logout":
 				epf = adminLogoutFlags
+
+			case "get-session":
+				epf = adminGetSessionFlags
+
+			case "get-organization-features":
+				epf = adminGetOrganizationFeaturesFlags
+
+			case "set-organization-feature":
+				epf = adminSetOrganizationFeatureFlags
+
+			case "get-organization-chat-analysis-settings":
+				epf = adminGetOrganizationChatAnalysisSettingsFlags
+
+			case "set-organization-chat-analysis-settings":
+				epf = adminSetOrganizationChatAnalysisSettingsFlags
+
+			case "trigger-organization-chat-analysis":
+				epf = adminTriggerOrganizationChatAnalysisFlags
+
+			case "open-organization-in-dashboard":
+				epf = adminOpenOrganizationInDashboardFlags
 
 			case "get-project":
 				epf = adminGetProjectFlags
@@ -7444,6 +7499,27 @@ func ParseEndpoint(
 			case "logout":
 				endpoint = c.Logout()
 				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
+			case "get-session":
+				endpoint = c.GetSession()
+				data, err = adminc.BuildGetSessionPayload(*adminGetSessionAdminSessionTokenFlag)
+			case "get-organization-features":
+				endpoint = c.GetOrganizationFeatures()
+				data, err = adminc.BuildGetOrganizationFeaturesPayload(*adminGetOrganizationFeaturesOrganizationIDFlag, *adminGetOrganizationFeaturesAdminSessionTokenFlag)
+			case "set-organization-feature":
+				endpoint = c.SetOrganizationFeature()
+				data, err = adminc.BuildSetOrganizationFeaturePayload(*adminSetOrganizationFeatureBodyFlag, *adminSetOrganizationFeatureAdminSessionTokenFlag)
+			case "get-organization-chat-analysis-settings":
+				endpoint = c.GetOrganizationChatAnalysisSettings()
+				data, err = adminc.BuildGetOrganizationChatAnalysisSettingsPayload(*adminGetOrganizationChatAnalysisSettingsOrganizationIDFlag, *adminGetOrganizationChatAnalysisSettingsAdminSessionTokenFlag)
+			case "set-organization-chat-analysis-settings":
+				endpoint = c.SetOrganizationChatAnalysisSettings()
+				data, err = adminc.BuildSetOrganizationChatAnalysisSettingsPayload(*adminSetOrganizationChatAnalysisSettingsBodyFlag, *adminSetOrganizationChatAnalysisSettingsAdminSessionTokenFlag)
+			case "trigger-organization-chat-analysis":
+				endpoint = c.TriggerOrganizationChatAnalysis()
+				data, err = adminc.BuildTriggerOrganizationChatAnalysisPayload(*adminTriggerOrganizationChatAnalysisBodyFlag, *adminTriggerOrganizationChatAnalysisAdminSessionTokenFlag)
+			case "open-organization-in-dashboard":
+				endpoint = c.OpenOrganizationInDashboard()
+				data, err = adminc.BuildOpenOrganizationInDashboardPayload(*adminOpenOrganizationInDashboardOrganizationIDFlag, *adminOpenOrganizationInDashboardAdminSessionTokenFlag)
 			case "get-project":
 				endpoint = c.GetProject()
 				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectOrganizationIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
@@ -11337,6 +11413,13 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    login: Login implements login.`)
 	fmt.Fprintln(os.Stderr, `    callback: Callback implements callback.`)
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
+	fmt.Fprintln(os.Stderr, `    get-session: GetSession implements getSession.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-features: GetOrganizationFeatures implements getOrganizationFeatures.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-feature: SetOrganizationFeature implements setOrganizationFeature.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-chat-analysis-settings: GetOrganizationChatAnalysisSettings implements getOrganizationChatAnalysisSettings.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-chat-analysis-settings: SetOrganizationChatAnalysisSettings implements setOrganizationChatAnalysisSettings.`)
+	fmt.Fprintln(os.Stderr, `    trigger-organization-chat-analysis: TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.`)
+	fmt.Fprintln(os.Stderr, `    open-organization-in-dashboard: OpenOrganizationInDashboard implements openOrganizationInDashboard.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
 	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
 	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
@@ -11425,6 +11508,144 @@ func adminLogoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin logout --session-id \"abc123\"")
+}
+
+func adminGetSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `GetSession implements getSession.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-session --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationFeaturesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-features", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `GetOrganizationFeatures implements getOrganizationFeatures.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-features --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationFeatureUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-feature", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `SetOrganizationFeature implements setOrganizationFeature.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationChatAnalysisSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-chat-analysis-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `GetOrganizationChatAnalysisSettings implements getOrganizationChatAnalysisSettings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-chat-analysis-settings --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationChatAnalysisSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-chat-analysis-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `SetOrganizationChatAnalysisSettings implements setOrganizationChatAnalysisSettings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-chat-analysis-settings --body '{\n      \"daily_cap\": 1,\n      \"enabled\": false,\n      \"judge\": \"business_memory\",\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminTriggerOrganizationChatAnalysisUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin trigger-organization-chat-analysis", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin trigger-organization-chat-analysis --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminOpenOrganizationInDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin open-organization-in-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `OpenOrganizationInDashboard implements openOrganizationInDashboard.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin open-organization-in-dashboard --organization-id \"abc123\" --admin-session-token \"abc123\"")
 }
 
 func adminGetProjectUsage() {

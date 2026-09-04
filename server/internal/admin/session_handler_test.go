@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -111,6 +110,7 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	)
 
 	return &Service{
+		tracer:   testenv.NewTracerProvider(t).Tracer("admin_test"),
 		logger:   logger,
 		oidc:     oidcClient,
 		sessions: sessions,
@@ -119,8 +119,12 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	}
 }
 
-// callSessionGet drives the handler through the same middleware and error
-// wrapper that Attach mounts it behind.
+type sessionInfo struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+// callSessionGet drives the generated route through the production middleware.
 func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -129,8 +133,10 @@ func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.Resp
 		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	}
 
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
 	rec := httptest.NewRecorder()
-	SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+	SessionMiddleware(mux).ServeHTTP(rec, req)
 
 	return rec
 }
@@ -146,8 +152,10 @@ func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, re
 			<-start
 			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			mux := goahttp.NewMuxer()
+			Attach(mux, svc)
 			rec := httptest.NewRecorder()
-			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+			SessionMiddleware(mux).ServeHTTP(rec, req)
 			codes <- rec.Code
 		})
 	}
@@ -163,8 +171,8 @@ func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, re
 	return results
 }
 
-// TestAttach_MountsSessionRoute proves the hand-written route reaches the
-// handler on the same muxer that carries the generated admin routes. A missing
+// TestAttach_MountsSessionRoute proves the generated route reaches the
+// handler on the admin muxer. A missing
 // or conflicting pattern would give 404 instead of 401.
 func TestAttach_MountsSessionRoute(t *testing.T) {
 	t.Parallel()
@@ -181,7 +189,7 @@ func TestAttach_MountsSessionRoute(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestHandleGetSession_ReturnsIdentity(t *testing.T) {
+func TestGetSession_HTTPContract(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()

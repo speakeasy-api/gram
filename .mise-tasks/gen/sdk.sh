@@ -18,26 +18,19 @@ generate() {
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
+  CI=true speakeasy run "$@" --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {
   workflow=".speakeasy/workflow.yaml"
-  source_key=".sources.Gram-Internal"
-  schema=$(yq "${source_key}.inputs[0].location" "$workflow")
-  output=$(yq "${source_key}.output" "$workflow")
-  overlays=()
-  while IFS= read -r line; do
-    overlays+=("$line")
-  done < <(yq -r "${source_key}.overlays[].location" "$workflow")
+  output=$(yq '.sources.Gram-Internal.output' "$workflow")
+  expected=$(mktemp)
+  cp "$output" "$expected"
+  trap 'cp "$expected" "$output"; rm -f "$expected"' EXIT
 
-  args=(--schema "$schema")
-  for overlay in "${overlays[@]}"; do
-    args+=(--overlay "$overlay")
-  done
-  result=$(speakeasy overlay apply "${args[@]}")
+  generate --source Gram-Internal >/dev/null 2>&1
 
-  if ! diff -q <(echo "$result") "$output" >/dev/null 2>&1; then
+  if ! diff -q "$expected" "$output" >/dev/null 2>&1; then
     echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
     exit 1
   fi

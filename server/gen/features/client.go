@@ -43,13 +43,13 @@ func NewClient(getProductFeatures, setProductFeature, setRemoteSessionAutoRefres
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetProductFeatures(ctx context.Context, p *GetProductFeaturesPayload) (res *GetProductFeaturesResult, err error) {
+func (c *Client) GetProductFeatures(ctx context.Context, p *GetProductFeaturesPayload) (res *ProductFeatures, err error) {
 	var ires any
 	ires, err = c.GetProductFeaturesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*GetProductFeaturesResult), nil
+	return ires.(*ProductFeatures), nil
 }
 
 // SetProductFeature calls the "setProductFeature" endpoint of the "features"

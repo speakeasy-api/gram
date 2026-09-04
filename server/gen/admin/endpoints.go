@@ -16,31 +16,38 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login                        goa.Endpoint
-	Callback                     goa.Endpoint
-	Logout                       goa.Endpoint
-	GetProject                   goa.Endpoint
-	UpdateOrganization           goa.Endpoint
-	BulkUpdateAccountType        goa.Endpoint
-	DisableOrganization          goa.Endpoint
-	EnableOrganization           goa.Endpoint
-	GetOrganization              goa.Endpoint
-	ListOrganizationMembers      goa.Endpoint
-	ListOrganizationProjects     goa.Endpoint
-	ListOrganizationActivity     goa.Endpoint
-	ListOrganizations            goa.Endpoint
-	ExtendTrial                  goa.Endpoint
-	CreateOrganization           goa.Endpoint
-	RearmTrial                   goa.Endpoint
-	GetOrganizationStats         goa.Endpoint
-	GetInferenceKeys             goa.Endpoint
-	SetInferenceKeyMonthlyLimit  goa.Endpoint
-	GetInferenceSpendHistory     goa.Endpoint
-	GetPaygBillingSummary        goa.Endpoint
-	GetStripeSubscription        goa.Endpoint
-	CancelStripeSubscription     goa.Endpoint
-	ResumeStripeSubscription     goa.Endpoint
-	MarkEnterpriseTrialConverted goa.Endpoint
+	Login                               goa.Endpoint
+	Callback                            goa.Endpoint
+	Logout                              goa.Endpoint
+	GetSession                          goa.Endpoint
+	GetOrganizationFeatures             goa.Endpoint
+	SetOrganizationFeature              goa.Endpoint
+	GetOrganizationChatAnalysisSettings goa.Endpoint
+	SetOrganizationChatAnalysisSettings goa.Endpoint
+	TriggerOrganizationChatAnalysis     goa.Endpoint
+	OpenOrganizationInDashboard         goa.Endpoint
+	GetProject                          goa.Endpoint
+	UpdateOrganization                  goa.Endpoint
+	BulkUpdateAccountType               goa.Endpoint
+	DisableOrganization                 goa.Endpoint
+	EnableOrganization                  goa.Endpoint
+	GetOrganization                     goa.Endpoint
+	ListOrganizationMembers             goa.Endpoint
+	ListOrganizationProjects            goa.Endpoint
+	ListOrganizationActivity            goa.Endpoint
+	ListOrganizations                   goa.Endpoint
+	ExtendTrial                         goa.Endpoint
+	CreateOrganization                  goa.Endpoint
+	RearmTrial                          goa.Endpoint
+	GetOrganizationStats                goa.Endpoint
+	GetInferenceKeys                    goa.Endpoint
+	SetInferenceKeyMonthlyLimit         goa.Endpoint
+	GetInferenceSpendHistory            goa.Endpoint
+	GetPaygBillingSummary               goa.Endpoint
+	GetStripeSubscription               goa.Endpoint
+	CancelStripeSubscription            goa.Endpoint
+	ResumeStripeSubscription            goa.Endpoint
+	MarkEnterpriseTrialConverted        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -48,31 +55,38 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:                        NewLoginEndpoint(s),
-		Callback:                     NewCallbackEndpoint(s),
-		Logout:                       NewLogoutEndpoint(s),
-		GetProject:                   NewGetProjectEndpoint(s, a.APIKeyAuth),
-		UpdateOrganization:           NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
-		BulkUpdateAccountType:        NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
-		DisableOrganization:          NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
-		EnableOrganization:           NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
-		GetOrganization:              NewGetOrganizationEndpoint(s, a.APIKeyAuth),
-		ListOrganizationMembers:      NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationProjects:     NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
-		ListOrganizationActivity:     NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
-		ListOrganizations:            NewListOrganizationsEndpoint(s, a.APIKeyAuth),
-		ExtendTrial:                  NewExtendTrialEndpoint(s, a.APIKeyAuth),
-		CreateOrganization:           NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
-		RearmTrial:                   NewRearmTrialEndpoint(s, a.APIKeyAuth),
-		GetOrganizationStats:         NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
-		GetInferenceKeys:             NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
-		SetInferenceKeyMonthlyLimit:  NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendHistory:     NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:        NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:        NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:     NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:     NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		MarkEnterpriseTrialConverted: NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		Login:                               NewLoginEndpoint(s),
+		Callback:                            NewCallbackEndpoint(s),
+		Logout:                              NewLogoutEndpoint(s),
+		GetSession:                          NewGetSessionEndpoint(s, a.APIKeyAuth),
+		GetOrganizationFeatures:             NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationFeature:              NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
+		GetOrganizationChatAnalysisSettings: NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		SetOrganizationChatAnalysisSettings: NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		TriggerOrganizationChatAnalysis:     NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
+		OpenOrganizationInDashboard:         NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
+		GetProject:                          NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:                  NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:               NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:                 NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:                  NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:                     NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:             NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects:            NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListOrganizationActivity:            NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:                   NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ExtendTrial:                         NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:                  NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
+		RearmTrial:                          NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:                NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:                    NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		SetInferenceKeyMonthlyLimit:         NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:            NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:               NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:               NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:            NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:            NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -81,6 +95,13 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Login = m(e.Login)
 	e.Callback = m(e.Callback)
 	e.Logout = m(e.Logout)
+	e.GetSession = m(e.GetSession)
+	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
+	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
+	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
+	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
+	e.TriggerOrganizationChatAnalysis = m(e.TriggerOrganizationChatAnalysis)
+	e.OpenOrganizationInDashboard = m(e.OpenOrganizationInDashboard)
 	e.GetProject = m(e.GetProject)
 	e.UpdateOrganization = m(e.UpdateOrganization)
 	e.BulkUpdateAccountType = m(e.BulkUpdateAccountType)
@@ -129,6 +150,179 @@ func NewLogoutEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LogoutPayload)
 		return nil, s.Logout(ctx, p)
+	}
+}
+
+// NewGetSessionEndpoint returns an endpoint function that calls the method
+// "getSession" of service "admin".
+func NewGetSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSession(ctx, p)
+	}
+}
+
+// NewGetOrganizationFeaturesEndpoint returns an endpoint function that calls
+// the method "getOrganizationFeatures" of service "admin".
+func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationFeaturesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.GetOrganizationFeatures(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedProductFeatures(res, "default")
+		return vres, nil
+	}
+}
+
+// NewSetOrganizationFeatureEndpoint returns an endpoint function that calls
+// the method "setOrganizationFeature" of service "admin".
+func NewSetOrganizationFeatureEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationFeaturePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.SetOrganizationFeature(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedProductFeatures(res, "default")
+		return vres, nil
+	}
+}
+
+// NewGetOrganizationChatAnalysisSettingsEndpoint returns an endpoint function
+// that calls the method "getOrganizationChatAnalysisSettings" of service
+// "admin".
+func NewGetOrganizationChatAnalysisSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationChatAnalysisSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationChatAnalysisSettings(ctx, p)
+	}
+}
+
+// NewSetOrganizationChatAnalysisSettingsEndpoint returns an endpoint function
+// that calls the method "setOrganizationChatAnalysisSettings" of service
+// "admin".
+func NewSetOrganizationChatAnalysisSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationChatAnalysisSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationChatAnalysisSettings(ctx, p)
+	}
+}
+
+// NewTriggerOrganizationChatAnalysisEndpoint returns an endpoint function that
+// calls the method "triggerOrganizationChatAnalysis" of service "admin".
+func NewTriggerOrganizationChatAnalysisEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TriggerOrganizationChatAnalysisPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.TriggerOrganizationChatAnalysis(ctx, p)
+	}
+}
+
+// NewOpenOrganizationInDashboardEndpoint returns an endpoint function that
+// calls the method "openOrganizationInDashboard" of service "admin".
+func NewOpenOrganizationInDashboardEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*OpenOrganizationInDashboardPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.OpenOrganizationInDashboard(ctx, p)
 	}
 }
 

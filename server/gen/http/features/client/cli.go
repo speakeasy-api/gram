@@ -64,7 +64,7 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 	}
 	v := &features.SetProductFeaturePayload{
 		OrganizationID: body.OrganizationID,
-		FeatureName:    body.FeatureName,
+		FeatureName:    features.ProductFeatureName(body.FeatureName),
 		Enabled:        body.Enabled,
 	}
 	v.SessionToken = sessionToken

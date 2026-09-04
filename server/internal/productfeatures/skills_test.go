@@ -36,7 +36,7 @@ func TestProductFeaturesService_SkillsAlwaysEnabled(t *testing.T) {
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        false,
 	})
 	require.NoError(t, err)
@@ -235,7 +235,7 @@ func TestProductFeaturesService_EnableSkillsTargetsRequestedOrganization(t *test
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: targetOrganizationID,
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	}))
 
