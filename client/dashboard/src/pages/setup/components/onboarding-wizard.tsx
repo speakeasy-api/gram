@@ -246,7 +246,11 @@ export function SetupWizard(): JSX.Element {
         );
       case "directory-sync":
         return (
-          <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />
+          <DirectorySyncStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
+            onBack={goBack}
+          />
         );
       case "create-marketplace":
         return (

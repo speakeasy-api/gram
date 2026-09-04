@@ -185,7 +185,7 @@ describe("DistributeServersStep secondary action", () => {
     ).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
   });
 
