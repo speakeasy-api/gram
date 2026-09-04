@@ -46,18 +46,26 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p de
 	var effects postCommitEffects
 
 	repo := orgrepo.New(dbtx)
-	if err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	ownerUserIDs, err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     p.organizationID,
 		UserID:             conv.ToPGTextEmpty(p.gramUserID),
 		WorkosUserID:       conv.ToPGTextEmpty(p.workosUserID),
 		WorkosMembershipID: conv.ToPGTextEmpty(p.workosMembershipID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(p.eventUpdatedAt),
 		WorkosLastEventID:  conv.ToPGText(p.eventID),
-	}); err != nil {
+	})
+	if err != nil {
 		return effects, fmt.Errorf("mark organization membership deleted for workos user %q: %w", p.workosUserID, err)
 	}
+	ownerUserID := p.gramUserID
+	for _, candidate := range ownerUserIDs {
+		if candidate.Valid {
+			ownerUserID = candidate.String
+			break
+		}
+	}
 	if err := agentownership.LatchOwnerLossByMembership(
-		ctx, dbtx, p.organizationID, p.gramUserID, p.ownerLossReason, agentownership.SystemActor, nil,
+		ctx, dbtx, p.organizationID, ownerUserID, p.ownerLossReason, agentownership.SystemActor, nil,
 	); err != nil {
 		return effects, fmt.Errorf("latch agent owner membership loss: %w", err)
 	}
