@@ -44,7 +44,7 @@ describe("ExploreDemo", () => {
     });
     mocks.enterDemo.mockResolvedValue({});
     const replace = vi.fn();
-    vi.stubGlobal("location", { replace });
+    vi.stubGlobal("location", { replace, search: "" });
 
     const { default: ExploreDemo } = await import("./ExploreDemo");
     render(<ExploreDemo />);
@@ -66,7 +66,7 @@ describe("ExploreDemo", () => {
     });
     mocks.enterDemo.mockResolvedValue({});
     const replace = vi.fn();
-    vi.stubGlobal("location", { replace });
+    vi.stubGlobal("location", { replace, search: "" });
 
     const { default: ExploreDemo } = await import("./ExploreDemo");
     render(<ExploreDemo />);
@@ -81,7 +81,7 @@ describe("ExploreDemo", () => {
     mocks.info.mockRejectedValue(new Error("no session"));
     mocks.enterDemo.mockRejectedValue(gramError(401));
     const replace = vi.fn();
-    vi.stubGlobal("location", { replace });
+    vi.stubGlobal("location", { replace, search: "" });
 
     const { default: ExploreDemo } = await import("./ExploreDemo");
     render(<ExploreDemo />);
