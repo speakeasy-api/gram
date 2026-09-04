@@ -322,10 +322,6 @@ vi.mock("@/components/ui/Table/sorting", () => ({
   },
 }));
 
-vi.mock("@/components/not-set-up-state", () => ({
-  NotSetUpState: () => <div data-testid="not-set-up-state" />,
-}));
-
 function inventoryServer(
   overrides: Partial<ShadowMCPInventoryServer> & {
     canonicalServerUrl: string;

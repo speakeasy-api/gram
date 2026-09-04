@@ -130,16 +130,23 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   const onInk = mode === "headless" || phase !== "idle";
 
   return (
+    // Full-width transparent overlay so the pill stays geometrically centred
+    // in the header without knowing the widths of the controls on either side.
+    // pointer-events-none on the container means clicks pass straight through
+    // to any header controls that happen to be underneath at very narrow sizes;
+    // only the pill itself (pointer-events-auto) intercepts interaction.
+    // Hidden below sm (640 px) where the pill would overlap the workspace
+    // switcher and command controls with no room to breathe.
     <nav
       aria-label="Interface mode"
       className={cn(
-        "absolute left-1/2 z-30 flex h-(--header-height) -translate-x-1/2 items-center justify-center",
+        "pointer-events-none absolute inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
         mode === "canvas" ? "top-(--header-offset)" : "top-0",
       )}
     >
       <div
         className={cn(
-          "relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
+          "pointer-events-auto relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
           onInk ? "border-neutral-softest" : "border-border",
         )}
       >

@@ -10,7 +10,17 @@ const DEMO_APP_ORIGIN = "https://app.getgram.ai";
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
 
-/** Link to the demo-org equivalent of a project page. */
+/**
+ * Query-parameter key used by ExploreDemo to land the visitor on a specific
+ * page after switching their session into the demo org.
+ */
+export const DEMO_REDIRECT_PARAM = "redirect";
+
+/**
+ * Link to the demo-org equivalent of a page. Routes through /explore-demo so
+ * auth.enterDemo runs first — a direct deep link would fail for users whose
+ * session is scoped to a different org.
+ */
 export function demoProjectPageHref(
   pathname: string,
   projectSlug?: string,
@@ -22,7 +32,8 @@ export function demoProjectPageHref(
       ? pathname.slice(projectRootIndex + (projectRoot?.length ?? 0))
       : "";
 
-  return `${DEMO_APP_ORIGIN}${DEMO_LANDING_PATH}${pagePath}`;
+  const demoPath = `${DEMO_LANDING_PATH}${pagePath}`;
+  return `${DEMO_APP_ORIGIN}/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
 }
 
 // Set by the /explore-demo page before switching, so Exit demo can return a

@@ -1,4 +1,3 @@
-import { NotSetUpState } from "@/components/not-set-up-state";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
@@ -10,13 +9,9 @@ import { Badge } from "@/components/ui/Badge";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { useSlugs } from "@/contexts/Sdk";
-import { DEMO_ORG_SLUG, demoProjectPageHref } from "@/lib/demo";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
@@ -85,29 +80,16 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
 }
 
 function InventoryEmptyState() {
-  const orgRoutes = useOrgRoutes();
-  const { orgSlug, projectSlug } = useSlugs();
-  const location = useLocation();
-  const demoHref =
-    orgSlug === DEMO_ORG_SLUG
-      ? undefined
-      : demoProjectPageHref(location.pathname, projectSlug);
-
   return (
-    <NotSetUpState
-      heading="Set up Shadow MCP discovery"
-      description="Configure an AI integration to discover the MCP servers used across your organization. Observed servers and access requests will appear here."
-      setupHref={orgRoutes.setup.href()}
-      setupLabel="Open setup"
-      demoHref={demoHref}
-      screenshot={
-        <img
-          src="/empty-states/shadow_mcp_empty.png"
-          alt="Shadow MCP inventory with observed servers"
-          className="block h-auto w-full"
-        />
-      }
-    />
+    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <Text variant="body" className="font-medium">
+        No MCP servers observed yet
+      </Text>
+      <Text muted small className="max-w-md">
+        Servers appear here once your AI integration reports activity. Check
+        back after your first agent run.
+      </Text>
+    </div>
   );
 }
 
