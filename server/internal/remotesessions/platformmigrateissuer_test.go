@@ -239,7 +239,7 @@ func TestMigrateToGlobalIssuer_LegacyProjectSourceWithNullOrganization(t *testin
 	migrated, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ProjectID:      *authCtx.ProjectID,
 		ID:             clientUUID,
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err, "the project tier still reaches the client through c.project_id")
 	require.Equal(t, targetID, migrated.RemoteSessionClient.RemoteSessionIssuerID)

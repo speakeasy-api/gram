@@ -38,6 +38,10 @@ func (*m3StripeWebhookClient) CreateCustomer(context.Context, stripeclient.Creat
 	return nil, errors.New("not implemented")
 }
 
+func (*m3StripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
+	return errors.New("not implemented")
+}
+
 func (*m3StripeWebhookClient) CreateCheckoutSession(context.Context, stripeclient.CreateCheckoutSessionInput) (*stripeclient.CheckoutSession, error) {
 	return nil, errors.New("not implemented")
 }

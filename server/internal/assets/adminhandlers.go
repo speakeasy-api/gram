@@ -26,7 +26,7 @@ import (
 // (audit_log.organization_id is NOT NULL).
 
 func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.UploadPlatformImageForm, reader io.ReadCloser) (*admingen.UploadImageResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close platform image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -43,7 +43,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up platform image upload", func() error {
 		return result.cleanup()
 	})
 

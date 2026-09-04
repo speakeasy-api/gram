@@ -125,6 +125,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -845,6 +846,8 @@ func newStartCommand() *cli.Command {
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
 				pubsubShutdown          func(context.Context) error
+				enforcementDispatcher   *enforcereply.Dispatcher
+				enforcementInbox        *enforcereply.Inbox
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				var errs []error
@@ -866,6 +869,12 @@ func newStartCommand() *cli.Command {
 				if telemetryLoggerShutdown != nil {
 					errs = append(errs, telemetryLoggerShutdown(ctx))
 				}
+				if enforcementDispatcher != nil {
+					errs = append(errs, enforcementDispatcher.Close(ctx))
+				}
+				if enforcementInbox != nil {
+					errs = append(errs, enforcementInbox.Close())
+				}
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
 				}
@@ -885,6 +894,25 @@ func newStartCommand() *cli.Command {
 			publishersShutdown = shutdown
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
+			}
+
+			var inboxErr error
+			enforcementInbox, inboxErr = enforcereply.New(ctx, logger, tracerProvider, meterProvider, enforcereply.Config{
+				RedisOptions: *redisClient.Options(),
+				ReplicaID:    "",
+				PollInterval: 0,
+				DrainGate:    nil,
+			})
+			if inboxErr != nil {
+				logger.ErrorContext(ctx, "pub/sub enforcement disabled: create reply inbox", attr.SlogError(inboxErr))
+			} else {
+				var dispatcherErr error
+				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
+				if dispatcherErr != nil {
+					logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(dispatcherErr))
+					_ = enforcementInbox.Close()
+					enforcementInbox = nil
+				}
 			}
 			authzEngine := authz.NewEngine(
 				logger,
@@ -1315,7 +1343,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1335,7 +1363,7 @@ func newStartCommand() *cli.Command {
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc))
-			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage))
+			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage, telemLogger))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1476,7 +1504,19 @@ func newStartCommand() *cli.Command {
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+			// Plugin changes signal a debounced per-project publish rather than
+			// waiting for the hourly rollout sweep to notice them. Both stay nil
+			// when GitHub publishing is off: the worker has no publisher then, so
+			// an enqueued run could only fail. They are declared as the interface
+			// types on purpose — a typed nil pointer here would read as non-nil
+			// through the interface and defeat the services' own nil guards.
+			var pluginsPublishSignaler plugins.PluginPublishSignaler
+			var skillsPublishSignaler skills.PluginPublishSignaler
+			if pluginsGitHub != nil {
+				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
+				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
+			}
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler)
 			plugins.Attach(mux, pluginsSvc)
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
@@ -1499,7 +1539,7 @@ func newStartCommand() *cli.Command {
 			}
 			killswitchapi.Attach(mux, killswitchService)
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
-				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, siteURL)
+				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL)
 			skills.Attach(mux, skillsService)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
 			toolsets.Attach(mux, toolsetsSvc)
@@ -1531,7 +1571,7 @@ func newStartCommand() *cli.Command {
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
@@ -1805,7 +1845,6 @@ func newStartCommand() *cli.Command {
 						ShadowMCPClient:           shadowMCPClient,
 						AuditLogger:               auditLogger,
 						WorkOSClient:              backgroundWorkOSClient,
-						SvixClient:                svixClient,
 						ProductFeatures:           productFeatures,
 						PluginPublisher:           pluginPublisher,
 						Publishers:                publishers,
@@ -1935,7 +1974,7 @@ func newStartCommand() *cli.Command {
 		After: func(c *cli.Context) error {
 			ctx := context.WithoutCancel(c.Context)
 			defer dbClose()
-			defer o11y.LogDefer(ctx, PullLogger(c.Context), func() error { return clickhouseShutdown(ctx) })
+			defer o11y.LogDefer(ctx, PullLogger(c.Context), "failed to shut down clickhouse client", func() error { return clickhouseShutdown(ctx) })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

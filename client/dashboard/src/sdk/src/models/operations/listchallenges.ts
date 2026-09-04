@@ -49,6 +49,14 @@ export type ListChallengesRequest = {
    */
   ids?: Array<string> | undefined;
   /**
+   * Inclusive start of the window to list challenges from. Omit for the whole history.
+   */
+  from?: Date | undefined;
+  /**
+   * Exclusive end of the window to list challenges from. Omit for the whole history.
+   */
+  to?: Date | undefined;
+  /**
    * Maximum number of results to return.
    */
   limit?: number | undefined;
@@ -110,6 +118,8 @@ export type ListChallengesRequest$Outbound = {
   project_id?: string | undefined;
   resolved?: boolean | undefined;
   ids?: Array<string> | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   limit: number;
   offset: number;
   "Gram-Key"?: string | undefined;
@@ -128,6 +138,8 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
     projectId: z.optional(z.string()),
     resolved: z.optional(z.boolean()),
     ids: z.optional(z.array(z.string())),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),

@@ -184,31 +184,6 @@ WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
 
--- name: SeedOutboxEntry :one
--- Fixture insert for the deprecated outbox table. Producers write to
--- publish_outbox now, so the only thing that still needs to create one of
--- these rows is the legacy relay's own tests; this goes away with them.
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES (@organization_id, @event_type, @payload)
-RETURNING id;
-
--- name: GetOutboxEntry :one
--- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-SELECT id FROM outbox WHERE id = @id;
-
--- name: GetOutboxRelayState :one
--- Reads the relay tracking state for a single outbox row.
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = @outbox_id;
-
 -- name: GetPublishOutboxRow :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at
@@ -397,6 +372,15 @@ SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen
 FROM device_agent_device_syncs
 WHERE organization_id = @organization_id
 ORDER BY serial_number ASC;
+
+-- name: ListDeviceAgentEnvironmentSyncsFixture :many
+-- Reads back non-laptop agent heartbeats so tests can assert the write path,
+-- and — the part that matters — assert that these rows land HERE rather than
+-- in device_agent_syncs, which the coverage join reads.
+SELECT organization_id, email, environment, hostname, first_seen_at, last_seen_at
+FROM device_agent_environment_syncs
+WHERE organization_id = @organization_id
+ORDER BY environment ASC, email ASC;
 
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
@@ -839,3 +823,114 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+-- Writes an issuer that belongs to an organization and to no project. No
+-- production surface creates one: CreateUserSessionIssuer always writes a
+-- project_id. Tests need such a row to exercise the organization-tier arm of
+-- the issuer predicates, the delete path's sweep for owners in a project other
+-- than the caller's included.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
+RETURNING id;
+
+-- name: SeedJsonWebKeySetFixture :one
+-- Builds the external credential / external key / key set chain a
+-- json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+-- Those tests reference the set row and never read its keys, so this skips the
+-- KMS mint that jsonwebkeysets.CreateSet performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT @organization_id, key.id, @name FROM key
+RETURNING id;
+
+-- name: SeedRemoteSessionClientForKeySetFixture :exec
+-- Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+-- delete guard and its preflight. Those live in the jsonwebkeysets package,
+-- which cannot reach the remotesessions service to build the reference.
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES (@organization_id, @issuer_slug, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT @organization_id, issuer.id, @client_id, @json_web_key_set_id FROM issuer;
+
+-- name: ClearRemoteSessionClientKeySetFixture :execrows
+-- Releases a key set the way the detach endpoint does, so the delete guard can
+-- be shown to read the live reference rather than any reference.
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = @json_web_key_set_id;
+
+-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+-- Tombstones the clients referencing a key set, so the delete guard can be
+-- shown to ignore them.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND deleted IS FALSE;
+
+-- name: CreateOwnerlessAgentFixture :exec
+INSERT INTO agents (organization_id, owner_user_id, name)
+VALUES (@organization_id, NULL, @name);
+
+-- name: DeleteOrganizationUserRelationshipFixture :exec
+DELETE FROM organization_user_relationships
+WHERE organization_id = @organization_id AND user_id = @user_id;
+
+-- name: SetAgentSuspendedFixture :exec
+UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentRevokedFixture :exec
+UPDATE agents
+SET suspended_at = NULL, revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SoftDeleteAgentFixture :exec
+UPDATE agents SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentInvalidLifecycleFixture :exec
+UPDATE agents
+SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetAgentOwnerLatchTimestampOnlyFixture :exec
+UPDATE agents SET owner_reassignment_required_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentOwnerLatchReasonOnlyFixture :exec
+UPDATE agents SET owner_reassignment_reason = 'owner unavailable' WHERE id = @id;
+
+-- name: SetAgentOwnerLatchFixture :exec
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: SetAgentRevokedAndOwnerLatchFixture :exec
+UPDATE agents
+SET suspended_at = NULL,
+    revoked_at = clock_timestamp(),
+    owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: ListAgentColumnNamesFixture :many
+SELECT column_name::text
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'agents'
+ORDER BY ordinal_position;

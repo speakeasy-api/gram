@@ -308,6 +308,8 @@ type mcpInputs struct {
 	// described toolset when non-nil (wrapper visibility governs). Nil falls
 	// back to the toolset flag.
 	wrapperIsPublic *bool
+	// metaMcpServerID is the gateway the call was dispatched through; attribution only.
+	metaMcpServerID string
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -474,7 +476,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}, nil
 }
@@ -523,10 +525,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	// OAuth metadata at the canonical RFC paths. The handlers in
-	// authnchallenge.go dispatch internally on toolsets.user_session_issuer_id:
-	// issuer-gated toolsets get the new metadata shape; legacy toolsets fall
-	// through to wellknown.Resolve* (preserving the prior behaviour).
+	// OAuth metadata at the canonical RFC paths; resolution semantics are
+	// documented in authnchallenge_well_known.go.
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
@@ -882,7 +882,6 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // downstream tool dispatch doesn't 401 when the in-toolset gate is skipped.
 // The legacy /mcp path passes nil.
 //
-// The caller is responsible for closing r.Body.
 // callerToolSelection is the consent-screen tool policy resolved by a
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
@@ -1074,7 +1073,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	if bodyDecodeErr != nil {
-		return oops.E(oops.CodeBadRequest, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
+		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
+		// JSON of the wrong shape/type stays an invalid request (-32600).
+		decodeCode := oops.CodeBadRequest
+		if !json.Valid(bodyBytes) {
+			decodeCode = oops.CodeParseError
+		}
+		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
@@ -1152,6 +1157,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		mcpServerID:              cfg.mcpServerID,
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
+		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
 		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),

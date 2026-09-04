@@ -10,11 +10,13 @@ const {
   useUserSessionsInfinite,
   invalidateAllUserSessionClients,
   revokeSessionMutate,
+  batchBadgesMutate,
 } = vi.hoisted(() => ({
   useUserSessionClientsInfinite: vi.fn(),
   useUserSessionsInfinite: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
   revokeSessionMutate: vi.fn(),
+  batchBadgesMutate: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
@@ -66,6 +68,29 @@ vi.mock("@/components/ui/MoreActions", () => ({
   ),
 }));
 
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ killswitch: { href: () => "/example/killswitch" } }),
+  useRoutes: () => ({
+    identities: {
+      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
+    },
+  }),
+}));
+
+vi.mock("@/hooks/useKillswitchAccess", () => ({
+  useKillswitchAccess: () => ({
+    canAccess: true,
+    isLoading: false,
+    reason: "allowed",
+  }),
+}));
+
+vi.mock("@gram/client/react-query/batchKillswitchUserBadges.js", () => ({
+  useBatchKillswitchUserBadgesMutation: () => ({
+    mutateAsync: batchBadgesMutate,
+  }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, hasAnyScope: () => true }),
 }));
@@ -102,6 +127,10 @@ vi.mock("./RevokeClientDialog", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "project-1" }),
+  useSession: () => ({
+    session: "session-1",
+    organization: { id: "org-1" },
+  }),
 }));
 
 function client(overrides: Record<string, unknown>) {
@@ -177,6 +206,16 @@ describe("ClientsAndSessionsTab", () => {
   beforeEach(() => {
     useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(queryResult([]));
+    batchBadgesMutate.mockResolvedValue({
+      badges: [
+        {
+          userId: "u1",
+          affected: true,
+          affectedNow: true,
+          scheduled: false,
+        },
+      ],
+    });
   });
 
   afterEach(() => {
@@ -232,7 +271,9 @@ describe("ClientsAndSessionsTab", () => {
     // not repeated — this tab is already scoped to one.
     expect(screen.getByText(/1 provider/)).toBeDefined();
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // Not the person's name — that is a link to their profile now, so the
+    // row is opened from anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
 
     expect(screen.getAllByText("Test Client").length).toBeGreaterThan(0);
   });
@@ -246,7 +287,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText(/Speakeasy tools only/)).toBeDefined();
+    expect(screen.getByText(/no upstreams/)).toBeDefined();
   });
 
   it("groups connections by person and can regroup by provider", () => {
@@ -300,6 +341,68 @@ describe("ClientsAndSessionsTab", () => {
     expect(screen.getByText("Needs re-auth")).toBeDefined();
   });
 
+  it("batches deduplicated people once and links status/actions to the exact user", async () => {
+    useUserSessionsInfinite.mockReturnValue(
+      queryResult([session({ id: "session-1" }), session({ id: "session-2" })]),
+    );
+
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="mcp-server-1"
+      />,
+    );
+
+    await vi.waitFor(() => expect(batchBadgesMutate).toHaveBeenCalledTimes(1));
+    expect(batchBadgesMutate.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        killswitchBatchUserBadgesRequest: { userIds: ["u1"] },
+      },
+    });
+    expect(
+      (await screen.findByRole("link", { name: /Killswitched/ })).getAttribute(
+        "href",
+      ),
+    ).toBe("/example/killswitch?user=u1");
+    expect(screen.getByText("View killswitches")).toBeDefined();
+    fireEvent.click(screen.getByText("New killswitch…"));
+    expect(revokeSessionMutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Revoke all connections"));
+    expect(
+      screen
+        .getByRole("link", { name: "New killswitch…" })
+        .getAttribute("href"),
+    ).toBe(
+      "/example/killswitch?create=1&createUser=u1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
+    );
+  });
+
+  it("batches only people revealed under an expanded agent", async () => {
+    useUserSessionsInfinite.mockReturnValue(queryResult([session({})]));
+    useUserSessionClientsInfinite.mockReturnValue(
+      queryResult([client({ clientName: "Visible Agent" })]),
+    );
+
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="mcp-server-1"
+      />,
+    );
+    fireEvent.click(screen.getByText("Agent"));
+    batchBadgesMutate.mockClear();
+
+    expect(batchBadgesMutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Visible Agent"));
+
+    await vi.waitFor(() => expect(batchBadgesMutate).toHaveBeenCalledTimes(1));
+    expect(batchBadgesMutate.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        killswitchBatchUserBadgesRequest: { userIds: ["u1"] },
+      },
+    });
+  });
+
   it("no longer offers the client drill-down that filtered the table above", () => {
     // The retired paradigm: clicking a client re-scoped a separate table
     // elsewhere on the page. Grouping replaced it, so the affordance must be
@@ -324,7 +427,9 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // The person's name is a link to their profile; the row opens from
+    // anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     fireEvent.click(screen.getByText("Revoke connection"));
     fireEvent.click(screen.getByText("Confirm session revoke"));
 

@@ -382,7 +382,7 @@ const platformMCPGeneratorVersion = "3"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "38"
+const hooksGeneratorVersion = "39"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2131,7 +2131,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 
 // GenerateCodexInstallScript produces a bash install script that:
 //   - Registers the Gram marketplace with the Codex CLI
-//   - Patches ~/.codex/config.toml with feature flags and plugin entry
+//   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
 // When marketplaceURL is empty the script uses the directory it was run from as
@@ -2146,10 +2146,25 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
 
-	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, approvals), nil
+	otelEndpointBase := ""
+	if cfg.HooksAPIKey != "" {
+		serverURL, err := url.Parse(cfg.ServerURL)
+		if err != nil {
+			return nil, errors.New("invalid Codex OTLP server URL")
+		}
+		if serverURL.ForceQuery || serverURL.RawQuery != "" {
+			return nil, errors.New("invalid Codex OTLP server URL: query parameters are not allowed")
+		}
+		if err := validateAgentPluginRemoteURL(cfg.ServerURL); err != nil {
+			return nil, fmt.Errorf("invalid Codex OTLP server URL: %w", err)
+		}
+		otelEndpointBase = strings.TrimRight(serverURL.String(), "/") + "/otel/v1"
+	}
+
+	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, cfg.ProjectSlug, cfg.HooksAPIKey, approvals), nil
 }
 
-func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approvals []codexHookApproval) []byte {
+func renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, projectSlug, hooksAPIKey string, approvals []codexHookApproval) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
@@ -2241,7 +2256,7 @@ case "$(uname -s)" in
 esac
 export SPEAKEASY_HOOKS_OS
 python3 - <<'PYTHON'
-import os, re
+import json, os, re
 
 WINDOWS = os.environ.get("SPEAKEASY_HOOKS_OS") == "windows"
 
@@ -2258,30 +2273,257 @@ content = open(config_path).read() if os.path.exists(config_path) else ""
 # with an explicit [table] header elsewhere in the file. Only the region
 # before the first table header is touched.
 def strip_root_dotted_key(text, key):
-    m = re.search(r'(?m)^[ \t]*\[', text)
-    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
-    root = re.sub(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?', '', root)
-    return root + rest
+    pattern = re.compile(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?')
+    matches = list(pattern.finditer(searchable_root(text)))
+    if not matches:
+        return text
+    parts = []
+    start = 0
+    for match in matches:
+        parts.append(text[start:match.start()])
+        start = match.end()
+    parts.append(text[start:])
+    return ''.join(parts)
+
+def toml_dotted_key_pattern(key):
+    components = []
+    for component in key.split('.'):
+        escaped = re.escape(component)
+        basic_chars = []
+        for char in component:
+            short_hex = f'{ord(char):04x}'
+            long_hex = f'{ord(char):08x}'
+            short_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in short_hex
+            )
+            long_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in long_hex
+            )
+            basic_chars.append(
+                '(?:' + re.escape(char) + r'|\\u' + short_pattern + r'|\\U' + long_pattern + ')'
+            )
+        basic = ''.join(basic_chars)
+        components.append(f"""(?:{escaped}|"{basic}"|'{escaped}')""")
+    return r'[ \t]*\.[ \t]*'.join(components)
+
+TOML_KEY_COMPONENT_PATTERN = r"""(?:[A-Za-z0-9_-]+|"(?:\\[^\r\n]|[^"\\\r\n])*"|'[^'\r\n]*')"""
+TOML_DOTTED_KEY_PATTERN = (
+    TOML_KEY_COMPONENT_PATTERN
+    + r'(?:[ \t]*\.[ \t]*' + TOML_KEY_COMPONENT_PATTERN + r')*'
+)
+TOML_TABLE_HEADER_PATTERN = (
+    r'(?m)^[ \t]*(?:'
+    + r'\[\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]\]'
+    + r'|\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]'
+    + r')[ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)'
+)
+
+def toml_assignment_value(line):
+    quote = None
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            return None
+        elif char == '=':
+            return line[index + 1:]
+        index += 1
+    return None
+
+def scan_toml_value(value, nesting, multiline_delimiter):
+    quote = None
+    index = 0
+    while index < len(value):
+        if multiline_delimiter is not None:
+            end = value.find(multiline_delimiter, index)
+            if end < 0:
+                return nesting, multiline_delimiter
+            if multiline_delimiter == '"""':
+                backslashes = 0
+                cursor = end - 1
+                while cursor >= 0 and value[cursor] == '\\':
+                    backslashes += 1
+                    cursor -= 1
+                if backslashes % 2 == 1:
+                    index = end + len(multiline_delimiter)
+                    continue
+            index = end + len(multiline_delimiter)
+            multiline_delimiter = None
+            continue
+
+        char = value[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif value.startswith('"""', index) or value.startswith("'''", index):
+            multiline_delimiter = value[index:index + 3]
+            index += 3
+            continue
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            break
+        elif char in '[{':
+            nesting.append(char)
+        elif char == ']' and nesting and nesting[-1] == '[':
+            nesting.pop()
+        elif char == '}' and nesting and nesting[-1] == '{':
+            nesting.pop()
+        index += 1
+    return nesting, multiline_delimiter
+
+def searchable_toml(text):
+    lines = []
+    nesting = []
+    multiline_delimiter = None
+    for line in text.splitlines(keepends=True):
+        continuation = bool(nesting) or multiline_delimiter is not None
+        if continuation:
+            lines.append(''.join(char if char in '\r\n' else ' ' for char in line))
+            value = line
+        else:
+            lines.append(line)
+            value = toml_assignment_value(line)
+        if value is not None:
+            nesting, multiline_delimiter = scan_toml_value(
+                value,
+                nesting,
+                multiline_delimiter,
+            )
+    return ''.join(lines)
+
+def root_end(text):
+    match = re.search(TOML_TABLE_HEADER_PATTERN, searchable_toml(text))
+    return match.start() if match else len(text)
+
+def searchable_root(text):
+    return searchable_toml(text[:root_end(text)])
+
+def root_has_entry(text, key):
+    return re.search(
+        r'(?m)^[ \t]*' + toml_dotted_key_pattern(key) + r'[ \t]*=',
+        searchable_root(text),
+    ) is not None
+
+def root_has_dotted_table(text, table):
+    return re.search(
+        r'(?m)^[ \t]*' + toml_dotted_key_pattern(table) + r'[ \t]*\.[ \t]*',
+        searchable_root(text),
+    ) is not None
+
+def ensure_root_entry(text, key, value):
+    if root_has_entry(text, key):
+        return text
+    end = root_end(text)
+    root, rest = text[:end], text[end:]
+    root = root.rstrip('\n')
+    if root:
+        root += '\n'
+    return root + key + ' = ' + value + '\n\n' + rest.lstrip('\n')
 
 def table_body_bounds(text, table_header):
-    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
+    searchable = searchable_toml(text)
+    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', searchable)
     if not m:
         return None
     start = m.end()
-    m2 = re.search(r'(?m)^[ \t]*\[', text[start:])
+    m2 = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
     end = start + m2.start() if m2 else len(text)
     return start, end
 
-def ensure_table_entry(text, table_header, key, value):
-    bounds = table_body_bounds(text, table_header)
+def dotted_table_body_bounds(text, table):
+    pattern = (
+        r'(?m)^[ \t]*\[[ \t]*'
+        + toml_dotted_key_pattern(table)
+        + r'[ \t]*\][ \t]*(?:#.*)?(?:\n|$)'
+    )
+    searchable = searchable_toml(text)
+    match = re.search(pattern, searchable)
+    if match is None:
+        return None
+    start = match.end()
+    next_header = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
+    end = start + next_header.start() if next_header else len(text)
+    return start, end
+
+def dotted_table_has_entry(text, table, key):
+    bounds = dotted_table_body_bounds(text, table)
     if bounds is None:
-        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+        return False
+    pattern = r'(?m)^[ \t]*' + toml_dotted_key_pattern(key) + r'[ \t]*='
+    searchable = searchable_toml(text)
+    return re.search(pattern, searchable[bounds[0]:bounds[1]]) is not None
+
+def dotted_table_has_dotted_key_prefix(text, table, key):
+    bounds = dotted_table_body_bounds(text, table)
+    if bounds is None:
+        return False
+    pattern = (
+        r'(?m)^[ \t]*'
+        + toml_dotted_key_pattern(key)
+        + r'[ \t]*\.[ \t]*'
+    )
+    searchable = searchable_toml(text)
+    return re.search(pattern, searchable[bounds[0]:bounds[1]]) is not None
+
+def has_dotted_table_prefix(text, table):
+    pattern = (
+        r'(?m)^[ \t]*\[[ \t]*'
+        + toml_dotted_key_pattern(table)
+        + r'(?:[ \t]*\.|[ \t]*\])'
+    )
+    return re.search(pattern, searchable_toml(text)) is not None
+
+def ensure_dotted_table_entry(text, table, key, value):
+    bounds = dotted_table_body_bounds(text, table)
+    if bounds is None:
+        return ensure_table_entry(text, "[" + table + "]", key, value)
+    if dotted_table_has_entry(text, table, key):
         return text
     prefix = text[:bounds[0]]
     if not prefix.endswith('\n'):
         prefix += '\n'
     return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
+
+def ensure_table_entry(text, table_header, key, value):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
+    searchable = searchable_toml(text)
+    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', searchable[bounds[0]:bounds[1]]):
+        return text
+    prefix = text[:bounds[0]]
+    if not prefix.endswith('\n'):
+        prefix += '\n'
+    return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
+
+
+def table_has_entry(text, table_header, key):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return False
+    searchable = searchable_toml(text)
+    return re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', searchable[bounds[0]:bounds[1]]) is not None
+
 
 def has_table_header(text, header):
     return table_body_bounds(text, header) is not None
@@ -2290,12 +2532,48 @@ def has_table_header(text, header):
 
 	// Python literals — embedded at generation time, not expanded by bash.
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
-	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
+	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n", marketplace)
+	fmt.Fprintf(&b, "OTEL_ENDPOINT_BASE = %q\n", otelEndpointBase)
+	fmt.Fprintf(&b, "OTEL_PROJECT = %q\n", projectSlug)
+	fmt.Fprintf(&b, "OTEL_API_KEY = %q\n\n", hooksAPIKey)
 
 	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
 content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
+
+if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
+    has_root_inline_otel = root_has_entry(content, "otel")
+    if has_root_inline_otel:
+        print("  ⚠  Existing root-level Codex OTEL configuration preserved; configure Speakeasy telemetry manually.")
+    elif root_has_dotted_table(content, "otel"):
+        content = ensure_root_entry(content, "otel.environment", '"prod"')
+    else:
+        content = ensure_dotted_table_entry(content, "otel", "environment", '"prod"')
+
+    headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+    for exporter_key, signal in [
+        ("exporter", "logs"),
+        ("trace_exporter", "traces"),
+        ("metrics_exporter", "metrics"),
+    ]:
+        exporter_table = f"[otel.{exporter_key}.otlp-http]"
+        has_root_dotted_exporter = (
+            root_has_entry(content, "otel." + exporter_key)
+            or root_has_dotted_table(content, "otel." + exporter_key)
+        )
+        has_inline_exporter = (
+            table_has_entry(content, "[otel]", exporter_key)
+            or dotted_table_has_entry(content, "otel", exporter_key)
+            or dotted_table_has_dotted_key_prefix(content, "otel", exporter_key)
+        )
+        has_exporter_table = has_dotted_table_prefix(content, "otel." + exporter_key)
+        if has_root_inline_otel or has_root_dotted_exporter or has_inline_exporter or has_exporter_table:
+            print(f"  ⚠  Existing Codex OTEL {signal} exporter preserved; configure Speakeasy telemetry manually.")
+            continue
+        content = ensure_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT_BASE + "/" + signal))
+        content = ensure_table_entry(content, exporter_table, "protocol", '"binary"')
+        content = ensure_table_entry(content, exporter_table, "headers", headers)
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
 if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^[ \t]*\[hooks\.state\.', content):

@@ -5,9 +5,13 @@ import "net/http"
 type Code string
 
 const (
-	CodeUnauthorized       Code = "unauthorized"
-	CodeForbidden          Code = "forbidden"
-	CodeBadRequest         Code = "bad_request"
+	CodeUnauthorized Code = "unauthorized"
+	CodeForbidden    Code = "forbidden"
+	CodeBadRequest   Code = "bad_request"
+	// CodeParseError is a request body that is not well-formed and cannot be
+	// decoded at all, distinct from CodeBadRequest (a decodable request that is
+	// semantically invalid). Maps to HTTP 400 and JSON-RPC -32700 (Parse error).
+	CodeParseError         Code = "parse_error"
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
 	CodeFailedPrecondition Code = "failed_precondition"
@@ -43,6 +47,7 @@ var StatusCodes = map[Code]int{
 	CodeUnauthorized:        http.StatusUnauthorized,
 	CodeForbidden:           http.StatusForbidden,
 	CodeBadRequest:          http.StatusBadRequest,
+	CodeParseError:          http.StatusBadRequest,
 	CodeNotFound:            http.StatusNotFound,
 	CodeConflict:            http.StatusConflict,
 	CodeFailedPrecondition:  http.StatusPreconditionFailed,
@@ -71,6 +76,8 @@ func (c Code) UserMessage() string {
 		return "permission denied"
 	case CodeBadRequest:
 		return "request is invalid"
+	case CodeParseError:
+		return "request body could not be parsed"
 	case CodeMethodNotAllowed:
 		return "method not allowed"
 	case CodeNotFound:
@@ -117,6 +124,8 @@ func (c Code) MCPCode() MCPCode {
 		return MCPCodeUnauthorized
 	case CodeForbidden, CodeInferenceDisabled:
 		return MCPCodeForbidden
+	case CodeParseError:
+		return MCPCodeParseError
 	case CodeBadRequest, CodeConflict, CodeFailedPrecondition, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
 	case CodeMethodNotAllowed:

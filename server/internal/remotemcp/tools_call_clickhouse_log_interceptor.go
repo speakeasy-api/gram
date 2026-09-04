@@ -154,6 +154,9 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if i.identity.McpServerID != "" {
 		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID
 	}
+	if i.identity.MetaMCPServerID != "" {
+		logAttrs[attr.MetaMcpServerIDKey] = i.identity.MetaMCPServerID
+	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordRequestBody(requestBytes)

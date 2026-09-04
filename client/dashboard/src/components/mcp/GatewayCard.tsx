@@ -7,7 +7,9 @@ import { useRoutes } from "@/routes";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { ArrowRight, Network } from "lucide-react";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import { GatewayStatusIndicator } from "./MCPStatusIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 
 // The gateway's cargo is its member servers, so the icon rail shows their
 // logos (up to four, then a +N tile) instead of a generic glyph.
@@ -64,10 +66,14 @@ function GatewayMemberIcons({
 export function GatewayCard({
   gateway,
   url,
+  activityStatus,
+  recentWindowDays,
 }: {
   gateway: MetaMcpServer;
   /** Canonical address, when the gateway has one. */
   url: string | undefined;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -122,6 +128,12 @@ export function GatewayCard({
             visibility={gateway.visibility}
             requiresSignIn={!!gateway.userSessionIssuerId}
           />
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+            />
+          )}
         </div>
         <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
           <span>Open</span>

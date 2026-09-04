@@ -38,6 +38,8 @@ var _ = Service("auditlogs", func() {
 			Param("subject_id")
 			Param("subject_ids")
 			Param("acting_surface")
+			Param("from")
+			Param("to")
 		})
 
 		shared.CursorPagination()
@@ -135,6 +137,14 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	})
 	Attribute("acting_surface", String, func() {
 		Description("Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.")
+	})
+	Attribute("from", String, func() {
+		Description("Inclusive start of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, func() {
+		Description("Exclusive end of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
 	})
 })
 

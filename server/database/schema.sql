@@ -1064,6 +1064,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
+  -- NULL on legacy API keys. Agent keys persist their canonical subject and
+  -- immutable delegation policy; profile validation is application-owned.
+  subject_urn TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
+  expires_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1143,6 +1150,65 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 -- mdm_devices.
 CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
 ON device_agent_syncs (organization_id, LOWER(email));
+
+-- Per-ENVIRONMENT agent heartbeats: the same poll as device_agent_syncs, but
+-- from a box that is not somebody's laptop — a cloud coding sandbox, a
+-- container, a shared self-hosted server. The agent declares which via the
+-- Gram-Device-Environment header; absent means laptop, so every agent
+-- predating the header keeps writing to device_agent_syncs exactly as before.
+--
+-- A separate table rather than an environment column on device_agent_syncs,
+-- for two reasons. Keeping these rows OUT of that table is the point: the
+-- coverage join falls back to matching an MDM device's assigned-user email
+-- against it, so a cloud session polling under a real person's email would
+-- otherwise mark that person's laptop agent_active whether or not the laptop
+-- runs the agent — a false coverage claim, which is worse than an absent one.
+-- And widening device_agent_syncs would mean changing its
+-- (organization_id, email) unique key, which the upsert infers by name; the
+-- migration must ship ahead of the code, so an already-deployed server would
+-- be left issuing an ON CONFLICT against an index that no longer exists.
+--
+-- Keyed on (organization_id, email, environment) because one identity legally
+-- polls from several kinds of box: the same address may run a laptop agent and
+-- be the shared identity a fleet of cloud sandboxes enrolls with. Those are
+-- different facts and must not overwrite each other.
+--
+-- These rows count sessions, never machines. An ephemeral box reports no
+-- hardware serial and a hostname that is a constant string baked into the
+-- image, so nothing here identifies an individual machine and none of it
+-- belongs in a per-device count.
+CREATE TABLE IF NOT EXISTS device_agent_environment_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  -- One of 'ephemeral' or 'server'. Never 'laptop': that is the default the
+  -- agent does not send, and those heartbeats belong in device_agent_syncs.
+  -- Validated in application code rather than by a CHECK so the set can grow
+  -- without a migration.
+  environment TEXT NOT NULL,
+
+  -- Descriptive only. Generic by nature here ('cursor', 'vm'), so it is a
+  -- breadcrumb for an operator reading a row, not an identifier.
+  hostname TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_environment_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_environment_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- The dedup key, an expression index for the same reason the sibling device
+-- table uses one: every reader compares LOWER(email), and a raw-column key
+-- would let 'Dev@acme.com' and 'dev@acme.com' hold two rows for one identity.
+-- The upsert infers this index via
+-- ON CONFLICT (organization_id, LOWER(email), environment).
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_environment_syncs_org_lower_email_env_key
+ON device_agent_environment_syncs (organization_id, LOWER(email), environment);
 
 -- Per-DEVICE agent heartbeats, the sibling of device_agent_syncs. Both are
 -- written by the same agent.getPlugins poll: that table answers "does this
@@ -1590,7 +1656,8 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   project_id uuid NOT NULL,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
-  metadata JSONB NOT NULL,
+  metadata JSONB,
+  authorization_server_issuer TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1598,7 +1665,16 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT external_oauth_server_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT external_oauth_server_metadata_source_check CHECK (
+    (metadata IS NULL) <> (authorization_server_issuer IS NULL)
+  ),
+  CONSTRAINT external_oauth_server_metadata_authorization_server_issuer_chec CHECK (
+    authorization_server_issuer IS NULL OR (
+      authorization_server_issuer <> '' AND
+      CHAR_LENGTH(authorization_server_issuer) <= 500
+    )
+  )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_server_metadata_project_slug_key
@@ -1882,6 +1958,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   user_session_issuer_id uuid NOT NULL,
   user_session_client_id uuid,
   subject_urn TEXT NOT NULL,
+
+  -- NULL on existing human sessions. Agent sessions preserve the approving
+  -- human and immutable delegation policy unchanged across refresh.
+  authorizer_user_id TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
+
   jti TEXT NOT NULL,
   refresh_token_hash TEXT NOT NULL,
   refresh_expires_at timestamptz NOT NULL,
@@ -2191,6 +2274,13 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   -- exact-match credential routing. Names a host inside the customer's
   -- private network — this value must NEVER be dialed by Gram.
   resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
+  -- Anonymous public MCP request rate limit, requests per second. NULL: deployment default.
+  public_request_rate_per_second integer CHECK (public_request_rate_per_second IS NULL OR (public_request_rate_per_second > 0 AND public_request_rate_per_second <= 100000)),
+  -- Token-bucket capacity for public_request_rate_per_second: the number of
+  -- requests admitted back-to-back from an idle tunnel before admission drops
+  -- to the sustained rate. Each request takes one token; tokens refill at
+  -- public_request_rate_per_second per second up to this cap. NULL: 2 × rate.
+  public_request_burst integer CHECK (public_request_burst IS NULL OR (public_request_burst > 0 AND public_request_burst <= 1000000)),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
   last_seen_at timestamptz,
 
@@ -2648,7 +2738,9 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
-  disable_causes TEXT[],
+  -- NULL is reserved for legacy rows awaiting provenance classification. New
+  -- writes must start classified and enabled.
+  disable_causes TEXT[] DEFAULT '{}'::text[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3600,6 +3692,27 @@ ON users (workos_id);
 
 COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.';
 
+CREATE TABLE IF NOT EXISTS organization_setup_tasks (
+  organization_id TEXT NOT NULL,
+  task_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'todo',
+  assignee_user_id TEXT,
+  assignee_email TEXT,
+  hidden_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_setup_tasks_pkey PRIMARY KEY (organization_id, task_key),
+  CONSTRAINT organization_setup_tasks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_setup_tasks_assignee_user_id_fkey FOREIGN KEY (assignee_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT organization_setup_tasks_assignee_check CHECK (assignee_user_id IS NULL OR assignee_email IS NULL)
+);
+
+CREATE INDEX IF NOT EXISTS organization_setup_tasks_assignee_user_id_idx
+ON organization_setup_tasks (assignee_user_id)
+WHERE assignee_user_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -3809,6 +3922,52 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS organization_user_relationships_org_workos_user_idx
 ON organization_user_relationships (organization_id, workos_user_id)
 WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS agents (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
+
+  suspended_at timestamptz,
+  revoked_at timestamptz,
+
+  -- Owner eligibility is evaluated live. These columns record only the durable
+  -- barrier established by owner deletion, inactivation, or membership loss.
+  -- Reactivation does not clear the barrier; explicit reassignment does.
+  owner_reassignment_required_at timestamptz,
+  owner_reassignment_reason TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT agents_pkey PRIMARY KEY (id),
+  CONSTRAINT agents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT agents_owner_tenant_fkey FOREIGN KEY (organization_id, owner_user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE RESTRICT,
+  CONSTRAINT agents_lifecycle_state_check CHECK (revoked_at IS NULL OR suspended_at IS NULL),
+  CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_id_id_key
+ON agents (organization_id, id);
+
+-- Names remain reserved through suspension and revocation; deletion releases them.
+CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_name_key
+ON agents (organization_id, LOWER(name))
+WHERE deleted IS FALSE;
+
+-- Supports owner-scoped listing and active-agent selection. Owner eligibility and
+-- the reassignment latch remain authoritative predicates evaluated by the service.
+CREATE INDEX IF NOT EXISTS agents_organization_owner_idx
+ON agents (organization_id, owner_user_id)
+WHERE deleted IS FALSE;
+
+-- Supports foreign-key checks for every agent, including deleted agents.
+CREATE INDEX IF NOT EXISTS agents_organization_owner_all_idx
+ON agents (organization_id, owner_user_id);
 
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),

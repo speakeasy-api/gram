@@ -45,7 +45,7 @@ func clientRemoteIssuerID(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	client, err := remotesessions_repo.New(conn).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             clientID,
 		ProjectID:      projectID,
-		OrganizationID: conv.ToPGText(organizationID),
+		OrganizationID: organizationID,
 	})
 	require.NoError(t, err)
 	return client.RemoteSessionClient.RemoteSessionIssuerID

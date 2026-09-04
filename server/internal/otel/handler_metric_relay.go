@@ -18,6 +18,8 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -88,6 +90,7 @@ func NewMetricRelayHandler(
 			db,
 			encryptionClient,
 			policy,
+			dataexports.DataSourceProductTelemetry,
 			"/v1/metrics",
 			"metric",
 		),

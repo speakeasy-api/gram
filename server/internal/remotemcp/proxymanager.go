@@ -35,6 +35,7 @@ import (
 // stays request-scoped.
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
+	metaMCPServerID        string
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -48,6 +49,14 @@ type BuildOption struct {
 func WithoutToolsCallIdentityCoverage() BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.recordIdentityCoverage = false
+	}}
+}
+
+// WithMetaMCPServerID attributes the proxy's telemetry and billing to the
+// gateway (meta MCP server) that dispatched it.
+func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.metaMCPServerID = metaMCPServerID
 	}}
 }
 
@@ -184,6 +193,7 @@ func (f *ProxyManager) Build(
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
+		MetaMCPServerID:     "",
 	}, server.Url, configured, visibility, organizationID, projectID, upstreamAuth, wwwAuthenticate, selection, options...)
 }
 
@@ -200,11 +210,14 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
 		}
+	}
+	if options.metaMCPServerID != "" {
+		identity.MetaMCPServerID = options.metaMCPServerID
 	}
 
 	// Per-request instance: the interceptor holds a single nilable start
@@ -288,8 +301,12 @@ func (f *ProxyManager) BuildTarget(
 		interceptors.NewFigma(upstreamURL, logger),
 	}
 
+	usageTracking := f.toolsCallUsageTrackingInterceptor
+	if identity.MetaMCPServerID != "" {
+		usageTracking = usageTracking.WithMetaMCPServerID(identity.MetaMCPServerID)
+	}
 	toolsCallResponseInterceptors := []proxy.ToolsCallResponseInterceptor{
-		f.toolsCallUsageTrackingInterceptor,
+		usageTracking,
 		clickHouseLogInterceptor,
 	}
 	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {

@@ -12,8 +12,6 @@ type DeploymentExternalMCP struct {
 	ID string
 	// The ID of the external MCP registry the server is from.
 	RegistryID *string
-	// The ID of the internal collection registry the server is from.
-	OrganizationMcpCollectionRegistryID *string
 	// The display name for the external MCP server.
 	Name string
 	// A URL-friendly identifier used for tool prefixing.

@@ -35,6 +35,8 @@ type NavContextValue = {
   hoveredItem: string | null;
   setHoveredItem: (item: string | null) => void;
   activeItem: string | null;
+  /** The group containing the current route, for the active marker. */
+  activeGroup: string | null;
   registerRef: (id: string, el: HTMLElement | null) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 };
@@ -46,6 +48,7 @@ const NavGroupContext = React.createContext<NavContextValue>({
   hoveredItem: null,
   setHoveredItem: () => {},
   activeItem: null,
+  activeGroup: null,
   registerRef: () => {},
   containerRef: { current: null },
 });
@@ -252,6 +255,7 @@ export function NavGroupProvider({
       hoveredItem,
       setHoveredItem,
       activeItem: resolvedActive,
+      activeGroup: activeGroup ?? null,
       registerRef,
       containerRef,
     }),
@@ -261,6 +265,7 @@ export function NavGroupProvider({
       openGroupFn,
       hoveredItem,
       resolvedActive,
+      activeGroup,
       registerRef,
     ],
   );
@@ -292,6 +297,24 @@ export function NavGroupProvider({
     </NavGroupContext.Provider>
   );
 }
+
+// There is one card on the list and it slides: it rests on the current page
+// and follows the pointer (`hoveredItem ?? resolvedActive`), so hovering reads
+// as "this one next", not as a second selection. The active item therefore
+// draws no ground of its own — two cards at once is the thing the slide is
+// meant to avoid — and says where you are with a rule instead, which the
+// moving card cannot take with it.
+//
+// Full height rather than a centred stub: it reads as the edge of the row,
+// and it lines up with the card whenever the card is resting on it.
+const ACTIVE_ITEM =
+  "text-foreground before:bg-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:content-['']";
+
+// The same marker, but only once the sidebar collapses to icons — where an
+// expanded group's leaves are hidden and it is the only thing that can say
+// where you are.
+const ACTIVE_MARKER_ICON_RAIL =
+  "group-data-[collapsible=icon]:before:bg-foreground group-data-[collapsible=icon]:before:absolute group-data-[collapsible=icon]:before:inset-y-0 group-data-[collapsible=icon]:before:left-0 group-data-[collapsible=icon]:before:w-0.5 group-data-[collapsible=icon]:before:content-['']";
 
 // ---------------------------------------------------------------------------
 // Hook for registering item ref + hover handlers
@@ -454,7 +477,7 @@ export function NavButton({
         "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
-          ? "text-foreground font-semibold"
+          ? ACTIVE_ITEM
           : "text-muted-foreground hover:text-foreground font-medium",
       )}
     >
@@ -526,10 +549,15 @@ export function CollapsibleNavGroup({
   stage?: ReleaseStage;
   children: React.ReactNode;
 }): React.JSX.Element {
-  const { openGroups, toggleGroup, openGroup } =
+  const { openGroups, toggleGroup, openGroup, activeGroup } =
     React.useContext(NavGroupContext);
   const navItem = useNavItem(label);
   const isOpen = openGroups.has(label);
+  // isOpen is "accordion expanded", not "you are here" — several groups sit
+  // open at once, so keying the marker on it marked all of them. The group
+  // wears the marker only while its own leaf cannot: when it is collapsed,
+  // and in the icon rail, where every leaf is hidden.
+  const isActiveGroup = activeGroup === label;
 
   const handleClick = () => {
     if (!isOpen) {
@@ -557,6 +585,8 @@ export function CollapsibleNavGroup({
               isOpen
                 ? "text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground font-medium",
+              isActiveGroup && !isOpen && ACTIVE_ITEM,
+              isActiveGroup && isOpen && ACTIVE_MARKER_ICON_RAIL,
             )}
           >
             <Icon
@@ -680,7 +710,7 @@ export function CollapsibleNavItem({
           className={cn(
             "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
-              ? "text-foreground font-semibold"
+              ? ACTIVE_ITEM
               : "text-muted-foreground hover:text-foreground",
           )}
         >

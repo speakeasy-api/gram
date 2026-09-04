@@ -53,11 +53,11 @@ func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.U
 	upstreamRows, err := repo.New(s.db).ListRemoteSessionUpstreamsForSubjects(ctx, repo.ListRemoteSessionUpstreamsForSubjectsParams{
 		SubjectUrns: subjectURNs,
 		IssuerIds:   issuerIDs,
-		// Scopes on the user_session_issuer's project, with org-level clients
+		// Scopes on the user_session_issuer's tenancy, with org-level clients
 		// additionally pinned to the caller's organization so a stray
 		// cross-tenant binding row can never surface a foreign credential.
 		ProjectID:      projectID,
-		OrganizationID: conv.ToPGText(organizationID),
+		OrganizationID: organizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session upstreams").LogError(ctx, s.logger)
@@ -96,6 +96,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		Status:              conv.PtrToPGTextEmpty(payload.Status),
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionIssuerID: issuerFilter,
@@ -138,15 +139,24 @@ func (s *Service) ListFacets(ctx context.Context, _ *gen.ListFacetsPayload) (*ge
 	}
 
 	q := repo.New(s.db)
-	clients, err := q.ListUserSessionClientFacets(ctx, *authCtx.ProjectID)
+	clients, err := q.ListUserSessionClientFacets(ctx, repo.ListUserSessionClientFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list client facets").LogError(ctx, s.logger)
 	}
-	users, err := q.ListUserSessionUserFacets(ctx, *authCtx.ProjectID)
+	users, err := q.ListUserSessionUserFacets(ctx, repo.ListUserSessionUserFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user facets").LogError(ctx, s.logger)
 	}
-	servers, err := q.ListUserSessionServerFacets(ctx, *authCtx.ProjectID)
+	servers, err := q.ListUserSessionServerFacets(ctx, repo.ListUserSessionServerFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list server facets").LogError(ctx, s.logger)
 	}
@@ -199,8 +209,9 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeUserSession(ctx, repo.RevokeUserSessionParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

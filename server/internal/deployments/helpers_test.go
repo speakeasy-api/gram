@@ -24,7 +24,7 @@ func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err 
 
 	manifest := testenv.ReadFixture(t, path)
 	zipWriter := zip.NewWriter(buf)
-	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), func() error {
+	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), "failed to close zip writer", func() error {
 		return zipWriter.Close()
 	})
 

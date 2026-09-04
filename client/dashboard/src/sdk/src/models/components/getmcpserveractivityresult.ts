@@ -17,7 +17,7 @@ import {
  */
 export type GetMcpServerActivityResult = {
   /**
-   * One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window
+   * One entry per MCP server (hosted, tunneled, or gateway) that has received at least one tool call within the lookback window
    */
   activity: Array<McpServerActivity>;
   /**

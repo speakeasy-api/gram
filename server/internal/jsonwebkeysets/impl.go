@@ -35,6 +35,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// keySetClientListingCap bounds the client_ids GetSetDeletePreflight lists. The
+// count it reports alongside is unbounded and authoritative, so a set with more
+// referencing clients than this reports a truncated list against a full count.
+const keySetClientListingCap = 50
+
 type Service struct {
 	tracer          trace.Tracer
 	logger          *slog.Logger
@@ -338,6 +343,41 @@ func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*g
 	return mv.BuildJsonWebKeySetView(set), nil
 }
 
+// GetSetDeletePreflight reports the remote_session_clients still referencing a
+// set, so the dashboard can tell an administrator what a delete would break
+// before they confirm it.
+//
+// Unlike the remote_session_client delete preflight, which is informational
+// because that delete cascades, this one predicts a real refusal: it counts
+// live references over the same predicate DeleteSet refuses on, so a non-zero
+// client_count here is exactly the condition that returns a conflict there. A missing set reports zero rather
+// than 404, matching DeleteSet's own idempotent treatment of an absent id.
+func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.GetSetDeletePreflightPayload) (*gensvc.JSONWebKeySetDeletePreflight, error) {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid key set id").LogError(ctx, logger)
+	}
+
+	summary, err := repo.New(s.db).SummarizeRemoteSessionClientsForJsonWebKeySet(ctx, repo.SummarizeRemoteSessionClientsForJsonWebKeySetParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		JsonWebKeySetID: id,
+		LimitValue:      keySetClientListingCap,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
+	}
+
+	return &gensvc.JSONWebKeySetDeletePreflight{
+		ClientCount: int(summary.ClientCount),
+		ClientIds:   summary.ClientIds,
+	}, nil
+}
+
 // DeleteSet soft-deletes a set and every key still published in it in one
 // transaction, emitting one audit event per withdrawn key before the set's own
 // deletion event. A missing id is a no-op so deletes stay idempotent.
@@ -372,6 +412,25 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
+	}
+
+	// Refuse while a live remote_session_client still signs with this set.
+	// Deleting it would leave that client declaring an authentication method it
+	// can no longer perform, failing at the counterparty's token endpoint rather
+	// than here. The database will not catch it: the composite foreign key is
+	// NO ACTION and `deleted` is a generated column, so a soft delete never
+	// fires it. Runs under the set lock taken above, which the attach path
+	// counterpart-locks FOR SHARE, so the count cannot go stale between here and
+	// the commit.
+	referencing, err := q.CountRemoteSessionClientsForJsonWebKeySet(ctx, repo.CountRemoteSessionClientsForJsonWebKeySetParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		JsonWebKeySetID: id,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking key set references").LogError(ctx, logger)
+	}
+	if referencing > 0 {
+		return oops.E(oops.CodeConflict, nil, "key set is still in use by a remote session client; detach it there first")
 	}
 
 	withdrawn, err := q.CascadeSoftDeleteJsonWebKeys(ctx, repo.CascadeSoftDeleteJsonWebKeysParams{

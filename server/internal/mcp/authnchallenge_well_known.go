@@ -1,8 +1,11 @@
 // Well-known metadata handlers for the issuer-gated OAuth surface:
 // RFC 9728 protected-resource metadata and RFC 8414 authorization-server
-// metadata. Both routes dispatch internally on
-// toolsets.user_session_issuer_id — issuer-gated toolsets get the new
-// metadata shape, legacy toolsets fall through to wellknown.Resolve*.
+// metadata. Both routes resolve mcp_endpoints → mcp_servers first and
+// dispatch on mcp_servers.user_session_issuer_id — issuer-gated servers get
+// the new metadata shape keyed on the endpoint the request arrived at.
+// Servers without an mcp_endpoints row fall back to the legacy
+// toolsets.mcp_slug lookup, where toolsets.user_session_issuer_id gates the
+// shape and legacy toolsets fall through to wellknown.Resolve*.
 
 package mcp
 
@@ -313,16 +316,13 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		if err != nil {
 			return err
 		}
-		// Today's OAuth machinery is keyed on the toolset's mcp_slug; the
-		// production model assumes mcp_endpoints.slug == toolsets.mcp_slug
-		// for toolset-backed servers until the upcoming OAuth migration.
-		oauthSlug := toolset.McpSlug.String
-		if oauthSlug == "" {
-			return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
-		}
-		// The resource URL mirrors ServeWellKnownProtectedResourceForServer
-		// (routeBase + mcp_endpoints.slug) so the served issuer matches the
-		// protected-resource metadata's authorization_servers entry.
+		// The OAuth slug and the resource URL are both keyed on the endpoint
+		// the request arrived at, so a hosted server can carry several
+		// endpoints and none of them has to equal toolsets.mcp_slug. The
+		// resource URL mirrors ServeWellKnownProtectedResourceForServer so the
+		// served issuer matches the protected-resource metadata's
+		// authorization_servers entry.
+		oauthSlug := mcpEndpoint.Slug
 		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)

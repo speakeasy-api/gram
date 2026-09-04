@@ -496,3 +496,61 @@ func SafeInt(v int64) int {
 	}
 	return int(v)
 }
+
+// TimeWindowError is a caller-facing complaint about the bounds a request
+// carried. Message names which bound was wrong in the words the client should
+// see, so a handler can pass it straight through rather than flattening every
+// cause into one message and leaving the caller to guess which parameter to
+// fix; the wrapped cause carries the parse detail and stays internal.
+type TimeWindowError struct {
+	Message string
+	cause   error
+}
+
+func (e *TimeWindowError) Error() string { return e.Message }
+
+func (e *TimeWindowError) Unwrap() error { return e.cause }
+
+// ParseOptionalTimeWindow reads the optional RFC 3339 bounds a caller sends to
+// scope a listing to a time range, and reports them as a half-open [from, to).
+//
+// A nil or blank bound is no bound rather than the zero time: the dashboard
+// clears a range by sending the parameter empty, and reading that as year zero
+// would silently filter every row out instead of widening back to everything.
+// Both bounds are normalized to UTC so the comparison a caller builds does not
+// depend on the offset the client happened to send.
+func ParseOptionalTimeWindow(rawFrom, rawTo *string) (from *time.Time, to *time.Time, err error) {
+	parse := func(raw *string, name string) (*time.Time, error) {
+		if raw == nil {
+			return nil, nil
+		}
+		trimmed := strings.TrimSpace(*raw)
+		if trimmed == "" {
+			return nil, nil
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+		if err != nil {
+			return nil, &TimeWindowError{
+				Message: fmt.Sprintf("invalid %s", name),
+				cause:   fmt.Errorf("parse %s: %w", name, err),
+			}
+		}
+		utc := parsed.UTC()
+		return &utc, nil
+	}
+
+	from, err = parse(rawFrom, "from")
+	if err != nil {
+		return nil, nil, err
+	}
+	to, err = parse(rawTo, "to")
+	if err != nil {
+		return nil, nil, err
+	}
+	// An inverted or empty window is a caller error, not an empty result: it
+	// would otherwise read as "this identity did nothing in that period".
+	if from != nil && to != nil && !from.Before(*to) {
+		return nil, nil, &TimeWindowError{Message: "from must be before to", cause: nil}
+	}
+	return from, to, nil
+}

@@ -51,7 +51,6 @@ type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *s
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, r.Body.Close)
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxStripeWebhookBodyBytes)
 	body, err := io.ReadAll(r.Body)

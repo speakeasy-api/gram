@@ -111,6 +111,7 @@ export const AUDIT_ACTIONS = [
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
   "organization:product_feature_enabled",
+  "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -140,9 +141,11 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:create",
   "remote-mcp:delete",
   "remote-mcp:update",
+  "remote-session-client:attach-json-web-key-set",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
+  "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:revoke-sessions",
@@ -475,6 +478,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled a product feature for";
     case "organization:product_feature_disabled":
       return "disabled a product feature for";
+    case "organization:setup_task_updated":
+      return "updated setup task for";
 
     case "organization_invitation:create":
       return "invited";
@@ -551,6 +556,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a user session issuer to";
     case "remote-session-client:detach-user-session-issuer":
       return "detached a user session issuer from";
+    case "remote-session-client:attach-json-web-key-set":
+      return "attached a JSON Web Key Set to";
+    case "remote-session-client:detach-json-web-key-set":
+      return "detached a JSON Web Key Set from";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":

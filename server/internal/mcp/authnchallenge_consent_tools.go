@@ -166,6 +166,7 @@ func (s *Service) consentToolSelectionPrefill(ctx context.Context, endpoint *Res
 	}
 	raw, err := usersessions_repo.New(s.db).GetLatestLiveUserSessionToolSelection(ctx, usersessions_repo.GetLatestLiveUserSessionToolSelectionParams{
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: uuid.NullUUID{UUID: clientRowID, Valid: true},
 		SubjectUrn:          subject,

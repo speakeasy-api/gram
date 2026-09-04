@@ -219,7 +219,7 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 }
 
 func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm, reader io.ReadCloser) (res *gen.UploadImageResult, err error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -236,7 +236,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up image upload", func() error {
 		return result.cleanup()
 	})
 
@@ -337,7 +337,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 }
 
 func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFunctionsForm, reader io.ReadCloser) (*gen.UploadFunctionsResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close functions upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -356,7 +356,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up functions upload", func() error {
 		return result.cleanup()
 	})
 
@@ -459,7 +459,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Form, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi v3 upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -478,7 +478,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up openapi v3 upload", func() error {
 		return result.cleanup()
 	})
 
@@ -735,7 +735,7 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close blob storage writer", func() error {
 		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
 			return fmt.Errorf("close blob storage: %w", err)
 		}
@@ -898,7 +898,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi document fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -970,7 +970,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched openapi document", func() error {
 		return result.cleanup()
 	})
 
@@ -1102,7 +1102,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -1126,7 +1126,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched image", func() error {
 		return result.cleanup()
 	})
 
@@ -1345,7 +1345,7 @@ func validateChatAttachmentContentType(contentType string) (mimeType, ext string
 }
 
 func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadChatAttachmentForm, reader io.ReadCloser) (*gen.UploadChatAttachmentResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close chat attachment upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -1362,7 +1362,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up chat attachment upload", func() error {
 		return result.cleanup()
 	})
 

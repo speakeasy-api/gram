@@ -87,7 +87,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusInternalServerError,
 		)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return cleanup() })
+	defer o11y.LogDefer(ctx, logger, "failed to remove tool call fifo", func() error { return cleanup() })
 
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer timeoutCancel()
@@ -105,7 +105,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			s.logger.ErrorContext(ctx, "failed to capture stderr log lines", attr.SlogError(err))
 		}
 	})
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close tool call log writers", func() error {
 		var err error
 		if e := stdoutWrt.Close(); e != nil {
 			err = errors.Join(err, fmt.Errorf("close stdout writer: %w", e))
@@ -192,7 +192,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		)
 	case f := <-pipech:
 		pipe = f
-		defer o11y.LogDefer(ctx, logger, func() error { return pipe.Close() })
+		defer o11y.LogDefer(ctx, logger, "failed to close tool call pipe", func() error { return pipe.Close() })
 	}
 
 	response, err := http.ReadResponse(bufio.NewReader(pipe), nil)
@@ -202,7 +202,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusInternalServerError,
 		)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return response.Body.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close tool call response body", func() error { return response.Body.Close() })
 
 	ct := response.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "application/vnd.fly.replay") {

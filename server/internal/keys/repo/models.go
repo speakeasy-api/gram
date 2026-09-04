@@ -10,17 +10,21 @@ import (
 )
 
 type ApiKey struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.NullUUID
-	CreatedByUserID string
-	Name            string
-	KeyPrefix       string
-	KeyHash         string
-	Scopes          []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	LastAccessedAt  pgtype.Timestamptz
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	CreatedByUserID        string
+	Name                   string
+	KeyPrefix              string
+	KeyHash                string
+	Scopes                 []string
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ExpiresAt              pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+	LastAccessedAt         pgtype.Timestamptz
 }

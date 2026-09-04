@@ -64,6 +64,61 @@ func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAt
 	return result.RowsAffected(), nil
 }
 
+const autoDetachMemberProviderClient = `-- name: AutoDetachMemberProviderClient :execrows
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.remote_session_client_id = c.id
+  AND l.user_session_issuer_id = $1
+  AND c.remote_session_issuer_id = $2
+  AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = $3
+      AND s.remote_session_issuer_id = $2
+      AND (
+        s.user_session_issuer_id = $1
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS mm
+            ON mm.project_id = m.project_id
+           AND mm.id = m.meta_mcp_server_id
+           AND mm.deleted IS FALSE
+          WHERE m.project_id = s.project_id
+            AND m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND mm.user_session_issuer_id = $1
+        )
+      )
+  )
+`
+
+type AutoDetachMemberProviderClientParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
+// client(s) for a removed member's upstream so the provider stops appearing on
+// the gateway's consent screen. The binding is scoped to the user_session_issuer,
+// so it must survive as long as ANY live consumer of that issuer still fronts
+// the upstream — a live member of a meta server on the issuer, or a server
+// directly issuer-gated to it (issuers can be shared across gateways/servers).
+// Run after the member row is soft-deleted so the just-removed member is
+// already excluded by the deleted filter below.
+func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -650,7 +705,8 @@ const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersFor
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
-    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -684,6 +740,7 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 	McpServerID         uuid.UUID
 	McpServerVisibility string
 	UpstreamUrl         string
+	Tunneled            bool
 }
 
 // The meta MCP's proxied (remote or tunneled) members that authenticate
@@ -708,7 +765,12 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 	var items []ListMetaMCPMembersForRemoteSessionIssuerRow
 	for rows.Next() {
 		var i ListMetaMCPMembersForRemoteSessionIssuerRow
-		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerVisibility,
+			&i.UpstreamUrl,
+			&i.Tunneled,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

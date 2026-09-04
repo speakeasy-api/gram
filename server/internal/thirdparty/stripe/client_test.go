@@ -97,6 +97,8 @@ func TestIsConfigured(t *testing.T) {
 
 type fakeStripeAPI struct {
 	customerParams             *stripesdk.CustomerCreateParams
+	customerUpdateID           string
+	customerUpdateParams       *stripesdk.CustomerUpdateParams
 	checkoutSessionParams      *stripesdk.CheckoutSessionCreateParams
 	checkoutRetrieveParams     *stripesdk.CheckoutSessionRetrieveParams
 	checkoutExpireID           string
@@ -125,6 +127,13 @@ func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.Cust
 	f.calls++
 	f.customerParams = params
 	return &stripesdk.Customer{ID: "cus_test"}, f.err
+}
+
+func (f *fakeStripeAPI) updateCustomer(_ context.Context, id string, params *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error) {
+	f.calls++
+	f.customerUpdateID = id
+	f.customerUpdateParams = params
+	return &stripesdk.Customer{ID: id}, f.err
 }
 
 func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
@@ -1185,4 +1194,172 @@ func webhookPayloadForType(t *testing.T, apiVersion string, created time.Time, e
 	})
 	require.NoError(t, err)
 	return payload
+}
+
+func TestCreateCustomerSetsIdentityAndContractMetadata(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		Email:            "billing@the-customer.test",
+		AccountType:      "free",
+		IdempotencyKey:   "customer:<ORG_ID>",
+	})
+	require.NoError(t, err)
+
+	params := api.customerParams
+	require.Equal(t, "The Customer, Inc.", stripesdk.StringValue(params.Name))
+	require.Equal(t, "billing@the-customer.test", stripesdk.StringValue(params.Email))
+	// A Stripe Customer can be shared with the SDK product (same organization id), so
+	// product-specific keys are namespaced and speakeasy_product stays off the customer.
+	require.Equal(t, map[string]string{
+		"organization_id":   "<ORG_ID>",
+		"organization_slug": "the-customer",
+		"organization_name": "The Customer, Inc.",
+		"aicp_account_type": "free",
+	}, params.Metadata)
+}
+
+func TestCreateCustomerOmitsEmptyEmail(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		IdempotencyKey:   "customer:<ORG_ID>",
+	})
+	require.NoError(t, err)
+	require.Nil(t, api.customerParams.Email, "empty email must not be sent to Stripe")
+}
+
+func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	anchor := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID:         "cus_test",
+		OrganizationID:     "<ORG_ID>",
+		OrganizationSlug:   "the-customer",
+		SuccessURL:         "https://app.example.test/the-customer/billing",
+		CancelURL:          "https://app.example.test/the-customer/billing",
+		BillingCycleAnchor: anchor,
+		ExpiresAt:          anchor.Add(-time.Minute),
+		IdempotencyKey:     "checkout:<ORG_ID>:request",
+	})
+	require.NoError(t, err)
+
+	// Name and account type are customer-only so idempotent replays stay identical.
+	want := map[string]string{
+		"speakeasy_product": "aicp",
+		"organization_id":   "<ORG_ID>",
+		"organization_slug": "the-customer",
+	}
+	require.Equal(t, want, api.checkoutSessionParams.Metadata)
+	require.Equal(t, want, api.checkoutSessionParams.SubscriptionData.Metadata)
+}
+
+func TestUpdateCustomerSetsIdentityAndContractMetadata(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{
+		CustomerID:       "cus_test",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		Email:            "billing@the-customer.test",
+		AccountType:      "payg",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "cus_test", api.customerUpdateID)
+	params := api.customerUpdateParams
+	require.Equal(t, "The Customer, Inc.", stripesdk.StringValue(params.Name))
+	require.Equal(t, "billing@the-customer.test", stripesdk.StringValue(params.Email))
+	require.NotContains(t, params.Metadata, "speakeasy_product", "the customer may be shared with another product")
+	require.Equal(t, "payg", params.Metadata["aicp_account_type"])
+	require.Equal(t, "the-customer", params.Metadata["organization_slug"])
+}
+
+func TestUpdateCustomerRequiresCustomerID(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{})
+	require.ErrorIs(t, err, errMissingCustomerID)
+	require.Zero(t, api.calls)
+}
+
+func TestCreateCustomerOmitsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	for _, accountType := range []string{"", "not-an-account-type"} {
+		api := &fakeStripeAPI{}
+		c := &client{api: api}
+
+		_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{
+			OrganizationID:   "<ORG_ID>",
+			OrganizationSlug: "the-customer",
+			OrganizationName: "The Customer, Inc.",
+			AccountType:      accountType,
+			IdempotencyKey:   "customer:<ORG_ID>",
+		})
+		require.NoError(t, err)
+		require.NotContains(t, api.customerParams.Metadata, "aicp_account_type", "account type %q must not be stamped", accountType)
+	}
+}
+
+func TestUpdateCustomerClearsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	for _, accountType := range []string{"", "not-an-account-type"} {
+		api := &fakeStripeAPI{}
+		c := &client{api: api}
+
+		err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{
+			CustomerID:       "cus_test",
+			OrganizationID:   "<ORG_ID>",
+			OrganizationSlug: "the-customer",
+			OrganizationName: "The Customer, Inc.",
+			AccountType:      accountType,
+		})
+		require.NoError(t, err)
+		// Stripe deletes a metadata key when its value is set to "".
+		value, ok := api.customerUpdateParams.Metadata["aicp_account_type"]
+		require.True(t, ok, "account type %q must clear the stale key on update", accountType)
+		require.Empty(t, value)
+	}
+}
+
+func TestUpdateCustomerLeavesEmailUnchangedWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	err := c.UpdateCustomer(t.Context(), UpdateCustomerInput{
+		CustomerID:       "cus_test",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		OrganizationName: "The Customer, Inc.",
+		AccountType:      "payg",
+	})
+	require.NoError(t, err)
+	require.Nil(t, api.customerUpdateParams.Email, "an empty email must not clear the address Stripe already has")
 }

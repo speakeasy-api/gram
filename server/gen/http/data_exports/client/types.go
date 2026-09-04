@@ -69,6 +69,15 @@ type ListDestinationsResponseBody struct {
 	Destinations []*DestinationResponseBody `form:"destinations,omitempty" json:"destinations,omitempty" xml:"destinations,omitempty"`
 }
 
+// ListForOrgResponseBody is the type of the "dataExports" service "listForOrg"
+// endpoint HTTP response body.
+type ListForOrgResponseBody struct {
+	// Active data export destinations across the active organization.
+	Destinations []*DestinationResponseBody `form:"destinations,omitempty" json:"destinations,omitempty" xml:"destinations,omitempty"`
+	// Active data export routes across the active organization.
+	Routes []*DataExportRouteResponseBody `form:"routes,omitempty" json:"routes,omitempty" xml:"routes,omitempty"`
+}
+
 // CreateDestinationResponseBody is the type of the "dataExports" service
 // "createDestination" endpoint HTTP response body.
 type CreateDestinationResponseBody struct {
@@ -332,6 +341,188 @@ type ListDestinationsUnexpectedResponseBody struct {
 // service "listDestinations" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListDestinationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgUnauthorizedResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "unauthorized" error.
+type ListForOrgUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgForbiddenResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "forbidden" error.
+type ListForOrgForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgBadRequestResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "bad_request" error.
+type ListForOrgBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgNotFoundResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "not_found" error.
+type ListForOrgNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgConflictResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "conflict" error.
+type ListForOrgConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgUnsupportedMediaResponseBody is the type of the "dataExports"
+// service "listForOrg" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListForOrgUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgInvalidResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "invalid" error.
+type ListForOrgInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgInvariantViolationResponseBody is the type of the "dataExports"
+// service "listForOrg" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListForOrgInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgUnexpectedResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "unexpected" error.
+type ListForOrgUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListForOrgGatewayErrorResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "gateway_error" error.
+type ListForOrgGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1683,6 +1874,25 @@ type OtelDestinationHeaderResponseBody struct {
 	HasValue *bool `form:"has_value,omitempty" json:"has_value,omitempty" xml:"has_value,omitempty"`
 }
 
+// DataExportRouteResponseBody is used to define fields on response body types.
+type DataExportRouteResponseBody struct {
+	// Route ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Project that owns the route.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Class of data exported by this route.
+	DataSource *string `form:"data_source,omitempty" json:"data_source,omitempty" xml:"data_source,omitempty"`
+	// Whether the route is enabled.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// OTEL destination configured on this route. Omitted when no OTEL destination
+	// is selected.
+	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // CreateOtelDestinationInputRequestBody is used to define fields on request
 // body types.
 type CreateOtelDestinationInputRequestBody struct {
@@ -1718,25 +1928,6 @@ type UpdateOtelDestinationHeaderInputRequestBody struct {
 	// Write-only header value. Omit to preserve an existing value; provide an
 	// empty string to clear it.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-}
-
-// DataExportRouteResponseBody is used to define fields on response body types.
-type DataExportRouteResponseBody struct {
-	// Route ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Project that owns the route.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Class of data exported by this route.
-	DataSource *string `form:"data_source,omitempty" json:"data_source,omitempty" xml:"data_source,omitempty"`
-	// Whether the route is enabled.
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// OTEL destination configured on this route. Omitted when no OTEL destination
-	// is selected.
-	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
-	// Creation timestamp.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// Last update timestamp.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateDestinationRequestBody builds the HTTP request body from the
@@ -1955,6 +2146,180 @@ func NewListDestinationsUnexpected(body *ListDestinationsUnexpectedResponseBody)
 // NewListDestinationsGatewayError builds a dataExports service
 // listDestinations endpoint gateway_error error.
 func NewListDestinationsGatewayError(body *ListDestinationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgListDataExportsForOrgResultOK builds a "dataExports" service
+// "listForOrg" endpoint result from a HTTP "OK" response.
+func NewListForOrgListDataExportsForOrgResultOK(body *ListForOrgResponseBody) *dataexports.ListDataExportsForOrgResult {
+	v := &dataexports.ListDataExportsForOrgResult{}
+	v.Destinations = make([]*dataexports.Destination, len(body.Destinations))
+	for i, val := range body.Destinations {
+		if val == nil {
+			v.Destinations[i] = nil
+			continue
+		}
+		v.Destinations[i] = unmarshalDestinationResponseBodyToDataexportsDestination(val)
+	}
+	v.Routes = make([]*dataexports.DataExportRoute, len(body.Routes))
+	for i, val := range body.Routes {
+		if val == nil {
+			v.Routes[i] = nil
+			continue
+		}
+		v.Routes[i] = unmarshalDataExportRouteResponseBodyToDataexportsDataExportRoute(val)
+	}
+
+	return v
+}
+
+// NewListForOrgUnauthorized builds a dataExports service listForOrg endpoint
+// unauthorized error.
+func NewListForOrgUnauthorized(body *ListForOrgUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgForbidden builds a dataExports service listForOrg endpoint
+// forbidden error.
+func NewListForOrgForbidden(body *ListForOrgForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgBadRequest builds a dataExports service listForOrg endpoint
+// bad_request error.
+func NewListForOrgBadRequest(body *ListForOrgBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgNotFound builds a dataExports service listForOrg endpoint
+// not_found error.
+func NewListForOrgNotFound(body *ListForOrgNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgConflict builds a dataExports service listForOrg endpoint
+// conflict error.
+func NewListForOrgConflict(body *ListForOrgConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgUnsupportedMedia builds a dataExports service listForOrg
+// endpoint unsupported_media error.
+func NewListForOrgUnsupportedMedia(body *ListForOrgUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgInvalid builds a dataExports service listForOrg endpoint
+// invalid error.
+func NewListForOrgInvalid(body *ListForOrgInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgInvariantViolation builds a dataExports service listForOrg
+// endpoint invariant_violation error.
+func NewListForOrgInvariantViolation(body *ListForOrgInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgUnexpected builds a dataExports service listForOrg endpoint
+// unexpected error.
+func NewListForOrgUnexpected(body *ListForOrgUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListForOrgGatewayError builds a dataExports service listForOrg endpoint
+// gateway_error error.
+func NewListForOrgGatewayError(body *ListForOrgGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3119,6 +3484,32 @@ func ValidateListDestinationsResponseBody(body *ListDestinationsResponseBody) (e
 	return
 }
 
+// ValidateListForOrgResponseBody runs the validations defined on
+// ListForOrgResponseBody
+func ValidateListForOrgResponseBody(body *ListForOrgResponseBody) (err error) {
+	if body.Destinations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destinations", "body"))
+	}
+	if body.Routes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("routes", "body"))
+	}
+	for _, e := range body.Destinations {
+		if e != nil {
+			if err2 := ValidateDestinationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Routes {
+		if e != nil {
+			if err2 := ValidateDataExportRouteResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCreateDestinationResponseBody runs the validations defined on
 // CreateDestinationResponseBody
 func ValidateCreateDestinationResponseBody(body *CreateDestinationResponseBody) (err error) {
@@ -3271,8 +3662,8 @@ func ValidateCreateRouteResponseBody(body *CreateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3315,8 +3706,8 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3550,6 +3941,246 @@ func ValidateListDestinationsUnexpectedResponseBody(body *ListDestinationsUnexpe
 // ValidateListDestinationsGatewayErrorResponseBody runs the validations
 // defined on listDestinations_gateway_error_response_body
 func ValidateListDestinationsGatewayErrorResponseBody(body *ListDestinationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgUnauthorizedResponseBody runs the validations defined on
+// listForOrg_unauthorized_response_body
+func ValidateListForOrgUnauthorizedResponseBody(body *ListForOrgUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgForbiddenResponseBody runs the validations defined on
+// listForOrg_forbidden_response_body
+func ValidateListForOrgForbiddenResponseBody(body *ListForOrgForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgBadRequestResponseBody runs the validations defined on
+// listForOrg_bad_request_response_body
+func ValidateListForOrgBadRequestResponseBody(body *ListForOrgBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgNotFoundResponseBody runs the validations defined on
+// listForOrg_not_found_response_body
+func ValidateListForOrgNotFoundResponseBody(body *ListForOrgNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgConflictResponseBody runs the validations defined on
+// listForOrg_conflict_response_body
+func ValidateListForOrgConflictResponseBody(body *ListForOrgConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgUnsupportedMediaResponseBody runs the validations defined
+// on listForOrg_unsupported_media_response_body
+func ValidateListForOrgUnsupportedMediaResponseBody(body *ListForOrgUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgInvalidResponseBody runs the validations defined on
+// listForOrg_invalid_response_body
+func ValidateListForOrgInvalidResponseBody(body *ListForOrgInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgInvariantViolationResponseBody runs the validations
+// defined on listForOrg_invariant_violation_response_body
+func ValidateListForOrgInvariantViolationResponseBody(body *ListForOrgInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgUnexpectedResponseBody runs the validations defined on
+// listForOrg_unexpected_response_body
+func ValidateListForOrgUnexpectedResponseBody(body *ListForOrgUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListForOrgGatewayErrorResponseBody runs the validations defined on
+// listForOrg_gateway_error_response_body
+func ValidateListForOrgGatewayErrorResponseBody(body *ListForOrgGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5339,26 +5970,6 @@ func ValidateOtelDestinationHeaderResponseBody(body *OtelDestinationHeaderRespon
 	return
 }
 
-// ValidateCreateOtelDestinationInputRequestBody runs the validations defined
-// on CreateOtelDestinationInputRequestBody
-func ValidateCreateOtelDestinationInputRequestBody(body *CreateOtelDestinationInputRequestBody) (err error) {
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
-	return
-}
-
-// ValidateUpdateOtelDestinationInputRequestBody runs the validations defined
-// on UpdateOtelDestinationInputRequestBody
-func ValidateUpdateOtelDestinationInputRequestBody(body *UpdateOtelDestinationInputRequestBody) (err error) {
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
-	return
-}
-
 // ValidateDataExportRouteResponseBody runs the validations defined on
 // DataExportRouteResponseBody
 func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err error) {
@@ -5387,8 +5998,8 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -5400,5 +6011,25 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
+	return
+}
+
+// ValidateCreateOtelDestinationInputRequestBody runs the validations defined
+// on CreateOtelDestinationInputRequestBody
+func ValidateCreateOtelDestinationInputRequestBody(body *CreateOtelDestinationInputRequestBody) (err error) {
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
+	return
+}
+
+// ValidateUpdateOtelDestinationInputRequestBody runs the validations defined
+// on UpdateOtelDestinationInputRequestBody
+func ValidateUpdateOtelDestinationInputRequestBody(body *UpdateOtelDestinationInputRequestBody) (err error) {
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
 	return
 }

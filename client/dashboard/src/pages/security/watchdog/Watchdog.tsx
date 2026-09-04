@@ -483,6 +483,13 @@ function SeverityChip({
   );
 }
 
+/** Explains how the headline number relates to the per-signal scores.
+ * Mirrors orgRiskScore in server/internal/risk/signals.go: the worst
+ * signal dominates, the top-three mean keeps one outlier from saturating
+ * it, and finding volume contributes the rest. */
+const ORG_RISK_SCORE_TOOLTIP =
+  "Each signal's score is inherited from its policy. The overall score is not a plain average: it weights the most severe signal, the average of the top signals, and the total number of findings.";
+
 /** StatTile tone for the org risk score, mirroring the signal table's
  * severity coding: red for high/critical bands, amber for medium, plain
  * ink for low. */
@@ -604,6 +611,7 @@ function KPIRow({
     <StatTileGroup>
       <StatTile
         title="Org risk score"
+        tooltip={ORG_RISK_SCORE_TOOLTIP}
         value={data.orgRiskScore}
         displayValue={data.orgRiskScore.toFixed(1)}
         previousValue={data.previousOrgRiskScore}

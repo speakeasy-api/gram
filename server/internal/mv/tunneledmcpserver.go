@@ -3,8 +3,10 @@ package mv
 import (
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
@@ -22,21 +24,27 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		lastSeenAt = latestConnectionHeartbeat(connections)
 	}
 
+	effectiveRate, effectiveBurst := publiclimits.Effective(server.PublicRequestRatePerSecond, server.PublicRequestBurst)
+
 	return &types.TunneledMcpServer{
-		ID:                         server.ID.String(),
-		ProjectID:                  server.ProjectID.String(),
-		Name:                       server.Name,
-		KeyPrefix:                  server.KeyPrefix,
-		Status:                     types.TunneledMcpLifecycleStatus(server.Status),
-		ConnectionStatus:           tunneledMcpConnectionStatus(server, connections),
-		AllowPublic:                server.AllowPublic,
-		AgentVersion:               agentVersion,
-		ResourceIdentifier:         conv.FromPGText[string](server.ResourceIdentifier),
-		LastSeenAt:                 lastSeenAt,
-		ActiveConnectionCount:      len(connections),
-		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
-		CreatedAt:                  server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                  server.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                                  server.ID.String(),
+		ProjectID:                           server.ProjectID.String(),
+		Name:                                server.Name,
+		KeyPrefix:                           server.KeyPrefix,
+		Status:                              types.TunneledMcpLifecycleStatus(server.Status),
+		ConnectionStatus:                    tunneledMcpConnectionStatus(server, connections),
+		AllowPublic:                         server.AllowPublic,
+		AgentVersion:                        agentVersion,
+		ResourceIdentifier:                  conv.FromPGText[string](server.ResourceIdentifier),
+		PublicRequestRatePerSecond:          optionalInt(server.PublicRequestRatePerSecond),
+		PublicRequestBurst:                  optionalInt(server.PublicRequestBurst),
+		EffectivePublicRequestRatePerSecond: effectiveRate,
+		EffectivePublicRequestBurst:         effectiveBurst,
+		LastSeenAt:                          lastSeenAt,
+		ActiveConnectionCount:               len(connections),
+		ActiveConsumerSessionCount:          activeConsumerSessionCount(connections),
+		CreatedAt:                           server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                           server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
@@ -140,4 +148,13 @@ func connectionMetadata(metadata map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+// optionalInt maps a nullable integer column to the view's optional int.
+func optionalInt(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
 }

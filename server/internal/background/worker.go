@@ -11,7 +11,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
@@ -112,7 +111,6 @@ type WorkerOptions struct {
 	ShadowMCPClient          *shadowmcp.Client
 	AuditLogger              *audit.Logger
 	WorkOSClient             activities.WorkOSClient
-	SvixClient               *svix.Svix
 	ProductFeatures          *productfeatures.Client
 	PluginPublisher          *plugins.Service
 	Publishers               *Publishers
@@ -192,7 +190,6 @@ func ForDeploymentProcessing(
 		BuiltinPresets:           nil,
 		ShadowMCPClient:          nil,
 		WorkOSClient:             workos.NewStubClient(),
-		SvixClient:               nil,
 		ProductFeatures:          nil,
 		ClickhouseConn:           nil,
 		PluginPublisher:          nil,
@@ -262,7 +259,6 @@ func NewTemporalWorker(
 		ShadowMCPClient:           nil,
 		AuditLogger:               nil,
 		WorkOSClient:              workos.NewStubClient(),
-		SvixClient:                nil,
 		ProductFeatures:           nil,
 		ClickhouseConn:            nil,
 		PluginPublisher:           nil,
@@ -313,7 +309,6 @@ func NewTemporalWorker(
 			ShadowMCPClient:           conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:               conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:              conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			SvixClient:                conv.Default(o.SvixClient, opts.SvixClient),
 			ProductFeatures:           conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:            conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:           conv.Default(o.PluginPublisher, opts.PluginPublisher),
@@ -399,7 +394,6 @@ func NewTemporalWorker(
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
-		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
@@ -492,11 +486,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
-	// Outbox relay activities
-	temporalWorker.RegisterActivity(activities.FetchPendingOutboxEvents)
-	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
-	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
-	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	// Killswitch maintenance activities
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
@@ -621,15 +610,17 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
-	// Outbox -> Relay workflow and GC
-	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
-	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
+	// Deprecated: superseded by PluginPublishWorkflowDebounced. Kept registered
+	// for one release so executions in flight across the deploy can finish;
+	// nothing starts it any more. Safe to delete once none are running.
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
 	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
@@ -713,12 +704,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if err := AddProcessOutboxSchedule(ctx, env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(ctx, "failed to add relay outbox to svix schedule", attr.SlogError(err))
-		}
-	}
-
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
@@ -741,10 +726,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
 			}
 		}
-	}
-
-	if err := AddOutboxGCSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {

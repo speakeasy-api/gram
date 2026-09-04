@@ -107,6 +107,7 @@ func TestCodeMCPCode(t *testing.T) {
 		{"unauthorized_uses_server_defined_code", CodeUnauthorized, MCPCodeUnauthorized},
 		{"forbidden_uses_server_defined_code", CodeForbidden, MCPCodeForbidden},
 		{"bad_request_is_invalid_request", CodeBadRequest, MCPCodeInvalidRequest},
+		{"parse_error_is_parse_error", CodeParseError, MCPCodeParseError},
 		{"conflict_is_invalid_request", CodeConflict, MCPCodeInvalidRequest},
 		{"unsupported_media_is_invalid_request", CodeUnsupportedMedia, MCPCodeInvalidRequest},
 		{"method_not_allowed_is_server_error", CodeMethodNotAllowed, MCPCodeServerError},

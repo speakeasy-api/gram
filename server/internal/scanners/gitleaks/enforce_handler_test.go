@@ -82,6 +82,25 @@ func TestEnforceHandlerAcknowledgesStaleRequest(t *testing.T) {
 	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.gitleaks.stale_dropped"))
 }
 
+func TestEnforceHandlerAcknowledgesFarFutureRequest(t *testing.T) {
+	t.Parallel()
+
+	mr, _, writer := newReplyWriter(t)
+	meterProvider, reader := newTestMeterProvider(t)
+	handler, _ := newTestEnforceHandler(t, meterProvider, writer, 30*time.Second)
+	request := riskv1.GitleaksEnforcement_builder{
+		RequestId:      new("scan-future"),
+		ProjectId:      new("project-future"),
+		OrganizationId: new("org-future"),
+		CreatedAt:      new(time.Now().Add(5 * time.Minute).UTC().Format(time.RFC3339Nano)),
+		Content:        new(fakeSecret),
+	}.Build()
+
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-future", "scan-future", nil)))
+	require.False(t, mr.Exists(enforcereply.InboxKey("replica-future")))
+	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.gitleaks.stale_dropped"))
+}
+
 func TestEnforceHandlerAcknowledgesReplyWriteFailure(t *testing.T) {
 	t.Parallel()
 

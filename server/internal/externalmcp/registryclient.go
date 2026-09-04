@@ -524,7 +524,7 @@ func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Req
 	if err != nil {
 		return listResponse{}, fmt.Errorf("fetch from registry: %w", err)
 	}
-	defer o11y.LogDefer(ctx, c.logger, func() error {
+	defer o11y.LogDefer(ctx, c.logger, "failed to close mcp registry response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -635,22 +635,21 @@ func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types
 		}
 
 		servers = append(servers, &types.ExternalMCPServerEntry{
-			Repository:                          toExternalMCPRepository(s.Server.Repository),
-			Packages:                            toExternalMCPPackages(s.Server.Packages),
-			RegistrySpecifier:                   s.Server.Name,
-			Version:                             s.Server.Version,
-			Description:                         s.Server.Description,
-			ToolsetID:                           nil,
-			McpServerID:                         nil,
-			RegistryID:                          &registryID,
-			OrganizationMcpCollectionRegistryID: nil,
-			Title:                               s.Server.Title,
-			IconURL:                             iconURL,
-			Meta:                                meta,
-			ToolCount:                           toolCount,
-			IsReadOnly:                          isReadOnly,
-			SupportsDcr:                         supportsDCR,
-			Remotes:                             remotes,
+			Repository:        toExternalMCPRepository(s.Server.Repository),
+			Packages:          toExternalMCPPackages(s.Server.Packages),
+			RegistrySpecifier: s.Server.Name,
+			Version:           s.Server.Version,
+			Description:       s.Server.Description,
+			ToolsetID:         nil,
+			McpServerID:       nil,
+			RegistryID:        &registryID,
+			Title:             s.Server.Title,
+			IconURL:           iconURL,
+			Meta:              meta,
+			ToolCount:         toolCount,
+			IsReadOnly:        isReadOnly,
+			SupportsDcr:       supportsDCR,
+			Remotes:           remotes,
 		})
 	}
 

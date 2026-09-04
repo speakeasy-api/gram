@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -57,6 +58,7 @@ type Service struct {
 	productFeatures ProductFeaturesClient
 	serverURL       string
 	blobStore       assets.BlobStore
+	telemetry       *telemetry.Logger
 }
 
 var (
@@ -75,6 +77,7 @@ func NewService(
 	productFeatures ProductFeaturesClient,
 	serverURL string,
 	blobStore assets.BlobStore,
+	telemetryLogger *telemetry.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -88,6 +91,7 @@ func NewService(
 		productFeatures: productFeatures,
 		serverURL:       serverURL,
 		blobStore:       blobStore,
+		telemetry:       telemetryLogger,
 	}
 }
 
@@ -177,6 +181,51 @@ func normalizeSerial(reported *string) string {
 	return serial
 }
 
+// Environment kinds an agent may declare.
+//
+// "endpoint" — an end-user device of any form factor, named so it does not
+// expire the way "laptop" would on a desktop or a phone — is the default, and
+// is the one kind never written to device_agent_environment_syncs: those
+// heartbeats go to device_agent_syncs, whose email match device coverage reads.
+// It is still a real value rather than an absence, so normalizeEnvironment
+// returns it and the call sites compare against it by name.
+const (
+	environmentEndpoint  = "endpoint"
+	environmentEphemeral = "ephemeral"
+	environmentServer    = "server"
+)
+
+// normalizeEnvironment maps the declared kind onto the closed set. Total: every
+// input resolves to one of the three constants, never to "".
+//
+// Three things collapse onto environmentEndpoint, and they are the same thing
+// as far as this server is concerned — "an ordinary device, recorded the way it
+// always was":
+//
+//   - an explicit "endpoint"
+//   - an absent header, which every agent predating this field sends
+//   - an unrecognized value
+//
+// The last of those degrades rather than erroring, deliberately. Rejecting the
+// poll would stop that device syncing plugins at all — an outage caused by an
+// attribution hint. A newer agent inventing a kind this server has not heard of
+// keeps working, and lands where it would have landed anyway.
+func normalizeEnvironment(reported *string) string {
+	switch strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, ""))) {
+	case environmentEphemeral:
+		return environmentEphemeral
+	case environmentServer:
+		return environmentServer
+	case environmentEndpoint:
+		// Listed rather than folded into the default so the closed set is
+		// visibly exhaustive here, and so the constant is not a declaration
+		// nothing reads.
+		return environmentEndpoint
+	default:
+		return environmentEndpoint
+	}
+}
+
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -215,7 +264,29 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// can show who is actively running it. Never fail the sync if the write fails
 	// (mirrors api_keys.last_accessed_at). The query's ON CONFLICT guard caps
 	// writes to at most once per minute per (org, email).
-	if err := s.repo.UpsertDeviceAgentSync(ctx, repo.UpsertDeviceAgentSyncParams{
+	//
+	// A non-laptop box records into device_agent_environment_syncs INSTEAD.
+	// Keeping those rows out of device_agent_syncs is the point: coverage falls
+	// back to matching an MDM device's assigned-user email against that table,
+	// so a cloud session polling under a real person's address would otherwise
+	// mark their laptop agent_active whether or not the laptop runs the agent.
+	// Cloud environments enroll with one shared identity, so using a real
+	// person's address is an easy accident, and a false coverage claim is worse
+	// than an absent one because nothing prompts anyone to look.
+	environment := normalizeEnvironment(payload.Environment)
+	if environment != environmentEndpoint {
+		if err := s.repo.UpsertDeviceAgentEnvironmentSync(ctx, repo.UpsertDeviceAgentEnvironmentSyncParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Email:          email,
+			Environment:    environment,
+			Hostname:       conv.PtrToPGTextTrimmed(payload.Hostname),
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to record device agent environment sync",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	} else if err := s.repo.UpsertDeviceAgentSync(ctx, repo.UpsertDeviceAgentSyncParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Email:          email,
 	}); err != nil {
@@ -236,7 +307,15 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// email: the dedup key and every reader compare LOWER(serial_number), so
 	// storing the vendor's casing verbatim would leave the stored value and
 	// its own key disagreeing.
-	if serial := normalizeSerial(payload.SerialNumber); serial != "" {
+	//
+	// Endpoints only, for the same reason the sibling above splits: this table
+	// backs DEVICE-level coverage, which matches an MDM device's serial. A
+	// shared server or an ephemeral box that happens to report a serial is not
+	// a managed endpoint, and letting its heartbeat land here would reopen the
+	// hole the environment split closes — just through the serial match instead
+	// of the email one. Those boxes are counted as environments; nothing about
+	// them belongs in a per-device count.
+	if serial := normalizeSerial(payload.SerialNumber); serial != "" && environment == environmentEndpoint {
 		if err := s.repo.UpsertDeviceAgentDeviceSync(ctx, repo.UpsertDeviceAgentDeviceSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			SerialNumber:   serial,

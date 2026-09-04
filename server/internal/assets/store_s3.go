@@ -271,7 +271,7 @@ func (s *s3ChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("get object with range: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close s3 object body", func() error {
 		return result.Body.Close()
 	})
 

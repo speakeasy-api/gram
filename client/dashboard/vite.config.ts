@@ -5,6 +5,7 @@ import process from "node:process";
 import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { replaceAdminServerUrl } from "./src/lib/admin-server-url";
 
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
 // contains a top-level `await import(...)` (check before adding). Grouping
@@ -261,7 +262,21 @@ export default defineConfig(({ command }) => {
           }
         : undefined,
     },
-    plugins: [themeInitPlugin(), react(), tailwindcss()],
+    plugins: [
+      {
+        name: "admin-server-url",
+        transformIndexHtml(html) {
+          if (command !== "serve") return html;
+          return replaceAdminServerUrl(
+            html,
+            process.env["GRAM_ADMIN_SERVER_URL"] || "",
+          );
+        },
+      },
+      themeInitPlugin(),
+      react(),
+      tailwindcss(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

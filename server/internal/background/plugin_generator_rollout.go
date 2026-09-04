@@ -20,15 +20,21 @@ import (
 const (
 	pluginGeneratorRolloutScheduleID = "v1:plugin-generator-rollout-schedule"
 	pluginGeneratorRolloutWorkflowID = pluginGeneratorRolloutScheduleID + "/scheduled"
-	// The schedule cadence determines how long a generator or plugin-config
-	// change takes to propagate, since nothing else triggers the rollout. The
-	// fingerprint check keeps unchanged projects from doing any GitHub/key work,
-	// so each tick is cheap apart from the per-project scan (resolve + in-memory
-	// generate + fingerprint compare). SKIP overlap (below) gives us the
-	// "trigger every interval unless one is already running" behaviour without a
-	// separate triggering workflow: a run that outlasts the interval just defers
-	// the next tick.
-	pluginGeneratorRolloutInterval         = 10 * time.Second
+	// This sweep is the safety net, not the primary trigger: plugin and plugin
+	// membership changes signal a per-project publish directly (see
+	// plugin_publish.go), so the cadence here only bounds how long a change with
+	// NO database write takes to propagate — a hooks generator-version bump or a
+	// hooks-rollout pin advance in PostHog, neither of which any callsite can
+	// signal. At 10s this workflow dominated the Temporal action bill for work
+	// that was a no-op on almost every tick.
+	//
+	// The fingerprint check keeps unchanged projects from doing any GitHub/key
+	// work, so each tick is cheap apart from the per-project scan (resolve +
+	// in-memory generate + fingerprint compare). SKIP overlap (below) gives us
+	// the "trigger every interval unless one is already running" behaviour
+	// without a separate triggering workflow: a run that outlasts the interval
+	// just defers the next tick.
+	pluginGeneratorRolloutInterval         = 1 * time.Hour
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
 )

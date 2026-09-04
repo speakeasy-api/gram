@@ -94,7 +94,7 @@ func (fbs *FSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser,
 
 	stat, err := f.Stat()
 	if err != nil {
-		defer o11y.LogDefer(ctx, fbs.Logger, func() error {
+		defer o11y.LogDefer(ctx, fbs.Logger, "failed to close asset file", func() error {
 			return f.Close()
 		})
 		return nil, 0, fmt.Errorf("stat file: %w", err)

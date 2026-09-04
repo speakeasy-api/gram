@@ -15,14 +15,16 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
-	// the other targets; exactly one must be set. Must be issuer-gated and live in
-	// the caller's project.
+	// Bind the JWT to this toolset's audience. When the toolset has an mcp_servers
+	// wrapper the mint resolves to that server (identical to passing its
+	// mcp_server_id); otherwise the JWT is bound to the legacy toolset audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
-	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
-	// with the other targets; exactly one must be set. Must be issuer-gated and
-	// live in the caller's project.
+	// Bind the JWT to this MCP server's user_session_issuer audience (any
+	// issuer-gated backend, hosted servers included). Mutually exclusive with the
+	// other targets; exactly one must be set. Must be issuer-gated and live in the
+	// caller's project.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Bind the JWT to this meta MCP server's user_session_issuer audience.
 	// Mutually exclusive with the other targets; exactly one must be set. Must be

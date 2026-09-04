@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,6 +96,7 @@ func (m *tunnelManager) buildProxy(
 			RemoteMCPServerID:   "",
 			TunneledMCPServerID: tunnelID,
 			McpServerID:         mcpServer.ID.String(),
+			MetaMCPServerID:     "",
 		},
 		gatewayURL,
 		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),
@@ -107,6 +109,12 @@ func (m *tunnelManager) buildProxy(
 		options...,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
+		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+			return rejection
+		}
+		return nil
+	}
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()

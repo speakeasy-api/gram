@@ -18,7 +18,7 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
+func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
 	var legacyEmail *string
 	{
 		if agentGetPluginsLegacyEmail != "" {
@@ -49,12 +49,19 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsAp
 			hostname = &agentGetPluginsHostname
 		}
 	}
+	var environment *string
+	{
+		if agentGetPluginsEnvironment != "" {
+			environment = &agentGetPluginsEnvironment
+		}
+	}
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
+	v.Environment = environment
 
 	return v, nil
 }
@@ -212,6 +219,90 @@ func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentRep
 		Email:           body.Email,
 	}
 	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildReportAIScanPayload builds the payload for the agent reportAIScan
+// endpoint from CLI flags.
+func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApikeyToken string, agentReportAIScanEmail string, agentReportAIScanSerialNumber string, agentReportAIScanHostname string) (*agent.ReportAIScanPayload, error) {
+	var err error
+	var body ReportAIScanRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportAIScanBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
+		}
+		if body.Matches == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_started_at", body.ScanStartedAt, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_completed_at", body.ScanCompletedAt, goa.FormatDateTime))
+		if body.TargetListVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 0, true))
+		}
+		if body.TargetListVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 2.147483647e+09, false))
+		}
+		if len(body.Matches) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.matches", body.Matches, len(body.Matches), 100, false))
+		}
+		for _, e := range body.Matches {
+			if e != nil {
+				if err2 := ValidateAIScanMatchRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportAIScanApikeyToken != "" {
+			apikeyToken = &agentReportAIScanApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentReportAIScanEmail != "" {
+			email = &agentReportAIScanEmail
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportAIScanSerialNumber != "" {
+			serialNumber = &agentReportAIScanSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportAIScanHostname != "" {
+			hostname = &agentReportAIScanHostname
+		}
+	}
+	v := &agent.ReportAIScanPayload{
+		ScanStartedAt:     body.ScanStartedAt,
+		ScanCompletedAt:   body.ScanCompletedAt,
+		TargetListVersion: body.TargetListVersion,
+	}
+	if body.Matches != nil {
+		v.Matches = make([]*agent.AIScanMatch, len(body.Matches))
+		for i, val := range body.Matches {
+			if val == nil {
+				v.Matches[i] = nil
+				continue
+			}
+			v.Matches[i] = marshalAIScanMatchRequestBodyToAgentAIScanMatch(val)
+		}
+	} else {
+		v.Matches = []*agent.AIScanMatch{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 

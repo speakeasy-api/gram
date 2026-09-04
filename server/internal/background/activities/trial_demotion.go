@@ -123,7 +123,8 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	for _, keyType := range openrouter.AllKeyTypes {
 		change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, dbtx, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
 		if err != nil {
-			return fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
+			demotionErr := fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
+			return demotionErr
 		}
 		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
 		if change.KeyAccessChanged {

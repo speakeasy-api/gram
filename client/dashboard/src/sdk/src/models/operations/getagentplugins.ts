@@ -30,6 +30,10 @@ export type GetAgentPluginsRequest = {
    * Hostname of the machine the agent runs on, when it can be read.
    */
   gramDeviceHostname?: string | undefined;
+  /**
+   * What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.
+   */
+  gramDeviceEnvironment?: string | undefined;
 };
 
 /** @internal */
@@ -67,6 +71,7 @@ export type GetAgentPluginsRequest$Outbound = {
   "Gram-User-Email"?: string | undefined;
   "Gram-Device-Serial"?: string | undefined;
   "Gram-Device-Hostname"?: string | undefined;
+  "Gram-Device-Environment"?: string | undefined;
 };
 
 /** @internal */
@@ -80,6 +85,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
     gramUserEmail: z.optional(z.string()),
     gramDeviceSerial: z.optional(z.string()),
     gramDeviceHostname: z.optional(z.string()),
+    gramDeviceEnvironment: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -87,6 +93,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
       gramUserEmail: "Gram-User-Email",
       gramDeviceSerial: "Gram-Device-Serial",
       gramDeviceHostname: "Gram-Device-Hostname",
+      gramDeviceEnvironment: "Gram-Device-Environment",
     });
   }),
 );

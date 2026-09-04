@@ -8,9 +8,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -23,16 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
-
-type eofCloseBody struct {
-	io.Reader
-	closed bool
-}
-
-func (b *eofCloseBody) Close() error {
-	b.closed = true
-	return io.EOF
-}
 
 // ---------------------------------------------------------------------------
 // Tests from servepublic_auth_test.go (all except helpers and BatchRequest)
@@ -117,7 +108,61 @@ func TestServePublicAuth_WithSecurityDefs_WrongMCPHeader_Returns401(t *testing.T
 	require.Contains(t, err.Error(), "unauthorized")
 }
 
-func TestServePublicAuth_PrivateServer_NoToken_Returns401WithoutClosingRequestBody(t *testing.T) {
+// TestServePublicAuth_PrivateServer_NoToken_LogsNoError pins AIM-160. An
+// unauthenticated POST answered with a 401 challenge is the normal first step
+// of the MCP OAuth handshake, so it is a success path and must not log at
+// ERROR. The regression this guards against is deferred cleanup promoting an
+// expected failure: closing the unread request body through o11y.LogDefer used
+// to return io.EOF, which net/http reports for any body a handler leaves
+// unconsumed, and that single line accounted for the bulk of gram-server's
+// error volume. Asserting on the log level rather than on whether Close was
+// called keeps the test tied to the symptom instead of to one implementation.
+func TestServePublicAuth_PrivateServer_NoToken_LogsNoError(t *testing.T) {
+	t.Parallel()
+
+	logs := &errorLogRecorder{mu: sync.Mutex{}, msgs: nil}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(logs))
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Auth Log Test MCP",
+		Slug:                   "priv-auth-log-test",
+		Description:            conv.ToPGText("A private MCP for auth logging tests"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("priv-auth-log-test"),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Fixture setup shares the service logger; only the request matters here.
+	logs.reset()
+
+	// The body reports io.EOF on Close, the way net/http's does for a request
+	// body the handler answered without consuming. Any cleanup that closes it
+	// and logs the result is what produced the noise.
+	reqBody := makeInitializeBody()
+	_, err = servePublicHTTPWithBody(
+		t,
+		context.Background(),
+		ti,
+		toolset.McpSlug.String,
+		eofOnCloseBody{Reader: bytes.NewReader(reqBody)},
+		int64(len(reqBody)),
+		"",
+		nil,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expired or invalid access token")
+
+	require.Empty(t, logs.recorded(), "answering an unauthenticated MCP POST with a 401 challenge must not log at ERROR")
+}
+
+func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -138,22 +183,10 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401WithoutClosingRequestBo
 	})
 	require.NoError(t, err)
 
-	body := &eofCloseBody{
-		Reader: bytes.NewReader(makeInitializeBody()),
-		closed: false,
-	}
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, body)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
-
-	err = ti.service.ServePublic(httptest.NewRecorder(), req)
+	unauthCtx := context.Background()
+	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expired or invalid access token")
-	require.False(t, body.closed, "the HTTP server owns the inbound request body lifecycle")
 }
 
 // ---------------------------------------------------------------------------

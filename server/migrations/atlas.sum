@@ -1,4 +1,4 @@
-h1:MU+PxXlyWSzXJcLArncH1k8LYWhbjOc/ppbHEOnRm70=
+h1:lWgwEDKhJmswhQSNNUz+XbbEegPtMm7g5WD2Dt8vHzk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -380,3 +380,10 @@ h1:MU+PxXlyWSzXJcLArncH1k8LYWhbjOc/ppbHEOnRm70=
 20260831170736_tunneled-mcp-server-resource-identifier.sql h1:knIZQZflX4azED7sFXe+uPiJJexkH2eTDfteUGnaKXg=
 20260831182126_aim-78-remote-session-client-jwks.sql h1:s39s09GZ0Zjh20gDECQj9ZmkSOsXZsHxpADmdM8uRrI=
 20260901222548_remote-session-issuer-tunnel-binding.sql h1:3JREClrlXOmZInBZO8aup9+fz/QjQka7XxTuJmGnzjA=
+20260902212254_public-tunnel-rate-limits.sql h1:nZB403TMLx/lHT2gVqVrlsN1Iw4CBhrGJjcNcaOxMuI=
+20260903163542_openrouter-disable-causes-default.sql h1:LS+zQwFykPPu8UqRaH4IGmyaioQr3GhQrLGuoi32B1o=
+20260903190252_dno1005-device-agent-environment-syncs.sql h1:kUaZL31hQY1vrBt5UvtGefk/D8r1kDGpYAhFFBaNoLk=
+20260903194055_add_external_oauth_authorization_server_issuer.sql h1:ulax1MM1HwC0e9Gdxf8gRp6GVh7cZ3dtpyOG0VKfmIU=
+20260903214520_organization-setup-tasks.sql h1:VOA01E6IifoXX5dkmwFgU3gskEG6LeSeuP7N9E7eZWo=
+20260903215231_aim-183-agent-principals.sql h1:l7hdBwam2aqT3pIjK2eBBje7J1z8ow8+/gZ7YpRyp7U=
+20260904130247_aim-191-delegated-agent-credential-columns.sql h1:ai8nyCt3GN33WzGoe8iMil/GP1Zw9xSI5ReYhdbM2Fk=

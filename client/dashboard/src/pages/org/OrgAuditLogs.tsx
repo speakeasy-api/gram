@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useQueryState } from "nuqs";
 import type { MCPServerEntry } from "@/elements";
 import { recommended } from "@/elements/plugins";
@@ -215,7 +216,15 @@ function AuditLogRow({
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <StrongName>
-            {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
+            {/* Only user actors reach an identity page; API keys and system
+                actors resolve to no person. */}
+            <IdentityLink
+              identifier={
+                log.actorType === "user" ? { userId: log.actorId } : null
+              }
+            >
+              {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
+            </IdentityLink>
           </StrongName>{" "}
           <span className="text-muted-foreground">
             {highlightMatch ? highlightMatch(verbText) : verbText}

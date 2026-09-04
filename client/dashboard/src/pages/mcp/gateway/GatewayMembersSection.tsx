@@ -22,6 +22,8 @@ import { useRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,18 +37,20 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
+  type MemberClassification,
+  type MemberRow,
+  buildAddCandidates,
   classifyMemberServer,
   memberBackendKind,
   nextSortOrder,
   planReorder,
-  type MemberClassification,
-  type MemberRow,
 } from "./memberRows";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
+import { useToolsets } from "../../toolsets/useToolsets";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted",
@@ -99,7 +103,7 @@ const STATUS_BY_CLASSIFICATION: Record<
   proxied: {
     label: "Unknown",
     variant: "neutral",
-    why: "The gateway can't reach this member's upstream yet, so it reports no health rather than guessing. Drill-down and execution arrive with per-upstream credential routing.",
+    why: "The gateway can't reach this member's upstream yet, so it reports no health. Drill-down and execution arrive with per-upstream credential routing.",
   },
   disabled: {
     label: "Excluded",
@@ -195,6 +199,7 @@ export function GatewayMembersSection({
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const { rows, isLoading, servers } = useGatewayMemberRows(metaMcpServer.id);
+  const toolsets = useToolsets();
 
   const [addOpen, setAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<MemberRow | null>(null);
@@ -207,6 +212,8 @@ export function GatewayMembersSection({
       // endpoint and caches it; membership changes what those return.
       queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
       queryClient.invalidateQueries({ queryKey: ["gatewayDescribeServer"] }),
+      // Adding a toolset mints an mcp_servers wrapper the picker keys on.
+      invalidateAllMcpServers(queryClient, { refetchType: "all" }),
     ]);
 
   const runMutation = async (work: () => Promise<void>, failure: string) => {
@@ -257,6 +264,37 @@ export function GatewayMembersSection({
         },
       });
       toast.success(`Added ${server.name || "server"} to the gateway`);
+    }, "Failed to add member");
+
+  // Members are keyed by mcp_server_id: mint the toolset's server row, then
+  // attach it. Private is the only visibility a toolset-backed row can hold
+  // from its own page; the gateway defers access to the toolset's MCP gate.
+  const handleAddToolset = (toolset: ToolsetEntry) =>
+    runMutation(async () => {
+      const wrapper = await client.mcpServers.create({
+        createMcpServerForm: {
+          name: toolset.name,
+          toolsetId: toolset.id,
+          visibility: "private",
+        },
+      });
+      try {
+        await client.metaMcp.addMember({
+          addMetaMcpMemberForm: {
+            metaMcpServerId: metaMcpServer.id,
+            mcpServerId: wrapper.id,
+            sortOrder: nextSortOrder(rows.map((row) => row.member)),
+          },
+        });
+      } catch (error) {
+        // The row now exists and is offered as a regular server candidate.
+        throw new Error(
+          `Created an MCP server for ${toolset.name} but couldn't add it to the gateway: ${
+            error instanceof Error ? error.message : "unknown error"
+          }. Add it again from the list.`,
+        );
+      }
+      toast.success(`Added ${toolset.name} to the gateway`);
     }, "Failed to add member");
 
   const indexByMemberId = new Map(
@@ -393,7 +431,10 @@ export function GatewayMembersSection({
               <Table.Header columns={columns} />
               {rows.length === 0 ? (
                 <Table.NoResultsMessage>
-                  <div className="flex flex-col items-center gap-3 px-4 py-8">
+                  {/* No padding of its own: Table.NoResultsMessage already
+                      insets the cell, and a second layer here made this empty
+                      state sit lower than every other one. */}
+                  <div className="flex flex-col items-center gap-3">
                     <Text muted>
                       No members yet. A gateway with no members exposes its four
                       tools but has nothing to route to.
@@ -432,8 +473,12 @@ export function GatewayMembersSection({
         open={addOpen}
         onOpenChange={setAddOpen}
         servers={servers}
+        toolsets={toolsets}
+        isLoading={isLoading || toolsets.isLoading}
+        toolsetsFailed={toolsets.isError}
         memberServerIds={new Set(rows.map((row) => row.member.mcpServerId))}
         onAdd={(server) => void handleAdd(server)}
+        onAddToolset={(toolset) => void handleAddToolset(toolset)}
         onAddFromCatalog={() =>
           void navigate(
             routes.sources.addFromCatalog.href() +
@@ -495,8 +540,12 @@ function AddMemberSheet({
   open,
   onOpenChange,
   servers,
+  toolsets,
+  isLoading,
+  toolsetsFailed,
   memberServerIds,
   onAdd,
+  onAddToolset,
   onAddFromCatalog,
   adding,
   projectId,
@@ -504,26 +553,22 @@ function AddMemberSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   servers: McpServer[];
+  toolsets: ToolsetEntry[];
+  isLoading: boolean;
+  toolsetsFailed: boolean;
   memberServerIds: Set<string>;
   onAdd: (server: McpServer) => void;
+  onAddToolset: (toolset: ToolsetEntry) => void;
   onAddFromCatalog: () => void;
   adding: boolean;
   projectId: string;
 }): JSX.Element {
   const [search, setSearch] = useState("");
 
-  const candidates = useMemo(() => {
-    const query = search.toLowerCase();
-    return servers
-      .filter((server) => !memberServerIds.has(server.id))
-      .filter(
-        (server) =>
-          !query ||
-          (server.name?.toLowerCase().includes(query) ?? false) ||
-          (server.slug?.toLowerCase().includes(query) ?? false),
-      )
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [servers, memberServerIds, search]);
+  const candidates = useMemo(
+    () => buildAddCandidates(servers, toolsets, memberServerIds, search),
+    [servers, toolsets, memberServerIds, search],
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -534,8 +579,10 @@ function AddMemberSheet({
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>Add member</SheetTitle>
           <SheetDescription>
-            Front another MCP server through this gateway. Disabled, unproxied
-            and slugless servers can be added but are excluded from serving.
+            Front another MCP server through this gateway. Hosted servers are
+            set up as members when added. Disabled servers, and hosted servers
+            with MCP turned off, can be added but won't serve until enabled;
+            unproxied and slugless servers can't be added.
           </SheetDescription>
         </SheetHeader>
 
@@ -562,60 +609,140 @@ function AddMemberSheet({
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-6 py-4">
-          {candidates.length === 0 ? (
+          {toolsetsFailed && (
+            <Text className="text-destructive text-xs">
+              Couldn't load hosted MCP servers. Only servers with their own
+              entry are listed.
+            </Text>
+          )}
+          {isLoading ? (
+            <Text muted className="py-8 text-center">
+              Loading MCP servers…
+            </Text>
+          ) : candidates.length === 0 &&
+            toolsetsFailed ? null : candidates.length === 0 ? (
             <Text muted className="py-8 text-center">
               {search
                 ? `No MCP servers matching \u201c${search}\u201d`
                 : "Every MCP server is already a member."}
             </Text>
           ) : (
-            candidates.map((server) => {
+            candidates.map((candidate) => {
+              if (candidate.kind === "toolset") {
+                const { toolset } = candidate;
+                return (
+                  <CandidateRow
+                    key={`toolset-${toolset.id}`}
+                    name={toolset.name}
+                    slug={toolset.slug}
+                    label={CLASSIFICATION_LABEL.hosted}
+                    badge={toolset.mcpEnabled ? undefined : "MCP off"}
+                    action={
+                      // Minting the server row is a project-level write, so
+                      // gate on the project rather than the gateway.
+                      <RequireScope
+                        scope="mcp:write"
+                        resourceId={projectId}
+                        level="component"
+                      >
+                        <AddButton
+                          disabled={adding}
+                          onClick={() => onAddToolset(toolset)}
+                        />
+                      </RequireScope>
+                    }
+                  />
+                );
+              }
+              const { server } = candidate;
               const classification = classifyMemberServer(server);
               const servable =
                 classification === "hosted" || classification === "proxied";
+              // The backend rejects these outright (unproxied has no dispatch
+              // path; slugless can't be addressed), so don't offer a doomed Add.
+              // Derived from the server fields, not the display classification,
+              // which collapses a disabled+slugless/unproxied server to
+              // "disabled" and would otherwise look addable.
+              const canAdd =
+                Boolean(server.slug) && !server.unproxiedMcpServerId;
               return (
-                <div
-                  key={server.id}
-                  className="border-border/60 hover:border-border hover:bg-muted/40 trans flex items-center gap-3 border px-3 py-2.5"
-                >
-                  <SourceMcpIcon
-                    mcpServerId={server.id}
-                    className="size-6 shrink-0 object-contain"
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <Text className="truncate text-sm font-medium">
-                      {server.name || "MCP server"}
-                    </Text>
-                    <div className="flex items-center gap-2">
-                      {server.slug && (
-                        <Text muted className="truncate font-mono text-xs">
-                          {server.slug}
-                        </Text>
-                      )}
-                      <Text muted className="text-xs">
-                        {CLASSIFICATION_LABEL[classification]}
-                      </Text>
-                    </div>
-                  </div>
-                  {!servable && (
-                    <Badge variant="warning">
-                      <Badge.Text>Excluded</Badge.Text>
-                    </Badge>
-                  )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={adding}
-                    onClick={() => onAdd(server)}
-                  >
-                    <Button.Text>Add</Button.Text>
-                  </Button>
-                </div>
+                <CandidateRow
+                  key={`server-${server.id}`}
+                  mcpServerId={server.id}
+                  name={server.name || "MCP server"}
+                  slug={server.slug}
+                  label={CLASSIFICATION_LABEL[classification]}
+                  badge={servable ? undefined : "Excluded"}
+                  action={
+                    <AddButton
+                      disabled={adding || !canAdd}
+                      onClick={() => onAdd(server)}
+                    />
+                  }
+                />
               );
             })
           )}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CandidateRow({
+  mcpServerId,
+  name,
+  slug,
+  label,
+  badge,
+  action,
+}: {
+  mcpServerId?: string;
+  name: string;
+  slug: string | undefined;
+  label: string;
+  badge: string | undefined;
+  action: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="border-border/60 hover:border-border hover:bg-muted/40 trans flex items-center gap-3 border px-3 py-2.5">
+      <SourceMcpIcon
+        mcpServerId={mcpServerId}
+        className="size-6 shrink-0 object-contain"
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Text className="truncate text-sm font-medium">{name}</Text>
+        <div className="flex items-center gap-2">
+          {slug && (
+            <Text muted className="truncate font-mono text-xs">
+              {slug}
+            </Text>
+          )}
+          <Text muted className="text-xs">
+            {label}
+          </Text>
+        </div>
+      </div>
+      {badge && (
+        <Badge variant="warning">
+          <Badge.Text>{badge}</Badge.Text>
+        </Badge>
+      )}
+      {action}
+    </div>
+  );
+}
+
+function AddButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <Button variant="secondary" size="sm" disabled={disabled} onClick={onClick}>
+      <Button.Text>Add</Button.Text>
+    </Button>
   );
 }

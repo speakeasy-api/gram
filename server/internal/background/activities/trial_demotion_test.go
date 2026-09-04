@@ -465,7 +465,7 @@ func TestDemoteExpiredTrials_NullDisableCausesFailClosedAndRollBack(t *testing.T
 	materializeTrialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat, nil)
 
 	err := ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID})
-	require.ErrorContains(t, err, "unclassified key")
+	require.ErrorIs(t, err, openrouter.ErrAPIKeyDisableCausesUnclassified)
 
 	trial, getErr := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, getErr)

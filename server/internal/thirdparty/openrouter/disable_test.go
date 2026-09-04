@@ -230,7 +230,7 @@ func TestAddAPIKeyDisableCauseRejectsRotationAfterValidUpstreamResponse(t *testi
 	require.NoError(t, err)
 	upstream.interceptPatch(func() {
 		_, updateErr := queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
-			MonthlyCredits: 100, KeyHash: "rotated-hash", Reinstate: false,
+			MonthlyCredits: 100, KeyHash: "rotated-hash",
 			OrganizationID: orgID, KeyType: string(KeyTypeChat),
 		})
 		require.NoError(t, updateErr)
@@ -372,11 +372,33 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, row.Disabled)
+	require.Equal(t, []string{string(DisableCauseAdminLock)}, row.DisableCauses)
 	require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
 }
 
 // The lockdown binds at key resolution, so a disabled key must never reach a
 // completion. This is what turns a demotion into an error Gram can explain.
+func TestDisableAPIKey_PersistsAdminLockBeforeFailedReconciliation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	upstream.respondWithPatchHash("different-hash")
+
+	err = provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal)
+	require.ErrorContains(t, err, "upstream key identity changed")
+
+	row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	})
+	require.NoError(t, getErr)
+	require.True(t, row.Disabled)
+	require.Equal(t, []string{string(DisableCauseAdminLock)}, row.DisableCauses)
+}
+
 func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 	t.Parallel()
 
@@ -392,9 +414,10 @@ func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 	require.ErrorIs(t, err, ErrPlatformKeyDisabled)
 	require.Empty(t, key, "a refused resolution must not leak the key it refused")
 
-	// Reinstatement makes resolution work again without minting a new key.
+	// Removing the classified admin lock makes resolution work again without
+	// minting a new key.
 	limit := 42
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseAdminLock, &limit)
 	require.NoError(t, err)
 
 	key, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
@@ -425,6 +448,85 @@ func TestDisableAPIKey_IsIdempotent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, row.Disabled)
+}
+
+func TestDisableOpenRouterAPIKeyLegacyQueryPreservesClassification(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: []string{string(DisableCauseTrialDemotion)},
+	}))
+
+	require.NoError(t, queries.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	}))
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
+
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
+	}))
+	require.NoError(t, queries.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	}))
+	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Nil(t, row.DisableCauses)
+	require.True(t, row.Disabled)
+}
+
+func TestDisableAPIKey_PreservesClassifiedCausesAndRejectsUnclassifiedRows(t *testing.T) {
+	t.Parallel()
+
+	t.Run("preserves existing causes", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+		require.NoError(t, err)
+		_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseTrialDemotion)
+		require.NoError(t, err)
+
+		require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+		row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+			OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
+	})
+
+	t.Run("unclassified remains fail closed", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+			OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
+		}))
+
+		err = provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal)
+		require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
+		require.Empty(t, upstream.recorded())
+		row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+			OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+		})
+		require.NoError(t, getErr)
+		require.Nil(t, row.DisableCauses)
+		require.True(t, row.Disabled)
+	})
 }
 
 // A missing key is already effectively disabled, so disabling it is a no-op
@@ -565,11 +667,11 @@ func TestReinstateAPIKeyLimitWithDB_ReentersTransactionBillingLock(t *testing.T)
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_, err = provisioner.ReinstateAPIKeyLimitWithDB(callCtx, tx, orgID, KeyTypeInternal, nil)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
 	require.NoError(t, tx.Commit(ctx))
 }
 
-func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
+func TestRefreshAPIKeyLimit_LegacyUnclassifiedDisabledKeyFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -578,35 +680,23 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
+	}))
 
 	limit := 42
 	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-	require.Equal(t, 42, refreshed)
-
-	patches := upstream.recorded()
-	require.Len(t, patches, 2)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":false}`, patches[1],
-		"a limit alone does not bring a disabled key back")
+	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
+	require.Zero(t, refreshed)
+	require.Empty(t, upstream.recorded())
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.False(t, row.Disabled, "a stale flag keeps key resolution failing after reinstatement")
-	require.Equal(t, int64(42), row.MonthlyCredits)
-
-	// Refreshing an enabled key must send the body it sent before the disabled
-	// field existed. Carrying disabled=false on every refresh would revive a
-	// key an operator turned off on the OpenRouter dashboard.
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-
-	patches = upstream.recorded()
-	require.Len(t, patches, 3)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
+	require.True(t, row.Disabled)
+	require.Nil(t, row.DisableCauses)
+	require.Equal(t, int64(5), row.MonthlyCredits)
 }
 
 // A refresh reads the key row, patches upstream, then writes the row back. A
@@ -625,10 +715,13 @@ func TestRefreshAPIKeyLimit_KeepsLockdownThatLandsMidRefresh(t *testing.T) {
 
 	locked := make(chan error, 1)
 	upstream.interceptPatch(func() {
-		locked <- queries.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		_, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
 			OrganizationID: orgID,
 			KeyType:        string(KeyTypeInternal),
+			KeyHash:        "hash-1",
+			DisableCause:   string(DisableCauseAdminLock),
 		})
+		locked <- err
 	})
 
 	limit := 42
@@ -661,7 +754,6 @@ func TestRefreshAPIKeyLimit_RejectsChangedUpstreamIdentity(t *testing.T) {
 		KeyType:        string(KeyTypeChat),
 		MonthlyCredits: 100,
 		KeyHash:        "hash-stored",
-		Reinstate:      false,
 	})
 	require.NoError(t, err)
 
@@ -925,7 +1017,7 @@ func TestRefreshAPIKeyLimit_NilPreservesPaygZeroSpendCap(t *testing.T) {
 	}
 }
 
-func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
+func TestReinstateAPIKeyLimit_LegacyUnclassifiedDisabledKeyFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -939,22 +1031,22 @@ func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
 		KeyType:        string(KeyTypeChat),
 		MonthlyCredits: 0,
 	}))
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil,
+	}))
 
 	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
-	require.NoError(t, err)
-	require.Positive(t, refreshed)
-	patches := upstream.recorded()
-	require.Len(t, patches, 2, "trial rearm must explicitly PATCH the disabled legacy key")
-	require.Contains(t, patches[1], `"disabled":false`)
+	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
+	require.Zero(t, refreshed)
+	require.Empty(t, upstream.recorded())
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeChat),
+		OrganizationID: orgID, KeyType: string(KeyTypeChat),
 	})
 	require.NoError(t, err)
-	require.False(t, row.Disabled)
-	require.EqualValues(t, refreshed, row.MonthlyCredits)
+	require.True(t, row.Disabled)
+	require.Nil(t, row.DisableCauses)
+	require.Zero(t, row.MonthlyCredits)
 }
 
 func TestRefreshAPIKeyLimit_ExplicitLimitRepairsLegacyEnabledZeroKey(t *testing.T) {

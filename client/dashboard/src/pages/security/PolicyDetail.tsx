@@ -87,7 +87,7 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,
@@ -154,7 +154,7 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-const PROMPT_STEPS: Step[] = [
+const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
@@ -182,7 +182,7 @@ const PROMPT_STEPS: Step[] = [
   },
 ];
 
-const STANDARD_STEPS: Step[] = [
+const STANDARD_STEPS: PolicyStep[] = [
   {
     id: "detect",
     title: "Detect",
@@ -238,10 +238,17 @@ const POLICY_ACTION_MESSAGE: Record<
   },
 };
 
+interface PolicyStep {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+}
+
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
 // each step change its own history entry.
-function useStepParam(steps: Step[]): [number, (index: number) => void] {
+function useStepParam(steps: PolicyStep[]): [number, (index: number) => void] {
   const [raw, setRaw] = useQueryState("step", { history: "push" });
   const found = steps.findIndex((s) => s.id === raw);
   const index = found >= 0 ? found : 0;
@@ -407,7 +414,7 @@ function HorizontalStepper({
   current,
   onStep,
 }: {
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
 }): JSX.Element {
@@ -466,7 +473,7 @@ function StepperShell({
   children,
 }: {
   header: React.ReactNode;
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;

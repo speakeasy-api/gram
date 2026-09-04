@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -580,7 +581,12 @@ export default function KillswitchDetail(): JSX.Element {
               </Badge>
             </div>
             <p className="text-muted-foreground mt-1">
-              {memberName ?? "Deleted member"} · Version {detail.version}
+              <IdentityLink
+                identifier={detail.userId ? { userId: detail.userId } : null}
+              >
+                {memberName ?? "Deleted member"}
+              </IdentityLink>{" "}
+              · Version {detail.version}
             </p>
           </div>
           {canChange && (
@@ -607,7 +613,16 @@ export default function KillswitchDetail(): JSX.Element {
       </header>
 
       <section className="grid gap-4 border p-5 sm:grid-cols-2">
-        <DetailValue label="Member" value={memberName ?? "Deleted member"} />
+        <DetailValue
+          label="Member"
+          value={
+            <IdentityLink
+              identifier={detail.userId ? { userId: detail.userId } : null}
+            >
+              {memberName ?? "Deleted member"}
+            </IdentityLink>
+          }
+        />
         <DetailValue
           label="Capability"
           value={`${detail.capabilityLabel} (${detail.capabilityKey})`}
@@ -768,7 +783,7 @@ function DetailValue({
   value,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
 }): JSX.Element {
   return (
     <div>
@@ -867,8 +882,12 @@ function HistoryRow({
         </time>
       </div>
       <div className="text-muted-foreground">
-        {event.actorDisplayName ??
-          (event.actorUserId ? "Deleted actor" : "System")}{" "}
+        <IdentityLink
+          identifier={event.actorUserId ? { userId: event.actorUserId } : null}
+        >
+          {event.actorDisplayName ??
+            (event.actorUserId ? "Deleted actor" : "System")}
+        </IdentityLink>{" "}
         · {capitalize(event.status)}
       </div>
       <div>

@@ -101,6 +101,17 @@ type GetSetResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// GetSetDeletePreflightResponseBody is the type of the "jsonWebKeySets"
+// service "getSetDeletePreflight" endpoint HTTP response body.
+type GetSetDeletePreflightResponseBody struct {
+	// Number of live remote_session_clients referencing this set. Deleting the set
+	// is refused while this is non-zero.
+	ClientCount *int `form:"client_count,omitempty" json:"client_count,omitempty" xml:"client_count,omitempty"`
+	// The client_id values of the referencing remote_session_clients, oldest
+	// first. Truncated when client_count exceeds the listing cap.
+	ClientIds []string `form:"client_ids,omitempty" json:"client_ids,omitempty" xml:"client_ids,omitempty"`
+}
+
 // ListKeysResponseBody is the type of the "jsonWebKeySets" service "listKeys"
 // endpoint HTTP response body.
 type ListKeysResponseBody struct {
@@ -986,6 +997,196 @@ type GetSetUnexpectedResponseBody struct {
 // GetSetGatewayErrorResponseBody is the type of the "jsonWebKeySets" service
 // "getSet" endpoint HTTP response body for the "gateway_error" error.
 type GetSetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightUnauthorizedResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetSetDeletePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "forbidden" error.
+type GetSetDeletePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "bad_request" error.
+type GetSetDeletePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "not_found" error.
+type GetSetDeletePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightConflictResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "conflict" error.
+type GetSetDeletePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetSetDeletePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightInvalidResponseBody is the type of the "jsonWebKeySets"
+// service "getSetDeletePreflight" endpoint HTTP response body for the
+// "invalid" error.
+type GetSetDeletePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightInvariantViolationResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetSetDeletePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unexpected" error.
+type GetSetDeletePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetDeletePreflightGatewayErrorResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetSetDeletePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2870,6 +3071,171 @@ func NewGetSetGatewayError(body *GetSetGatewayErrorResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewGetSetDeletePreflightJSONWebKeySetDeletePreflightOK builds a
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint result from a HTTP
+// "OK" response.
+func NewGetSetDeletePreflightJSONWebKeySetDeletePreflightOK(body *GetSetDeletePreflightResponseBody) *jsonwebkeysets.JSONWebKeySetDeletePreflight {
+	v := &jsonwebkeysets.JSONWebKeySetDeletePreflight{
+		ClientCount: *body.ClientCount,
+	}
+	v.ClientIds = make([]string, len(body.ClientIds))
+	for i, val := range body.ClientIds {
+		v.ClientIds[i] = val
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightUnauthorized builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint unauthorized error.
+func NewGetSetDeletePreflightUnauthorized(body *GetSetDeletePreflightUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightForbidden builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint forbidden error.
+func NewGetSetDeletePreflightForbidden(body *GetSetDeletePreflightForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightBadRequest builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint bad_request error.
+func NewGetSetDeletePreflightBadRequest(body *GetSetDeletePreflightBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightNotFound builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint not_found error.
+func NewGetSetDeletePreflightNotFound(body *GetSetDeletePreflightNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightConflict builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint conflict error.
+func NewGetSetDeletePreflightConflict(body *GetSetDeletePreflightConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightUnsupportedMedia builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint unsupported_media error.
+func NewGetSetDeletePreflightUnsupportedMedia(body *GetSetDeletePreflightUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightInvalid builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint invalid error.
+func NewGetSetDeletePreflightInvalid(body *GetSetDeletePreflightInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightInvariantViolation builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint invariant_violation error.
+func NewGetSetDeletePreflightInvariantViolation(body *GetSetDeletePreflightInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightUnexpected builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint unexpected error.
+func NewGetSetDeletePreflightUnexpected(body *GetSetDeletePreflightUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetDeletePreflightGatewayError builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint gateway_error error.
+func NewGetSetDeletePreflightGatewayError(body *GetSetDeletePreflightGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteSetUnauthorized builds a jsonWebKeySets service deleteSet endpoint
 // unauthorized error.
 func NewDeleteSetUnauthorized(body *DeleteSetUnauthorizedResponseBody) *goa.ServiceError {
@@ -4004,6 +4370,18 @@ func ValidateGetSetResponseBody(body *GetSetResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightResponseBody runs the validations defined on
+// GetSetDeletePreflightResponseBody
+func ValidateGetSetDeletePreflightResponseBody(body *GetSetDeletePreflightResponseBody) (err error) {
+	if body.ClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_count", "body"))
+	}
+	if body.ClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_ids", "body"))
 	}
 	return
 }
@@ -5235,6 +5613,247 @@ func ValidateGetSetUnexpectedResponseBody(body *GetSetUnexpectedResponseBody) (e
 // ValidateGetSetGatewayErrorResponseBody runs the validations defined on
 // getSet_gateway_error_response_body
 func ValidateGetSetGatewayErrorResponseBody(body *GetSetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightUnauthorizedResponseBody runs the validations
+// defined on getSetDeletePreflight_unauthorized_response_body
+func ValidateGetSetDeletePreflightUnauthorizedResponseBody(body *GetSetDeletePreflightUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightForbiddenResponseBody runs the validations
+// defined on getSetDeletePreflight_forbidden_response_body
+func ValidateGetSetDeletePreflightForbiddenResponseBody(body *GetSetDeletePreflightForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightBadRequestResponseBody runs the validations
+// defined on getSetDeletePreflight_bad_request_response_body
+func ValidateGetSetDeletePreflightBadRequestResponseBody(body *GetSetDeletePreflightBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightNotFoundResponseBody runs the validations
+// defined on getSetDeletePreflight_not_found_response_body
+func ValidateGetSetDeletePreflightNotFoundResponseBody(body *GetSetDeletePreflightNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightConflictResponseBody runs the validations
+// defined on getSetDeletePreflight_conflict_response_body
+func ValidateGetSetDeletePreflightConflictResponseBody(body *GetSetDeletePreflightConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightUnsupportedMediaResponseBody runs the
+// validations defined on getSetDeletePreflight_unsupported_media_response_body
+func ValidateGetSetDeletePreflightUnsupportedMediaResponseBody(body *GetSetDeletePreflightUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightInvalidResponseBody runs the validations
+// defined on getSetDeletePreflight_invalid_response_body
+func ValidateGetSetDeletePreflightInvalidResponseBody(body *GetSetDeletePreflightInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightInvariantViolationResponseBody runs the
+// validations defined on
+// getSetDeletePreflight_invariant_violation_response_body
+func ValidateGetSetDeletePreflightInvariantViolationResponseBody(body *GetSetDeletePreflightInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightUnexpectedResponseBody runs the validations
+// defined on getSetDeletePreflight_unexpected_response_body
+func ValidateGetSetDeletePreflightUnexpectedResponseBody(body *GetSetDeletePreflightUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetDeletePreflightGatewayErrorResponseBody runs the validations
+// defined on getSetDeletePreflight_gateway_error_response_body
+func ValidateGetSetDeletePreflightGatewayErrorResponseBody(body *GetSetDeletePreflightGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

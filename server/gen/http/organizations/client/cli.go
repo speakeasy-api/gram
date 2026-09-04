@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
 	goa "goa.design/goa/v3/pkg"
@@ -319,6 +320,78 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 	}
 	if body.IntentOptions != nil {
 		v.IntentOptions = marshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(body.IntentOptions)
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListSetupTasksPayload builds the payload for the organizations
+// listSetupTasks endpoint from CLI flags.
+func BuildListSetupTasksPayload(organizationsListSetupTasksIncludeHidden string, organizationsListSetupTasksSessionToken string) (*organizations.ListSetupTasksPayload, error) {
+	var err error
+	var includeHidden *bool
+	{
+		if organizationsListSetupTasksIncludeHidden != "" {
+			var val bool
+			val, err = strconv.ParseBool(organizationsListSetupTasksIncludeHidden)
+			includeHidden = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeHidden, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsListSetupTasksSessionToken != "" {
+			sessionToken = &organizationsListSetupTasksSessionToken
+		}
+	}
+	v := &organizations.ListSetupTasksPayload{}
+	v.IncludeHidden = includeHidden
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateSetupTaskPayload builds the payload for the organizations
+// updateSetupTask endpoint from CLI flags.
+func BuildUpdateSetupTaskPayload(organizationsUpdateSetupTaskBody string, organizationsUpdateSetupTaskSessionToken string) (*organizations.UpdateSetupTaskPayload, error) {
+	var err error
+	var body UpdateSetupTaskRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsUpdateSetupTaskBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assignee\": {\n         \"email\": \"alice@example.com\",\n         \"user_id\": \"abc123\"\n      },\n      \"clear_assignee\": false,\n      \"hidden\": false,\n      \"status\": \"in_progress\",\n      \"task_key\": \"abc123\"\n   }'")
+		}
+		if body.Status != nil {
+			if !(*body.Status == "todo" || *body.Status == "in_progress" || *body.Status == "awaiting_support" || *body.Status == "done") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"todo", "in_progress", "awaiting_support", "done"}))
+			}
+		}
+		if body.Assignee != nil {
+			if err2 := ValidateSetupTaskAssigneeInputRequestBody(body.Assignee); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsUpdateSetupTaskSessionToken != "" {
+			sessionToken = &organizationsUpdateSetupTaskSessionToken
+		}
+	}
+	v := &organizations.UpdateSetupTaskPayload{
+		TaskKey:       body.TaskKey,
+		Status:        body.Status,
+		ClearAssignee: body.ClearAssignee,
+		Hidden:        body.Hidden,
+	}
+	if body.Assignee != nil {
+		v.Assignee = marshalSetupTaskAssigneeInputRequestBodyToOrganizationsSetupTaskAssigneeInput(body.Assignee)
 	}
 	v.SessionToken = sessionToken
 

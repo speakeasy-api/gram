@@ -467,7 +467,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
 		return inmem
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close local feature flags csv file", func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
 	rdr.FieldsPerRecord = -1

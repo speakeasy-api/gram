@@ -124,9 +124,9 @@ var memberScopes = []Scope{
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
 	//
-	// The Observe/observability dashboard surface is separately gated on org:admin
-	// at the page level, so basic members (e.g. synced via directory/SCIM) don't
-	// see telemetry by default.
+	// Most Observe pages are separately gated on org:admin. The Identities
+	// roster and required-employee-scoped Shadow AI read are project:read
+	// surfaces; identity detail resolution separately requires org:read.
 }
 
 func (s Scope) Parts() ScopeParts {

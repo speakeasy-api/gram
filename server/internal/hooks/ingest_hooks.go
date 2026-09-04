@@ -1630,7 +1630,9 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		return ""
 	}
 	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	if adapter != "codex" && adapter != "opencode" && adapter != "litellm" {
+	// openclaw carries OpenClaw's own ctx.runId, which the spike proved stable
+	// across before_agent_run, before_tool_call, llm_output and agent_end.
+	if adapter != "codex" && adapter != "opencode" && adapter != "openclaw" && adapter != "litellm" {
 		return ""
 	}
 	if payload.Session != nil && payload.Session.TurnID != nil {
@@ -1638,7 +1640,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		if encoded, ok := strings.CutPrefix(turnID, agentTurnPrefix); ok {
 			encodedProvider, nativeTurnID, found := strings.Cut(encoded, ":")
 			encodedProvider = strings.ToLower(strings.TrimSpace(encodedProvider))
-			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode"
+			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode" || encodedProvider == "openclaw"
 			if found && stableProvider && (adapter == "litellm" || adapter == encodedProvider) && strings.TrimSpace(nativeTurnID) != "" {
 				return encodedProvider + ":" + strings.TrimSpace(nativeTurnID)
 			}

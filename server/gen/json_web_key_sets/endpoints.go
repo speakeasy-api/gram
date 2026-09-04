@@ -16,16 +16,17 @@ import (
 
 // Endpoints wraps the "jsonWebKeySets" service endpoints.
 type Endpoints struct {
-	CreateSet   goa.Endpoint
-	UpdateSet   goa.Endpoint
-	ListSets    goa.Endpoint
-	GetSet      goa.Endpoint
-	DeleteSet   goa.Endpoint
-	ListKeys    goa.Endpoint
-	PublishKey  goa.Endpoint
-	ActivateKey goa.Endpoint
-	RetireKey   goa.Endpoint
-	RevokeKey   goa.Endpoint
+	CreateSet             goa.Endpoint
+	UpdateSet             goa.Endpoint
+	ListSets              goa.Endpoint
+	GetSet                goa.Endpoint
+	GetSetDeletePreflight goa.Endpoint
+	DeleteSet             goa.Endpoint
+	ListKeys              goa.Endpoint
+	PublishKey            goa.Endpoint
+	ActivateKey           goa.Endpoint
+	RetireKey             goa.Endpoint
+	RevokeKey             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "jsonWebKeySets" service with
@@ -34,16 +35,17 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateSet:   NewCreateSetEndpoint(s, a.APIKeyAuth),
-		UpdateSet:   NewUpdateSetEndpoint(s, a.APIKeyAuth),
-		ListSets:    NewListSetsEndpoint(s, a.APIKeyAuth),
-		GetSet:      NewGetSetEndpoint(s, a.APIKeyAuth),
-		DeleteSet:   NewDeleteSetEndpoint(s, a.APIKeyAuth),
-		ListKeys:    NewListKeysEndpoint(s, a.APIKeyAuth),
-		PublishKey:  NewPublishKeyEndpoint(s, a.APIKeyAuth),
-		ActivateKey: NewActivateKeyEndpoint(s, a.APIKeyAuth),
-		RetireKey:   NewRetireKeyEndpoint(s, a.APIKeyAuth),
-		RevokeKey:   NewRevokeKeyEndpoint(s, a.APIKeyAuth),
+		CreateSet:             NewCreateSetEndpoint(s, a.APIKeyAuth),
+		UpdateSet:             NewUpdateSetEndpoint(s, a.APIKeyAuth),
+		ListSets:              NewListSetsEndpoint(s, a.APIKeyAuth),
+		GetSet:                NewGetSetEndpoint(s, a.APIKeyAuth),
+		GetSetDeletePreflight: NewGetSetDeletePreflightEndpoint(s, a.APIKeyAuth),
+		DeleteSet:             NewDeleteSetEndpoint(s, a.APIKeyAuth),
+		ListKeys:              NewListKeysEndpoint(s, a.APIKeyAuth),
+		PublishKey:            NewPublishKeyEndpoint(s, a.APIKeyAuth),
+		ActivateKey:           NewActivateKeyEndpoint(s, a.APIKeyAuth),
+		RetireKey:             NewRetireKeyEndpoint(s, a.APIKeyAuth),
+		RevokeKey:             NewRevokeKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -54,6 +56,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateSet = m(e.UpdateSet)
 	e.ListSets = m(e.ListSets)
 	e.GetSet = m(e.GetSet)
+	e.GetSetDeletePreflight = m(e.GetSetDeletePreflight)
 	e.DeleteSet = m(e.DeleteSet)
 	e.ListKeys = m(e.ListKeys)
 	e.PublishKey = m(e.PublishKey)
@@ -151,6 +154,29 @@ func NewGetSetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.GetSet(ctx, p)
+	}
+}
+
+// NewGetSetDeletePreflightEndpoint returns an endpoint function that calls the
+// method "getSetDeletePreflight" of service "jsonWebKeySets".
+func NewGetSetDeletePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSetDeletePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSetDeletePreflight(ctx, p)
 	}
 }
 

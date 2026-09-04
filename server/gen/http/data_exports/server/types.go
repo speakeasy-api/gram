@@ -69,6 +69,15 @@ type ListDestinationsResponseBody struct {
 	Destinations []*DestinationResponseBody `form:"destinations" json:"destinations" xml:"destinations"`
 }
 
+// ListForOrgResponseBody is the type of the "dataExports" service "listForOrg"
+// endpoint HTTP response body.
+type ListForOrgResponseBody struct {
+	// Active data export destinations across the active organization.
+	Destinations []*DestinationResponseBody `form:"destinations" json:"destinations" xml:"destinations"`
+	// Active data export routes across the active organization.
+	Routes []*DataExportRouteResponseBody `form:"routes" json:"routes" xml:"routes"`
+}
+
 // CreateDestinationResponseBody is the type of the "dataExports" service
 // "createDestination" endpoint HTTP response body.
 type CreateDestinationResponseBody struct {
@@ -332,6 +341,188 @@ type ListDestinationsUnexpectedResponseBody struct {
 // service "listDestinations" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListDestinationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgUnauthorizedResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "unauthorized" error.
+type ListForOrgUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgForbiddenResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "forbidden" error.
+type ListForOrgForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgBadRequestResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "bad_request" error.
+type ListForOrgBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgNotFoundResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "not_found" error.
+type ListForOrgNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgConflictResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "conflict" error.
+type ListForOrgConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgUnsupportedMediaResponseBody is the type of the "dataExports"
+// service "listForOrg" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListForOrgUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgInvalidResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "invalid" error.
+type ListForOrgInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgInvariantViolationResponseBody is the type of the "dataExports"
+// service "listForOrg" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListForOrgInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgUnexpectedResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "unexpected" error.
+type ListForOrgUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForOrgGatewayErrorResponseBody is the type of the "dataExports" service
+// "listForOrg" endpoint HTTP response body for the "gateway_error" error.
+type ListForOrgGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1758,6 +1949,37 @@ func NewListDestinationsResponseBody(res *dataexports.ListDestinationsResult) *L
 	return body
 }
 
+// NewListForOrgResponseBody builds the HTTP response body from the result of
+// the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgResponseBody(res *dataexports.ListDataExportsForOrgResult) *ListForOrgResponseBody {
+	body := &ListForOrgResponseBody{}
+	if res.Destinations != nil {
+		body.Destinations = make([]*DestinationResponseBody, len(res.Destinations))
+		for i, val := range res.Destinations {
+			if val == nil {
+				body.Destinations[i] = nil
+				continue
+			}
+			body.Destinations[i] = marshalDataexportsDestinationToDestinationResponseBody(val)
+		}
+	} else {
+		body.Destinations = []*DestinationResponseBody{}
+	}
+	if res.Routes != nil {
+		body.Routes = make([]*DataExportRouteResponseBody, len(res.Routes))
+		for i, val := range res.Routes {
+			if val == nil {
+				body.Routes[i] = nil
+				continue
+			}
+			body.Routes[i] = marshalDataexportsDataExportRouteToDataExportRouteResponseBody(val)
+		}
+	} else {
+		body.Routes = []*DataExportRouteResponseBody{}
+	}
+	return body
+}
+
 // NewCreateDestinationResponseBody builds the HTTP response body from the
 // result of the "createDestination" endpoint of the "dataExports" service.
 func NewCreateDestinationResponseBody(res *dataexports.Destination) *CreateDestinationResponseBody {
@@ -1977,6 +2199,146 @@ func NewListDestinationsUnexpectedResponseBody(res *goa.ServiceError) *ListDesti
 // service.
 func NewListDestinationsGatewayErrorResponseBody(res *goa.ServiceError) *ListDestinationsGatewayErrorResponseBody {
 	body := &ListDestinationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgUnauthorizedResponseBody(res *goa.ServiceError) *ListForOrgUnauthorizedResponseBody {
+	body := &ListForOrgUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgForbiddenResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgForbiddenResponseBody(res *goa.ServiceError) *ListForOrgForbiddenResponseBody {
+	body := &ListForOrgForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgBadRequestResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgBadRequestResponseBody(res *goa.ServiceError) *ListForOrgBadRequestResponseBody {
+	body := &ListForOrgBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgNotFoundResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgNotFoundResponseBody(res *goa.ServiceError) *ListForOrgNotFoundResponseBody {
+	body := &ListForOrgNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgConflictResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgConflictResponseBody(res *goa.ServiceError) *ListForOrgConflictResponseBody {
+	body := &ListForOrgConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgUnsupportedMediaResponseBody(res *goa.ServiceError) *ListForOrgUnsupportedMediaResponseBody {
+	body := &ListForOrgUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgInvalidResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgInvalidResponseBody(res *goa.ServiceError) *ListForOrgInvalidResponseBody {
+	body := &ListForOrgInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgInvariantViolationResponseBody(res *goa.ServiceError) *ListForOrgInvariantViolationResponseBody {
+	body := &ListForOrgInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgUnexpectedResponseBody(res *goa.ServiceError) *ListForOrgUnexpectedResponseBody {
+	body := &ListForOrgUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForOrgGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listForOrg" endpoint of the "dataExports" service.
+func NewListForOrgGatewayErrorResponseBody(res *goa.ServiceError) *ListForOrgGatewayErrorResponseBody {
+	body := &ListForOrgGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2996,6 +3358,15 @@ func NewListDestinationsPayload(sessionToken *string, apikeyToken *string, proje
 	return v
 }
 
+// NewListForOrgPayload builds a dataExports service listForOrg endpoint
+// payload.
+func NewListForOrgPayload(sessionToken *string) *dataexports.ListForOrgPayload {
+	v := &dataexports.ListForOrgPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateDestinationPayload builds a dataExports service createDestination
 // endpoint payload.
 func NewCreateDestinationPayload(body *CreateDestinationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.CreateDestinationPayload {
@@ -3174,8 +3545,8 @@ func ValidateCreateRouteRequestBody(body *CreateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("data_source", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3194,8 +3565,8 @@ func ValidateUpdateRouteRequestBody(body *UpdateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

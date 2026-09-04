@@ -305,13 +305,13 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return false, fmt.Errorf("lock identity provider for client attachment: %w", err)
 	}
-	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID}); err != nil {
+	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID}); err != nil {
 		return false, fmt.Errorf("validate registered MCP session issuer: %w", err)
 	}
 	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             project.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
-		OrganizationID:        conv.ToPGText(principal.OrganizationID),
+		OrganizationID:        principal.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            2,

@@ -365,7 +365,7 @@ func newAdminCommand() *cli.Command {
 				if err != nil {
 					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
 				} else {
-					defer o11y.LogDefer(ctx, logger, func() error { return chShutdown(ctx) })
+					defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
 					billingTelemetry = telemetryrepo.New(chDB)
 				}
 			}

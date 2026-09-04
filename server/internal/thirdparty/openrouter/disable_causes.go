@@ -11,6 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
+// ErrAPIKeyDisableCausesUnclassified marks a legacy row whose disable reason
+// cannot be changed safely until the operator classifier establishes provenance.
+var ErrAPIKeyDisableCausesUnclassified = errors.New("OpenRouter API key disable causes are unclassified")
+
 type DisableCause string
 
 const (
@@ -91,7 +95,7 @@ func (o *OpenRouter) prepareEnterpriseTrialConversionKeyWithDB(ctx context.Conte
 	case err != nil:
 		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("read OpenRouter API key for enterprise trial conversion: %w", err)
 	case snapshot.DisableCauses == nil:
-		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: disable causes are unclassified")
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", ErrAPIKeyDisableCausesUnclassified)
 	}
 
 	if beforeMutationTestHook != nil {

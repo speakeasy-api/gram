@@ -11,7 +11,9 @@ import (
 type EventSource string
 
 const (
-	EventSourceToolCall       EventSource = "tool_call"
+	EventSourceToolCall EventSource = "tool_call"
+	// EventSourceMetaDiscovery marks gateway list_servers/describe_* calls; distinct so they never count as tool calls.
+	EventSourceMetaDiscovery  EventSource = "meta_discovery"
 	EventSourceChatCompletion EventSource = "chat_completion"
 	EventSourceEvaluation     EventSource = "evaluation"
 	EventSourceResourceRead   EventSource = "resource_read"

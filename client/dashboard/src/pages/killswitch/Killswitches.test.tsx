@@ -1,7 +1,13 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import Killswitches from "./Killswitches";
 import { KillswitchesRoot } from "./KillswitchesRoot";
 
@@ -49,6 +55,7 @@ vi.mock("@/routes", () => ({
       href: () => "/acme/killswitch",
       detail: { href: (id: string) => `/acme/killswitch/${id}`, goTo: vi.fn() },
     },
+    mcpSessions: { href: () => "/acme/mcp-sessions" },
   }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -87,7 +94,10 @@ vi.mock("@gram/client/react-query/killswitchCapabilities.js", () => ({
     dependencies.capabilityRequest = args[1];
     dependencies.capabilityOptions = args[2];
     return {
-      data: { capabilities: [], comingSoon: [] },
+      data: {
+        capabilities: [{ key: "mcp_tool_calls", label: "MCP tool calls" }],
+        comingSoon: [],
+      },
       isLoading: dependencies.capabilitiesLoading,
       error: dependencies.capabilitiesError,
       refetch: dependencies.refetchCapabilities,
@@ -99,7 +109,9 @@ vi.mock("@gram/client/react-query/killswitchMCPServers.js", () => ({
     dependencies.serverRequest = args[1];
     dependencies.serverOptions = args[2];
     return {
-      data: { servers: [] },
+      data: {
+        servers: [{ id: "server-1", name: "Server 1", projectId: "project-1" }],
+      },
       isLoading: false,
       error: dependencies.serversError,
       refetch: dependencies.refetchServers,
@@ -115,12 +127,24 @@ vi.mock("@gram/client/react-query/previewKillswitchOverlaps.js", () => ({
 vi.mock("./KillswitchEditorSheet", () => ({
   KillswitchEditorSheet: (props: Record<string, unknown>) => {
     dependencies.editorProps = props;
-    return null;
+    return <div data-testid="killswitch-editor" />;
   },
 }));
 vi.mock("@/components/FeatureRequestModal", () => ({
   FeatureRequestModal: () => null,
 }));
+
+function NavigationProbe(): JSX.Element {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="location">{location.search}</output>
+      <button onClick={() => void navigate(-1)}>Back</button>
+      <button onClick={() => void navigate(1)}>Forward</button>
+    </>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -176,6 +200,64 @@ describe("KillswitchesRoot", () => {
 });
 
 describe("Killswitches list", () => {
+  it("renders the standard filter bar and Killswitch table", () => {
+    listHook.mockReturnValue({
+      data: {
+        pages: [
+          {
+            result: {
+              items: [
+                {
+                  id: "ks-1",
+                  userId: "user-1",
+                  capabilityKey: "mcp_tool_calls",
+                  capabilityLabel: "MCP tool calls",
+                  scope: { type: "all_servers" },
+                  schedule: { start: "now", end: "until_lifted" },
+                  status: "active",
+                  version: 1,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/acme/killswitch"]}>
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Member filter: All members" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Status filter: All statuses" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Capability filter: All capabilities",
+      }),
+    ).not.toBeNull();
+    expect(screen.getByRole("table")).not.toBeNull();
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Member", "Capability", "Status", "Schedule", ""]);
+    expect(screen.getByRole("link", { name: "Alex Morgan" })).not.toBeNull();
+    expect(screen.getByText("All MCP servers")).not.toBeNull();
+    expect(screen.getByText("Active")).not.toBeNull();
+  });
+
   it("scopes every cached query by session", () => {
     listHook.mockReturnValue({
       data: { pages: [{ result: { items: [] } }] },
@@ -200,6 +282,43 @@ describe("Killswitches list", () => {
     expect(dependencies.membersRequest).toEqual({ gramSession: "session" });
     expect(dependencies.capabilityRequest).toEqual({ gramSession: "session" });
     expect(dependencies.serverRequest).toEqual({ gramSession: "session" });
+  });
+
+  it("ignores unsupported status and capability URL filters", () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/acme/killswitch?status=unknown&capability=deprecated",
+        ]}
+      >
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(listHook.mock.calls.at(-1)?.[1]).toMatchObject({
+      status: undefined,
+      capabilityKey: undefined,
+    });
+    expect(
+      screen.getByRole("button", { name: "Status filter: All statuses" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Capability filter: All capabilities",
+      }),
+    ).not.toBeNull();
   });
 
   it("retries every list dependency that can make rows inaccurate", async () => {
@@ -276,6 +395,99 @@ describe("Killswitches list", () => {
     expect(dependencies.refetchCapabilities).toHaveBeenCalledTimes(1);
   });
 
+  it("fails closed for contextual catalog errors and retries every failed dependency", async () => {
+    dependencies.membersError = new Error("members unavailable");
+    dependencies.serversError = new Error("servers unavailable");
+    dependencies.capabilitiesError = new Error("capabilities unavailable");
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/acme/killswitch?create=1&createUser=user-1&createCapability=mcp_tool_calls&originServer=server-1",
+        ]}
+      >
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(dependencies.editorProps).toMatchObject({
+      open: true,
+      capabilitiesError: dependencies.capabilitiesError,
+    });
+    const retry = dependencies.editorProps?.onRetryCapabilities as () => void;
+    act(() => retry());
+    expect(dependencies.refetchMembers).toHaveBeenCalledTimes(1);
+    expect(dependencies.refetchServers).toHaveBeenCalledTimes(1);
+    expect(dependencies.refetchCapabilities).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the create URL as editor state across open, close, back, and forward", async () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+    render(
+      <MemoryRouter initialEntries={["/acme/killswitch?status=active"]}>
+        <Routes>
+          <Route
+            path=":orgSlug/killswitch"
+            element={
+              <>
+                <Killswitches />
+                <NavigationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "New killswitch" }),
+    );
+    expect(screen.getByTestId("location").textContent).toBe(
+      "?status=active&create=1",
+    );
+    expect(dependencies.editorProps).toMatchObject({ open: true });
+    expect(screen.getByTestId("killswitch-editor")).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("location").textContent).toBe("?status=active");
+    expect(screen.queryByTestId("killswitch-editor")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Forward" }));
+    expect(screen.getByTestId("location").textContent).toBe(
+      "?status=active&create=1",
+    );
+    expect(screen.getByTestId("killswitch-editor")).not.toBeNull();
+    const onOpenChange = dependencies.editorProps?.onOpenChange as (
+      open: boolean,
+    ) => void;
+    act(() => onOpenChange(false));
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("?status=active"),
+    );
+    expect(screen.queryByTestId("killswitch-editor")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("location").textContent).toBe("?status=active");
+  });
+
   it("passes raw notes to the create API", async () => {
     listHook.mockReturnValue({
       data: { pages: [{ result: { items: [] } }] },
@@ -325,6 +537,68 @@ describe("Killswitches list", () => {
         },
       }),
     );
+  });
+
+  it("validates reload-safe create context and drops a stale server hint", () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/acme/killswitch?create=1&createUser=user-1&createCapability=mcp_tool_calls&originServer=deleted-server",
+        ]}
+      >
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(dependencies.editorProps).toMatchObject({
+      open: true,
+      createContext: {
+        userId: "user-1",
+        capabilityKey: "mcp_tool_calls",
+        originatingMcpServerId: undefined,
+      },
+    });
+    const mcpSessionsHref = dependencies.editorProps?.mcpSessionsHref as (
+      userId: string,
+    ) => string;
+    expect(mcpSessionsHref("user-1")).toBe(
+      "/acme/mcp-sessions?subjectUrn=user%3Auser-1",
+    );
+  });
+
+  it("falls back to an unbound editor for a stale contextual member", () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+    render(
+      <MemoryRouter
+        initialEntries={["/acme/killswitch?create=1&createUser=deleted-user"]}
+      >
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(dependencies.editorProps).toMatchObject({
+      open: true,
+      createContext: undefined,
+    });
   });
 
   it("preserves the principal filter in the URL and renders a dedicated empty state", () => {

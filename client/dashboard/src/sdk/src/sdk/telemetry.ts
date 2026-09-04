@@ -6,6 +6,7 @@ import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
+import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServerUsage.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
@@ -39,6 +40,7 @@ import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
 import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
+import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserverusageresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
 import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
@@ -83,6 +85,10 @@ import {
   GetMcpServerActivityRequest,
   GetMcpServerActivitySecurity,
 } from "../models/operations/getmcpserveractivity.js";
+import {
+  GetMetaMcpServerUsageRequest,
+  GetMetaMcpServerUsageSecurity,
+} from "../models/operations/getmetamcpserverusage.js";
 import {
   GetObservabilityOverviewRequest,
   GetObservabilityOverviewSecurity,
@@ -264,6 +270,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetMcpServerActivityResult> {
     return unwrapAsync(telemetryGetMcpServerActivity(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMetaMcpServerUsage telemetry
+   *
+   * @remarks
+   * Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+   */
+  async getMetaMcpServerUsage(
+    request: GetMetaMcpServerUsageRequest,
+    security?: GetMetaMcpServerUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMetaMcpServerUsageResult> {
+    return unwrapAsync(telemetryGetMetaMcpServerUsage(
       this,
       request,
       security,

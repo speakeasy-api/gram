@@ -275,6 +275,7 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 	err := usersessions_repo.New(s.db).TouchUserSessionLastUsed(ctx, usersessions_repo.TouchUserSessionLastUsedParams{
 		NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Jti:                 jti,
 		UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-userSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
@@ -655,8 +656,9 @@ var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not m
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        endpoint.UserSessionIssuerID,
-		ProjectID: endpoint.ProjectID,
+		ID:             endpoint.UserSessionIssuerID,
+		ProjectID:      endpoint.ProjectID,
+		OrganizationID: endpoint.OrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

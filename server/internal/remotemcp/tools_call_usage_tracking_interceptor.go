@@ -28,6 +28,8 @@ import (
 type ToolsCallUsageTrackingInterceptor struct {
 	tracker billing.Tracker
 	logger  *slog.Logger
+	// metaMCPServerID is set only on per-target copies for gateway member proxies.
+	metaMCPServerID string
 }
 
 var _ proxy.ToolsCallResponseInterceptor = (*ToolsCallUsageTrackingInterceptor)(nil)
@@ -36,9 +38,17 @@ var _ proxy.ToolsCallResponseInterceptor = (*ToolsCallUsageTrackingInterceptor)(
 // given billing tracker. The same instance can be reused across requests.
 func NewToolsCallUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ToolsCallUsageTrackingInterceptor {
 	return &ToolsCallUsageTrackingInterceptor{
-		tracker: tracker,
-		logger:  logger,
+		tracker:         tracker,
+		logger:          logger,
+		metaMCPServerID: "",
 	}
+}
+
+// WithMetaMCPServerID returns a copy whose billing events carry the gateway id.
+func (i *ToolsCallUsageTrackingInterceptor) WithMetaMCPServerID(metaMCPServerID string) *ToolsCallUsageTrackingInterceptor {
+	clone := *i
+	clone.metaMCPServerID = metaMCPServerID
+	return &clone
 }
 
 // Name implements [proxy.ToolsCallResponseInterceptor].
@@ -95,6 +105,7 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MetaMCPServerID:       conv.PtrEmpty(i.metaMCPServerID),
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,
 		FunctionExecutionTime: nil,

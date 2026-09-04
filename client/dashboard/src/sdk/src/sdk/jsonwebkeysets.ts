@@ -6,6 +6,7 @@ import { jsonWebKeySetsActivateKey } from "../funcs/jsonWebKeySetsActivateKey.js
 import { jsonWebKeySetsCreate } from "../funcs/jsonWebKeySetsCreate.js";
 import { jsonWebKeySetsDelete } from "../funcs/jsonWebKeySetsDelete.js";
 import { jsonWebKeySetsGet } from "../funcs/jsonWebKeySetsGet.js";
+import { jsonWebKeySetsGetDeletePreflight } from "../funcs/jsonWebKeySetsGetDeletePreflight.js";
 import { jsonWebKeySetsList } from "../funcs/jsonWebKeySetsList.js";
 import { jsonWebKeySetsListKeys } from "../funcs/jsonWebKeySetsListKeys.js";
 import { jsonWebKeySetsPublishKey } from "../funcs/jsonWebKeySetsPublishKey.js";
@@ -15,6 +16,7 @@ import { jsonWebKeySetsUpdate } from "../funcs/jsonWebKeySetsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { JSONWebKey } from "../models/components/jsonwebkey.js";
 import { JSONWebKeySet } from "../models/components/jsonwebkeyset.js";
+import { JSONWebKeySetDeletePreflight } from "../models/components/jsonwebkeysetdeletepreflight.js";
 import { ListJSONWebKeySetsResult } from "../models/components/listjsonwebkeysetsresult.js";
 import { ListJSONWebKeysResult } from "../models/components/listjsonwebkeysresult.js";
 import {
@@ -33,6 +35,10 @@ import {
   GetJsonWebKeySetRequest,
   GetJsonWebKeySetSecurity,
 } from "../models/operations/getjsonwebkeyset.js";
+import {
+  GetJsonWebKeySetDeletePreflightRequest,
+  GetJsonWebKeySetDeletePreflightSecurity,
+} from "../models/operations/getjsonwebkeysetdeletepreflight.js";
 import {
   ListJsonWebKeysRequest,
   ListJsonWebKeysSecurity,
@@ -102,7 +108,7 @@ export class JsonWebKeySets extends ClientSDK {
    * deleteSet jsonWebKeySets
    *
    * @remarks
-   * Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.
+   * Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Refused with a conflict while any live remote_session_client still references the set — detach it there first; see getDeletePreflight. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.
    */
   async delete(
     request: DeleteJsonWebKeySetRequest,
@@ -129,6 +135,25 @@ export class JsonWebKeySets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<JSONWebKeySet> {
     return unwrapAsync(jsonWebKeySetsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSetDeletePreflight jsonWebKeySets
+   *
+   * @remarks
+   * Authoritative impact summary for deleting a JSON Web Key Set: the remote_session_clients still referencing it. deleteSet returns a conflict for exactly the sets this reports a non-zero client_count for. Requires org:read.
+   */
+  async getDeletePreflight(
+    request: GetJsonWebKeySetDeletePreflightRequest,
+    security?: GetJsonWebKeySetDeletePreflightSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<JSONWebKeySetDeletePreflight> {
+    return unwrapAsync(jsonWebKeySetsGetDeletePreflight(
       this,
       request,
       security,

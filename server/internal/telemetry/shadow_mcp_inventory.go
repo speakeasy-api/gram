@@ -92,6 +92,8 @@ func (s *Service) BackfillShadowMCPInventoryURLs(ctx context.Context, params Bac
 		Limit:               params.Limit,
 		OrganizationID:      "",
 		UserKeys:            nil,
+		From:                nil,
+		To:                  nil,
 	})
 	if err != nil {
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage for backfill")

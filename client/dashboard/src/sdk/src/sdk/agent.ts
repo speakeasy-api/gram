@@ -7,6 +7,7 @@ import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
+import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -35,6 +36,10 @@ import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
 } from "../models/operations/listsyncedagentusers.js";
+import {
+  ReportAgentAIScanRequest,
+  ReportAgentAIScanSecurity,
+} from "../models/operations/reportagentaiscan.js";
 import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
@@ -134,6 +139,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListSyncedUsersResult> {
     return unwrapAsync(agentListSyncedUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportAIScan agent
+   *
+   * @remarks
+   * Report the result of a device-agent AI scan: which AI tools from the agent's compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.
+   */
+  async reportAIScan(
+    request: ReportAgentAIScanRequest,
+    security?: ReportAgentAIScanSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentReportAIScan(
       this,
       request,
       security,

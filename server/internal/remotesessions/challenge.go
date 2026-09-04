@@ -308,6 +308,8 @@ type RemoteSessionState struct {
 	RefreshExpiresAt       *time.Time
 	AuthorizationExpiresAt *time.Time
 	CanRefresh             bool
+	// Resource is the RFC 8707 resource recorded on the grant, if any.
+	Resource string
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -361,6 +363,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			RefreshExpiresAt:       refreshExpiresAt,
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			CanRefresh:             row.CanRefresh,
+			Resource:               row.Resource.String,
 		}
 	}
 	return statuses, nil
@@ -644,7 +647,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
 		ProjectID:      state.ProjectID,
-		OrganizationID: conv.ToPGText(state.OrganizationID),
+		OrganizationID: state.OrganizationID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)

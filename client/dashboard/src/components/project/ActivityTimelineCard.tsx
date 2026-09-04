@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { Link as TextLink } from "@/components/ui/Link";
@@ -71,7 +72,16 @@ export function ActivityTimelineCard({
                       <ActionIconTile action={log.action} className="mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm">
-                          <span className="font-medium">{actor}</span>{" "}
+                          <IdentityLink
+                            identifier={
+                              log.actorType === "user"
+                                ? { userId: log.actorId }
+                                : null
+                            }
+                            className="font-medium"
+                          >
+                            {actor}
+                          </IdentityLink>{" "}
                           <span className="text-muted-foreground">
                             {actionLabel}
                           </span>
