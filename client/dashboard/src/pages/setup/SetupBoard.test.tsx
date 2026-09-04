@@ -262,20 +262,19 @@ beforeEach(() => {
 });
 
 describe("SetupBoard", () => {
-  it("groups tasks into workstreams, explains prerequisites, and completes dialog tasks", async () => {
+  it("renders four status columns, blocks prerequisites, and completes dialog tasks", async () => {
     render(<SetupBoard />);
 
     for (const heading of [
-      "Connect identity",
-      "Observe agents",
-      "Secure traffic",
+      "To do",
+      "In progress",
+      "Awaiting support",
+      "Done",
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
     }
-    expect(
-      screen.getByRole("region", { name: "Setup workstreams" }),
-    ).toBeTruthy();
-    expect(screen.getByText("Available after Instrument agents")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Setup board" })).toBeTruthy();
+    expect(screen.getByText("Blocked by Instrument agents")).toBeTruthy();
     const blockedTask = screen.getByTestId("setup-task-confirm-traffic");
     const viewBlockedTask = within(blockedTask).getByRole("button", {
       name: "View task: Confirm traffic",
@@ -286,7 +285,7 @@ describe("SetupBoard", () => {
       screen.getByRole("dialog", { name: "Confirm traffic" }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByText("1 of 4 required tasks complete")).toBeTruthy();
+    expect(screen.getByText("1 of 4 tasks complete")).toBeTruthy();
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByText("4 tasks")).toBeNull();
 
@@ -392,17 +391,37 @@ describe("SetupBoard", () => {
     ).toBeNull();
   });
 
-  it("keeps task status controls in the workstream overview", async () => {
+  it("moves a task to the status column it is dropped into", async () => {
     render(<SetupBoard />);
 
-    const identityWorkstream = screen.getByRole("region", {
-      name: "Connect identity",
-    });
-    fireEvent.click(
-      within(identityWorkstream).getByRole("button", {
-        name: "Move to in progress",
-      }),
+    const draggedTask = screen.getByTestId("setup-task-draggable-connect-idp");
+    const destination = screen.getByTestId("setup-column-in_progress");
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+
+    fireEvent.dragStart(draggedTask, { dataTransfer });
+    fireEvent.dragOver(
+      screen.getByTestId("setup-task-draggable-instrument-agents"),
+      { clientY: 0, dataTransfer },
     );
+    const dropSpace = screen.getByTestId("setup-task-drop-space");
+    expect(
+      dropSpace.nextElementSibling?.contains(
+        screen.getByTestId("setup-task-instrument-agents"),
+      ),
+    ).toBe(true);
+
+    // The placeholder now sits under the pointer. It must not bubble an event
+    // that relocates itself to the end of the column.
+    fireEvent.dragOver(dropSpace, { dataTransfer });
+    expect(
+      dropSpace.nextElementSibling?.contains(
+        screen.getByTestId("setup-task-instrument-agents"),
+      ),
+    ).toBe(true);
+    fireEvent.drop(destination, { dataTransfer });
 
     await waitFor(() =>
       expect(mocks.update).toHaveBeenCalledWith({
@@ -458,7 +477,7 @@ describe("SetupBoard", () => {
       isError: false,
     });
     const view = render(<SetupBoard />);
-    expect(document.querySelector(".h-64")).toBeTruthy();
+    expect(document.querySelector(".h-80")).toBeTruthy();
 
     view.unmount();
     mocks.setupQuery.mockReturnValue({
