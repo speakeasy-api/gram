@@ -75,7 +75,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
 
-11. **Killswitch list and detail (local rewritten seed only)** — Killswitch
+11. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
+    Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
+    shows the existing Gram-hosted metadata configuration, recommends
+    provider-hosted metadata, and offers **Review update**. Opening the review
+    starts with the fictional `https://auth.example.com` issuer; live discovery
+    does not need to succeed for this seeded-page check.
+
+12. **Killswitch list and detail (local rewritten seed only)** — Killswitch
     management intentionally rejects demo/support sessions. Verify this contract in
     the local organization after `mise run seed`, not through the demo-org
     impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
@@ -91,13 +98,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `**This is plain text, not Markdown.**` literally: no script executes and no
     Markdown formatting appears. Internal notes remain visible only on the
     admin management detail/history surfaces.
-12. **Audit logs** — Killswitch history contributes nine rows: six
+13. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
     version as their Killswitch history entries; the expiry row is attributed to
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
-13. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
+14. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
     page. The Shadow AI section lists Claude Code, Cursor, Codex, and Ollama in
     deterministic last-seen order, spans Harness and Local model categories,
     and shows two devices where applicable. Installed / Running signals,
@@ -105,7 +112,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
     proving each page is filtered to its canonical enrolled-user identity.
 
-14. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+15. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and

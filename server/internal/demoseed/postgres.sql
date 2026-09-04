@@ -174,6 +174,7 @@ DECLARE
   toolset_1    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e01';
   toolset_2    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e02';
   toolset_3    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e03';
+  toolset_4    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e04';
   us_issuer    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a01';
   -- One registered agent per credential kind the Connections list can report,
   -- plus the pre-column row whose kind is resolved from the rest of it.
@@ -409,6 +410,13 @@ BEGIN
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
   DELETE FROM user_session_issuers WHERE project_id = proj_a;
+  -- The metadata table is project-scoped rather than organization-scoped, so
+  -- constrain cleanup through the demo project's tenant ownership.
+  DELETE FROM external_oauth_server_metadata
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
   DELETE FROM toolsets WHERE organization_id = demo_org;
   -- environments.project_id is NOT NULL but its FK is ON DELETE SET NULL, so
   -- the projects delete below fails outright on any environment row. The demo
@@ -706,21 +714,35 @@ BEGIN
             tool_names[i] <> 'process_refund');
   END LOOP;
 
+  -- Keep a legacy Gram-hosted metadata row so the authentication page can
+  -- demonstrate the proactive recommendation without contacting a provider.
+  INSERT INTO external_oauth_server_metadata
+    (id, project_id, slug, metadata, authorization_server_issuer)
+  VALUES
+    (demo.det_uuid('gram-demo-external-oauth-discovery'), proj_a,
+     'acme-oauth-discovery',
+     '{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/oauth/authorize","token_endpoint":"https://auth.example.com/oauth/token","registration_endpoint":"https://auth.example.com/oauth/register"}'::jsonb,
+     NULL);
+
   INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
-                        mcp_slug, mcp_enabled, mcp_is_public)
+                        mcp_slug, mcp_enabled, mcp_is_public, external_oauth_server_id)
   VALUES
     (toolset_1, demo_org, proj_a, 'Acme Support Tools', 'acme-support-tools',
      'Support workflows: logs, refunds, customer lookups.',
-     'acme-demo-support', TRUE, FALSE),
+     'acme-demo-support', TRUE, FALSE, NULL),
     (toolset_2, demo_org, proj_a, 'Acme Ops', 'acme-ops',
-     'Operational checks and deploy tooling.', NULL, TRUE, FALSE),
+     'Operational checks and deploy tooling.', NULL, TRUE, FALSE, NULL),
     -- The OAuth-protected server, kept separate from the two above: attaching
     -- a session issuer changes what a server's authentication tab and install
     -- instructions say, and the support server is the one a visitor meets
     -- first.
     (toolset_3, demo_org, proj_a, 'Acme Partner Gateway', 'acme-partner-gateway',
      'Tools Acme exposes to partner agents, behind OAuth.',
-     'acme-demo-partner', TRUE, FALSE);
+     'acme-demo-partner', TRUE, FALSE, NULL),
+    (toolset_4, demo_org, proj_a, 'Acme OAuth Discovery', 'acme-oauth-discovery',
+     'Demonstrates external OAuth metadata source choices.',
+     'acme-demo-oauth-discovery', TRUE, TRUE,
+     demo.det_uuid('gram-demo-external-oauth-discovery'));
 
   -- Version = epoch seconds: the server caches toolset contents in Redis
   -- keyed by (deployment, toolset, version), and a reseed reusing version 1
@@ -729,7 +751,8 @@ BEGIN
   INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
     (toolset_1, extract(epoch FROM now())::bigint, tool_urns, '{}'),
     (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}'),
-    (toolset_3, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[3], tool_urns[4]], '{}');
+    (toolset_3, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[3], tool_urns[4]], '{}'),
+    (toolset_4, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1]], '{}');
 
   ------------------------------------------------------------------
   -- MCP connections: the issuer that gates the partner gateway, the agents
@@ -2342,6 +2365,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
+  END IF;
+
+  -- This legacy row drives the OAuth metadata recommendation. Keep its count
+  -- stable so a rerun cannot duplicate it or silently drop the demo surface.
+  SELECT count(*) INTO stray FROM external_oauth_server_metadata
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 external OAuth metadata row, found %', stray;
   END IF;
 
   -- The registrations are the point of the Connections surfaces: one per
