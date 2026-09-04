@@ -210,8 +210,7 @@ type UserSessionGrant struct {
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
 	// AgentAuthorization is the final, human-approved handoff consumed by the
-	// agent-session lane. Until that lane is present, token redemption rejects
-	// grants carrying this field instead of minting a human session.
+	// existing session lane to mint an agent-subject session.
 	AgentAuthorization *AgentAuthorizationResult `json:"agent_authorization,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
@@ -253,7 +252,10 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // validateUserSessionToken: the bearer token itself was accepted but the
 // endpoint's organization could not be described, so the resulting 401 is
 // not a credential rejection.
-var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+var (
+	errIssuerGateOrgLookup        = errors.New("describe organization for issuer-gated endpoint")
+	errAgentSessionCredentialLoad = errors.New("load agent session credential")
+)
 
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
 // logs and on the mcp.request.rejected counter, beyond the bearer-token
@@ -281,6 +283,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
 		return "tool_selection_load_failed"
+	case errors.Is(err, errAgentSessionCredentialLoad):
+		return "agent_session_load_failed"
 	default:
 		return "invalid_bearer_token"
 	}
@@ -374,6 +378,26 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	if err != nil {
 		return ctx, nil, nil, err
 	}
+	if subject.Kind == urn.SessionSubjectKindAgent {
+		row, qerr := usersessions_repo.New(s.db).GetUserSessionPrincipalCredentialByJTI(ctx, usersessions_repo.GetUserSessionPrincipalCredentialByJTIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Jti:                 session.JTI(),
+		})
+		if qerr != nil {
+			if errors.Is(qerr, pgx.ErrNoRows) {
+				return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			}
+			return ctx, nil, nil, fmt.Errorf("%w: %w", errAgentSessionCredentialLoad, qerr)
+		}
+		credential, cerr := loadAgentSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.AuthorizerUserID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		if cerr != nil {
+			return ctx, nil, nil, cerr
+		}
+		newCtx, err = s.admitAgentSession(newCtx, endpoint, subject, credential)
+		if err != nil {
+			return ctx, nil, nil, err
+		}
+	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
 	return newCtx, &subject, toolSelection, nil
 }
@@ -419,10 +443,12 @@ func (s *Service) contextForSessionSubject(
 		ctx = contextvalues.SetOAuthClientID(ctx, oauthClientID)
 	}
 
-	// Stamped for every subject kind, anonymous included: liveness describes
-	// the connection, and an anonymous session is a real connection whose
-	// principal happens to be unknown.
-	s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
+	// Stamped for every persisted subject kind, anonymous included: liveness
+	// describes the connection. Authorization-code completion passes no session
+	// id because no row exists yet.
+	if sessionID != "" {
+		s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
+	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
 		return ctx, nil
@@ -441,7 +467,7 @@ func (s *Service) contextForSessionSubject(
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             &sessionID,
+		SessionID:             nil,
 		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,
 		AccountType:           orgMetadata.GramAccountType,
@@ -452,6 +478,9 @@ func (s *Service) contextForSessionSubject(
 		IsAdmin:               false,
 		SupportOrganizationID: "",
 	}
+	if sessionID != "" {
+		authCtx.SessionID = &sessionID
+	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
@@ -461,6 +490,10 @@ func (s *Service) contextForSessionSubject(
 	case urn.SessionSubjectKindAPIKey:
 		authCtx.APIKeyID = subject.ID
 		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
+	case urn.SessionSubjectKindAgent:
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeAgent, subject.ID),
+		), nil
 	case urn.SessionSubjectKindAnonymous:
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.

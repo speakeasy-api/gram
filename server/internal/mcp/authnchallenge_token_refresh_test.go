@@ -20,8 +20,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	agents_repo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -136,6 +140,118 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NoError(t, secondUnknown.err)
 	require.Equal(t, http.StatusBadRequest, secondUnknown.code)
 	require.Less(t, time.Since(started), 3*time.Second, "cached terminal refresh failures must not wait for the replay grace period")
+}
+
+func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, agent, _, session := seedAgentRefreshSession(t, ctx, ti)
+	issuer := ti.serverURL.JoinPath("mcp", fx.toolset.McpSlug.String).String()
+	accessToken, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:   session.SubjectUrn,
+		Audience:  urn.NewToolset(fx.toolset.ID).String(),
+		Issuer:    issuer,
+		ExpiresAt: &session.ExpiresAt.Time,
+		ClientID:  fx.client.ClientID,
+		JTI:       session.Jti,
+	})
+	require.NoError(t, err)
+	endpoint := &mcp.ResolvedMcpEndpoint{
+		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
+		OrganizationID:      fx.orgID,
+		ProjectID:           fx.target.ProjectID,
+		RouteBase:           "mcp",
+		Slug:                fx.toolset.McpSlug.String,
+		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+	}
+
+	w := httptest.NewRecorder()
+	admittedCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
+	require.NoError(t, err)
+	actor, ok := contextvalues.AuthenticatedActor(admittedCtx)
+	require.True(t, ok)
+	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), actor.String())
+	credential, ok := contextvalues.PrincipalCredentialAuthorization(admittedCtx)
+	require.True(t, ok)
+	require.Equal(t, fx.userID, credential.AuthorizerUserID)
+
+	_, err = agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	require.NoError(t, err)
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, oldSession := seedAgentRefreshSession(t, ctx, ti)
+
+	result := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusOK, result.code, result.body)
+	var response tokenResponseFixture
+	require.NoError(t, json.Unmarshal([]byte(result.body), &response))
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	require.NoError(t, err)
+
+	rotated, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+		Jti:                 claims.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, oldSession.SubjectUrn.String(), rotated.SubjectUrn.String())
+	require.Equal(t, oldSession.AuthorizerUserID, rotated.AuthorizerUserID)
+	require.JSONEq(t, string(oldSession.DelegatedGrants), string(rotated.DelegatedGrants))
+	require.Equal(t, oldSession.DelegatedGrantsVersion, rotated.DelegatedGrantsVersion)
+}
+
+func TestHandleToken_AgentRefreshReplayDeniesDirectlyRevokedSuccessor(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	winner := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, winner.err)
+	require.Equal(t, http.StatusOK, winner.code, winner.body)
+	var response tokenResponseFixture
+	require.NoError(t, json.Unmarshal([]byte(winner.body), &response))
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	require.NoError(t, err)
+	successor, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+		Jti:                 claims.ID,
+	})
+	require.NoError(t, err)
+	_, err = usersessions_repo.New(ti.conn).RevokeUserSession(ctx, usersessions_repo.RevokeUserSessionParams{
+		ID:             successor.ID,
+		ProjectID:      fx.target.ProjectID,
+		OrganizationID: fx.orgID,
+	})
+	require.NoError(t, err)
+
+	replay := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, replay.err)
+	require.Equal(t, http.StatusBadRequest, replay.code, replay.body)
+	require.Contains(t, replay.body, "refreshed session is no longer active")
+}
+
+func TestHandleToken_AgentRefreshDeniesSuspendedParent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, agent, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	_, err := agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	require.NoError(t, err)
+
+	result := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusBadRequest, result.code, result.body)
+	require.Contains(t, result.body, "agent authorization is no longer valid")
 }
 
 func TestHandleToken_UnpublishedRollbackReleasesLease(t *testing.T) {
@@ -512,6 +628,47 @@ func assertSameTokenPair(t *testing.T, expectedBody, actualBody string) {
 	require.NoError(t, json.Unmarshal([]byte(actualBody), &actual))
 	require.Equal(t, expected.AccessToken, actual.AccessToken)
 	require.Equal(t, expected.RefreshToken, actual.RefreshToken)
+}
+
+func seedAgentRefreshSession(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+) (agentConsentFixture, agents_repo.Agent, string, usersessions_repo.UserSession) {
+	t.Helper()
+
+	fx := newAgentConsentFixture(t, ctx, ti)
+	agent := createConsentAgent(t, ctx, ti, fx, "Refresh subject agent")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+	policy, err := authz.NewDelegatedPolicyV1([]authz.Grant{{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   fx.target.MCPResourceID.String(),
+			authz.SelectorKeyProjectID:    fx.target.ProjectID.String(),
+		},
+	}})
+	require.NoError(t, err)
+	delegatedGrants, err := authz.EncodeDelegatedPolicy(authz.CurrentDelegatedPolicyVersion, policy)
+	require.NoError(t, err)
+	refreshToken := "agent-refresh-" + uuid.NewString()
+	refreshHash := sha256.Sum256([]byte(refreshToken))
+	oldJTIHash := sha256.Sum256([]byte("agent-jti-" + uuid.NewString()))
+	session, err := usersessions_repo.New(ti.conn).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID:    fx.target.UserSessionIssuerID,
+		UserSessionClientID:    uuid.NullUUID{UUID: fx.client.ID, Valid: true},
+		SubjectUrn:             urn.NewAgentSubject(agent.ID),
+		AuthorizerUserID:       pgtype.Text{String: fx.userID, Valid: true},
+		DelegatedGrants:        delegatedGrants,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(authz.CurrentDelegatedPolicyVersion), Valid: true},
+		Jti:                    base64.RawURLEncoding.EncodeToString(oldJTIHash[:]),
+		RefreshTokenHash:       base64.RawURLEncoding.EncodeToString(refreshHash[:]),
+		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+	return fx, agent, refreshToken, session
 }
 
 func seedRefreshReplaySession(

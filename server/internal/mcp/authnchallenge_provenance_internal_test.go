@@ -42,6 +42,7 @@ func TestIdentityForValidatedSession(t *testing.T) {
 	}{
 		{name: "concrete user is authoritative", subject: urn.NewUserSubject("user_01J8EXAMPLE"), wantKind: mcpidentity.KindUserSession, wantUser: "user_01J8EXAMPLE"},
 		{name: "api key never carries an acting user", subject: urn.NewAPIKeySubject(uuid.MustParse("11111111-1111-1111-1111-111111111111")), wantKind: mcpidentity.KindAPIKey},
+		{name: "agent never carries an acting user", subject: urn.NewAgentSubject(uuid.MustParse("22222222-2222-2222-2222-222222222222")), wantKind: mcpidentity.KindAgent},
 		{name: "anonymous never carries an acting user", subject: urn.NewAnonymousSubject("session_01J8EXAMPLE"), wantKind: mcpidentity.KindAnonymous},
 	}
 

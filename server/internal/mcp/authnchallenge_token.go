@@ -89,7 +89,10 @@ type userSessionRefreshReplayPayload struct {
 
 type mintSessionParams struct {
 	AuthorizationExpiresAt *time.Time
+	AuthorizerUserID       pgtype.Text
 	BaseURL                string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
 	Subject                urn.SessionSubject
@@ -320,13 +323,40 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	// AIM-196 hands a fully authorized agent choice to the existing token flow,
-	// but AIM-197 owns minting the corresponding agent session. Reject rather
-	// than silently ignoring the handoff and creating a human session.
-	if grant.AgentAuthorization != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_session_not_available")
+	if grant.AgentAuthorization == nil && grant.Subject.Kind == urn.SessionSubjectKindAgent {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_handoff_missing")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent sessions are not available")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization handoff is missing")
+	}
+	subject := grant.Subject
+	var authorizerUserID pgtype.Text
+	var delegatedGrants []byte
+	var delegatedGrantsVersion pgtype.Int4
+	if agentAuthorization := grant.AgentAuthorization; agentAuthorization != nil {
+		if !agentAuthorization.Target.matches(endpoint) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_target_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+		}
+		credential, cerr := newAgentSessionCredential(agentAuthorization.Target, agentAuthorization.AuthorizerUserID)
+		if cerr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is invalid")
+		}
+		subject = urn.NewAgentSubject(agentAuthorization.AgentID)
+		authorizationCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "", clientRow.ClientID)
+		if cerr == nil {
+			authorizationCtx, cerr = s.admitAgentSession(authorizationCtx, endpoint, subject, credential)
+		}
+		if cerr != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_admission_denied")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid")
+		}
+		ctx = authorizationCtx
+		authorizerUserID = pgtype.Text{String: credential.AuthorizerUserID, Valid: true}
+		delegatedGrants = credential.DelegatedGrants
+		delegatedGrantsVersion = pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true}
 	}
 
 	var desiredSessionDuration *time.Duration
@@ -355,10 +385,13 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
 		AuthorizationExpiresAt: nil,
+		AuthorizerUserID:       authorizerUserID,
 		BaseURL:                baseURL,
+		DelegatedGrants:        delegatedGrants,
+		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
-		Subject:                grant.Subject,
+		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
 	if err != nil {
@@ -638,10 +671,31 @@ func (s *Service) rotateRefreshToken(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}
+	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
+		credential, cerr := loadAgentSessionCredential(
+			endpoint, oldSession.SubjectUrn, oldSession.SubjectUrn, oldSession.OrganizationID,
+			oldSession.AuthorizerUserID, oldSession.DelegatedGrants, oldSession.DelegatedGrantsVersion,
+		)
+		authorizationCtx := ctx
+		if cerr == nil {
+			authorizationCtx, cerr = s.contextForSessionSubject(ctx, endpoint, oldSession.SubjectUrn, "", clientRow.ClientID)
+		}
+		if cerr == nil {
+			authorizationCtx, cerr = s.admitAgentSession(authorizationCtx, endpoint, oldSession.SubjectUrn, credential)
+		}
+		if cerr != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+		}
+		ctx = authorizationCtx
+	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
 		AuthorizationExpiresAt: &authorizationExpiresAt,
+		AuthorizerUserID:       oldSession.AuthorizerUserID,
 		BaseURL:                baseURL,
+		DelegatedGrants:        oldSession.DelegatedGrants,
+		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
 		Subject:                oldSession.SubjectUrn,
@@ -744,6 +798,39 @@ func (s *Service) writeRefreshTokenReplay(
 	if payload.Subject == nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
+	}
+	replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Jti:                 payload.JTI,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_revoked")
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+		}
+		return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
+	}
+	if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
+		replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+	}
+	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
+		credential, cerr := loadAgentSessionCredential(
+			endpoint, *payload.Subject, replaySession.SubjectUrn, replaySession.OrganizationID,
+			replaySession.AuthorizerUserID, replaySession.DelegatedGrants, replaySession.DelegatedGrantsVersion,
+		)
+		authorizationCtx := ctx
+		if cerr == nil {
+			authorizationCtx, cerr = s.contextForSessionSubject(ctx, endpoint, *payload.Subject, "", clientRow.ClientID)
+		}
+		if cerr == nil {
+			_, cerr = s.admitAgentSession(authorizationCtx, endpoint, *payload.Subject, credential)
+		}
+		if cerr != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+		}
 	}
 
 	endpointIssuer, err := endpoint.RootURL(baseURL)
@@ -910,6 +997,17 @@ func (s *Service) mintSession(
 	params mintSessionParams,
 	logger *slog.Logger,
 ) (*mintedSession, error) {
+	if params.Subject.Kind == urn.SessionSubjectKindAgent {
+		if _, err := loadAgentSessionCredential(
+			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
+			params.AuthorizerUserID, params.DelegatedGrants, params.DelegatedGrantsVersion,
+		); err != nil {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+	} else if params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
 	now := time.Now()
 	if params.AuthorizationExpiresAt == nil {
 		// Resolve the issuer's session_duration — the maximum absolute
@@ -984,14 +1082,17 @@ func (s *Service) mintSession(
 	}
 
 	if _, err := queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
-		SubjectUrn:          params.Subject,
-		Jti:                 jti,
-		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
-		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
-		ToolSelection:       params.ToolSelection,
+		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
+		UserSessionClientID:    uuid.NullUUID{UUID: clientRow.ID, Valid: true},
+		SubjectUrn:             params.Subject,
+		AuthorizerUserID:       params.AuthorizerUserID,
+		DelegatedGrants:        params.DelegatedGrants,
+		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
+		Jti:                    jti,
+		RefreshTokenHash:       sha256Hex(refreshTokenRaw),
+		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:       pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		ToolSelection:          params.ToolSelection,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
