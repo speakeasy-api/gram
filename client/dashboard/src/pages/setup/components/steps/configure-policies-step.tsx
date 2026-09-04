@@ -49,7 +49,8 @@ import {
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import {
   effectiveScopeKinds,
-  encodeKindScope,
+  kindScopeForMessageTypes,
+  replaceCategoryDetectionScope,
 } from "@/pages/security/policy-scope";
 import { cn } from "@/lib/utils";
 
@@ -296,12 +297,14 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          detectionScopes: [
+          messageTypes: [],
+          detectionScopes: replaceCategoryDetectionScope(
+            existing.detectionScopes,
             {
               category: cat,
-              scopeInclude: encodeKindScope([...nextCfg.messageTypes]),
+              ...kindScopeForMessageTypes([...nextCfg.messageTypes]),
             },
-          ],
+          ),
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -337,9 +340,7 @@ export function ConfigurePoliciesStep({
           ? effectiveScopeKinds(detectionScope)
           : null;
         const serverMessageTypes =
-          effectiveScope === null ||
-          effectiveScope.custom ||
-          effectiveScope.kinds.size === 0
+          effectiveScope === null || effectiveScope.custom
             ? new Set(next[cat].messageTypes)
             : new Set(effectiveScope.kinds);
         const messageTypesEqual =
@@ -387,7 +388,7 @@ export function ConfigurePoliciesStep({
               detectionScopes: [
                 {
                   category: cat,
-                  scopeInclude: encodeKindScope([...cfg.messageTypes]),
+                  ...kindScopeForMessageTypes([...cfg.messageTypes]),
                 },
               ],
               action: cfg.action,
