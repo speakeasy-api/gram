@@ -8,6 +8,7 @@ import { Stack } from "@/components/ui/Stack";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { ServerIcon, WaypointsIcon } from "lucide-react";
+import type { ReactElement } from "react";
 
 import { WizardContext } from "./machine";
 import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
@@ -27,16 +28,16 @@ export function ExternalOAuthForm({
   hasMultipleOAuth2AuthCode: boolean;
   oauth2SecurityCount: number;
   onCancel: () => void;
-}) {
+}): ReactElement {
   const state = WizardContext.useSelector((snapshot) => snapshot);
-  const send = WizardContext.useActorRef().send;
+  const actorRef = WizardContext.useActorRef();
   const { external, error, initialPath } = state.context;
   const directEntry = initialPath === "external";
   const submitting = state.matches({ external: "submitting" });
 
   const back = () => {
     if (state.matches({ external: "source" }) && directEntry) onCancel();
-    else send({ type: "BACK" });
+    else actorRef.send({ type: "BACK" });
   };
 
   return (
@@ -61,14 +62,14 @@ export function ExternalOAuthForm({
             <SourceCard
               title="Provider-hosted metadata"
               description="Clients discover metadata directly from your authorization server."
-              onClick={() => send({ type: "SELECT_PROVIDER_ISSUER" })}
+              onClick={() => actorRef.send({ type: "SELECT_PROVIDER_ISSUER" })}
               icon={ServerIcon}
               recommended
             />
             <SourceCard
               title="Gram-hosted metadata"
               description="Gram hosts metadata you provide for compatibility with existing deployments."
-              onClick={() => send({ type: "SELECT_GRAM_HOSTED" })}
+              onClick={() => actorRef.send({ type: "SELECT_GRAM_HOSTED" })}
               icon={WaypointsIcon}
             />
           </Stack>
@@ -84,7 +85,11 @@ export function ExternalOAuthForm({
                 placeholder="https://login.example.com"
                 value={external.issuerUrl}
                 onChange={(value) =>
-                  send({ type: "FIELD_EXTERNAL", key: "issuerUrl", value })
+                  actorRef.send({
+                    type: "FIELD_EXTERNAL",
+                    key: "issuerUrl",
+                    value,
+                  })
                 }
                 validate={(value) => validateProviderIssuerUrl(value) ?? true}
                 autoFocus
@@ -163,7 +168,11 @@ export function ExternalOAuthForm({
                 placeholder={EXTERNAL_METADATA_PLACEHOLDER}
                 value={external.metadataJson}
                 onChange={(value) =>
-                  send({ type: "FIELD_EXTERNAL", key: "metadataJson", value })
+                  actorRef.send({
+                    type: "FIELD_EXTERNAL",
+                    key: "metadataJson",
+                    value,
+                  })
                 }
                 rows={12}
                 className="font-mono text-sm"
@@ -184,7 +193,7 @@ export function ExternalOAuthForm({
         </Button>
         {state.matches({ external: "providerIssuer" }) && (
           <Button
-            onClick={() => send({ type: "NEXT" })}
+            onClick={() => actorRef.send({ type: "NEXT" })}
             disabled={!!validateProviderIssuerUrl(external.issuerUrl)}
           >
             Verify metadata
@@ -192,7 +201,7 @@ export function ExternalOAuthForm({
         )}
         {(state.matches({ external: "review" }) ||
           state.matches({ external: "gramHosted" })) && (
-          <Button onClick={() => send({ type: "SUBMIT" })}>
+          <Button onClick={() => actorRef.send({ type: "SUBMIT" })}>
             Configure External OAuth
           </Button>
         )}
