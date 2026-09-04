@@ -238,3 +238,69 @@ func TestEventCreatedAtCountsOnlyImportTimeFallbacks(t *testing.T) {
 	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
 	require.Equal(t, 2, source.progress.TimestampFallbacks)
 }
+
+// A message and title carrying the JSON escape \u0000: Postgres text and
+// jsonb columns both reject NUL, so the importer must neutralize it before
+// the row reaches the database instead of wedging the sync on that window.
+const chatgptConversationNULFixture = `{"event_id":"evt_nul_1","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T11:00:00Z","previous_message_id":"","message":{"id":"msg_nul_1","created_at":"2026-07-27T11:00:00Z","author":{"type":"user","client_type":"desktop_web"},"content":{"type":"text","value":"before\u0000after"}},"conversation":{"id":"conv_nul","title":"NUL\u0000title","created_at":"2026-07-27T10:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+{"event_id":"evt_nul_2","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T11:00:05Z","previous_message_id":"msg_nul_1","message":{"id":"msg_nul_2","created_at":"2026-07-27T11:00:05Z","author":{"type":"assistant","client_type":"desktop_web"},"content":{"type":"text","value":"clean reply"}},"conversation":{"id":"conv_nul","title":"NUL\u0000title","created_at":"2026-07-27T10:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+`
+
+func TestChatGPTConversationProcessPageStoresMessagesContainingNUL(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "ChatGPT NUL Import Test Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+	cfg := created.Config
+	cfg.ProjectID = project.ID
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	file := chatgptFixtureFile(chatgptConversationNULFixture)
+	src := &chatgptConversationSource{
+		client: &stubCodexComplianceClient{
+			listPages:  nil,
+			listParams: nil,
+			downloads:  map[string][]byte{file.ID: []byte(chatgptConversationNULFixture)},
+		},
+		svc:        svc,
+		cfg:        cfg,
+		pageLimit:  chatgptCompliancePageLimit,
+		users:      newConnectedUserResolver(conn, orgID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &ChatGPTConversationSyncProgress{},
+	}
+
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
+	require.Equal(t, int64(2), src.progress.MessagesWritten)
+
+	chatID, ok := src.chatIDs["conv_nul"]
+	require.True(t, ok, "conversation must be upserted")
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, "NUL�title", chatRow.Title.String)
+
+	messages, err := chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+	// The NUL is replaced, not dropped, so the transcript keeps a visible
+	// marker where the byte was.
+	require.Equal(t, "before�after", messages[0].Content)
+	require.NotContains(t, messages[0].Content, "\x00")
+	// The inline raw copy is jsonb, which rejects the \u0000 escape just as
+	// text rejects the byte; it must carry the same replacement.
+	require.JSONEq(t, "\"before�after\"", string(messages[0].ContentRaw))
+	require.Equal(t, "clean reply", messages[1].Content)
+}

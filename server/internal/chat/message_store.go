@@ -624,6 +624,14 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
+		// Provider transcripts occasionally carry NUL, which Postgres text and
+		// jsonb columns reject; neutralize it before metering so the reading
+		// reflects what is actually stored.
+		param.Content = ReplaceNUL(param.Content)
+		param.ContentRaw = replaceNULInJSON(param.ContentRaw)
+		param.ExternalUserID.String = ReplaceNUL(param.ExternalUserID.String)
+		param.ExternalMessageID.String = ReplaceNUL(param.ExternalMessageID.String)
+		param.UserAgent.String = ReplaceNUL(param.UserAgent.String)
 		readings, err := w.meterMessage(ctx, meterMessageInput{
 			organizationID:        organizationID,
 			projectID:             projectID,
