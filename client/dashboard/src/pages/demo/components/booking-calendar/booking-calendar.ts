@@ -1,6 +1,6 @@
 // Cal.com event link booked when an org isn't whitelisted yet — the calendar is
 // embedded directly (no routing form). Rotate here if the Cal event changes.
-export const CAL_DEMO_LINK = "team/speakeasy-com/ai-transformation";
+export const BOOKING_CALENDAR_LINK = "team/speakeasy-com/ai-transformation";
 
 export function splitDisplayName(displayName?: string): {
   firstName: string;
