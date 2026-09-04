@@ -16,6 +16,7 @@ import (
 
 	agents "github.com/speakeasy-api/gram/server/gen/agents"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCreateRequest instantiates a HTTP request object with method and path
@@ -1187,6 +1188,934 @@ func DecodeReassignResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
+// BuildListPolicyGrantsRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "listPolicyGrants" endpoint
+func (c *Client) BuildListPolicyGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPolicyGrantsAgentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "listPolicyGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPolicyGrantsRequest returns an encoder for requests sent to the
+// agents listPolicyGrants server.
+func EncodeListPolicyGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.ListPolicyGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "listPolicyGrants", "*agents.ListPolicyGrantsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("agent_id", p.AgentID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListPolicyGrantsResponse returns a decoder for responses returned by
+// the agents listPolicyGrants endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListPolicyGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPolicyGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*AgentPolicyGrantResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := ValidateAgentPolicyGrantResponse(e); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			res := NewListPolicyGrantsAgentPolicyGrantOK(body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPolicyGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPolicyGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPolicyGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPolicyGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPolicyGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPolicyGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPolicyGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPolicyGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+				}
+				err = ValidateListPolicyGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+				}
+				return nil, NewListPolicyGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPolicyGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+				}
+				err = ValidateListPolicyGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+				}
+				return nil, NewListPolicyGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "listPolicyGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPolicyGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listPolicyGrants", err)
+			}
+			err = ValidateListPolicyGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listPolicyGrants", err)
+			}
+			return nil, NewListPolicyGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "listPolicyGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreatePolicyGrantRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "createPolicyGrant" endpoint
+func (c *Client) BuildCreatePolicyGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreatePolicyGrantAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "createPolicyGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreatePolicyGrantRequest returns an encoder for requests sent to the
+// agents createPolicyGrant server.
+func EncodeCreatePolicyGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.CreatePolicyGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "createPolicyGrant", "*agents.CreatePolicyGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := p
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "createPolicyGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreatePolicyGrantResponse returns a decoder for responses returned by
+// the agents createPolicyGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreatePolicyGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreatePolicyGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body CreatePolicyGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			res := NewCreatePolicyGrantAgentPolicyGrantCreated(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreatePolicyGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreatePolicyGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreatePolicyGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreatePolicyGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreatePolicyGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreatePolicyGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreatePolicyGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreatePolicyGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+				}
+				err = ValidateCreatePolicyGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+				}
+				return nil, NewCreatePolicyGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreatePolicyGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+				}
+				err = ValidateCreatePolicyGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+				}
+				return nil, NewCreatePolicyGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "createPolicyGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreatePolicyGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "createPolicyGrant", err)
+			}
+			err = ValidateCreatePolicyGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "createPolicyGrant", err)
+			}
+			return nil, NewCreatePolicyGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "createPolicyGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdatePolicyGrantRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "updatePolicyGrant" endpoint
+func (c *Client) BuildUpdatePolicyGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdatePolicyGrantAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "updatePolicyGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdatePolicyGrantRequest returns an encoder for requests sent to the
+// agents updatePolicyGrant server.
+func EncodeUpdatePolicyGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.UpdatePolicyGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "updatePolicyGrant", "*agents.UpdatePolicyGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := p
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "updatePolicyGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdatePolicyGrantResponse returns a decoder for responses returned by
+// the agents updatePolicyGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdatePolicyGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdatePolicyGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdatePolicyGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			res := NewUpdatePolicyGrantAgentPolicyGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdatePolicyGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdatePolicyGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdatePolicyGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdatePolicyGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdatePolicyGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdatePolicyGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdatePolicyGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdatePolicyGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+				}
+				err = ValidateUpdatePolicyGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+				}
+				return nil, NewUpdatePolicyGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdatePolicyGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+				}
+				err = ValidateUpdatePolicyGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+				}
+				return nil, NewUpdatePolicyGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "updatePolicyGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdatePolicyGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "updatePolicyGrant", err)
+			}
+			err = ValidateUpdatePolicyGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "updatePolicyGrant", err)
+			}
+			return nil, NewUpdatePolicyGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "updatePolicyGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeletePolicyGrantRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "deletePolicyGrant" endpoint
+func (c *Client) BuildDeletePolicyGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeletePolicyGrantAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "deletePolicyGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeletePolicyGrantRequest returns an encoder for requests sent to the
+// agents deletePolicyGrant server.
+func EncodeDeletePolicyGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.DeletePolicyGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "deletePolicyGrant", "*agents.DeletePolicyGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewDeletePolicyGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "deletePolicyGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDeletePolicyGrantResponse returns a decoder for responses returned by
+// the agents deletePolicyGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDeletePolicyGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeletePolicyGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeletePolicyGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeletePolicyGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeletePolicyGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeletePolicyGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeletePolicyGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeletePolicyGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeletePolicyGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeletePolicyGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+				}
+				err = ValidateDeletePolicyGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+				}
+				return nil, NewDeletePolicyGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeletePolicyGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+				}
+				err = ValidateDeletePolicyGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+				}
+				return nil, NewDeletePolicyGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "deletePolicyGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeletePolicyGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "deletePolicyGrant", err)
+			}
+			err = ValidateDeletePolicyGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "deletePolicyGrant", err)
+			}
+			return nil, NewDeletePolicyGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "deletePolicyGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSuspendRequest instantiates a HTTP request object with method and path
 // set to call the "agents" service "suspend" endpoint
 func (c *Client) BuildSuspendRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2119,6 +3048,55 @@ func unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v *AgentPermi
 		Write:     *v.Write,
 		Authorize: *v.Authorize,
 		Transfer:  *v.Transfer,
+	}
+
+	return res
+}
+
+// unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant builds a value of
+// type *agents.AgentPolicyGrant from a value of type *AgentPolicyGrantResponse.
+func unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant(v *AgentPolicyGrantResponse) *agents.AgentPolicyGrant {
+	res := &agents.AgentPolicyGrant{
+		ID:        *v.ID,
+		Scope:     *v.Scope,
+		Effect:    *v.Effect,
+		CreatedAt: *v.CreatedAt,
+		UpdatedAt: *v.UpdatedAt,
+	}
+	res.Selector = unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector builds a
+// value of type *agents.AgentPolicySelector from a value of type
+// *AgentPolicySelectorResponse.
+func unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v *AgentPolicySelectorResponse) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   *v.ResourceKind,
+		ResourceID:     *v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector builds a
+// value of type *agents.AgentPolicySelector from a value of type
+// *AgentPolicySelectorResponseBody.
+func unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorResponseBody) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   *v.ResourceKind,
+		ResourceID:     *v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
 	}
 
 	return res

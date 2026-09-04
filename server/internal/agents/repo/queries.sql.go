@@ -51,6 +51,45 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 	return i, err
 }
 
+const createAgentPolicyGrant = `-- name: CreateAgentPolicyGrant :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, concat('agent:', $2::uuid), $3, NULL, $4)
+RETURNING id, scope, selectors, created_at, updated_at
+`
+
+type CreateAgentPolicyGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Scope          string
+	Selectors      []byte
+}
+
+type CreateAgentPolicyGrantRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateAgentPolicyGrant(ctx context.Context, arg CreateAgentPolicyGrantParams) (CreateAgentPolicyGrantRow, error) {
+	row := q.db.QueryRow(ctx, createAgentPolicyGrant,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i CreateAgentPolicyGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createAgentWithID = `-- name: CreateAgentWithID :one
 INSERT INTO agents (
   id,
@@ -133,6 +172,42 @@ func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (Agent
 	return i, err
 }
 
+const deleteAgentPolicyGrant = `-- name: DeleteAgentPolicyGrant :one
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+  AND id = $3
+  AND COALESCE(effect, 'allow') = 'allow'
+RETURNING id, scope, selectors, created_at, updated_at
+`
+
+type DeleteAgentPolicyGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	GrantID        uuid.UUID
+}
+
+type DeleteAgentPolicyGrantRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPolicyGrantParams) (DeleteAgentPolicyGrantRow, error) {
+	row := q.db.QueryRow(ctx, deleteAgentPolicyGrant, arg.OrganizationID, arg.AgentID, arg.GrantID)
+	var i DeleteAgentPolicyGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentByID = `-- name: GetAgentByID :one
 SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
@@ -198,6 +273,44 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAgentPolicyGrantForUpdate = `-- name: GetAgentPolicyGrantForUpdate :one
+SELECT id, scope, selectors, created_at, updated_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+  AND id = $3
+  AND COALESCE(effect, 'allow') = 'allow'
+LIMIT 1
+FOR UPDATE
+`
+
+type GetAgentPolicyGrantForUpdateParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	GrantID        uuid.UUID
+}
+
+type GetAgentPolicyGrantForUpdateRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetAgentPolicyGrantForUpdate(ctx context.Context, arg GetAgentPolicyGrantForUpdateParams) (GetAgentPolicyGrantForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getAgentPolicyGrantForUpdate, arg.OrganizationID, arg.AgentID, arg.GrantID)
+	var i GetAgentPolicyGrantForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -289,6 +402,57 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
+
+SELECT id, scope, selectors, created_at, updated_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+  AND COALESCE(effect, 'allow') = 'allow'
+ORDER BY scope, selectors, id
+`
+
+type ListAgentPolicyGrantsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+type ListAgentPolicyGrantsRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Agent direct-policy queries construct the canonical principal from the typed
+// agent ID and bind every operation to the organization and selected agent.
+func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicyGrantsParams) ([]ListAgentPolicyGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentPolicyGrants, arg.OrganizationID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPolicyGrantsRow
+	for rows.Next() {
+		var i ListAgentPolicyGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Scope,
+			&i.Selectors,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -520,6 +684,53 @@ func (q *Queries) TransferAgent(ctx context.Context, arg TransferAgentParams) (A
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateAgentPolicyGrant = `-- name: UpdateAgentPolicyGrant :one
+UPDATE principal_grants
+SET scope = $1,
+    selectors = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND principal_urn = concat('agent:', $4::uuid)
+  AND id = $5
+  AND COALESCE(effect, 'allow') = 'allow'
+RETURNING id, scope, selectors, created_at, updated_at
+`
+
+type UpdateAgentPolicyGrantParams struct {
+	Scope          string
+	Selectors      []byte
+	OrganizationID string
+	AgentID        uuid.UUID
+	GrantID        uuid.UUID
+}
+
+type UpdateAgentPolicyGrantRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateAgentPolicyGrant(ctx context.Context, arg UpdateAgentPolicyGrantParams) (UpdateAgentPolicyGrantRow, error) {
+	row := q.db.QueryRow(ctx, updateAgentPolicyGrant,
+		arg.Scope,
+		arg.Selectors,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.GrantID,
+	)
+	var i UpdateAgentPolicyGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

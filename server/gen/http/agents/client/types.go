@@ -45,6 +45,15 @@ type ReassignRequestBody struct {
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
 }
 
+// DeletePolicyGrantRequestBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP request body.
+type DeletePolicyGrantRequestBody struct {
+	// Direct policy grant identifier
+	GrantID string `form:"grant_id" json:"grant_id" xml:"grant_id"`
+	// First-class agent identifier
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+}
+
 // SuspendRequestBody is the type of the "agents" service "suspend" endpoint
 // HTTP request body.
 type SuspendRequestBody struct {
@@ -151,6 +160,28 @@ type ReassignResponseBody struct {
 	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// CreatePolicyGrantResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body.
+type CreatePolicyGrantResponseBody struct {
+	ID        *string                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Scope     *string                          `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Effect    *string                          `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector  *AgentPolicySelectorResponseBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+	CreatedAt *string                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string                          `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdatePolicyGrantResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body.
+type UpdatePolicyGrantResponseBody struct {
+	ID        *string                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Scope     *string                          `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Effect    *string                          `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector  *AgentPolicySelectorResponseBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+	CreatedAt *string                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string                          `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
@@ -1101,6 +1132,740 @@ type ReassignGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPolicyGrantsUnauthorizedResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "unauthorized" error.
+type ListPolicyGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsForbiddenResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "forbidden" error.
+type ListPolicyGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsBadRequestResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "bad_request" error.
+type ListPolicyGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsNotFoundResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "not_found" error.
+type ListPolicyGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsConflictResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "conflict" error.
+type ListPolicyGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsUnsupportedMediaResponseBody is the type of the "agents"
+// service "listPolicyGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPolicyGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsInvalidResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "invalid" error.
+type ListPolicyGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsInvariantViolationResponseBody is the type of the "agents"
+// service "listPolicyGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPolicyGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsUnexpectedResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "unexpected" error.
+type ListPolicyGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPolicyGrantsGatewayErrorResponseBody is the type of the "agents" service
+// "listPolicyGrants" endpoint HTTP response body for the "gateway_error" error.
+type ListPolicyGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantUnauthorizedResponseBody is the type of the "agents"
+// service "createPolicyGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreatePolicyGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantForbiddenResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "forbidden" error.
+type CreatePolicyGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantBadRequestResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "bad_request" error.
+type CreatePolicyGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantNotFoundResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "not_found" error.
+type CreatePolicyGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantConflictResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "conflict" error.
+type CreatePolicyGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantUnsupportedMediaResponseBody is the type of the "agents"
+// service "createPolicyGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreatePolicyGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantInvalidResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "invalid" error.
+type CreatePolicyGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantInvariantViolationResponseBody is the type of the "agents"
+// service "createPolicyGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreatePolicyGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantUnexpectedResponseBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP response body for the "unexpected" error.
+type CreatePolicyGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreatePolicyGrantGatewayErrorResponseBody is the type of the "agents"
+// service "createPolicyGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreatePolicyGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantUnauthorizedResponseBody is the type of the "agents"
+// service "updatePolicyGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdatePolicyGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantForbiddenResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "forbidden" error.
+type UpdatePolicyGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantBadRequestResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "bad_request" error.
+type UpdatePolicyGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantNotFoundResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "not_found" error.
+type UpdatePolicyGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantConflictResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "conflict" error.
+type UpdatePolicyGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantUnsupportedMediaResponseBody is the type of the "agents"
+// service "updatePolicyGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdatePolicyGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantInvalidResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "invalid" error.
+type UpdatePolicyGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantInvariantViolationResponseBody is the type of the "agents"
+// service "updatePolicyGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdatePolicyGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantUnexpectedResponseBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP response body for the "unexpected" error.
+type UpdatePolicyGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePolicyGrantGatewayErrorResponseBody is the type of the "agents"
+// service "updatePolicyGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdatePolicyGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantUnauthorizedResponseBody is the type of the "agents"
+// service "deletePolicyGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeletePolicyGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantForbiddenResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "forbidden" error.
+type DeletePolicyGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantBadRequestResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "bad_request" error.
+type DeletePolicyGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantNotFoundResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "not_found" error.
+type DeletePolicyGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantConflictResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "conflict" error.
+type DeletePolicyGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantUnsupportedMediaResponseBody is the type of the "agents"
+// service "deletePolicyGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeletePolicyGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantInvalidResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "invalid" error.
+type DeletePolicyGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantInvariantViolationResponseBody is the type of the "agents"
+// service "deletePolicyGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeletePolicyGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantUnexpectedResponseBody is the type of the "agents" service
+// "deletePolicyGrant" endpoint HTTP response body for the "unexpected" error.
+type DeletePolicyGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeletePolicyGrantGatewayErrorResponseBody is the type of the "agents"
+// service "deletePolicyGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeletePolicyGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SuspendUnauthorizedResponseBody is the type of the "agents" service
 // "suspend" endpoint HTTP response body for the "unauthorized" error.
 type SuspendUnauthorizedResponseBody struct {
@@ -1833,6 +2598,53 @@ type AgentPermissionsResponseBody struct {
 	Transfer *bool `form:"transfer,omitempty" json:"transfer,omitempty" xml:"transfer,omitempty"`
 }
 
+// AgentPolicyGrantResponse is used to define fields on response body types.
+type AgentPolicyGrantResponse struct {
+	ID        *string                      `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Scope     *string                      `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Effect    *string                      `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector  *AgentPolicySelectorResponse `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+	CreatedAt *string                      `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string                      `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AgentPolicySelectorResponse is used to define fields on response body types.
+type AgentPolicySelectorResponse struct {
+	// The kind of resource this selector targets.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	// Specific tool name filter (MCP scopes only).
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
+// AgentPolicySelectorResponseBody is used to define fields on response body
+// types.
+type AgentPolicySelectorResponseBody struct {
+	// The kind of resource this selector targets.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	// Specific tool name filter (MCP scopes only).
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
 // NewCreateRequestBody builds the HTTP request body from the payload of the
 // "create" endpoint of the "agents" service.
 func NewCreateRequestBody(p *agents.CreatePayload) *CreateRequestBody {
@@ -1869,6 +2681,16 @@ func NewReassignRequestBody(p *agents.ReassignPayload) *ReassignRequestBody {
 	body := &ReassignRequestBody{
 		AgentID:     p.AgentID,
 		OwnerUserID: p.OwnerUserID,
+	}
+	return body
+}
+
+// NewDeletePolicyGrantRequestBody builds the HTTP request body from the
+// payload of the "deletePolicyGrant" endpoint of the "agents" service.
+func NewDeletePolicyGrantRequestBody(p *agents.DeletePolicyGrantPayload) *DeletePolicyGrantRequestBody {
+	body := &DeletePolicyGrantRequestBody{
+		GrantID: p.GrantID,
+		AgentID: p.AgentID,
 	}
 	return body
 }
@@ -2715,6 +3537,651 @@ func NewReassignUnexpected(body *ReassignUnexpectedResponseBody) *goa.ServiceErr
 // NewReassignGatewayError builds a agents service reassign endpoint
 // gateway_error error.
 func NewReassignGatewayError(body *ReassignGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsAgentPolicyGrantOK builds a "agents" service
+// "listPolicyGrants" endpoint result from a HTTP "OK" response.
+func NewListPolicyGrantsAgentPolicyGrantOK(body []*AgentPolicyGrantResponse) []*agents.AgentPolicyGrant {
+	v := make([]*agents.AgentPolicyGrant, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant(val)
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsUnauthorized builds a agents service listPolicyGrants
+// endpoint unauthorized error.
+func NewListPolicyGrantsUnauthorized(body *ListPolicyGrantsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsForbidden builds a agents service listPolicyGrants
+// endpoint forbidden error.
+func NewListPolicyGrantsForbidden(body *ListPolicyGrantsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsBadRequest builds a agents service listPolicyGrants
+// endpoint bad_request error.
+func NewListPolicyGrantsBadRequest(body *ListPolicyGrantsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsNotFound builds a agents service listPolicyGrants
+// endpoint not_found error.
+func NewListPolicyGrantsNotFound(body *ListPolicyGrantsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsConflict builds a agents service listPolicyGrants
+// endpoint conflict error.
+func NewListPolicyGrantsConflict(body *ListPolicyGrantsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsUnsupportedMedia builds a agents service listPolicyGrants
+// endpoint unsupported_media error.
+func NewListPolicyGrantsUnsupportedMedia(body *ListPolicyGrantsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsInvalid builds a agents service listPolicyGrants endpoint
+// invalid error.
+func NewListPolicyGrantsInvalid(body *ListPolicyGrantsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsInvariantViolation builds a agents service
+// listPolicyGrants endpoint invariant_violation error.
+func NewListPolicyGrantsInvariantViolation(body *ListPolicyGrantsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsUnexpected builds a agents service listPolicyGrants
+// endpoint unexpected error.
+func NewListPolicyGrantsUnexpected(body *ListPolicyGrantsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPolicyGrantsGatewayError builds a agents service listPolicyGrants
+// endpoint gateway_error error.
+func NewListPolicyGrantsGatewayError(body *ListPolicyGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantAgentPolicyGrantCreated builds a "agents" service
+// "createPolicyGrant" endpoint result from a HTTP "Created" response.
+func NewCreatePolicyGrantAgentPolicyGrantCreated(body *CreatePolicyGrantResponseBody) *agents.AgentPolicyGrant {
+	v := &agents.AgentPolicyGrant{
+		ID:        *body.ID,
+		Scope:     *body.Scope,
+		Effect:    *body.Effect,
+		CreatedAt: *body.CreatedAt,
+		UpdatedAt: *body.UpdatedAt,
+	}
+	v.Selector = unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(body.Selector)
+
+	return v
+}
+
+// NewCreatePolicyGrantUnauthorized builds a agents service createPolicyGrant
+// endpoint unauthorized error.
+func NewCreatePolicyGrantUnauthorized(body *CreatePolicyGrantUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantForbidden builds a agents service createPolicyGrant
+// endpoint forbidden error.
+func NewCreatePolicyGrantForbidden(body *CreatePolicyGrantForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantBadRequest builds a agents service createPolicyGrant
+// endpoint bad_request error.
+func NewCreatePolicyGrantBadRequest(body *CreatePolicyGrantBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantNotFound builds a agents service createPolicyGrant
+// endpoint not_found error.
+func NewCreatePolicyGrantNotFound(body *CreatePolicyGrantNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantConflict builds a agents service createPolicyGrant
+// endpoint conflict error.
+func NewCreatePolicyGrantConflict(body *CreatePolicyGrantConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantUnsupportedMedia builds a agents service
+// createPolicyGrant endpoint unsupported_media error.
+func NewCreatePolicyGrantUnsupportedMedia(body *CreatePolicyGrantUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantInvalid builds a agents service createPolicyGrant
+// endpoint invalid error.
+func NewCreatePolicyGrantInvalid(body *CreatePolicyGrantInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantInvariantViolation builds a agents service
+// createPolicyGrant endpoint invariant_violation error.
+func NewCreatePolicyGrantInvariantViolation(body *CreatePolicyGrantInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantUnexpected builds a agents service createPolicyGrant
+// endpoint unexpected error.
+func NewCreatePolicyGrantUnexpected(body *CreatePolicyGrantUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreatePolicyGrantGatewayError builds a agents service createPolicyGrant
+// endpoint gateway_error error.
+func NewCreatePolicyGrantGatewayError(body *CreatePolicyGrantGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantAgentPolicyGrantOK builds a "agents" service
+// "updatePolicyGrant" endpoint result from a HTTP "OK" response.
+func NewUpdatePolicyGrantAgentPolicyGrantOK(body *UpdatePolicyGrantResponseBody) *agents.AgentPolicyGrant {
+	v := &agents.AgentPolicyGrant{
+		ID:        *body.ID,
+		Scope:     *body.Scope,
+		Effect:    *body.Effect,
+		CreatedAt: *body.CreatedAt,
+		UpdatedAt: *body.UpdatedAt,
+	}
+	v.Selector = unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(body.Selector)
+
+	return v
+}
+
+// NewUpdatePolicyGrantUnauthorized builds a agents service updatePolicyGrant
+// endpoint unauthorized error.
+func NewUpdatePolicyGrantUnauthorized(body *UpdatePolicyGrantUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantForbidden builds a agents service updatePolicyGrant
+// endpoint forbidden error.
+func NewUpdatePolicyGrantForbidden(body *UpdatePolicyGrantForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantBadRequest builds a agents service updatePolicyGrant
+// endpoint bad_request error.
+func NewUpdatePolicyGrantBadRequest(body *UpdatePolicyGrantBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantNotFound builds a agents service updatePolicyGrant
+// endpoint not_found error.
+func NewUpdatePolicyGrantNotFound(body *UpdatePolicyGrantNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantConflict builds a agents service updatePolicyGrant
+// endpoint conflict error.
+func NewUpdatePolicyGrantConflict(body *UpdatePolicyGrantConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantUnsupportedMedia builds a agents service
+// updatePolicyGrant endpoint unsupported_media error.
+func NewUpdatePolicyGrantUnsupportedMedia(body *UpdatePolicyGrantUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantInvalid builds a agents service updatePolicyGrant
+// endpoint invalid error.
+func NewUpdatePolicyGrantInvalid(body *UpdatePolicyGrantInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantInvariantViolation builds a agents service
+// updatePolicyGrant endpoint invariant_violation error.
+func NewUpdatePolicyGrantInvariantViolation(body *UpdatePolicyGrantInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantUnexpected builds a agents service updatePolicyGrant
+// endpoint unexpected error.
+func NewUpdatePolicyGrantUnexpected(body *UpdatePolicyGrantUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePolicyGrantGatewayError builds a agents service updatePolicyGrant
+// endpoint gateway_error error.
+func NewUpdatePolicyGrantGatewayError(body *UpdatePolicyGrantGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantUnauthorized builds a agents service deletePolicyGrant
+// endpoint unauthorized error.
+func NewDeletePolicyGrantUnauthorized(body *DeletePolicyGrantUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantForbidden builds a agents service deletePolicyGrant
+// endpoint forbidden error.
+func NewDeletePolicyGrantForbidden(body *DeletePolicyGrantForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantBadRequest builds a agents service deletePolicyGrant
+// endpoint bad_request error.
+func NewDeletePolicyGrantBadRequest(body *DeletePolicyGrantBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantNotFound builds a agents service deletePolicyGrant
+// endpoint not_found error.
+func NewDeletePolicyGrantNotFound(body *DeletePolicyGrantNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantConflict builds a agents service deletePolicyGrant
+// endpoint conflict error.
+func NewDeletePolicyGrantConflict(body *DeletePolicyGrantConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantUnsupportedMedia builds a agents service
+// deletePolicyGrant endpoint unsupported_media error.
+func NewDeletePolicyGrantUnsupportedMedia(body *DeletePolicyGrantUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantInvalid builds a agents service deletePolicyGrant
+// endpoint invalid error.
+func NewDeletePolicyGrantInvalid(body *DeletePolicyGrantInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantInvariantViolation builds a agents service
+// deletePolicyGrant endpoint invariant_violation error.
+func NewDeletePolicyGrantInvariantViolation(body *DeletePolicyGrantInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantUnexpected builds a agents service deletePolicyGrant
+// endpoint unexpected error.
+func NewDeletePolicyGrantUnexpected(body *DeletePolicyGrantUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePolicyGrantGatewayError builds a agents service deletePolicyGrant
+// endpoint gateway_error error.
+func NewDeletePolicyGrantGatewayError(body *DeletePolicyGrantGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3592,6 +5059,92 @@ func ValidateReassignResponseBody(body *ReassignResponseBody) (err error) {
 	}
 	if body.Permissions != nil {
 		if err2 := ValidateAgentPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantResponseBody runs the validations defined on
+// CreatePolicyGrantResponseBody
+func ValidateCreatePolicyGrantResponseBody(body *CreatePolicyGrantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorResponseBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantResponseBody runs the validations defined on
+// UpdatePolicyGrantResponseBody
+func ValidateUpdatePolicyGrantResponseBody(body *UpdatePolicyGrantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorResponseBody(body.Selector); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4949,6 +6502,966 @@ func ValidateReassignGatewayErrorResponseBody(body *ReassignGatewayErrorResponse
 	return
 }
 
+// ValidateListPolicyGrantsUnauthorizedResponseBody runs the validations
+// defined on listPolicyGrants_unauthorized_response_body
+func ValidateListPolicyGrantsUnauthorizedResponseBody(body *ListPolicyGrantsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsForbiddenResponseBody runs the validations defined
+// on listPolicyGrants_forbidden_response_body
+func ValidateListPolicyGrantsForbiddenResponseBody(body *ListPolicyGrantsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsBadRequestResponseBody runs the validations defined
+// on listPolicyGrants_bad_request_response_body
+func ValidateListPolicyGrantsBadRequestResponseBody(body *ListPolicyGrantsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsNotFoundResponseBody runs the validations defined on
+// listPolicyGrants_not_found_response_body
+func ValidateListPolicyGrantsNotFoundResponseBody(body *ListPolicyGrantsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsConflictResponseBody runs the validations defined on
+// listPolicyGrants_conflict_response_body
+func ValidateListPolicyGrantsConflictResponseBody(body *ListPolicyGrantsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsUnsupportedMediaResponseBody runs the validations
+// defined on listPolicyGrants_unsupported_media_response_body
+func ValidateListPolicyGrantsUnsupportedMediaResponseBody(body *ListPolicyGrantsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsInvalidResponseBody runs the validations defined on
+// listPolicyGrants_invalid_response_body
+func ValidateListPolicyGrantsInvalidResponseBody(body *ListPolicyGrantsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsInvariantViolationResponseBody runs the validations
+// defined on listPolicyGrants_invariant_violation_response_body
+func ValidateListPolicyGrantsInvariantViolationResponseBody(body *ListPolicyGrantsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsUnexpectedResponseBody runs the validations defined
+// on listPolicyGrants_unexpected_response_body
+func ValidateListPolicyGrantsUnexpectedResponseBody(body *ListPolicyGrantsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPolicyGrantsGatewayErrorResponseBody runs the validations
+// defined on listPolicyGrants_gateway_error_response_body
+func ValidateListPolicyGrantsGatewayErrorResponseBody(body *ListPolicyGrantsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantUnauthorizedResponseBody runs the validations
+// defined on createPolicyGrant_unauthorized_response_body
+func ValidateCreatePolicyGrantUnauthorizedResponseBody(body *CreatePolicyGrantUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantForbiddenResponseBody runs the validations defined
+// on createPolicyGrant_forbidden_response_body
+func ValidateCreatePolicyGrantForbiddenResponseBody(body *CreatePolicyGrantForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantBadRequestResponseBody runs the validations defined
+// on createPolicyGrant_bad_request_response_body
+func ValidateCreatePolicyGrantBadRequestResponseBody(body *CreatePolicyGrantBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantNotFoundResponseBody runs the validations defined
+// on createPolicyGrant_not_found_response_body
+func ValidateCreatePolicyGrantNotFoundResponseBody(body *CreatePolicyGrantNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantConflictResponseBody runs the validations defined
+// on createPolicyGrant_conflict_response_body
+func ValidateCreatePolicyGrantConflictResponseBody(body *CreatePolicyGrantConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantUnsupportedMediaResponseBody runs the validations
+// defined on createPolicyGrant_unsupported_media_response_body
+func ValidateCreatePolicyGrantUnsupportedMediaResponseBody(body *CreatePolicyGrantUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantInvalidResponseBody runs the validations defined on
+// createPolicyGrant_invalid_response_body
+func ValidateCreatePolicyGrantInvalidResponseBody(body *CreatePolicyGrantInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantInvariantViolationResponseBody runs the validations
+// defined on createPolicyGrant_invariant_violation_response_body
+func ValidateCreatePolicyGrantInvariantViolationResponseBody(body *CreatePolicyGrantInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantUnexpectedResponseBody runs the validations defined
+// on createPolicyGrant_unexpected_response_body
+func ValidateCreatePolicyGrantUnexpectedResponseBody(body *CreatePolicyGrantUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePolicyGrantGatewayErrorResponseBody runs the validations
+// defined on createPolicyGrant_gateway_error_response_body
+func ValidateCreatePolicyGrantGatewayErrorResponseBody(body *CreatePolicyGrantGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantUnauthorizedResponseBody runs the validations
+// defined on updatePolicyGrant_unauthorized_response_body
+func ValidateUpdatePolicyGrantUnauthorizedResponseBody(body *UpdatePolicyGrantUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantForbiddenResponseBody runs the validations defined
+// on updatePolicyGrant_forbidden_response_body
+func ValidateUpdatePolicyGrantForbiddenResponseBody(body *UpdatePolicyGrantForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantBadRequestResponseBody runs the validations defined
+// on updatePolicyGrant_bad_request_response_body
+func ValidateUpdatePolicyGrantBadRequestResponseBody(body *UpdatePolicyGrantBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantNotFoundResponseBody runs the validations defined
+// on updatePolicyGrant_not_found_response_body
+func ValidateUpdatePolicyGrantNotFoundResponseBody(body *UpdatePolicyGrantNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantConflictResponseBody runs the validations defined
+// on updatePolicyGrant_conflict_response_body
+func ValidateUpdatePolicyGrantConflictResponseBody(body *UpdatePolicyGrantConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantUnsupportedMediaResponseBody runs the validations
+// defined on updatePolicyGrant_unsupported_media_response_body
+func ValidateUpdatePolicyGrantUnsupportedMediaResponseBody(body *UpdatePolicyGrantUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantInvalidResponseBody runs the validations defined on
+// updatePolicyGrant_invalid_response_body
+func ValidateUpdatePolicyGrantInvalidResponseBody(body *UpdatePolicyGrantInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantInvariantViolationResponseBody runs the validations
+// defined on updatePolicyGrant_invariant_violation_response_body
+func ValidateUpdatePolicyGrantInvariantViolationResponseBody(body *UpdatePolicyGrantInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantUnexpectedResponseBody runs the validations defined
+// on updatePolicyGrant_unexpected_response_body
+func ValidateUpdatePolicyGrantUnexpectedResponseBody(body *UpdatePolicyGrantUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantGatewayErrorResponseBody runs the validations
+// defined on updatePolicyGrant_gateway_error_response_body
+func ValidateUpdatePolicyGrantGatewayErrorResponseBody(body *UpdatePolicyGrantGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantUnauthorizedResponseBody runs the validations
+// defined on deletePolicyGrant_unauthorized_response_body
+func ValidateDeletePolicyGrantUnauthorizedResponseBody(body *DeletePolicyGrantUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantForbiddenResponseBody runs the validations defined
+// on deletePolicyGrant_forbidden_response_body
+func ValidateDeletePolicyGrantForbiddenResponseBody(body *DeletePolicyGrantForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantBadRequestResponseBody runs the validations defined
+// on deletePolicyGrant_bad_request_response_body
+func ValidateDeletePolicyGrantBadRequestResponseBody(body *DeletePolicyGrantBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantNotFoundResponseBody runs the validations defined
+// on deletePolicyGrant_not_found_response_body
+func ValidateDeletePolicyGrantNotFoundResponseBody(body *DeletePolicyGrantNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantConflictResponseBody runs the validations defined
+// on deletePolicyGrant_conflict_response_body
+func ValidateDeletePolicyGrantConflictResponseBody(body *DeletePolicyGrantConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantUnsupportedMediaResponseBody runs the validations
+// defined on deletePolicyGrant_unsupported_media_response_body
+func ValidateDeletePolicyGrantUnsupportedMediaResponseBody(body *DeletePolicyGrantUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantInvalidResponseBody runs the validations defined on
+// deletePolicyGrant_invalid_response_body
+func ValidateDeletePolicyGrantInvalidResponseBody(body *DeletePolicyGrantInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantInvariantViolationResponseBody runs the validations
+// defined on deletePolicyGrant_invariant_violation_response_body
+func ValidateDeletePolicyGrantInvariantViolationResponseBody(body *DeletePolicyGrantInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantUnexpectedResponseBody runs the validations defined
+// on deletePolicyGrant_unexpected_response_body
+func ValidateDeletePolicyGrantUnexpectedResponseBody(body *DeletePolicyGrantUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePolicyGrantGatewayErrorResponseBody runs the validations
+// defined on deletePolicyGrant_gateway_error_response_body
+func ValidateDeletePolicyGrantGatewayErrorResponseBody(body *DeletePolicyGrantGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSuspendUnauthorizedResponseBody runs the validations defined on
 // suspend_unauthorized_response_body
 func ValidateSuspendUnauthorizedResponseBody(body *SuspendUnauthorizedResponseBody) (err error) {
@@ -5923,6 +8436,99 @@ func ValidateAgentPermissionsResponseBody(body *AgentPermissionsResponseBody) (e
 	}
 	if body.Transfer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("transfer", "body"))
+	}
+	return
+}
+
+// ValidateAgentPolicyGrantResponse runs the validations defined on
+// AgentPolicyGrantResponse
+func ValidateAgentPolicyGrantResponse(body *AgentPolicyGrantResponse) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorResponse(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAgentPolicySelectorResponse runs the validations defined on
+// AgentPolicySelectorResponse
+func ValidateAgentPolicySelectorResponse(body *AgentPolicySelectorResponse) (err error) {
+	if body.ResourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_kind", "body"))
+	}
+	if body.ResourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
+	}
+	if body.ResourceKind != nil {
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+		}
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateAgentPolicySelectorResponseBody runs the validations defined on
+// AgentPolicySelectorResponseBody
+func ValidateAgentPolicySelectorResponseBody(body *AgentPolicySelectorResponseBody) (err error) {
+	if body.ResourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_kind", "body"))
+	}
+	if body.ResourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
+	}
+	if body.ResourceKind != nil {
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+		}
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
 	}
 	return
 }

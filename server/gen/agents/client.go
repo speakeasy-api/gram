@@ -15,29 +15,37 @@ import (
 
 // Client is the "agents" service client.
 type Client struct {
-	CreateEndpoint   goa.Endpoint
-	GetEndpoint      goa.Endpoint
-	RenameEndpoint   goa.Endpoint
-	TransferEndpoint goa.Endpoint
-	ReassignEndpoint goa.Endpoint
-	SuspendEndpoint  goa.Endpoint
-	ResumeEndpoint   goa.Endpoint
-	RevokeEndpoint   goa.Endpoint
-	DeleteEndpoint   goa.Endpoint
+	CreateEndpoint            goa.Endpoint
+	GetEndpoint               goa.Endpoint
+	RenameEndpoint            goa.Endpoint
+	TransferEndpoint          goa.Endpoint
+	ReassignEndpoint          goa.Endpoint
+	ListPolicyGrantsEndpoint  goa.Endpoint
+	CreatePolicyGrantEndpoint goa.Endpoint
+	UpdatePolicyGrantEndpoint goa.Endpoint
+	DeletePolicyGrantEndpoint goa.Endpoint
+	SuspendEndpoint           goa.Endpoint
+	ResumeEndpoint            goa.Endpoint
+	RevokeEndpoint            goa.Endpoint
+	DeleteEndpoint            goa.Endpoint
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(create, get, rename, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(create, get, rename, transfer, reassign, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:   create,
-		GetEndpoint:      get,
-		RenameEndpoint:   rename,
-		TransferEndpoint: transfer,
-		ReassignEndpoint: reassign,
-		SuspendEndpoint:  suspend,
-		ResumeEndpoint:   resume,
-		RevokeEndpoint:   revoke,
-		DeleteEndpoint:   delete_,
+		CreateEndpoint:            create,
+		GetEndpoint:               get,
+		RenameEndpoint:            rename,
+		TransferEndpoint:          transfer,
+		ReassignEndpoint:          reassign,
+		ListPolicyGrantsEndpoint:  listPolicyGrants,
+		CreatePolicyGrantEndpoint: createPolicyGrant,
+		UpdatePolicyGrantEndpoint: updatePolicyGrant,
+		DeletePolicyGrantEndpoint: deletePolicyGrant,
+		SuspendEndpoint:           suspend,
+		ResumeEndpoint:            resume,
+		RevokeEndpoint:            revoke,
+		DeleteEndpoint:            delete_,
 	}
 }
 
@@ -149,6 +157,94 @@ func (c *Client) Reassign(ctx context.Context, p *ReassignPayload) (res *Managed
 		return
 	}
 	return ires.(*ManagedAgent), nil
+}
+
+// ListPolicyGrants calls the "listPolicyGrants" endpoint of the "agents"
+// service.
+// ListPolicyGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPolicyGrants(ctx context.Context, p *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error) {
+	var ires any
+	ires, err = c.ListPolicyGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*AgentPolicyGrant), nil
+}
+
+// CreatePolicyGrant calls the "createPolicyGrant" endpoint of the "agents"
+// service.
+// CreatePolicyGrant may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreatePolicyGrant(ctx context.Context, p *CreatePolicyGrantPayload) (res *AgentPolicyGrant, err error) {
+	var ires any
+	ires, err = c.CreatePolicyGrantEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentPolicyGrant), nil
+}
+
+// UpdatePolicyGrant calls the "updatePolicyGrant" endpoint of the "agents"
+// service.
+// UpdatePolicyGrant may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdatePolicyGrant(ctx context.Context, p *UpdatePolicyGrantPayload) (res *AgentPolicyGrant, err error) {
+	var ires any
+	ires, err = c.UpdatePolicyGrantEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentPolicyGrant), nil
+}
+
+// DeletePolicyGrant calls the "deletePolicyGrant" endpoint of the "agents"
+// service.
+// DeletePolicyGrant may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeletePolicyGrant(ctx context.Context, p *DeletePolicyGrantPayload) (err error) {
+	_, err = c.DeletePolicyGrantEndpoint(ctx, p)
+	return
 }
 
 // Suspend calls the "suspend" endpoint of the "agents" service.

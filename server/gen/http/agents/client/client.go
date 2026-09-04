@@ -34,6 +34,22 @@ type Client struct {
 	// endpoint.
 	ReassignDoer goahttp.Doer
 
+	// ListPolicyGrants Doer is the HTTP client used to make requests to the
+	// listPolicyGrants endpoint.
+	ListPolicyGrantsDoer goahttp.Doer
+
+	// CreatePolicyGrant Doer is the HTTP client used to make requests to the
+	// createPolicyGrant endpoint.
+	CreatePolicyGrantDoer goahttp.Doer
+
+	// UpdatePolicyGrant Doer is the HTTP client used to make requests to the
+	// updatePolicyGrant endpoint.
+	UpdatePolicyGrantDoer goahttp.Doer
+
+	// DeletePolicyGrant Doer is the HTTP client used to make requests to the
+	// deletePolicyGrant endpoint.
+	DeletePolicyGrantDoer goahttp.Doer
+
 	// Suspend Doer is the HTTP client used to make requests to the suspend
 	// endpoint.
 	SuspendDoer goahttp.Doer
@@ -67,20 +83,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:          doer,
-		GetDoer:             doer,
-		RenameDoer:          doer,
-		TransferDoer:        doer,
-		ReassignDoer:        doer,
-		SuspendDoer:         doer,
-		ResumeDoer:          doer,
-		RevokeDoer:          doer,
-		DeleteDoer:          doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateDoer:            doer,
+		GetDoer:               doer,
+		RenameDoer:            doer,
+		TransferDoer:          doer,
+		ReassignDoer:          doer,
+		ListPolicyGrantsDoer:  doer,
+		CreatePolicyGrantDoer: doer,
+		UpdatePolicyGrantDoer: doer,
+		DeletePolicyGrantDoer: doer,
+		SuspendDoer:           doer,
+		ResumeDoer:            doer,
+		RevokeDoer:            doer,
+		DeleteDoer:            doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -199,6 +219,102 @@ func (c *Client) Reassign() goa.Endpoint {
 		resp, err := c.ReassignDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "reassign", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPolicyGrants returns an endpoint that makes HTTP requests to the agents
+// service listPolicyGrants server.
+func (c *Client) ListPolicyGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPolicyGrantsRequest(c.encoder)
+		decodeResponse = DecodeListPolicyGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPolicyGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPolicyGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listPolicyGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreatePolicyGrant returns an endpoint that makes HTTP requests to the agents
+// service createPolicyGrant server.
+func (c *Client) CreatePolicyGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreatePolicyGrantRequest(c.encoder)
+		decodeResponse = DecodeCreatePolicyGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreatePolicyGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreatePolicyGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "createPolicyGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdatePolicyGrant returns an endpoint that makes HTTP requests to the agents
+// service updatePolicyGrant server.
+func (c *Client) UpdatePolicyGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdatePolicyGrantRequest(c.encoder)
+		decodeResponse = DecodeUpdatePolicyGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdatePolicyGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdatePolicyGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "updatePolicyGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeletePolicyGrant returns an endpoint that makes HTTP requests to the agents
+// service deletePolicyGrant server.
+func (c *Client) DeletePolicyGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeletePolicyGrantRequest(c.encoder)
+		decodeResponse = DecodeDeletePolicyGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeletePolicyGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeletePolicyGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "deletePolicyGrant", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -17,6 +17,9 @@ export const AUDIT_ACTIONS = [
   "agent:delete",
   "agent:owner_loss",
   "agent:reassign",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
   "agent:rename",
   "agent:resume",
   "agent:revoke",
@@ -275,6 +278,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "recorded owner loss for agent";
     case "agent:reassign":
       return "reassigned agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
     case "agent:rename":
       return "renamed agent";
     case "agent:resume":

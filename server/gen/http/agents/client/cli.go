@@ -172,6 +172,119 @@ func BuildReassignPayload(agentsReassignBody string, agentsReassignSessionToken 
 	return v, nil
 }
 
+// BuildListPolicyGrantsPayload builds the payload for the agents
+// listPolicyGrants endpoint from CLI flags.
+func BuildListPolicyGrantsPayload(agentsListPolicyGrantsAgentID string, agentsListPolicyGrantsSessionToken string) (*agents.ListPolicyGrantsPayload, error) {
+	var err error
+	var agentID string
+	{
+		agentID = agentsListPolicyGrantsAgentID
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListPolicyGrantsSessionToken != "" {
+			sessionToken = &agentsListPolicyGrantsSessionToken
+		}
+	}
+	v := &agents.ListPolicyGrantsPayload{}
+	v.AgentID = agentID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreatePolicyGrantPayload builds the payload for the agents
+// createPolicyGrant endpoint from CLI flags.
+func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCreatePolicyGrantSessionToken string) (*agents.CreatePolicyGrantPayload, error) {
+	var err error
+	var body struct {
+		AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+		Scope    *string `form:"scope" json:"scope" xml:"scope"`
+		Effect   *string `form:"effect" json:"effect" xml:"effect"`
+		Selector *string `form:"selector" json:"selector" xml:"selector"`
+	}
+	{
+		err = json.Unmarshal([]byte(agentsCreatePolicyGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsCreatePolicyGrantSessionToken != "" {
+			sessionToken = &agentsCreatePolicyGrantSessionToken
+		}
+	}
+	v := &agents.CreatePolicyGrantPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdatePolicyGrantPayload builds the payload for the agents
+// updatePolicyGrant endpoint from CLI flags.
+func BuildUpdatePolicyGrantPayload(agentsUpdatePolicyGrantBody string, agentsUpdatePolicyGrantSessionToken string) (*agents.UpdatePolicyGrantPayload, error) {
+	var err error
+	var body struct {
+		AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+		GrantID  *string `form:"grant_id" json:"grant_id" xml:"grant_id"`
+		Scope    *string `form:"scope" json:"scope" xml:"scope"`
+		Effect   *string `form:"effect" json:"effect" xml:"effect"`
+		Selector *string `form:"selector" json:"selector" xml:"selector"`
+	}
+	{
+		err = json.Unmarshal([]byte(agentsUpdatePolicyGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"grant_id\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsUpdatePolicyGrantSessionToken != "" {
+			sessionToken = &agentsUpdatePolicyGrantSessionToken
+		}
+	}
+	v := &agents.UpdatePolicyGrantPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeletePolicyGrantPayload builds the payload for the agents
+// deletePolicyGrant endpoint from CLI flags.
+func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDeletePolicyGrantSessionToken string) (*agents.DeletePolicyGrantPayload, error) {
+	var err error
+	var body DeletePolicyGrantRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsDeletePolicyGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", body.GrantID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsDeletePolicyGrantSessionToken != "" {
+			sessionToken = &agentsDeletePolicyGrantSessionToken
+		}
+	}
+	v := &agents.DeletePolicyGrantPayload{
+		GrantID: body.GrantID,
+		AgentID: body.AgentID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSuspendPayload builds the payload for the agents suspend endpoint from
 // CLI flags.
 func BuildSuspendPayload(agentsSuspendBody string, agentsSuspendSessionToken string) (*agents.SuspendPayload, error) {
