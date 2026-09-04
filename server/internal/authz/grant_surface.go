@@ -13,6 +13,7 @@ const (
 	GrantSurfaceRiskPolicy GrantSurface = "risk_policy"
 )
 
+//nolint:exhaustive // Retired scope tombstones intentionally have no writable grant surface.
 var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeRoot:                    GrantSurfaceAccess,
 	ScopeOrgRead:                 GrantSurfaceAccess,
@@ -42,6 +43,10 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeRiskPolicyBlock:         GrantSurfaceRiskPolicy,
 	ScopeChatRead:                GrantSurfaceAccess,
 	ScopeChatWrite:               GrantSurfaceAccess,
+	ScopeAgentRead:               GrantSurfaceAccess,
+	ScopeAgentWrite:              GrantSurfaceAccess,
+	ScopeAgentAuthorize:          GrantSurfaceAccess,
+	ScopeAgentTransfer:           GrantSurfaceAccess,
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.

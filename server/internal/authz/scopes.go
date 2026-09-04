@@ -2,6 +2,7 @@ package authz
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -43,6 +44,17 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeAgentRead               Scope = "agent:read"
+	ScopeAgentWrite              Scope = "agent:write"
+	ScopeAgentAuthorize          Scope = "agent:authorize"
+	ScopeAgentTransfer           Scope = "agent:transfer"
+)
+
+// Retired scope names remain registered as tombstones so stored delegated
+// policy can still be parsed and displayed. Retired names must never be reused.
+const (
+	scopeMCPApprovalReadTombstone   Scope = "mcp_approval:read"
+	scopeMCPApprovalDecideTombstone Scope = "mcp_approval:decide"
 )
 
 type scopeVisibility int
@@ -69,6 +81,10 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAgentRead,
+	ScopeAgentWrite,
+	ScopeAgentAuthorize,
+	ScopeAgentTransfer,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -80,38 +96,92 @@ var adminScopes = []Scope{
 	// alone.
 }
 
-// scopeVisibilityByScope is the source of truth for whether a scope is exposed
-// to clients as a first-class permission or only used internally for storage
-// and evaluation.
-var scopeVisibilityByScope = map[Scope]scopeVisibility{
-	ScopeRoot:                    scopeVisibilityInternal,
-	ScopeOrgRead:                 scopeVisibilityUserVisible,
-	ScopeOrgBlockedRead:          scopeVisibilityInternal,
-	ScopeOrgAdmin:                scopeVisibilityUserVisible,
-	ScopeOrgBlockedAdmin:         scopeVisibilityInternal,
-	ScopeProjectRead:             scopeVisibilityUserVisible,
-	ScopeProjectBlockedRead:      scopeVisibilityInternal,
-	ScopeProjectWrite:            scopeVisibilityUserVisible,
-	ScopeProjectBlockedWrite:     scopeVisibilityInternal,
-	ScopeMCPRead:                 scopeVisibilityUserVisible,
-	ScopeMCPBlockedRead:          scopeVisibilityInternal,
-	ScopeMCPWrite:                scopeVisibilityUserVisible,
-	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
-	ScopeMCPConnect:              scopeVisibilityUserVisible,
-	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
-	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
-	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
-	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
-	ScopeEnvironmentBlockedWrite: scopeVisibilityInternal,
-	ScopeSkillRead:               scopeVisibilityUserVisible,
-	ScopeSkillBlockedRead:        scopeVisibilityInternal,
-	ScopeSkillWrite:              scopeVisibilityUserVisible,
-	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
-	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
-	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
-	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
-	ScopeChatRead:                scopeVisibilityUserVisible,
-	ScopeChatWrite:               scopeVisibilityUserVisible,
+// AgentRuntimeScopeRegistryVersion identifies an immutable version of the
+// application-owned allowlist used by agent direct and delegated policy.
+type AgentRuntimeScopeRegistryVersion int
+
+const (
+	AgentRuntimeScopeRegistryVersion1 AgentRuntimeScopeRegistryVersion = 1
+
+	CurrentAgentRuntimeScopeRegistryVersion = AgentRuntimeScopeRegistryVersion1
+)
+
+// ScopeLifecycle distinguishes active scope registrations from retained
+// retirement tombstones.
+type ScopeLifecycle string
+
+const (
+	ScopeLifecycleActive  ScopeLifecycle = "active"
+	ScopeLifecycleRetired ScopeLifecycle = "retired"
+)
+
+type scopeDefinition struct {
+	visibility            scopeVisibility
+	lifecycle             ScopeLifecycle
+	agentRuntimeSafeSince AgentRuntimeScopeRegistryVersion
+}
+
+func activeScope(visibility scopeVisibility) scopeDefinition {
+	return scopeDefinition{
+		visibility:            visibility,
+		lifecycle:             ScopeLifecycleActive,
+		agentRuntimeSafeSince: 0,
+	}
+}
+
+func retiredScope() scopeDefinition {
+	return scopeDefinition{
+		visibility:            0,
+		lifecycle:             ScopeLifecycleRetired,
+		agentRuntimeSafeSince: 0,
+	}
+}
+
+func agentSafeScope(visibility scopeVisibility) scopeDefinition {
+	return scopeDefinition{
+		visibility:            visibility,
+		lifecycle:             ScopeLifecycleActive,
+		agentRuntimeSafeSince: AgentRuntimeScopeRegistryVersion1,
+	}
+}
+
+// scopeDefinitions is the application-owned scope registry. Every active scope
+// and every retained retirement tombstone must have an entry.
+var scopeDefinitions = map[Scope]scopeDefinition{
+	ScopeRoot:                       activeScope(scopeVisibilityInternal),
+	ScopeOrgRead:                    activeScope(scopeVisibilityUserVisible),
+	ScopeOrgBlockedRead:             activeScope(scopeVisibilityInternal),
+	ScopeOrgAdmin:                   activeScope(scopeVisibilityUserVisible),
+	ScopeOrgBlockedAdmin:            activeScope(scopeVisibilityInternal),
+	ScopeProjectRead:                agentSafeScope(scopeVisibilityUserVisible),
+	ScopeProjectBlockedRead:         activeScope(scopeVisibilityInternal),
+	ScopeProjectWrite:               agentSafeScope(scopeVisibilityUserVisible),
+	ScopeProjectBlockedWrite:        activeScope(scopeVisibilityInternal),
+	ScopeMCPRead:                    agentSafeScope(scopeVisibilityUserVisible),
+	ScopeMCPBlockedRead:             activeScope(scopeVisibilityInternal),
+	ScopeMCPWrite:                   agentSafeScope(scopeVisibilityUserVisible),
+	ScopeMCPBlockedWrite:            activeScope(scopeVisibilityInternal),
+	ScopeMCPConnect:                 agentSafeScope(scopeVisibilityUserVisible),
+	ScopeMCPBlockedConnect:          activeScope(scopeVisibilityInternal),
+	ScopeEnvironmentRead:            agentSafeScope(scopeVisibilityUserVisible),
+	ScopeEnvironmentBlockedRead:     activeScope(scopeVisibilityInternal),
+	ScopeEnvironmentWrite:           agentSafeScope(scopeVisibilityUserVisible),
+	ScopeEnvironmentBlockedWrite:    activeScope(scopeVisibilityInternal),
+	ScopeSkillRead:                  agentSafeScope(scopeVisibilityUserVisible),
+	ScopeSkillBlockedRead:           activeScope(scopeVisibilityInternal),
+	ScopeSkillWrite:                 agentSafeScope(scopeVisibilityUserVisible),
+	ScopeSkillBlockedWrite:          activeScope(scopeVisibilityInternal),
+	ScopeRiskPolicyEvaluate:         agentSafeScope(scopeVisibilityUserVisible),
+	ScopeRiskPolicyBypass:           activeScope(scopeVisibilityUserVisible),
+	ScopeRiskPolicyBlock:            activeScope(scopeVisibilityUserVisible),
+	ScopeChatRead:                   activeScope(scopeVisibilityUserVisible),
+	ScopeChatWrite:                  activeScope(scopeVisibilityUserVisible),
+	ScopeAgentRead:                  activeScope(scopeVisibilityUserVisible),
+	ScopeAgentWrite:                 activeScope(scopeVisibilityUserVisible),
+	ScopeAgentAuthorize:             activeScope(scopeVisibilityUserVisible),
+	ScopeAgentTransfer:              activeScope(scopeVisibilityUserVisible),
+	scopeMCPApprovalReadTombstone:   retiredScope(),
+	scopeMCPApprovalDecideTombstone: retiredScope(),
 }
 
 var memberScopes = []Scope{
@@ -139,12 +209,12 @@ func (s Scope) Parts() ScopeParts {
 }
 
 func ScopeVisibilityFor(scope Scope) (string, bool) {
-	visibility, ok := scopeVisibilityByScope[scope]
-	if !ok {
+	definition, ok := scopeDefinitions[scope]
+	if !ok || definition.lifecycle != ScopeLifecycleActive {
 		return "", false
 	}
 
-	switch visibility {
+	switch definition.visibility {
 	case scopeVisibilityUserVisible:
 		return ScopeVisibilityUserVisible, true
 	case scopeVisibilityInternal:
@@ -170,6 +240,8 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // Preserves qstearns' non-escalation rule: project:read does not grant environment access
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
+//
+//nolint:exhaustive // Retired scope tombstones intentionally have no authorization expansions.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -199,11 +271,17 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeAgentRead:               nil,
+	ScopeAgentWrite:              nil,
+	ScopeAgentAuthorize:          nil,
+	ScopeAgentTransfer:           nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
+//
+//nolint:exhaustive // Retired scope tombstones intentionally have no exclusion scopes.
 var scopeExclusions = map[Scope]Scope{
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
@@ -233,6 +311,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeAgentRead:               "",
+	ScopeAgentWrite:              "",
+	ScopeAgentAuthorize:          "",
+	ScopeAgentTransfer:           "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
@@ -251,11 +333,11 @@ var scopeSubScopes map[Scope][]Scope
 func init() {
 	scopeSubScopes = make(map[Scope][]Scope)
 	for lower, highers := range scopeExpansions {
-		if scopeVisibilityByScope[lower] != scopeVisibilityUserVisible {
+		if scopeDefinitions[lower].visibility != scopeVisibilityUserVisible {
 			continue
 		}
 		for _, h := range highers {
-			if scopeVisibilityByScope[h] != scopeVisibilityUserVisible {
+			if scopeDefinitions[h].visibility != scopeVisibilityUserVisible {
 				continue
 			}
 			scopeSubScopes[h] = append(scopeSubScopes[h], lower)
@@ -275,4 +357,72 @@ func CalculateSubScopes(scope Scope) []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// ScopeLifecycleFor returns the lifecycle of a known active scope or retained
+// tombstone. Unknown scopes return false.
+func ScopeLifecycleFor(scope Scope) (ScopeLifecycle, bool) {
+	definition, ok := scopeDefinitions[scope]
+	if !ok {
+		return "", false
+	}
+	return definition.lifecycle, true
+}
+
+// AgentRuntimeScopeImplicationClosure returns the complete set of checks that a
+// grant for scope can satisfy, including scope itself.
+func AgentRuntimeScopeImplicationClosure(scope Scope) []Scope {
+	seen := make(map[Scope]struct{}, 1)
+	seen[scope] = struct{}{}
+	queue := []Scope{scope}
+	for len(queue) > 0 {
+		granted := queue[0]
+		queue = queue[1:]
+		for checked, satisfying := range scopeExpansions {
+			if !slices.Contains(satisfying, granted) {
+				continue
+			}
+			if _, ok := seen[checked]; ok {
+				continue
+			}
+			seen[checked] = struct{}{}
+			queue = append(queue, checked)
+		}
+	}
+
+	closure := make([]Scope, 0, len(seen))
+	for implied := range seen {
+		closure = append(closure, implied)
+	}
+	slices.Sort(closure)
+	return closure
+}
+
+// ValidateAgentRuntimeScope verifies that a scope and its complete implication
+// closure are active and explicitly safe in the requested registry version.
+func ValidateAgentRuntimeScope(version AgentRuntimeScopeRegistryVersion, scope Scope) error {
+	if version < AgentRuntimeScopeRegistryVersion1 || version > CurrentAgentRuntimeScopeRegistryVersion {
+		return fmt.Errorf("unsupported agent runtime scope registry version %d", version)
+	}
+
+	for _, implied := range AgentRuntimeScopeImplicationClosure(scope) {
+		definition, ok := scopeDefinitions[implied]
+		if !ok {
+			return fmt.Errorf("scope %q is not registered", implied)
+		}
+		if definition.lifecycle != ScopeLifecycleActive {
+			return fmt.Errorf("scope %q is retired", implied)
+		}
+		if definition.agentRuntimeSafeSince == 0 || definition.agentRuntimeSafeSince > version {
+			return fmt.Errorf("scope %q is not agent-runtime-safe", implied)
+		}
+	}
+
+	return nil
+}
+
+// IsAgentRuntimeScopeSafe reports whether the scope is valid for direct agent
+// policy or delegated credential policy in the requested registry version.
+func IsAgentRuntimeScopeSafe(version AgentRuntimeScopeRegistryVersion, scope Scope) bool {
+	return ValidateAgentRuntimeScope(version, scope) == nil
 }

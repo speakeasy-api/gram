@@ -29,6 +29,8 @@ import {
   ANNOTATION_TO_DISPOSITION,
   DISPOSITION_TO_ANNOTATION,
   isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+  unrestrictedResourceLabel,
 } from "./types";
 import { computePanelState } from "./computePanelState";
 import {
@@ -240,8 +242,6 @@ export function GrantRuleDrawerContent({
     return projects;
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const resourceKind = projectSelectable ? resourceType : "mcp";
-
   const filteredProjectList = useMemo(
     () =>
       resourceSearch
@@ -312,26 +312,17 @@ export function GrantRuleDrawerContent({
   );
 
   // Fixed-scope permissions have no resource picker — their granularity is
-  // baked into the scope definition. Org scopes are always org-wide;
-  // environment scopes apply to every environment in the project; chat:read is
-  // granted org-wide (members are scoped to their own sessions automatically on
-  // the server, so the role editor only offers the unrestricted "all sessions"
-  // grant that admins receive).
-  if (
-    resourceType === "org" ||
-    resourceType === "environment" ||
-    resourceType === "chat"
-  ) {
+  // baked into the scope definition. The role editor only offers unrestricted
+  // grants for these resources.
+  if (isUnrestrictedResourceType(resourceType)) {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center border bg-transparent px-2 py-1 text-xs">
-        {resourceType === "environment"
-          ? "All in project"
-          : resourceType === "chat"
-            ? "All sessions"
-            : "All"}
+        {unrestrictedResourceLabel(resourceType)}
       </span>
     );
   }
+
+  const resourceKind = projectSelectable ? resourceType : "mcp";
 
   // For MCP scopes, `id` is `Server.id`, which serverMerge.ts guarantees is
   // the id enforcement checks (toolset id for toolset-backed servers, the
