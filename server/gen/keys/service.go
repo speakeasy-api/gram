@@ -18,6 +18,9 @@ import (
 type Service interface {
 	// Create a new api key
 	CreateKey(context.Context, *CreateKeyPayload) (res *Key, err error)
+	// Rotate an API key. Agent-key rotation replaces immutable delegation and
+	// directly revokes the old row.
+	RotateKey(context.Context, *RotateKeyPayload) (res *Key, err error)
 	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
@@ -46,15 +49,60 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createKey", "listKeys", "revokeKey", "verifyKey"}
+var MethodNames = [5]string{"createKey", "rotateKey", "listKeys", "revokeKey", "verifyKey"}
+
+type AgentDelegatedGrant struct {
+	Scope    string
+	Selector *AgentPolicySelector
+}
+
+type AgentDelegatedPolicy struct {
+	Requested []*AgentDelegatedGrant
+	Effective []*AgentDelegatedGrant
+}
+
+type AgentPolicyGrantForm struct {
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
+// A constraint that narrows which resources an agent grant applies to.
+type AgentPolicySelector struct {
+	// The kind of resource this selector targets.
+	ResourceKind string
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string
+	// Specific tool name filter (MCP scopes only).
+	Tool *string
+	// Project filter (MCP scopes only).
+	ProjectID *string
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string
+}
 
 // CreateKeyPayload is the payload type of the keys service createKey method.
 type CreateKeyPayload struct {
 	SessionToken *string
 	// The name of the key
 	Name string
-	// The scopes of the key that determines its permissions.
+	// Legacy transport scopes. Omitted or empty defaults to consumer for ordinary
+	// keys; agent keys require no scopes.
 	Scopes []string
+	// First-class agent subject. Omit for an ordinary API key.
+	AgentID *string
+	// Delegated policy format version. Required for agent keys.
+	DelegatedGrantsVersion *int
+	// Exact allow grants approved for an agent credential
+	RequestedGrants []*AgentPolicyGrantForm
+	// Agent credential expiry; defaults to 90 days and cannot exceed one year
+	ExpiresAt *string
 }
 
 // Key is the result type of the keys service createKey method.
@@ -65,7 +113,7 @@ type Key struct {
 	OrganizationID string
 	// The optional project ID this key is scoped to
 	ProjectID *string
-	// The ID of the user who created this key
+	// The human creator; immutable authorizer for agent keys
 	CreatedByUserID string
 	// The name of the key
 	Name string
@@ -73,8 +121,16 @@ type Key struct {
 	KeyPrefix string
 	// The token of the api key (only returned on key creation)
 	Key *string
-	// List of permission scopes for this key
+	// Legacy transport scopes; always empty for agent keys
 	Scopes []string
+	// Principal authenticated by this key; agent keys use agent:<uuid>
+	SubjectUrn *string
+	// Immutable delegated policy approved for this credential
+	DelegatedGrants *AgentDelegatedPolicy
+	// Delegated policy format version
+	DelegatedGrantsVersion *int
+	// Required expiry for an agent key; legacy keys may not expire.
+	ExpiresAt *string
 	// The creation date of the key.
 	CreatedAt string
 	// When the key was last updated.
@@ -85,6 +141,8 @@ type Key struct {
 
 // ListKeysPayload is the payload type of the keys service listKeys method.
 type ListKeysPayload struct {
+	// When set, list keys for this first-class agent
+	AgentID      *string
 	SessionToken *string
 }
 
@@ -98,6 +156,23 @@ type RevokeKeyPayload struct {
 	// The ID of the key to revoke
 	ID           string
 	SessionToken *string
+}
+
+// RotateKeyPayload is the payload type of the keys service rotateKey method.
+type RotateKeyPayload struct {
+	SessionToken *string
+	// API key identifier to replace
+	ID string
+	// The name of the replacement key
+	Name string
+	// Legacy transport scopes; agent rotation requires an empty array
+	Scopes []string
+	// Delegated policy format version
+	DelegatedGrantsVersion int
+	// New exact allow grants approved for the replacement credential
+	RequestedGrants []*AgentPolicyGrantForm
+	// Replacement expiry; defaults to 90 days and cannot exceed one year
+	ExpiresAt *string
 }
 
 type ValidateKeyOrganization struct {

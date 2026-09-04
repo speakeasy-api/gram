@@ -19,6 +19,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -45,6 +47,8 @@ type Service struct {
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
 	audit       *audit.Logger
+	authorizer  *agentmanagement.Authorizer
+	features    feature.Provider
 	keyPrefix   string
 }
 
@@ -58,10 +62,15 @@ func NewService(
 	env string,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	featureProviders ...feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	fullKeyPrefix := auth.APIKeyPrefix(env)
+	var features feature.Provider
+	if len(featureProviders) > 0 {
+		features = featureProviders[0]
+	}
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
 		logger:      logger,
@@ -72,6 +81,8 @@ func NewService(
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
+		authorizer:  agentmanagement.NewAuthorizer(authzEngine),
+		features:    features,
 		keyPrefix:   fullKeyPrefix,
 	}
 }
@@ -94,6 +105,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if payload.AgentID != nil || payload.DelegatedGrantsVersion != nil || payload.RequestedGrants != nil || payload.ExpiresAt != nil {
+		return s.createAgentKey(ctx, payload)
 	}
 	// Plugin distribution reserves plugins- names and LiteLLM instance minting
 	// reserves litellm- names; both prefixes act as provenance discriminators
@@ -205,6 +219,9 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if payload.AgentID != nil {
+		return s.listAgentKeys(ctx, *payload.AgentID)
+	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
@@ -245,6 +262,28 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
+	keyID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
+	}
+	loaded, loadErr := s.repo.GetAPIKeyByID(ctx, repo.GetAPIKeyByIDParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID})
+	if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, loadErr, "load API key for revocation").LogError(ctx, s.logger)
+	}
+	if loadErr == nil && loaded.SubjectUrn.Valid {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "access agent API keys").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		if err := s.revokeLoadedAgentKey(ctx, tx, loaded); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "save agent API key revocation").LogError(ctx, s.logger)
+		}
+		return nil
+	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
@@ -256,11 +295,6 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	kr := s.repo.WithTx(dbtx)
-
-	keyID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
-	}
 
 	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
 		ID:             keyID,

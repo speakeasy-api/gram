@@ -27,6 +27,10 @@ const (
 	// administrator grants are backfilled and the M1 safety suite is promoted.
 	// It is evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagementM1 Flag = "gram-agent-management-m1"
+	// FlagAgentCredentialsM2 gates agent credential issuance and management until
+	// the integrated M2 authorization safety suite has passed. It is evaluated
+	// per organization and fails closed unless explicitly on.
+	FlagAgentCredentialsM2 Flag = "gram-agent-credentials-m2"
 
 	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
 	// authorization challenge. It remains independently default-off until the M2
