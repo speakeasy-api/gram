@@ -34,4 +34,17 @@ describe("AGENT_PLATFORMS", () => {
       OTEL_TRACES_EXPORTER: "otlp",
     });
   });
+
+  it("delegates Codex telemetry configuration to the device agent", () => {
+    const codex = AGENT_PLATFORMS.find(({ id }) => id === "codex");
+
+    expect(codex?.setupSteps).toHaveLength(1);
+    const step = codex?.setupSteps[0];
+    expect(step?.title).toBe("Deploy the Speakeasy device agent via MDM");
+    expect(step).not.toHaveProperty("code");
+    expect(step).not.toHaveProperty("requiresApiKey");
+    expect(step?.description).toContain(
+      "OpenTelemetry logs, metrics, and traces",
+    );
+  });
 });

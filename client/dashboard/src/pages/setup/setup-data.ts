@@ -146,28 +146,12 @@ const SETUP_AGENT_PLATFORMS: Array<{
       {
         title: "Deploy the Speakeasy device agent via MDM",
         description:
-          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
+          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform. The agent installs the observability plugin and configures authenticated OpenTelemetry logs, metrics, and traces for every managed developer with no per-user setup. Restart Codex after the first policy sync.",
         helpLink: {
           url: "{{GRAM_DEVICE_AGENT_URL}}",
           linkLabel: "device agent setup",
           sentence:
             "Follow the Fleet (MDM) walkthrough on the {LINK} page, then hand the profile to your MDM admin.",
-        },
-      },
-      {
-        title: "Forward Codex OpenTelemetry logs to Speakeasy",
-        description:
-          "Codex exports OpenTelemetry logs for every turn, tool call, and approval. Point its OTLP exporter at Speakeasy so Codex activity lands in your dashboard alongside your other agents. Add the block below to ~/.codex/config.toml, or push it fleet-wide from your MDM by dropping it in /etc/codex/managed_config.toml (com.openai.codex on macOS).",
-        code: `[otel]
-environment = "prod"
-exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/logs", protocol = "json", headers = { "Gram-Project" = "default", "Gram-Key" = "{{GRAM_API_KEY}}" } } }`,
-        language: "toml",
-        requiresApiKey: true,
-        helpLink: {
-          url: "https://learn.chatgpt.com/docs/config-file/config-reference",
-          linkLabel: "Codex OTEL config reference",
-          sentence:
-            "See the {LINK} for every OpenTelemetry option and managed-config precedence.",
         },
       },
     ],
