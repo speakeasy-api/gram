@@ -85,14 +85,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	authorizedCtx, err := s.auth.AuthorizeWithPostAuthenticationCheck(ctx, key, schema, s.requireM1Enabled)
+	authorizedCtx, err := s.auth.AuthorizeWithPostAuthenticationCheck(ctx, key, schema, s.requireAgentManagementEnabled)
 	if err != nil {
 		return authorizedCtx, fmt.Errorf("authorize agent management session: %w", err)
 	}
 	return authorizedCtx, nil
 }
 
-func (s *Service) requireM1Enabled(ctx context.Context) error {
+func (s *Service) requireAgentManagementEnabled(ctx context.Context) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeNotFound)
@@ -101,7 +101,7 @@ func (s *Service) requireM1Enabled(ctx context.Context) error {
 	evaluation, err := feature.EvaluateFlag(
 		ctx,
 		s.features,
-		feature.FlagAgentManagementM1,
+		feature.FlagAgentManagement,
 		authCtx.ActiveOrganizationID,
 		feature.OrgProjectGroups(authCtx.OrganizationSlug, ""),
 	)
