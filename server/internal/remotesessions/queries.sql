@@ -5,6 +5,10 @@
 -- Serves both creation paths: a project-level issuer passes a valid project_id
 -- plus its organization_id; an organization-level (cross-project) issuer passes
 -- a NULL project_id plus organization_id.
+--
+-- metadata_fetched_at and metadata_unreadable_url record whether discovery
+-- ran for this row: a form-driven create passes NULL for both, a create that
+-- ran discovery passes the fetch time and the candidate it could not read.
 INSERT INTO remote_session_issuers (
     project_id,
     organization_id,
@@ -35,6 +39,8 @@ INSERT INTO remote_session_issuers (
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
     metadata,
+    metadata_fetched_at,
+    metadata_unreadable_url,
     oidc,
     passthrough
 )
@@ -74,6 +80,8 @@ VALUES (
     @backchannel_logout_supported,
     @authorization_response_iss_parameter_supported,
     @metadata,
+    @metadata_fetched_at,
+    @metadata_unreadable_url,
     @oidc,
     @passthrough
 )
@@ -149,6 +157,10 @@ SET
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
     metadata = NULL,
+    metadata_fetched_at = NULL,
+    metadata_unreadable_url = NULL,
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
     oidc = FALSE,
     passthrough = FALSE,
     deleted_at = NULL,
@@ -379,6 +391,11 @@ RETURNING *;
 -- capture. metadata is the one column a refresh may leave NULL, when the
 -- document could not be retained.
 --
+-- The tracking columns move with every successful write: metadata_fetched_at
+-- is stamped, the last error and its time are cleared, and
+-- metadata_unreadable_url records the candidate this run could not read (NULL
+-- when every candidate answered definitively).
+--
 -- Scoping differs from the tier-specific updates by necessity, since one query
 -- serves project-owned, organization-level, and global rows. Rather than the
 -- caller's own scope it restates the loaded row's identity: callers pass back
@@ -426,6 +443,10 @@ SET
     backchannel_logout_supported = @backchannel_logout_supported::boolean,
     authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
     metadata = NULLIF(@metadata::text, '')::jsonb,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_unreadable_url = NULLIF(@metadata_unreadable_url::text, ''),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text

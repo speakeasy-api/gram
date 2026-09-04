@@ -251,6 +251,10 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 		Metadata: string(retainableDocument(doc.raw)),
 
+		// Recorded so the next refresh, and anyone reading the row, can tell
+		// which members were kept from the stored document rather than read.
+		MetadataUnreadableUrl: discovered.unreadable,
+
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no
 		// longer holds the same authorization over.

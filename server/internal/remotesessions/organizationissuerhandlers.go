@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -155,7 +156,9 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		ClaimsSupported:                            nil,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
-		Metadata: nil,
+		Metadata:              nil,
+		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {

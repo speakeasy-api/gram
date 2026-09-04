@@ -151,7 +151,9 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClaimsSupported:                            nil,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
-		Metadata: nil,
+		Metadata:              nil,
+		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {

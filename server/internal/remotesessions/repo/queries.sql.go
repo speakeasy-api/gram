@@ -427,6 +427,10 @@ SET
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
     metadata = NULL,
+    metadata_fetched_at = NULL,
+    metadata_unreadable_url = NULL,
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
     oidc = FALSE,
     passthrough = FALSE,
     deleted_at = NULL,
@@ -716,6 +720,8 @@ INSERT INTO remote_session_issuers (
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
     metadata,
+    metadata_fetched_at,
+    metadata_unreadable_url,
     oidc,
     passthrough
 )
@@ -756,7 +762,9 @@ VALUES (
     $28,
     $29,
     $30,
-    $31
+    $31,
+    $32,
+    $33
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
@@ -791,6 +799,8 @@ type CreateRemoteSessionIssuerParams struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	Metadata                                   []byte
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataUnreadableUrl                      pgtype.Text
 	Oidc                                       bool
 	Passthrough                                bool
 }
@@ -800,6 +810,10 @@ type CreateRemoteSessionIssuerParams struct {
 // Serves both creation paths: a project-level issuer passes a valid project_id
 // plus its organization_id; an organization-level (cross-project) issuer passes
 // a NULL project_id plus organization_id.
+//
+// metadata_fetched_at and metadata_unreadable_url record whether discovery
+// ran for this row: a form-driven create passes NULL for both, a create that
+// ran discovery passes the fetch time and the candidate it could not read.
 func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionIssuer,
 		arg.ProjectID,
@@ -831,6 +845,8 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.Metadata,
+		arg.MetadataFetchedAt,
+		arg.MetadataUnreadableUrl,
 		arg.Oidc,
 		arg.Passthrough,
 	)
@@ -6212,11 +6228,15 @@ SET
     backchannel_logout_supported = $20::boolean,
     authorization_response_iss_parameter_supported = $21::boolean,
     metadata = NULLIF($22::text, '')::jsonb,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_unreadable_url = NULLIF($23::text, ''),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
     updated_at = clock_timestamp()
-WHERE id = $23
-  AND issuer = $24::text
-  AND project_id IS NOT DISTINCT FROM $25::uuid
-  AND organization_id IS NOT DISTINCT FROM $26::text
+WHERE id = $24
+  AND issuer = $25::text
+  AND project_id IS NOT DISTINCT FROM $26::uuid
+  AND organization_id IS NOT DISTINCT FROM $27::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
@@ -6244,6 +6264,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	BackchannelLogoutSupported                 bool
 	AuthorizationResponseIssParameterSupported bool
 	Metadata                                   string
+	MetadataUnreadableUrl                      string
 	ID                                         uuid.UUID
 	Issuer                                     string
 	ProjectID                                  uuid.NullUUID
@@ -6273,6 +6294,11 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 // reserved for rows discovery has not captured yet, and this query is the
 // capture. metadata is the one column a refresh may leave NULL, when the
 // document could not be retained.
+//
+// The tracking columns move with every successful write: metadata_fetched_at
+// is stamped, the last error and its time are cleared, and
+// metadata_unreadable_url records the candidate this run could not read (NULL
+// when every candidate answered definitively).
 //
 // Scoping differs from the tier-specific updates by necessity, since one query
 // serves project-owned, organization-level, and global rows. Rather than the
@@ -6321,6 +6347,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.Metadata,
+		arg.MetadataUnreadableUrl,
 		arg.ID,
 		arg.Issuer,
 		arg.ProjectID,
