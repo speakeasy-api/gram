@@ -135,6 +135,9 @@ export default function CreateFromSource(): JSX.Element {
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState("");
+  // Until the name is the user's own, it follows the selection: picking a
+  // different source should not leave the previous source's name behind.
+  const [isNameOwned, setIsNameOwned] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -269,7 +272,7 @@ export default function CreateFromSource(): JSX.Element {
                       setSelectedKey(source.key);
                       // The source name is the obvious default, and most
                       // people keep it.
-                      if (!name.trim()) setName(source.name);
+                      if (!isNameOwned) setName(source.name);
                     }}
                     onInspect={() =>
                       openPanel({
@@ -318,7 +321,11 @@ export default function CreateFromSource(): JSX.Element {
               id="from-source-name"
               placeholder="My MCP server"
               value={name}
-              onChange={setName}
+              onChange={(value) => {
+                setName(value);
+                // Clearing the field hands the name back to the selection.
+                setIsNameOwned(value.trim() !== "");
+              }}
             />
             {selected && (
               <Text muted small>
