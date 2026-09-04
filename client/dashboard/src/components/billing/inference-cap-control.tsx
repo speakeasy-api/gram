@@ -1,4 +1,5 @@
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
+import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import {
   inferenceCapAnchor,
   inferenceCapLabel,
@@ -14,15 +15,10 @@ import { invalidateAllGetInferenceSpendCaps } from "@gram/client/react-query/get
 import { useSetSpendCapMutation } from "@gram/client/react-query/setSpendCap.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
 
 /** The bounds the API accepts for a monthly inference cap, in whole USD. */
 const MIN_CAP_USD = 1;
 const MAX_CAP_USD = 10_000;
-
-// The in-app booking gate, which prefills the form from the session — the same
-// path the trial card sends people to. Not the marketing site's /talk-to-us.
-const SALES_PATH = "/talk-to-us";
 
 function formatUsd(amount: number): string {
   return `$${amount.toLocaleString("en-US")}`;
@@ -330,10 +326,7 @@ function CapForm({
               admin who just had a larger amount rejected. */}
           <Text muted small>
             Need a cap above {MAX_LABEL}?{" "}
-            <Link to={SALES_PATH} className="underline underline-offset-2">
-              Talk to us
-            </Link>
-            .
+            <BookingCalendarLink>Talk to us</BookingCalendarLink>.
           </Text>
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>

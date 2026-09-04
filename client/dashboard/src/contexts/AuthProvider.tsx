@@ -56,7 +56,6 @@ const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
   "/guide",
-  "/talk-to-us",
   "/trial-ended",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
@@ -163,7 +162,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       if (!isPath(location.pathname, "/trial-ended")) {
         return <Navigate to="/trial-ended" replace />;
       }
-    } else if (!isPath(location.pathname, "/talk-to-us")) {
+    } else {
       return <BookDemo />;
     }
   }

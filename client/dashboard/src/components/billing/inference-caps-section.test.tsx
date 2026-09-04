@@ -1137,17 +1137,17 @@ describe("InferenceCapsSection", () => {
 
   // $10,000 is the ceiling the endpoint enforces, so an admin who needs more
   // has to be pointed at a conversation rather than left retrying an amount
-  // that will never be accepted. The gate is the in-app booking route, which
-  // prefills from the session — not the marketing site.
-  it("points an admin needing a larger cap at the in-app sales gate", () => {
+  // that will never be accepted.
+  it("offers an admin needing a larger cap the sales calendar", () => {
     loadedCaps([otherCap()]);
 
     render(<InferenceCapsSection />);
 
     expect(screen.getByText(/need a cap above \$10,000/i)).toBeTruthy();
-    const salesLink = screen.getByRole("link", { name: "Talk to us" });
-    expect(salesLink.getAttribute("href")).toBe("/talk-to-us");
-    expect(salesLink.getAttribute("target")).toBeNull();
+    const salesTrigger = screen.getByRole("button", {
+      name: "Talk to us",
+    });
+    expect(salesTrigger.getAttribute("type")).toBe("button");
   });
 
   // The endpoint is admin-only, so a member gets the amounts they are spending
