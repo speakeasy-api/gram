@@ -106,10 +106,14 @@ export function SetupWizard(): JSX.Element {
   // additional-agent-config, confirm-traffic, distribute-servers) have no
   // server signal — once marketplace is published we land on instrument-agents
   // and let the user click forward.
+  // throwOnError: false so a failed resume check degrades to step 0 (as the
+  // effect below assumes) instead of throwing to the page error boundary. The
+  // QueryClient default only suppresses 401/403, so a 500 here would otherwise
+  // replace the whole wizard with an error screen.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
-    useOnboardingStatus();
+    useOnboardingStatus(undefined, undefined, { throwOnError: false });
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
-    usePublishStatus();
+    usePublishStatus(undefined, undefined, { throwOnError: false });
   const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
 
   useEffect(() => {

@@ -95,6 +95,17 @@ describe("SetupWizard", () => {
     expect(resumedStep()).toBe("instrument-agents");
   });
 
+  it("resumes at directory-sync when only SSO is configured", () => {
+    onboardingStatus.current = {
+      data: { ssoConfigured: true, dsyncConfigured: false },
+      isLoading: false,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("directory-sync");
+  });
+
   it("resumes at create-marketplace after directory sync is configured", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: true },
