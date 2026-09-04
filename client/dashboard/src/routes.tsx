@@ -159,6 +159,11 @@ const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
+const SetupWizard = React.lazy(() =>
+  import("./pages/setup/components/onboarding-wizard").then((module) => ({
+    default: module.SetupWizard,
+  })),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -1420,6 +1425,15 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupBoard,
+    outsideMainLayout: true,
+  },
+  // The linear wizard walks one owner through setup step by step; the board at
+  // /setup is the default. SetupViewToggle swaps between the two.
+  setupWizard: {
+    title: "Setup wizard",
+    url: "setup/wizard",
+    icon: "list-checks",
+    component: SetupWizard,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or
