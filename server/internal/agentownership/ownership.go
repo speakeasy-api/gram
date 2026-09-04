@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -94,7 +94,7 @@ func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {
 		OwnerReassignmentRequiredAt: nil,
 		OwnerReassignmentReason:     nil,
 		Name:                        agent.Name,
-		Lifecycle:                   string(agents.DeriveLifecycle(agent)),
+		Lifecycle:                   string(lifecycle.Derive(agent)),
 	}
 	if agent.OwnerReassignmentRequiredAt.Valid {
 		value := agent.OwnerReassignmentRequiredAt.Time.Format(time.RFC3339Nano)
