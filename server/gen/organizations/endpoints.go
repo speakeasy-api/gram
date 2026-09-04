@@ -30,6 +30,8 @@ type Endpoints struct {
 	VerifyOnboardingHooksSetup         goa.Endpoint
 	SendEnterpriseAdminOnboardingEmail goa.Endpoint
 	GenerateWorkOSAdminPortalLink      goa.Endpoint
+	ListSetupTasks                     goa.Endpoint
+	UpdateSetupTask                    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -51,6 +53,8 @@ func NewEndpoints(s Service) *Endpoints {
 		VerifyOnboardingHooksSetup:         NewVerifyOnboardingHooksSetupEndpoint(s, a.APIKeyAuth),
 		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailEndpoint(s, a.APIKeyAuth),
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
+		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
+		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -71,6 +75,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.VerifyOnboardingHooksSetup = m(e.VerifyOnboardingHooksSetup)
 	e.SendEnterpriseAdminOnboardingEmail = m(e.SendEnterpriseAdminOnboardingEmail)
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
+	e.ListSetupTasks = m(e.ListSetupTasks)
+	e.UpdateSetupTask = m(e.UpdateSetupTask)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -393,5 +399,51 @@ func NewGenerateWorkOSAdminPortalLinkEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.GenerateWorkOSAdminPortalLink(ctx, p)
+	}
+}
+
+// NewListSetupTasksEndpoint returns an endpoint function that calls the method
+// "listSetupTasks" of service "organizations".
+func NewListSetupTasksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSetupTasksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSetupTasks(ctx, p)
+	}
+}
+
+// NewUpdateSetupTaskEndpoint returns an endpoint function that calls the
+// method "updateSetupTask" of service "organizations".
+func NewUpdateSetupTaskEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateSetupTaskPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateSetupTask(ctx, p)
 	}
 }

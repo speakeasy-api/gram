@@ -411,7 +411,7 @@ export function DistributeServersStep({
       title="Distribute MCP servers"
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}
-      onSkip={onSkip}
+      onSkip={skipLabel === "Continue" ? onComplete : onSkip}
       skipLabel={skipLabel}
       continueLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
