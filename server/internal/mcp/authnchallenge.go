@@ -115,6 +115,10 @@ type AuthnChallengeState struct {
 	// kept separate from the eventual credential subject so selecting an agent
 	// never makes the agent appear to have consented for itself.
 	AuthorizerUserID string `json:"authorizer_user_id,omitempty"`
+	// AuthorizerImpersonated preserves WorkOS support-session provenance across
+	// the redirect to consent. Impersonated humans may authorize themselves but
+	// must never authorize an agent.
+	AuthorizerImpersonated bool `json:"authorizer_impersonated,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -185,8 +189,10 @@ func (a AuthnChallengeState) mintOriginOr(fallback string) string {
 
 // UserSessionGrant is the short-lived OAuth authorization grant minted by
 // HandleConsent's POST and consumed by HandleToken's authorization_code
-// grant. Stored in Redis under
-// `userSessionGrant:{user_session_issuer_id}:{code}` for ~10 minutes.
+// grant. Human grants are stored in Redis under
+// `userSessionGrant:{user_session_issuer_id}:{code}`; agent authorization
+// grants use `agentUserSessionGrant:{user_session_issuer_id}:{code}` so older
+// binaries cannot redeem them. Both expire after ~10 minutes.
 type UserSessionGrant struct {
 	Code string `json:"code"`
 	// FlowID carries the OAuth flow correlation identifier from the

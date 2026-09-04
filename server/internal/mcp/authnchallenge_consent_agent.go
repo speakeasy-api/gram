@@ -48,12 +48,17 @@ type consentHumanAuthorization struct {
 }
 
 func agentAuthorizationTarget(endpoint *ResolvedMcpEndpoint) (*AgentAuthorizationTarget, bool) {
+	// Meta-MCP runtime authorization is evaluated against each member MCP
+	// resource, not the gateway ID. Keep agent selection disabled until the
+	// target can represent and revalidate that member set.
+	if endpoint.MetaMcpServerID.Valid {
+		return nil, false
+	}
+
 	var resourceID uuid.UUID
 	switch {
 	case endpoint.McpServerID.Valid:
 		resourceID = endpoint.McpServerID.UUID
-	case endpoint.MetaMcpServerID.Valid:
-		resourceID = endpoint.MetaMcpServerID.UUID
 	case endpoint.ToolsetID.Valid:
 		resourceID = endpoint.ToolsetID.UUID
 	default:
@@ -108,6 +113,9 @@ func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeStat
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.Subject.ID == "" || state.AuthorizerUserID == "" || state.AuthorizerUserID != state.Subject.ID {
 		return consentHumanAuthorization{}, errors.New("agent authorization requires an authenticated human")
 	}
+	if state.AuthorizerImpersonated {
+		return consentHumanAuthorization{}, errors.New("impersonated support sessions cannot authorize agents")
+	}
 
 	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
 		UserID:         state.AuthorizerUserID,
@@ -145,13 +153,21 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 		return nil, fmt.Errorf("list agent authorization candidates: %w", err)
 	}
 
+	agentIDs := make([]uuid.UUID, 0, len(candidates))
+	for _, candidate := range candidates {
+		agentIDs = append(agentIDs, candidate.ID)
+	}
+	policies, err := authz.LoadKnownAgentPolicies(ctx, s.db, target.OrganizationID, agentIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load candidate agent policies: %w", err)
+	}
+
 	result := make([]consentAgentOption, 0, len(candidates))
 	for _, candidate := range candidates {
-		eligible, err := s.consentAgentEligible(ctx, human, candidate, *target, false)
-		if err != nil {
-			return nil, err
+		if !consentAgentCandidateEligible(human, candidate, *target) {
+			continue
 		}
-		if eligible {
+		if authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
 			result = append(result, consentAgentOption{ID: candidate.ID.String(), Name: candidate.Name})
 		}
 	}
@@ -178,7 +194,7 @@ func (s *Service) authorizeConsentAgent(ctx context.Context, state AuthnChalleng
 	if err != nil {
 		return nil, errors.New("selected agent is not eligible")
 	}
-	eligible, err := s.consentAgentEligible(ctx, human, agent, *target, true)
+	eligible, err := s.consentAgentEligible(ctx, human, agent, *target)
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +204,8 @@ func (s *Service) authorizeConsentAgent(ctx context.Context, state AuthnChalleng
 	return &AgentAuthorizationResult{AgentID: agent.ID, AuthorizerUserID: human.userID, Target: *target}, nil
 }
 
-func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget, requireOwnerPolicy bool) (bool, error) {
-	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) (bool, error) {
+	if !consentAgentCandidateEligible(human, agent, target) {
 		return false, nil
 	}
 	ownerActive, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
@@ -203,16 +219,6 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 		return false, nil
 	}
 
-	callerMayAuthorize := agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{
-		Scope:        authz.ScopeAgentAuthorize,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agent.ID.String(),
-		Dimensions:   nil,
-	})
-	if !callerMayAuthorize {
-		return false, nil
-	}
-
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	agentPolicy, err := authz.LoadAgentPolicy(ctx, s.db, target.OrganizationID, agentPrincipal)
 	if err != nil {
@@ -222,12 +228,6 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if !authz.GrantsSatisfy(agentPolicy, check) {
 		return false, nil
 	}
-	// The picker intentionally answers only caller eligibility and A. O is a
-	// live issuance gate and is always evaluated by the final Authorize action.
-	if !requireOwnerPolicy {
-		return true, nil
-	}
-
 	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, target.OrganizationID, agent.OwnerUserID)
 	if err != nil {
 		return false, fmt.Errorf("resolve agent owner policy principals: %w", err)
@@ -237,4 +237,16 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 		return false, fmt.Errorf("load agent owner policy: %w", err)
 	}
 	return authz.GrantsSatisfy(ownerPolicy, check), nil
+}
+
+func consentAgentCandidateEligible(human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) bool {
+	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+		return false
+	}
+	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{
+		Scope:        authz.ScopeAgentAuthorize,
+		ResourceKind: authz.ResourceKindAgent,
+		ResourceID:   agent.ID.String(),
+		Dimensions:   nil,
+	})
 }

@@ -775,6 +775,28 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
 }
 
+func TestHandleIDPCallback_RejectsResolvedSubjectReplacement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	challengeID := uuid.NewString()
+	subject := urn.NewAnonymousSubject(uuid.NewString())
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:        challengeID,
+		Subject:   &subject,
+		CreatedAt: time.Now(),
+	}))
+
+	q := url.Values{"state": {challengeID}, "code": {"replacement-idp-code"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/example/idp_callback?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	err := ti.service.HandleIDPCallback(w, req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identity is already resolved")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+	require.Error(t, err, "the invalid callback state must remain single-use")
+}
+
 func TestHandleIDPCallback_RejectsResolvedAuthorizerReplacement(t *testing.T) {
 	t.Parallel()
 

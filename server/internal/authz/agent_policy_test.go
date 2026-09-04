@@ -3,6 +3,7 @@ package authz
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -68,5 +69,16 @@ func TestLoadAgentPolicyUsesOnlyExactSafeAgentGrants(t *testing.T) {
 
 	rows, err := accessrepo.New(conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: "org-agent-policy", PrincipalUrns: []string{principal.String()}})
 	require.NoError(t, err)
+
+	policies, err := LoadKnownAgentPolicies(ctx, conn, "org-agent-policy", []uuid.UUID{agent.ID, otherAgent.ID})
+	require.NoError(t, err)
+	require.Len(t, policies[agent.ID], 1)
+	require.Equal(t, ScopeProjectWrite, policies[agent.ID][0].Scope)
+	require.Len(t, policies[otherAgent.ID], 1)
+	require.Equal(t, ScopeProjectRead, policies[otherAgent.ID][0].Scope)
+
+	_, err = LoadKnownAgentPolicies(ctx, conn, "org-agent-policy", []uuid.UUID{uuid.Nil})
+	require.Error(t, err)
+
 	require.Greater(t, len(rows), len(grants), "generic grant behavior remains broader than the agent runtime resolver")
 }
