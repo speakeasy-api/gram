@@ -45,6 +45,19 @@ func TestStripeFlagsAreAvailableInEveryServerProcess(t *testing.T) {
 			_, tomlSourceable = meterEventName.(altsrc.FlagInputSourceExtension)
 			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
 			require.Contains(t, meterEventName.Names(), "stripe.meter_event_name")
+			meterEventNameFlag, ok := meterEventName.(*altsrc.StringFlag)
+			require.True(t, ok)
+			require.Contains(t, meterEventNameFlag.EnvVars, "STRIPE_METER_EVENT_NAME_TUM")
+
+			ingressMeterEventName := requireFlag(t, command.Flags, "stripe-meter-event-name-mcp-bandwidth-ingress")
+			_, tomlSourceable = ingressMeterEventName.(altsrc.FlagInputSourceExtension)
+			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
+			require.Contains(t, ingressMeterEventName.Names(), "stripe.meter_event_name_mcp_bandwidth_ingress")
+
+			egressMeterEventName := requireFlag(t, command.Flags, "stripe-meter-event-name-mcp-bandwidth-egress")
+			_, tomlSourceable = egressMeterEventName.(altsrc.FlagInputSourceExtension)
+			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
+			require.Contains(t, egressMeterEventName.Names(), "stripe.meter_event_name_mcp_bandwidth_egress")
 
 			portalConfigurationID := requireFlag(t, command.Flags, "stripe-portal-configuration-id")
 			_, tomlSourceable = portalConfigurationID.(altsrc.FlagInputSourceExtension)
