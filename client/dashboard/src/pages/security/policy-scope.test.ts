@@ -152,7 +152,7 @@ describe("effectivePolicyScopeKinds", () => {
     });
   });
 
-  it("uses unrestricted category scopes when recommendations are disabled", () => {
+  it("uses unrestricted category scopes when no definition is applied", () => {
     expect(
       effectivePolicyScopeKinds({
         categories: ["account_identity"],
@@ -174,6 +174,30 @@ describe("effectivePolicyScopeKinds", () => {
       }),
     ).toEqual({
       kinds: new Set(),
+      additionalKinds: new Set(["prompt_attachment"]),
+      custom: false,
+    });
+  });
+
+  it("applies policy-level prompt attachment scopes to regular kinds", () => {
+    expect(
+      effectivePolicyScopeKinds({
+        categories: ["secrets"],
+        scopeInclude: 'kind == "prompt_attachment"',
+      }),
+    ).toEqual({
+      kinds: new Set(),
+      additionalKinds: new Set(["prompt_attachment"]),
+      custom: false,
+    });
+
+    expect(
+      effectivePolicyScopeKinds({
+        categories: ["secrets"],
+        scopeInclude: 'kind in ["prompt_attachment","tool_request"]',
+      }),
+    ).toEqual({
+      kinds: new Set(["tool_request"]),
       additionalKinds: new Set(["prompt_attachment"]),
       custom: false,
     });

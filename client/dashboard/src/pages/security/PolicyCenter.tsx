@@ -646,7 +646,11 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  const { data: categoriesData } = useRiskCategories();
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+  } = useRiskCategories();
   const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
@@ -915,6 +919,16 @@ function PolicyCenterContent() {
       header: "Applies To",
       width: "2.1fr",
       render: (row) => {
+        if (recommendedScopesEnabled && !categoriesData) {
+          return (
+            <span className="text-muted-foreground text-sm">
+              {categoriesLoading && !categoriesError
+                ? "Loading scope..."
+                : "Scope unavailable"}
+            </span>
+          );
+        }
+
         const scope = effectivePolicyScopeKinds({
           categories: policyCategoriesForScope(row.policy),
           detectionScopes: recommendedScopesEnabled

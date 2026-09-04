@@ -37,6 +37,8 @@ import { Label } from "@/components/ui/Label";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { StepContainer } from "../step-container";
 import {
   RULE_CATEGORY_META,
@@ -234,6 +236,10 @@ export function ConfigurePoliciesStep({
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
+  const recommendedScopesFlag = useFeatureFlag(
+    FEATURE_FLAGS.riskRecommendedScopes,
+  );
+  const recommendedScopesEnabled = recommendedScopesFlag.status === "enabled";
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
@@ -297,14 +303,18 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          messageTypes: [],
-          detectionScopes: replaceCategoryDetectionScope(
-            existing.detectionScopes,
-            {
-              category: cat,
-              ...kindScopeForMessageTypes([...nextCfg.messageTypes]),
-            },
-          ),
+          ...(recommendedScopesEnabled
+            ? {
+                messageTypes: [],
+                detectionScopes: replaceCategoryDetectionScope(
+                  existing.detectionScopes,
+                  {
+                    category: cat,
+                    ...kindScopeForMessageTypes([...nextCfg.messageTypes]),
+                  },
+                ),
+              }
+            : { messageTypes: [...nextCfg.messageTypes] }),
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -339,10 +349,21 @@ export function ConfigurePoliciesStep({
         const effectiveScope = detectionScope
           ? effectiveScopeKinds(detectionScope)
           : null;
-        const serverMessageTypes =
-          effectiveScope === null || effectiveScope.custom
-            ? new Set(next[cat].messageTypes)
-            : new Set(effectiveScope.kinds);
+        let serverMessageTypes: Set<PolicyMessageType>;
+        if (recommendedScopesEnabled) {
+          serverMessageTypes =
+            effectiveScope === null || effectiveScope.custom
+              ? new Set(next[cat].messageTypes)
+              : new Set(effectiveScope.kinds);
+        } else if (existing.messageTypes?.length) {
+          serverMessageTypes = new Set(
+            existing.messageTypes.filter((type): type is PolicyMessageType =>
+              MESSAGE_TYPES.includes(type as PolicyMessageType),
+            ),
+          );
+        } else {
+          serverMessageTypes = new Set(MESSAGE_TYPES);
+        }
         const messageTypesEqual =
           formatMessageTypes(serverMessageTypes) ===
           formatMessageTypes(next[cat].messageTypes);
@@ -368,7 +389,7 @@ export function ConfigurePoliciesStep({
         requestAnimationFrame(() => setAnimationsReady(true));
       });
     }
-  }, [policiesData, policyForCategory]);
+  }, [policiesData, policyForCategory, recommendedScopesEnabled]);
 
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
@@ -385,12 +406,16 @@ export function ConfigurePoliciesStep({
             createRiskPolicyRequestBody: {
               enabled: true,
               ...buildPolicyPayload(cat),
-              detectionScopes: [
-                {
-                  category: cat,
-                  ...kindScopeForMessageTypes([...cfg.messageTypes]),
-                },
-              ],
+              ...(recommendedScopesEnabled
+                ? {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...kindScopeForMessageTypes([...cfg.messageTypes]),
+                      },
+                    ],
+                  }
+                : { messageTypes: [...cfg.messageTypes] }),
               action: cfg.action,
               autoName: true,
             },
