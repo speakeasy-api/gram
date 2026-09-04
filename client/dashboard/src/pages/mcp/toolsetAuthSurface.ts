@@ -84,6 +84,20 @@ export function mustConvertOAuthBeforePrivate({
   return mcpIsPublic && !userSessionIssuerWired && oauthParadigm !== null;
 }
 
+/** Issuer worth migrating from Gram-hosted to provider-hosted metadata. */
+export function externalOauthMetadataUpdateIssuer(
+  toolset: Toolset,
+  gramResourceIssuer: string | undefined,
+): string | undefined {
+  const external = toolset.externalOauthServer;
+  if (!external || external.authorizationServerIssuer != null) return undefined;
+
+  const issuer = externalOauthIssuerUrl(toolset);
+  return issuer && gramResourceIssuer && issuer !== gramResourceIssuer
+    ? issuer
+    : undefined;
+}
+
 /**
  * Best-effort issuer URL to seed the attach sheet's discovery: the RFC 8414
  * `issuer` claim from the external server's stored metadata, when present.

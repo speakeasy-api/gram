@@ -1,5 +1,9 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { Alert, AlertDescription } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -7,9 +11,11 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
+import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
 import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { buildUpdateExternalOAuthServerMutation } from "@gram/client/react-query/updateExternalOAuthServer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -34,18 +40,25 @@ import { createWizardServices } from "./services";
 // Container
 // ---------------------------------------------------------------------------
 
+export type ExistingExternalOAuthConfig = {
+  issuer: string;
+  metadata: Record<string, unknown>;
+};
+
 function OAuthWizard({
   isOpen,
   onClose,
   toolsetSlug,
   toolset,
   initialPath,
+  existingConfig,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
   initialPath?: Input["initialPath"];
+  existingConfig?: ExistingExternalOAuthConfig;
 }) {
   // Force the inner machine to remount after the modal close animation
   // finishes (200ms). This replaces the old `dispatch RESET` pattern: it
@@ -61,15 +74,170 @@ function OAuthWizard({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
-        <WizardBody
-          key={resetKey}
-          onClose={onClose}
-          toolsetSlug={toolsetSlug}
-          toolset={toolset}
-          initialPath={initialPath}
-        />
+        {existingConfig ? (
+          <ExistingConfigReview
+            key={resetKey}
+            config={existingConfig}
+            onClose={onClose}
+            toolsetSlug={toolsetSlug}
+          />
+        ) : (
+          <WizardBody
+            key={resetKey}
+            onClose={onClose}
+            toolsetSlug={toolsetSlug}
+            toolset={toolset}
+            initialPath={initialPath}
+          />
+        )}
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+function ExistingConfigReview({
+  config,
+  onClose,
+  toolsetSlug,
+}: {
+  config: ExistingExternalOAuthConfig;
+  onClose: () => void;
+  toolsetSlug: string;
+}) {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const [stage, setStage] = useState<"intro" | "review" | "clear" | "success">(
+    "intro",
+  );
+  const [verified, setVerified] = useState<{
+    authorizationEndpoint?: string;
+    tokenEndpoint?: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const review = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await buildFetchRemoteSessionIssuerMetadataMutation(
+        client,
+      ).mutationFn({
+        request: { fetchIssuerMetadataRequestBody: { issuer: config.issuer } },
+      });
+      setVerified(result);
+      setStage("review");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not verify provider metadata",
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const update = async (providerHosted: boolean) => {
+    setPending(true);
+    setError(null);
+    try {
+      await buildUpdateExternalOAuthServerMutation(client).mutationFn({
+        request: {
+          slug: toolsetSlug,
+          updateExternalOAuthServerRequestBody: providerHosted
+            ? { authorizationServerIssuer: config.issuer }
+            : { metadata: config.metadata },
+        },
+      });
+      await Promise.all([
+        invalidateAllToolset(queryClient),
+        invalidateAllGetMcpMetadata(queryClient),
+      ]);
+      setStage("success");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not update OAuth metadata",
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <>
+      <Dialog.Header>
+        <Dialog.Title>Review OAuth metadata</Dialog.Title>
+      </Dialog.Header>
+      <div className="px-6 py-4">
+        <Stack gap={4}>
+          <Text>
+            Gram always hosts protected-resource metadata for this MCP server.
+          </Text>
+          <Text muted small>
+            Switching authorization-server metadata keeps existing tokens and
+            registrations. Some clients may ask users to authenticate again.
+          </Text>
+          {stage === "review" && verified && (
+            <Stack gap={2}>
+              <Text small>Issuer: {config.issuer}</Text>
+              <Text small>
+                Authorization endpoint:{" "}
+                {verified.authorizationEndpoint ?? "Not advertised"}
+              </Text>
+              <Text small>
+                Token endpoint: {verified.tokenEndpoint ?? "Not advertised"}
+              </Text>
+            </Stack>
+          )}
+          {stage === "clear" && (
+            <Text>
+              Confirm that Gram should continue hosting authorization-server
+              metadata.
+            </Text>
+          )}
+          {stage === "success" && <Text>OAuth metadata updated.</Text>}
+          {error && (
+            <Alert variant="error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </Stack>
+      </div>
+      <Dialog.Footer className="flex justify-between">
+        {stage === "success" ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              {stage === "intro" && (
+                <>
+                  <Button variant="secondary" onClick={() => setStage("clear")}>
+                    Keep Gram-hosted metadata
+                  </Button>
+                  <Button onClick={() => void review()} disabled={pending}>
+                    {pending ? "Reviewing..." : "Review update"}
+                  </Button>
+                </>
+              )}
+              {stage === "review" && (
+                <Button onClick={() => void update(true)} disabled={pending}>
+                  {pending ? "Updating..." : "Use provider-hosted metadata"}
+                </Button>
+              )}
+              {stage === "clear" && (
+                <Button onClick={() => void update(false)} disabled={pending}>
+                  {pending ? "Updating..." : "Confirm Gram-hosted metadata"}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </Dialog.Footer>
+    </>
   );
 }
 
@@ -245,12 +413,14 @@ export function ConnectOAuthModal({
   toolsetSlug,
   toolset,
   initialPath,
+  existingConfig,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
   initialPath?: Input["initialPath"];
+  existingConfig?: ExistingExternalOAuthConfig;
 }): JSX.Element {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
@@ -277,6 +447,7 @@ export function ConnectOAuthModal({
       toolsetSlug={toolsetSlug}
       toolset={toolset}
       initialPath={initialPath}
+      existingConfig={existingConfig}
     />
   );
 }

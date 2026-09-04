@@ -4,6 +4,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import {
   canConfigureExternalOAuth,
   externalOauthIssuerUrl,
+  externalOauthMetadataUpdateIssuer,
   getOAuthParadigm,
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
@@ -176,6 +177,58 @@ describe("getOAuthParadigm", () => {
 
   it("returns null when no legacy OAuth is configured", () => {
     expect(getOAuthParadigm({} as Toolset)).toBeNull();
+  });
+});
+
+describe("externalOauthMetadataUpdateIssuer", () => {
+  const gramIssuer = "https://mcp.example.com/mcp/my-server";
+  const metadataIssuer = "https://auth.example.com";
+
+  it("recommends a stored nonblank issuer for attached Gram-hosted OAuth", () => {
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: {
+            authorizationServerIssuer: undefined,
+            metadata: { issuer: metadataIssuer },
+          },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBe(metadataIssuer);
+  });
+
+  it("does not recommend detached, provider-hosted, blank, or Gram-resource issuers", () => {
+    expect(
+      externalOauthMetadataUpdateIssuer({} as Toolset, gramIssuer),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: {
+            authorizationServerIssuer: metadataIssuer,
+            metadata: { issuer: metadataIssuer },
+          },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: { metadata: { issuer: "   " } },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: { metadata: { issuer: gramIssuer } },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
   });
 });
 

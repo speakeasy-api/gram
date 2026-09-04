@@ -11,6 +11,7 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
@@ -50,9 +51,11 @@ import {
 } from "./environmentVariableUtils";
 import {
   ConvertToUserSessionsButton,
+  ExternalOAuthMetadataRecommendation,
   ToolsetAuthenticationSection,
 } from "./ToolsetAuthenticationSection";
 import {
+  externalOauthMetadataUpdateIssuer,
   getOAuthParadigm,
   isUserSessionIssuerWired,
   type OAuthParadigm,
@@ -958,6 +961,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const { url: mcpUrl } = useMcpUrl(toolset);
+  const metadataUpdateIssuer = externalOauthMetadataUpdateIssuer(
+    toolset,
+    mcpUrl,
+  );
+  const storedMetadata = toolset.externalOauthServer?.metadata as
+    | Record<string, unknown>
+    | undefined;
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!toolset?.externalOauthServer;
@@ -1030,6 +1041,11 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
         </div>
       }
     >
+      {metadataUpdateIssuer && storedMetadata && (
+        <ExternalOAuthMetadataRecommendation
+          onReview={() => setIsOAuthModalOpen(true)}
+        />
+      )}
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
@@ -1052,6 +1068,11 @@ function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
+        existingConfig={
+          metadataUpdateIssuer && storedMetadata
+            ? { issuer: metadataUpdateIssuer, metadata: storedMetadata }
+            : undefined
+        }
       />
     </PageSection>
   );

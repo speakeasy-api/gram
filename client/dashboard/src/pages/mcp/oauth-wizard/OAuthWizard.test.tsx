@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   return {
     addExternalOAuth: vi.fn().mockResolvedValue(undefined),
+    updateExternalOAuth: vi.fn().mockResolvedValue(undefined),
     createUserSessionIssuer: vi.fn().mockResolvedValue({ id: "usi-1" }),
     fetchRemoteSessionIssuerMetadata: vi.fn().mockResolvedValue({}),
     createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
@@ -50,6 +51,13 @@ vi.mock("@gram/client/react-query/addExternalOAuthServer.js", () => ({
   buildAddExternalOAuthServerMutation: () => ({
     mutationKey: [],
     mutationFn: mocks.addExternalOAuth,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/updateExternalOAuthServer.js", () => ({
+  buildUpdateExternalOAuthServerMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.updateExternalOAuth,
   }),
 }));
 
@@ -293,6 +301,105 @@ describe("OAuthWizard - external OAuth sources", () => {
 
     expect(screen.getByText(/multiple origins/i)).toBeTruthy();
     expect(screen.getByLabelText("OAuth Metadata JSON")).toBeTruthy();
+  });
+});
+
+describe("OAuthWizard — existing external OAuth config", () => {
+  const existingConfig = {
+    issuer: "https://auth.example.com",
+    metadata: { issuer: "https://auth.example.com" },
+  };
+
+  it("does not discover until review and only updates after confirmation", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
+      issuer: existingConfig.issuer,
+      authorizationEndpoint: "https://auth.example.com/authorize",
+      tokenEndpoint: "https://auth.example.com/token",
+    });
+    renderWizard({ existingConfig });
+
+    expect(mocks.fetchRemoteSessionIssuerMetadata).not.toHaveBeenCalled();
+    expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+    await screen.findByText(/auth\.example\.com\/authorize/);
+    expect(mocks.fetchRemoteSessionIssuerMetadata).toHaveBeenCalledTimes(1);
+    expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use provider-hosted metadata" }),
+    );
+    await waitFor(() =>
+      expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
+  });
+
+  it("cancels without discovery or mutation", () => {
+    const onClose = vi.fn();
+    renderWizard({ existingConfig, onClose: () => void onClose() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchRemoteSessionIssuerMetadata).not.toHaveBeenCalled();
+    expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
+  });
+
+  it("keeps discovery failures actionable without mutation", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockRejectedValueOnce(
+      new Error("provider unavailable"),
+    );
+    renderWizard({ existingConfig });
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+
+    expect(await screen.findByText("provider unavailable")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review update" })).toBeTruthy();
+    expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
+  });
+
+  it("confirms clearing with stored metadata and never discovers", async () => {
+    renderWizard({ existingConfig });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+    );
+    expect(mocks.updateExternalOAuth).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+    );
+    await waitFor(() =>
+      expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.updateExternalOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateExternalOAuthServerRequestBody: {
+            metadata: existingConfig.metadata,
+          },
+        }),
+      }),
+    );
+    expect(mocks.fetchRemoteSessionIssuerMetadata).not.toHaveBeenCalled();
+  });
+
+  it("preserves the confirmation after update failure", async () => {
+    mocks.updateExternalOAuth.mockRejectedValueOnce(
+      new Error("update rejected"),
+    );
+    renderWizard({ existingConfig });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+    );
+
+    expect(await screen.findByText("update rejected")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
+    ).toBeTruthy();
   });
 });
 
