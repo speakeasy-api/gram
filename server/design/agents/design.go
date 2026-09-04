@@ -84,6 +84,16 @@ var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
 	Required("grant_id")
 })
 
+var CreatePolicyGrantForm = Type("CreateAgentPolicyGrantForm", func() {
+	Extend(AgentIDForm)
+	Extend(PolicyGrantForm)
+})
+
+var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
+	Extend(PolicyGrantIDForm)
+	Extend(PolicyGrantForm)
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
@@ -199,19 +209,13 @@ var _ = Service("agents", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createPolicyGrant")
 		Payload(func() {
 			security.SessionPayload()
-			Extend(AgentIDForm)
-			Extend(PolicyGrantForm)
+			Extend(CreatePolicyGrantForm)
 		})
 		Result(PolicyGrant)
 		HTTP(func() {
 			POST("/rpc/agents.createPolicyGrant")
 			security.SessionHeader()
-			Body(func() {
-				Attribute("agent_id")
-				Attribute("scope")
-				Attribute("effect")
-				Attribute("selector")
-			})
+			Body(CreatePolicyGrantForm)
 			Response(StatusCreated)
 		})
 	})
@@ -221,20 +225,13 @@ var _ = Service("agents", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicyGrant")
 		Payload(func() {
 			security.SessionPayload()
-			Extend(PolicyGrantIDForm)
-			Extend(PolicyGrantForm)
+			Extend(UpdatePolicyGrantForm)
 		})
 		Result(PolicyGrant)
 		HTTP(func() {
 			POST("/rpc/agents.updatePolicyGrant")
 			security.SessionHeader()
-			Body(func() {
-				Attribute("agent_id")
-				Attribute("grant_id")
-				Attribute("scope")
-				Attribute("effect")
-				Attribute("selector")
-			})
+			Body(UpdatePolicyGrantForm)
 			Response(StatusOK)
 		})
 	})

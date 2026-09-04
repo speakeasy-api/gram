@@ -201,16 +201,29 @@ func BuildListPolicyGrantsPayload(agentsListPolicyGrantsAgentID string, agentsLi
 // createPolicyGrant endpoint from CLI flags.
 func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCreatePolicyGrantSessionToken string) (*agents.CreatePolicyGrantPayload, error) {
 	var err error
-	var body struct {
-		AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-		Scope    *string `form:"scope" json:"scope" xml:"scope"`
-		Effect   *string `form:"effect" json:"effect" xml:"effect"`
-		Selector *string `form:"selector" json:"selector" xml:"selector"`
-	}
+	var body CreatePolicyGrantRequestBody
 	{
 		err = json.Unmarshal([]byte(agentsCreatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Selector == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 1, true))
+		}
+		if !(body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow"}))
+		}
+		if body.Selector != nil {
+			if err2 := ValidateAgentPolicySelector(body.Selector); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -219,7 +232,14 @@ func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCre
 			sessionToken = &agentsCreatePolicyGrantSessionToken
 		}
 	}
-	v := &agents.CreatePolicyGrantPayload{}
+	v := &agents.CreatePolicyGrantPayload{
+		AgentID: body.AgentID,
+		Scope:   body.Scope,
+		Effect:  body.Effect,
+	}
+	if body.Selector != nil {
+		v.Selector = marshalAgentPolicySelectorToAgentsAgentPolicySelector(body.Selector)
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -229,17 +249,30 @@ func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCre
 // updatePolicyGrant endpoint from CLI flags.
 func BuildUpdatePolicyGrantPayload(agentsUpdatePolicyGrantBody string, agentsUpdatePolicyGrantSessionToken string) (*agents.UpdatePolicyGrantPayload, error) {
 	var err error
-	var body struct {
-		AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-		GrantID  *string `form:"grant_id" json:"grant_id" xml:"grant_id"`
-		Scope    *string `form:"scope" json:"scope" xml:"scope"`
-		Effect   *string `form:"effect" json:"effect" xml:"effect"`
-		Selector *string `form:"selector" json:"selector" xml:"selector"`
-	}
+	var body UpdatePolicyGrantRequestBody
 	{
 		err = json.Unmarshal([]byte(agentsUpdatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"grant_id\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Selector == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", body.GrantID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 1, true))
+		}
+		if !(body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow"}))
+		}
+		if body.Selector != nil {
+			if err2 := ValidateAgentPolicySelector(body.Selector); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -248,7 +281,15 @@ func BuildUpdatePolicyGrantPayload(agentsUpdatePolicyGrantBody string, agentsUpd
 			sessionToken = &agentsUpdatePolicyGrantSessionToken
 		}
 	}
-	v := &agents.UpdatePolicyGrantPayload{}
+	v := &agents.UpdatePolicyGrantPayload{
+		GrantID: body.GrantID,
+		AgentID: body.AgentID,
+		Scope:   body.Scope,
+		Effect:  body.Effect,
+	}
+	if body.Selector != nil {
+		v.Selector = marshalAgentPolicySelectorToAgentsAgentPolicySelector(body.Selector)
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil
