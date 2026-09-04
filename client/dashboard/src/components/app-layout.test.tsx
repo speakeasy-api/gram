@@ -27,10 +27,13 @@ vi.mock("@/contexts/Sdk.tsx", () => ({
   }),
 }));
 
+import {
+  restoreLocation,
+  stubLocationReplace,
+} from "@/lib/stub-location-replace";
+
 import { ImpersonationBanner, LoginCheck } from "./app-layout";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
-
-let originalLocation: Location | undefined;
 
 const baseSession = {
   impersonatorEmail: undefined,
@@ -55,13 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  if (originalLocation) {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
-    originalLocation = undefined;
-  }
+  restoreLocation();
 });
 
 describe("trusted support banner", () => {
@@ -94,20 +91,7 @@ describe("trusted support banner", () => {
       ...baseSession,
       organizationOverride: true,
     });
-    originalLocation = window.location;
-    const hrefSetter = vi.fn();
-    // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
-    delete window.location;
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
-        ...originalLocation,
-        set href(value: string) {
-          hrefSetter(value);
-        },
-      },
-    });
+    const replace = stubLocationReplace();
 
     render(<ImpersonationBanner />);
     await userEvent.click(
@@ -116,7 +100,7 @@ describe("trusted support banner", () => {
 
     await waitFor(() => {
       expect(mocks.logout).toHaveBeenCalledOnce();
-      expect(hrefSetter).toHaveBeenCalledWith("/login");
+      expect(replace).toHaveBeenCalledWith("/login");
     });
   });
 

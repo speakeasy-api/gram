@@ -1,5 +1,6 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { cn } from "@/lib/utils";
 import { AUTH_BUTTON_CLASSES } from "@/pages/login/components/auth-constants";
 import { AuthShell } from "@/pages/login/components/auth-shell";
@@ -106,10 +107,7 @@ export default function SwitchOrg({
     }
   };
 
-  const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
-  };
+  const handleLogout = () => logoutToLogin(client);
 
   const currentOrg = allOrgs.find((org) => org.id === currentOrgId);
   const currentOrgName =

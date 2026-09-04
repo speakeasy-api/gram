@@ -2,6 +2,7 @@ import { useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
@@ -123,8 +124,7 @@ export const ImpersonationBanner = (): JSX.Element => {
         window.location.replace("/");
         return;
       }
-      await client.auth.logout();
-      window.location.href = "/login";
+      await logoutToLogin(client);
     })();
   };
 
@@ -242,10 +242,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
           type="button"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
-            void (async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
-            })();
+            void logoutToLogin(client);
           }}
         >
           Log out

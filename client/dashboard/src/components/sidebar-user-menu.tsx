@@ -8,6 +8,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getAdminServerUrl } from "@/lib/admin-server-url";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   DropdownMenu,
@@ -245,10 +246,7 @@ export function SidebarUserMenu(): JSX.Element {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
-              void (async () => {
-                await client.auth.logout();
-                window.location.href = "/login";
-              })();
+              void logoutToLogin(client);
             }}
           >
             <LogOutIcon className="mr-2 h-4 w-4" />
