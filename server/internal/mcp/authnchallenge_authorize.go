@@ -185,6 +185,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		FlowID:                   flowID,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
+		AuthorizerImpersonated:   nil,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpoint.EndpointRef(baseURL),
 		ClientID:                 req.ClientID,

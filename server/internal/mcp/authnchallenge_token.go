@@ -566,7 +566,49 @@ func (s *Service) rotateRefreshToken(
 	canPublishFailure bool,
 	logger *slog.Logger,
 ) (releaseLease bool, err error) {
-	dbtx, err := s.db.Begin(ctx)
+	// Resolve rollout and request context before claiming a transaction
+	// connection. Live parent and policy admission runs later on the rotation
+	// transaction itself, immediately before minting the successor.
+	var admittedAgentSessionID uuid.UUID
+	admittedAgentContext := ctx
+	refreshSession, lookupErr := usersessions_repo.New(s.db).GetUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetUserSessionByRefreshTokenHashParams{
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		RefreshTokenHash:    refreshTokenHash,
+	})
+	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+		return true, oops.E(oops.CodeUnexpected, lookupErr, "load refresh token session").LogError(ctx, logger)
+	}
+	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent &&
+		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
+		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
+		selection, selectionErr := toolfilter.ParseSessionSelection(refreshSession.ToolSelection)
+		selectionMatches := selectionErr == nil && (selection == nil || selection.Resource == endpointToolSelectionResource(endpoint))
+		if selectionMatches {
+			credential, admissionErr := loadAgentSessionCredential(
+				endpoint, refreshSession.SubjectUrn, refreshSession.SubjectUrn, refreshSession.OrganizationID,
+				refreshSession.AuthorizerUserID, refreshSession.DelegatedGrants, refreshSession.DelegatedGrantsVersion,
+			)
+			if admissionErr == nil {
+				admittedAgentContext, admissionErr = s.contextForSessionSubject(ctx, endpoint, refreshSession.SubjectUrn, "", clientRow.ClientID)
+			}
+			if admissionErr == nil {
+				admittedAgentContext, admissionErr = s.prepareAgentSessionContext(admittedAgentContext, endpoint, refreshSession.SubjectUrn, credential)
+			}
+			if admissionErr != nil {
+				var rolloutErr *oops.ShareableError
+				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+					return true, admissionErr
+				}
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+			}
+			admittedAgentSessionID = refreshSession.ID
+		}
+	}
+
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
+	})
 	if err != nil {
 		return true, oops.E(oops.CodeUnexpected, err, "begin refresh token rotation").LogError(ctx, logger)
 	}
@@ -672,22 +714,20 @@ func (s *Service) rotateRefreshToken(
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
-		credential, cerr := loadAgentSessionCredential(
-			endpoint, oldSession.SubjectUrn, oldSession.SubjectUrn, oldSession.OrganizationID,
-			oldSession.AuthorizerUserID, oldSession.DelegatedGrants, oldSession.DelegatedGrantsVersion,
-		)
-		authorizationCtx := ctx
-		if cerr == nil {
-			authorizationCtx, cerr = s.contextForSessionSubject(ctx, endpoint, oldSession.SubjectUrn, "", clientRow.ClientID)
+		var admissionErr error
+		if admittedAgentSessionID == uuid.Nil || admittedAgentSessionID != oldSession.ID {
+			admissionErr = oops.C(oops.CodeUnauthorized)
+		} else {
+			admittedAgentContext, admissionErr = s.authz.AdmitPrincipalCredentialWithDBTX(admittedAgentContext, dbtx)
+			if admissionErr == nil {
+				admittedAgentContext, admissionErr = s.requireAgentSessionAuthorization(admittedAgentContext, endpoint)
+			}
 		}
-		if cerr == nil {
-			authorizationCtx, cerr = s.admitAgentSession(authorizationCtx, endpoint, oldSession.SubjectUrn, credential)
-		}
-		if cerr != nil {
+		if admissionErr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}
-		ctx = authorizationCtx
+		ctx = admittedAgentContext
 	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
@@ -799,23 +839,23 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
 	}
-	replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Jti:                 payload.JTI,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_revoked")
+	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
+		replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Jti:                 payload.JTI,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_revoked")
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+			}
+			return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
+		}
+		if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
+			replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
 		}
-		return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
-	}
-	if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
-		replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
-	}
-	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
 		credential, cerr := loadAgentSessionCredential(
 			endpoint, *payload.Subject, replaySession.SubjectUrn, replaySession.OrganizationID,
 			replaySession.AuthorizerUserID, replaySession.DelegatedGrants, replaySession.DelegatedGrantsVersion,
@@ -828,6 +868,10 @@ func (s *Service) writeRefreshTokenReplay(
 			_, cerr = s.admitAgentSession(authorizationCtx, endpoint, *payload.Subject, credential)
 		}
 		if cerr != nil {
+			var rolloutErr *oops.ShareableError
+			if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+				return cerr
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}

@@ -54,10 +54,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// than a flow failure, so it is left to the started-without-terminal gap.
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
-	if challengeState.AuthorizerUserID != "" {
-		// Only the pre-IDP cache key belongs on this route. A resolved challenge
-		// must proceed through consent; accepting it here would let a second IDP
-		// result replace the immutable human authorizer attribution.
+	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
+		// Only the pre-IDP cache key belongs on this route. Public challenges and
+		// private challenges resolved by any server version already carry a
+		// subject; accepting either here would let a second IDP result replace the
+		// immutable human identity. Retain the authorizer marker check as a guard
+		// for malformed states that carry only the newer field.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge identity is already resolved").LogError(ctx, logger)
 	}
 
@@ -198,6 +200,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
+	impersonated := idpUser.ImpersonatorEmail() != ""
+	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)

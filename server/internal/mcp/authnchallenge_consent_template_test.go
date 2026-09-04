@@ -515,6 +515,30 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	require.NotContains(t, html, `name="scope"`)
 }
 
+func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:            "Demo",
+		MCPSlug:               "example",
+		MCPRouteBase:          "mcp",
+		State:                 "state",
+		CSRFToken:             "csrf",
+		SubjectDisplay:        "user@example.com",
+		ScriptURL:             "/mcp/consent-page-test.js",
+		ConsentEnabled:        false,
+		AgentSelectionEnabled: true,
+		AgentOptions:          []consentAgentOption{{ID: "01998c1e-0000-7000-8000-000000000001", Name: "Build agent"}},
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	hint := strings.Index(html, "Connect a service above to enable access.")
+	require.NotEqual(t, -1, hint)
+	require.Contains(t, html[hint-100:hint], "data-agent-self-only")
+}
+
 func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {
 	t.Parallel()
 

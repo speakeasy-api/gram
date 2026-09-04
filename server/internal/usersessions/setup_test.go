@@ -431,6 +431,27 @@ func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	return project.ID
 }
 
+// seedLegacyProjectIssuer writes the pre-dual-write shape: a project-tier
+// issuer whose organization_id is NULL. Session creation must recover its
+// organization from the owning project.
+func seedLegacyProjectIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     pgtype.Text{},
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
 // seedIssuerInProject creates a project-tier issuer owned by an arbitrary
 // project rather than the one on the auth context. organization_id is written
 // the way the production create handler writes it, so the row is a faithful

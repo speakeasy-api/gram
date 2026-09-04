@@ -66,6 +66,7 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 		ID:                       stateID,
 		UserSessionIssuerID:      target.UserSessionIssuerID,
 		AuthorizerUserID:         authCtx.UserID,
+		AuthorizerImpersonated:   new(bool),
 		AgentAuthorizationTarget: &target,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:   toolset.McpSlug.String,
@@ -308,6 +309,65 @@ func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
 	require.Empty(t, w.Header().Get("Location"))
+}
+
+func TestConsentAgentSelectionRejectsImpersonatedAuthorizer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	agent := createConsentAgent(t, ctx, ti, fx, "Support-hidden agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	impersonated := true
+	state.AuthorizerImpersonated = &impersonated
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	w := serveAgentConsentGet(t, ctx, ti, fx)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotContains(t, w.Body.String(), "Authorize as")
+	require.NotContains(t, w.Body.String(), agent.Name)
+
+	w, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.Empty(t, w.Header().Get("Location"))
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err, "impersonated rejection must not consume the challenge")
+}
+
+func TestConsentAgentSelectionRejectsLegacyAuthorizerWithoutProvenance(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	agent := createConsentAgent(t, ctx, ti, fx, "Legacy-hidden agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.AuthorizerImpersonated = nil
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	w := serveAgentConsentGet(t, ctx, ti, fx)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotContains(t, w.Body.String(), "Authorize as")
+	require.NotContains(t, w.Body.String(), agent.Name)
+
+	w, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.Empty(t, w.Header().Get("Location"))
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err, "legacy-state rejection must not consume the challenge")
 }
 
 func TestConsentAgentSelectionFailsClosedWhenRolloutDisabled(t *testing.T) {

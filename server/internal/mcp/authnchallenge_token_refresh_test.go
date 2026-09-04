@@ -25,7 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -177,12 +179,54 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, fx.userID, credential.AuthorizerUserID)
 
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, true)
+
 	_, err = agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
 	require.NoError(t, err)
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	oopsErr = nil
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestHandleToken_AgentRefreshHidesDisabledRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+
+	result := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.Error(t, result.err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, result.err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestHandleToken_AgentRefreshReplayHidesDisabledRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+	winner := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, winner.err)
+	require.Equal(t, http.StatusOK, winner.code, winner.body)
+
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	replay := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.Error(t, replay.err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, replay.err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {

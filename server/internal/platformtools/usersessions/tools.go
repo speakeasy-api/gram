@@ -55,8 +55,8 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		}
 	case urn.SessionSubjectKindAPIKey:
 		subjectName = conv.FromPGText[string](row.ApiKeyName)
-	case urn.SessionSubjectKindAnonymous:
-		// anonymous subjects have no resolved display name
+	case urn.SessionSubjectKindAnonymous, urn.SessionSubjectKindAgent:
+		// anonymous and agent subjects have no resolved display name
 	}
 
 	var revokedAt *string

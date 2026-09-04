@@ -92,6 +92,9 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 		return c.infrastructureRejection(ctx, err)
 	}
 	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
+		if derivation.hasAgentPrincipal() {
+			return c.infrastructureRejection(ctx, errors.New("agent principals are not supported by the MCP tool-execution kill switch"))
+		}
 		return c.noMatch(killswitches.NoMatchReasonUnsupportedIdentity)
 	}
 	if !supported {

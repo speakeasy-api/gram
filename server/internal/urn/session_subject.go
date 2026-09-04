@@ -216,8 +216,13 @@ func (u *SessionSubject) validate() error {
 	}
 
 	if u.Kind == SessionSubjectKindAPIKey || u.Kind == SessionSubjectKindAgent {
-		if _, parseErr := uuid.Parse(u.ID); parseErr != nil {
+		id, parseErr := uuid.Parse(u.ID)
+		if parseErr != nil {
 			u.err = fmt.Errorf("%w: %s id must be a uuid", ErrInvalid, u.Kind)
+			return u.err
+		}
+		if u.Kind == SessionSubjectKindAgent && id.String() != u.ID {
+			u.err = fmt.Errorf("%w: agent id must use canonical uuid format", ErrInvalid)
 			return u.err
 		}
 	}
