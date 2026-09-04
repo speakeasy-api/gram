@@ -144,18 +144,6 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		return zero, nil, err
 	}
 
-	// A refresh restates the issuer's whole discovered surface, clearing what
-	// the upstream no longer advertises. That is only sound when every
-	// candidate answered definitively. When a same-origin candidate failed
-	// transiently, a member it alone advertises would read as withdrawn, so
-	// the previously stored document fills whatever the partial result left
-	// out and the caller sees the warning discovery attached. Withdrawal is
-	// applied on the next complete refresh. A row with no stored document has
-	// nothing to fall back to and is refreshed as if complete.
-	if doc.partial != "" {
-		doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
-	}
-
 	// Gram distrusts the whole document rather than salvaging parts of it. A
 	// refresh overwrites metadata that currently works, so a document that
 	// deviates on anything load-bearing is more likely to be a captive portal,
@@ -198,6 +186,20 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		return zero, nil, &untrustedDocumentError{
 			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
 		}
+	}
+
+	// A refresh restates the issuer's whole discovered surface, clearing what
+	// the upstream no longer advertises. That is only sound when every
+	// candidate answered definitively. When a same-origin candidate failed
+	// transiently, a member it alone advertises would read as withdrawn, so
+	// the previously stored document fills whatever the partial result left
+	// out and the caller sees the warning discovery attached. Withdrawal is
+	// applied on the next complete refresh. A row with no stored document has
+	// nothing to fall back to and is refreshed as if complete. The fill runs
+	// only after the gate above has judged the fetched document on its own:
+	// a stored member must never satisfy a check the upstream failed.
+	if doc.partial != "" {
+		doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
 	}
 
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{

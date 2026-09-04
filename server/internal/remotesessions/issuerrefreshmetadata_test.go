@@ -166,6 +166,50 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(
 	}), "a 404 is definitive and raises no partial warning: %v", withdrawn.DiscoveryWarnings)
 }
 
+// The stored document only fills gaps after the fetched one has passed the
+// distrust gate on its own. A primary that advertises no issuer is rejected
+// even when a transient miss on the other candidate would otherwise have let
+// the stored issuer stand in for it.
+func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotBorrowStoredIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusOK)
+	var dropIssuer atomic.Bool
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+		oidcStatus: &oidcStatus,
+		mutateOAuth: func(doc map[string]any) {
+			if dropIssuer.Load() {
+				delete(doc, "issuer")
+			}
+		},
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial-issuer", upstream.URL))
+	require.NoError(t, err)
+
+	refresh := func() (*types.RemoteSessionIssuerRefresh, error) {
+		return ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+			ID:               created.ID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+	}
+
+	complete, err := refresh()
+	require.NoError(t, err)
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	dropIssuer.Store(true)
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	_, err = refresh()
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "advertises no issuer")
+}
+
 // loadIssuerRow reads the stored row for an issuer the test service created
 // in the test project.
 func loadIssuerRow(t *testing.T, ctx context.Context, ti *testInstance, issuer *types.RemoteSessionIssuer) repo.RemoteSessionIssuer {
