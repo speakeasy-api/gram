@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 )
 
 // Mode selects what a run does. Dry-run reads and reports without writing.
@@ -53,7 +52,6 @@ type Runner struct {
 	pool    *pgxpool.Pool
 	logger  *slog.Logger
 	engine  *celenv.Engine
-	catalog policycatalog.Catalog
 	options Options
 }
 
@@ -62,14 +60,10 @@ func NewRunner(pool *pgxpool.Pool, logger *slog.Logger, options Options) (*Runne
 	if err != nil {
 		return nil, fmt.Errorf("build cel engine: %w", err)
 	}
-	catalog, err := policycatalog.Build()
-	if err != nil {
-		return nil, fmt.Errorf("build policy catalog: %w", err)
-	}
 	if options.BatchSize <= 0 {
 		options.BatchSize = 100
 	}
-	return &Runner{pool: pool, logger: logger, engine: engine, catalog: catalog, options: options}, nil
+	return &Runner{pool: pool, logger: logger, engine: engine, options: options}, nil
 }
 
 // Run folds every policy carrying a legacy scope. Batches are keyset-paginated
@@ -179,7 +173,7 @@ func (r *Runner) foldRow(ctx context.Context, q *Queries, mode Mode, row LockLeg
 		ScopeInclude:    row.ScopeInclude.String,
 		ScopeExempt:     row.ScopeExempt.String,
 		DetectionScopes: ra.DetectionScopesFromConfig(row.AnalyzerConfig),
-	}, r.catalog)
+	})
 	if err != nil {
 		return err
 	}
