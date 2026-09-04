@@ -269,11 +269,7 @@ func logRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, logger *s
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) error {
-	ownerUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.ID))
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("resolve deleted owner: %w", err)
-	}
-	affected, err := usersrepo.New(dbtx).DisableUser(ctx, usersrepo.DisableUserParams{
+	ownerUserIDs, err := usersrepo.New(dbtx).DisableUser(ctx, usersrepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosDeletedAt: conv.ToPGTimestamptz(payload.DeletedAt),
 		WorkosID:        conv.ToPGText(payload.ID),
@@ -281,11 +277,10 @@ func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx da
 	if err != nil {
 		return fmt.Errorf("disable user: %w", err)
 	}
-	if affected == 0 || ownerUserID == "" {
-		return nil
-	}
-	if err := agentownership.LatchOwnerLossByUser(ctx, dbtx, ownerUserID, agentownership.OwnerReassignmentReasonOwnerDeleted, agentownership.SystemActor, nil); err != nil {
-		return fmt.Errorf("latch deleted agent owner: %w", err)
+	for _, ownerUserID := range ownerUserIDs {
+		if err := agentownership.LatchOwnerLossByUser(ctx, dbtx, ownerUserID, agentownership.OwnerReassignmentReasonOwnerDeleted, agentownership.SystemActor, nil); err != nil {
+			return fmt.Errorf("latch deleted agent owner: %w", err)
+		}
 	}
 	return nil
 }

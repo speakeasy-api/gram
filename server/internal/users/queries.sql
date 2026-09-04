@@ -25,14 +25,15 @@ ON CONFLICT (workos_id) DO UPDATE SET
   updated_at = clock_timestamp()
 WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at;
 
--- name: DisableUser :execrows
+-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = @workos_updated_at,
   workos_deleted_at = @workos_deleted_at,
   deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_id = @workos_id
-  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
+  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at)
+RETURNING id;
 
 -- name: GetUser :one
 SELECT * FROM users

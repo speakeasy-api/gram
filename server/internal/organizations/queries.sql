@@ -184,17 +184,7 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
 
--- name: LockWorkOSMembershipsMissingFromSet :many
-SELECT our.organization_id, our.user_id
-FROM organization_user_relationships AS our
-JOIN organization_metadata AS om ON om.id = our.organization_id
-WHERE our.user_id = @user_id
-  AND our.deleted_at IS NULL
-  AND om.workos_id IS NOT NULL
-  AND NOT (om.workos_id = ANY(@workos_org_ids::text[]))
-FOR UPDATE OF our;
-
--- name: SetUserWorkOSMemberships :exec
+-- name: SetUserWorkOSMemberships :many
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 -- (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
 -- the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
@@ -240,19 +230,20 @@ upserted AS (
     )
     ON CONFLICT (organization_id, user_id) DO UPDATE SET
         workos_membership_id = EXCLUDED.workos_membership_id,
-        deleted_at = NULL,
         updated_at = clock_timestamp()
+    WHERE organization_user_relationships.deleted IS FALSE
     RETURNING organization_id
 )
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = @user_id
-  AND organization_user_relationships.deleted_at IS NULL
+  AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
-  );
+  )
+RETURNING organization_id, user_id;
 
 -- name: SetOrgWorkosID :one
 UPDATE organization_metadata
@@ -435,7 +426,7 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     deleted_at = NULL,
     updated_at = clock_timestamp();
 
--- name: MarkWorkOSMembershipDeleted :exec
+-- name: MarkWorkOSMembershipDeleted :many
 -- Record a WorkOS membership delete, inserting a tombstone when the local
 -- relationship did not exist so stale replayed creates cannot resurrect it.
 WITH updated_existing_user_relationship AS (
@@ -446,11 +437,15 @@ WITH updated_existing_user_relationship AS (
         workos_last_event_id = @workos_last_event_id,
         deleted_at = COALESCE(deleted_at, clock_timestamp()),
         updated_at = clock_timestamp()
-    WHERE organization_id = @organization_id
-      AND user_id = @user_id
-      AND @user_id::text IS NOT NULL
-    RETURNING id
-)
+    WHERE organization_user_relationships.organization_id = @organization_id
+      AND (
+          (sqlc.narg('user_id')::text IS NOT NULL AND organization_user_relationships.user_id = sqlc.narg('user_id'))
+          OR (@workos_user_id::text IS NOT NULL AND organization_user_relationships.workos_user_id = @workos_user_id)
+          OR (@workos_membership_id::text IS NOT NULL AND organization_user_relationships.workos_membership_id = @workos_membership_id)
+      )
+    RETURNING organization_user_relationships.user_id
+),
+inserted AS (
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
@@ -462,7 +457,7 @@ INSERT INTO organization_user_relationships (
 )
 SELECT
     @organization_id,
-    @user_id,
+    sqlc.narg('user_id'),
     @workos_user_id,
     @workos_membership_id,
     @workos_updated_at,
@@ -476,7 +471,12 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+RETURNING user_id
+)
+SELECT user_id FROM updated_existing_user_relationship
+UNION ALL
+SELECT user_id FROM inserted;
 
 -- name: SyncUserOrganizationRoleAssignments :exec
 -- Declaratively set all WorkOS role assignments for a known Gram user in an

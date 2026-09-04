@@ -6419,6 +6419,8 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: reassign
+      x-speakeasy-react-hook:
+        name: ReassignAgent
   /rpc/agents.rename:
     post:
       operationId: renameAgent
@@ -6846,6 +6848,8 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: transfer
+      x-speakeasy-react-hook:
+        name: TransferAgent
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.

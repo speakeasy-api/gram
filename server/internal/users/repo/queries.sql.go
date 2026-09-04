@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const disableUser = `-- name: DisableUser :execrows
+const disableUser = `-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = $1,
   workos_deleted_at = $2,
@@ -19,6 +19,7 @@ SET workos_updated_at = $1,
   updated_at = clock_timestamp()
 WHERE workos_id = $3
   AND (workos_updated_at IS NULL OR $1 >= workos_updated_at)
+RETURNING id
 `
 
 type DisableUserParams struct {
@@ -27,12 +28,24 @@ type DisableUserParams struct {
 	WorkosID        pgtype.Text
 }
 
-func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) (int64, error) {
-	result, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
+func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
