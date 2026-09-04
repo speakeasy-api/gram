@@ -690,6 +690,35 @@ function remoteServerStatus(
 }
 
 /**
+ * Link to the MCP server's Inspect tab, correctly scoped to the server's
+ * project. Uses useRoutes with the project slug override so the link works
+ * when rendered from org-level pages (where the ambient projectSlug is
+ * undefined).
+ */
+function InspectTabLink({
+  serverId,
+  serverSlug,
+  projectSlug,
+}: {
+  serverId: string;
+  serverSlug: string;
+  projectSlug?: string;
+}) {
+  const routes = useRoutes({ projectSlug });
+  return (
+    <Link
+      to={routes.mcp.x.inspect.href(
+        mcpServerRouteParam({ id: serverId, slug: serverSlug }),
+      )}
+      className="text-primary inline-flex items-center gap-1 hover:underline"
+    >
+      Connect it on the Inspect tab
+      <ArrowUpRight className="h-3 w-3" />
+    </Link>
+  );
+}
+
+/**
  * Dashboard adapter around the shared ToolSelectionPanel: converts server
  * groups and selectors into the panel's normalized types, lazily loads remote
  * tool metadata, and replays panel toggles as the legacy selector/annotation
@@ -722,8 +751,6 @@ function RoleToolSelectionPanel({
   isDeny?: boolean;
   className?: string;
 }): JSX.Element {
-  const routes = useRoutes();
-
   const allServers = useMemo(
     () =>
       mcpServers
@@ -796,15 +823,11 @@ function RoleToolSelectionPanel({
               <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
                 <p>This server&apos;s tools haven&apos;t been synced yet.</p>
                 <p>
-                  <Link
-                    to={routes.mcp.x.inspect.href(
-                      mcpServerRouteParam({ id: server.id, slug: server.slug }),
-                    )}
-                    className="text-primary inline-flex items-center gap-1 hover:underline"
-                  >
-                    Connect it on the Inspect tab
-                    <ArrowUpRight className="h-3 w-3" />
-                  </Link>{" "}
+                  <InspectTabLink
+                    serverId={server.id}
+                    serverSlug={server.slug}
+                    projectSlug={server.projectSlug}
+                  />{" "}
                   to permission its tools individually.
                 </p>
               </div>
@@ -820,7 +843,7 @@ function RoleToolSelectionPanel({
           status: "ready",
         };
       }),
-    [allServers, remoteTools, routes],
+    [allServers, remoteTools],
   );
 
   // Annotation counts stay pinned to deploy-time tools: lazily loaded remote
