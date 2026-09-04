@@ -75,6 +75,7 @@ func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
 		"agent:revoke",
 		"agent:delete",
 	}, actions)
+	require.Equal(t, actions, m1OutboxActions(t, conn, "org-a"))
 }
 
 func TestAuditFailureRollsBackLifecycleMutation(t *testing.T) {

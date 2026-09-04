@@ -21,7 +21,7 @@ The migration targets every active role with the reserved `admin` slug that can 
 
 ## Rollout gate
 
-Agent-management endpoints must remain disabled for a target environment or cohort until `-verify` exits zero against that complete target database and the output has `summary.verification.ready_for_enforcement=true`. A dry run is evidence for planning only; it does not open the gate. Apply also blocks if its final verification finds unexpected rows or unresolved administrator roles.
+Agent-management endpoints fail closed behind the `gram-agent-management-m1` feature flag. Keep that flag disabled for a target environment or cohort until the focused M1 agent CI gate passes for the published `GRAM_CODE_SHA`, `-verify` exits zero against that complete target database, and the output has `summary.verification.ready_for_enforcement=true`. A dry run is evidence for planning only; it does not open the gate. Apply also blocks if its final verification finds unexpected rows or unresolved administrator roles.
 
 If verification is blocked, investigate the bounded samples internally, repair the role data through the existing role/grant machinery, rerun apply if required grants are missing, and repeat verification. Do not add an `org:admin` runtime fallback or enable a partially verified cohort.
 
@@ -43,7 +43,7 @@ Set `GRAM_DATABASE_URL` to the target PostgreSQL URL with `sslmode=require`, `ss
      -apply -environment=staging -confirm-environment=staging
    ```
 
-3. Run the rollout gate separately. Do not enable enforcement unless this exits zero and reports readiness:
+3. Run database verification separately. Do not enable the `gram-agent-management-m1` feature flag unless the focused M1 agent CI gate passed for `GRAM_CODE_SHA` and this command exits zero and reports readiness:
 
    ```sh
    go run ./server/cmd/tools/migrations agent-management-grants \
