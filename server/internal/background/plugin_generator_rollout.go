@@ -155,6 +155,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					CreatedByUserID: candidate.CreatedByUserID,
 					CommitMessage:   commitMessage,
 					SkipIfUnchanged: true,
+					// The sweep is the safety net for a lost initial-publish
+					// enqueue, so unlike a change signal it may create the repo.
+					// Its candidate list is already scoped to projects with a
+					// Default plugin or a previous publish.
+					AllowFirstPublish: true,
 				}))
 			}
 

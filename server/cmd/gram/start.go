@@ -246,6 +246,8 @@ func restoreLocalPluginRepositories(
 				CreatedByUserID: candidate.CreatedByUserID,
 				CommitMessage:   "Restore local plugin marketplace",
 				SkipIfUnchanged: false,
+				// Local dev restore recreates the repo on purpose.
+				AllowFirstPublish: true,
 			}); err != nil {
 				logger.WarnContext(ctx, "restore local plugin repository",
 					attr.SlogProjectID(candidate.ProjectID.String()),

@@ -1900,6 +1900,8 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
 		SkipIfUnchanged: false,
+		// A human clicking Publish is exactly how a project gets its first repo.
+		AllowFirstPublish: true,
 	})
 	if err != nil {
 		return nil, err
@@ -1923,6 +1925,20 @@ type PublishProjectInput struct {
 	// rollout hasn't cleared. The only lever to advance hooks is the
 	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary).
 	SkipIfUnchanged bool
+	// AllowFirstPublish lets the publish create the project's marketplace repo
+	// when it has none yet. It is deliberately opt-in — false must stay the
+	// safe value, because a workflow payload encoded before this field existed
+	// (or a call site that forgets it) decodes as false, and the failure mode
+	// of creating a repo is worse than the failure mode of deferring one to the
+	// rollout sweep.
+	//
+	// Set it on the paths that mean to create a marketplace: project creation,
+	// a Default-plugin attach, the dashboard Publish button, and the sweep
+	// (whose candidates are already scoped to projects with a Default plugin or
+	// a previous publish). A plain change signal leaves it off: the mutation
+	// behind it only means generated output may have moved, which is no reason
+	// to hand a project with nothing attachable an empty repo and an API key.
+	AllowFirstPublish bool
 }
 
 type PublishProjectResult struct {
@@ -1958,9 +1974,10 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames: nil,
-		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged: input.SkipIfUnchanged,
+		GitHubUsernames:   nil,
+		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:   input.SkipIfUnchanged,
+		AllowFirstPublish: input.AllowFirstPublish,
 	})
 	if err != nil {
 		return nil, err
@@ -1986,6 +2003,9 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// AllowFirstPublish permits creating the project's first marketplace repo;
+	// see PublishProjectInput.AllowFirstPublish.
+	AllowFirstPublish bool
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2066,6 +2086,29 @@ type publishOutcome struct {
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
+	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
+	// so the rows we persist round-trip cleanly through the case-insensitive
+	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
+	repoOwner := strings.ToLower(s.github.Org)
+	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+
+	// Resolved before any plugin or config work so a change signal for an
+	// unpublished project costs one query rather than a full in-memory
+	// generate it is only going to throw away.
+	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
+	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
+	}
+	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	// A change-driven signal updates an existing marketplace but never creates
+	// one: the mutation that triggered it only means the generated output may
+	// have moved, which is no reason to hand a project a repo (and a fresh API
+	// key) it has never had. RepoURL is still reported so callers can log it.
+	if firstPublish && !input.AllowFirstPublish {
+		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: false}, nil
+	}
+
 	pluginInfos, err := s.resolvePluginInfos(ctx, input.ProjectID)
 	if err != nil {
 		return nil, err
@@ -2082,18 +2125,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
 
-	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
-	// so the rows we persist round-trip cleanly through the case-insensitive
-	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
-	repoOwner := strings.ToLower(s.github.Org)
-	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
-
-	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
-	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
-	}
-	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
 	// Package admission is available before the first Platform MCP connection,
@@ -2491,6 +2522,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				},
 				GitHubUsernames: nil,
 				CommitMessage:   "Update marketplace name",
+				// Only reached when a connection already exists (see the switch
+				// above), so this never creates a repo either way.
+				AllowFirstPublish: true,
 				// A human changed the marketplace name: always republish so the
 				// new name propagates to installed copies (MCP + marketplace.json).
 				// The hooks component is gated by the rollout inside publishProject:

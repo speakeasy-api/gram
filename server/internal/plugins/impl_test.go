@@ -2576,6 +2576,8 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	}
 
 	// First publish: no fingerprint on record yet, so it must publish.
@@ -2686,6 +2688,8 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	}
 
 	first, err := ti.service.PublishProject(ctx, input)
@@ -2747,6 +2751,8 @@ func phasedRolloutFixture(t *testing.T, ctx context.Context, ti *testInstance, m
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "baseline",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 
@@ -2781,6 +2787,8 @@ func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "phased",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 	require.True(t, res.Skipped, "non-eligible org with a pending hooks bump and no content change must skip")
@@ -2815,6 +2823,8 @@ func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *te
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "phased",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 	require.False(t, res.Skipped, "eligible org must roll the pending hooks bump forward")
@@ -2861,6 +2871,8 @@ func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPha
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "phased",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 	require.False(t, res.Skipped, "MCP content change must publish even for a phase-gated org")
@@ -2913,6 +2925,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	}
 
 	first, err := ti.service.PublishProject(ctx, input)
@@ -2980,6 +2994,8 @@ func TestPluginsService_PublishProject_SkipsAfterDashboardPublish(t *testing.T) 
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
+		// These exercise the automated publisher, which may create the repo.
+		AllowFirstPublish: true,
 	})
 	require.NoError(t, err)
 	require.True(t, result.Skipped, "rollout must skip a project the dashboard just published unchanged")
