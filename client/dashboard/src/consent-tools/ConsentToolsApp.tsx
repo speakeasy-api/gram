@@ -270,7 +270,9 @@ export function ConsentToolsApp({
   useEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
-      button.disabled = !approveReady;
+      button.dataset["consentSelfReady"] = approveReady ? "true" : "false";
+      button.disabled =
+        button.dataset["agentSelected"] !== "true" && !approveReady;
     }
   }, [approveButtonId, approveReady]);
 

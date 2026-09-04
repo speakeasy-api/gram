@@ -45,6 +45,63 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentPolicy = document.querySelector("[data-agent-policy]");
+    var agentPolicyName = document.querySelector("[data-agent-policy-name]");
+    var subjectDisplay = document.querySelector(
+      "[data-consent-subject-display]",
+    );
+    var subjectMode = document.querySelector("[data-consent-subject-mode]");
+    var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
+    if (agentInputs.length > 0) {
+      var syncAgentSelection = function () {
+        var selected = null;
+        Array.prototype.forEach.call(agentInputs, function (input) {
+          if (input.checked) {
+            selected = input;
+          }
+        });
+        var authorizingAgent = Boolean(selected && selected.value !== "");
+        var selectedDisplay = selected
+          ? selected.getAttribute("data-subject-display") || ""
+          : "";
+        if (agentPolicy) {
+          agentPolicy.hidden = !authorizingAgent;
+        }
+        if (agentPolicyName) {
+          agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
+        }
+        Array.prototype.forEach.call(selfOnlySections, function (section) {
+          section.hidden = authorizingAgent;
+        });
+        if (subjectDisplay && selected) {
+          subjectDisplay.textContent = selectedDisplay;
+        }
+        if (subjectMode) {
+          subjectMode.textContent = authorizingAgent
+            ? "Authorizing"
+            : "Signing in as";
+        }
+        if (button) {
+          button.textContent = authorizingAgent
+            ? button.getAttribute("data-agent-label")
+            : button.getAttribute("data-self-label");
+          button.setAttribute(
+            "data-agent-selected",
+            authorizingAgent ? "true" : "false",
+          );
+          button.value = authorizingAgent ? "approve_agent" : "approve";
+          button.disabled = authorizingAgent
+            ? false
+            : button.getAttribute("data-consent-self-ready") !== "true";
+        }
+      };
+      Array.prototype.forEach.call(agentInputs, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      syncAgentSelection();
+    }
+
     form.addEventListener("submit", function (event) {
       if (submitted) {
         event.preventDefault();

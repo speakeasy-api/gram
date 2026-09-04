@@ -27,6 +27,11 @@ const (
 	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
 
+	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
+	// authorization challenge. It remains independently default-off until the M2
+	// credential and authorization safety gate is promoted.
+	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
+
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email

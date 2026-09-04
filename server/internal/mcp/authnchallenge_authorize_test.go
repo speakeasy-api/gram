@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -81,6 +82,13 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 	// Stamping the platform origin here would make each of them emit an `iss`
 	// the client discards, with no error it is allowed to display.
 	require.Equal(t, "https://"+domain.Domain, stored.Endpoint.BaseURL)
+	require.Equal(t, &mcp.AgentAuthorizationTarget{
+		Scope:               authz.ScopeMCPConnect,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           toolset.ProjectID,
+		UserSessionIssuerID: issuer.ID,
+		MCPResourceID:       toolset.ID,
+	}, stored.AgentAuthorizationTarget)
 }
 
 // The end-to-end shape the mint-time snapshot exists for: /authorize runs on a

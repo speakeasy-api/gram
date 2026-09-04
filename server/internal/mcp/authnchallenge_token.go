@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -283,7 +284,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Atomic GETDEL: single-use authorization code. If two clients race to
 	// redeem the same code, exactly one wins the GETDEL; the other gets
 	// ErrCacheMiss and is rejected as invalid_grant (RFC 6749 §4.1.2 / §10.5).
-	grantKey := "userSessionGrant:" + endpoint.UserSessionIssuerID.String() + ":" + req.Code
+	// Agent codes are stored in a separate namespace. Older binaries only
+	// probe userSessionGrant and therefore fail closed instead of interpreting
+	// an additive grant field as a human authorization during a rolling deploy.
+	grantKey := userSessionGrantCacheKey(endpoint.UserSessionIssuerID, req.Code, strings.HasPrefix(req.Code, agentAuthorizationCodePrefix))
 	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
@@ -314,6 +318,15 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
+	}
+
+	// AIM-196 hands a fully authorized agent choice to the existing token flow,
+	// but AIM-197 owns minting the corresponding agent session. Reject rather
+	// than silently ignoring the handoff and creating a human session.
+	if grant.AgentAuthorization != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_session_not_available")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent sessions are not available")
 	}
 
 	var desiredSessionDuration *time.Duration

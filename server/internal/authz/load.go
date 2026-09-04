@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -65,20 +67,70 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 
 	grants := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		scope := Scope(row.Scope)
-		if ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope) != nil {
-			continue
+		if grant, ok := normalizeAgentPolicyGrant(row); ok {
+			grants = append(grants, grant)
 		}
-		selector, err := SelectorFromRow(row.Selectors)
-		if err != nil || ValidateSelector(scope, selector) != nil {
-			continue
-		}
-		grants = append(grants, Grant{
-			PrincipalUrn: canonical.String(),
-			Scope:        scope,
-			Selector:     selector,
-		})
 	}
 
 	return grants, nil
+}
+
+// LoadKnownAgentPolicies loads direct runtime-safe policy for agent IDs that a
+// caller has already resolved inside organizationID. It batches the grant read
+// so candidate lists do not issue one policy query per agent.
+func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizationID string, agentIDs []uuid.UUID) (map[uuid.UUID][]Grant, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+
+	principalURNs := make([]string, 0, len(agentIDs))
+	agentIDByPrincipal := make(map[string]uuid.UUID, len(agentIDs))
+	policies := make(map[uuid.UUID][]Grant, len(agentIDs))
+	for _, agentID := range agentIDs {
+		if agentID == uuid.Nil {
+			return nil, fmt.Errorf("agent id is required")
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()).String()
+		principalURNs = append(principalURNs, principal)
+		agentIDByPrincipal[principal] = agentID
+		policies[agentID] = nil
+	}
+	if len(principalURNs) == 0 {
+		return policies, nil
+	}
+
+	rows, err := accessrepo.New(db).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{
+		OrganizationID: organizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query agent policy grants: %w", err)
+	}
+
+	for _, row := range rows {
+		agentID, known := agentIDByPrincipal[row.PrincipalUrn.String()]
+		grant, valid := normalizeAgentPolicyGrant(row)
+		if known && valid {
+			policies[agentID] = append(policies[agentID], grant)
+		}
+	}
+
+	return policies, nil
+}
+
+func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (Grant, bool) {
+	var invalid Grant
+	scope := Scope(row.Scope)
+	if ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope) != nil {
+		return invalid, false
+	}
+	selector, err := SelectorFromRow(row.Selectors)
+	if err != nil || ValidateSelector(scope, selector) != nil {
+		return invalid, false
+	}
+	return Grant{
+		PrincipalUrn: row.PrincipalUrn.String(),
+		Scope:        scope,
+		Selector:     selector,
+	}, true
 }
