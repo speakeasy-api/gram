@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -66,7 +67,14 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
+		var shareable *oops.ShareableError
+		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+			return ctx, fmt.Errorf("principal credential admission: %w", err)
+		}
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
+	}
+	if scheme.Name == constants.KeySecurityScheme {
+		s.keys.TouchPrincipalAPIKey(ctx)
 	}
 
 	// After resolving Gram-Project, require the caller holds project:read on
