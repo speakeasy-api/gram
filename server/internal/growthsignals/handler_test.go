@@ -176,3 +176,22 @@ func TestEventHandlerAcksMalformedEnvelope(t *testing.T) {
 
 	require.Empty(t, client.Captured())
 }
+
+// The topic is at-least-once and this handler shares a message with its
+// siblings, so a sibling failure redelivers the event to everyone. The stable
+// outbox id is what lets PostHog collapse the redelivery into one occurrence.
+func TestEventHandlerStampsDeduplicationKey(t *testing.T) {
+	t.Parallel()
+
+	handler, client := newTestEventHandler(t)
+	event := auditWebhookEvent(t, string(events.RemoteMcpServerV1.EventType()), audit.ActionRemoteMcpServerCreate)
+
+	require.NoError(t, handler.Handle(t.Context(), event, testMessageMetadata()))
+	require.NoError(t, handler.Handle(t.Context(), event, testMessageMetadata()))
+
+	captured := client.Captured()
+	require.Len(t, captured, 2, "the handler itself does not dedupe; PostHog does")
+	require.Equal(t, handlerEventID, captured[0].Properties["$insert_id"])
+	require.Equal(t, captured[0].Properties["$insert_id"], captured[1].Properties["$insert_id"],
+		"a redelivery of one event must carry one key")
+}
