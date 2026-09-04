@@ -5,6 +5,8 @@ import {
   useProjectSources,
 } from "@/components/sources/source-list";
 import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -23,6 +25,7 @@ export function SourcesRoot(): JSX.Element {
  */
 export default function Sources(): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
   const { sources, isLoading } = useProjectSources();
   const [search, setSearch] = useState("");
 
@@ -37,14 +40,15 @@ export default function Sources(): JSX.Element {
   return (
     <ResourceListPage
       scope="mcp:read"
+      resourceId={project.id}
       title="Sources"
       description="The OpenAPI documents and functions this project deploys. Their tools are what an MCP server built from them starts with."
       primaryAction={
-        <routes.mcp.add.fromSource.Link>
-          <Button variant="primary">
+        <Button variant="primary" asChild>
+          <routes.mcp.add.fromSource.Link>
             <Button.Text>Build a server</Button.Text>
-          </Button>
-        </routes.mcp.add.fromSource.Link>
+          </routes.mcp.add.fromSource.Link>
+        </Button>
       }
       search={{
         value: search,
@@ -61,6 +65,13 @@ export default function Sources(): JSX.Element {
           "Push an OpenAPI document or a function, from the CLI or the add flow, and it shows up here.",
       }}
     >
+      {filtered.length === 0 ? (
+        // Distinct from the empty state above: the project has sources, this
+        // search just doesn't match any, so the toolbar stays put.
+        <Text muted small>
+          No sources match “{search.trim()}”.
+        </Text>
+      ) : null}
       <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
         {filtered.map((source) => (
           <SourceCard

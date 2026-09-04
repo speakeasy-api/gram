@@ -69,6 +69,9 @@ export default function CreateFromSource(): JSX.Element {
     if (!requested) return;
     setSelectedKey(requested.key);
     setName((current) => (current.trim() === "" ? requested.name : current));
+    // The arrival is only convincing if the chosen card is visible, and it may
+    // sit past the ten shown by default.
+    setShowAll(true);
   }, [requestedKey, selectedKey, sources]);
 
   const selected = sources.find((source) => source.key === selectedKey);

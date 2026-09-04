@@ -25,8 +25,9 @@ export function sourceAssetId(source: SourceOption): string {
 export function useProjectSources(): {
   sources: SourceOption[];
   isLoading: boolean;
+  isError: boolean;
 } {
-  const { data: deploymentResult, isLoading } = useLatestDeployment();
+  const { data: deploymentResult, isLoading, isError } = useLatestDeployment();
   const deployment = deploymentResult?.deployment;
 
   const sources = useMemo(() => {
@@ -45,5 +46,5 @@ export function useProjectSources(): {
     return [...openapi, ...functions];
   }, [deployment]);
 
-  return { sources, isLoading };
+  return { sources, isLoading, isError };
 }

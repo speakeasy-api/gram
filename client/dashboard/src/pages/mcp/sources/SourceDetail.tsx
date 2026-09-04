@@ -8,6 +8,7 @@ import {
   useProjectSources,
 } from "@/components/sources/source-list";
 import { Button } from "@/components/ui/Button";
+import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useParams } from "react-router";
 
@@ -21,7 +22,8 @@ import { useParams } from "react-router";
 export default function SourceDetailRoute(): JSX.Element {
   const routes = useRoutes();
   const { sourceId } = useParams<{ sourceId: string }>();
-  const { sources, isLoading } = useProjectSources();
+  const project = useProject();
+  const { sources, isLoading, isError } = useProjectSources();
 
   // Asset ids are unique across both kinds, so the id alone addresses a
   // source — and the URL carries no segment that isn't a page of its own.
@@ -30,15 +32,20 @@ export default function SourceDetailRoute(): JSX.Element {
   );
   const kind = source?.kind ?? "openapi";
 
+  // A deployment that failed to load is not a source that isn't there: saying
+  // "not found" for a dropped request sends people looking for the wrong
+  // problem.
   if (!isLoading && !source) {
     return (
       <DetailPage
         scope="mcp:read"
+        resourceId={project.id}
         sections={[]}
         notFound={{
-          title: "Source not found",
-          description:
-            "This source is not in the project's latest deployment. It may have been replaced by a newer one.",
+          title: isError ? "Couldn't load this source" : "Source not found",
+          description: isError
+            ? "The project's latest deployment could not be fetched. Reload to try again."
+            : "This source is not in the project's latest deployment. It may have been replaced by a newer one.",
           backTo: routes.mcp.sources.href(),
         }}
       />
@@ -48,6 +55,7 @@ export default function SourceDetailRoute(): JSX.Element {
   return (
     <DetailPage
       scope="mcp:read"
+      resourceId={project.id}
       layout="scroll"
       loading={isLoading}
       title={source?.name ?? "Source"}
@@ -67,13 +75,13 @@ export default function SourceDetailRoute(): JSX.Element {
             variant="button"
           />
           {/* Arriving from a source, that source is the choice already made. */}
-          <routes.mcp.add.fromSource.Link
-            queryParams={{ source: `${kind}:${sourceId ?? ""}` }}
-          >
-            <Button variant="primary">
+          <Button variant="primary" asChild>
+            <routes.mcp.add.fromSource.Link
+              queryParams={{ source: `${kind}:${sourceId ?? ""}` }}
+            >
               <Button.Text>Build a server</Button.Text>
-            </Button>
-          </routes.mcp.add.fromSource.Link>
+            </routes.mcp.add.fromSource.Link>
+          </Button>
         </>
       }
       sections={[

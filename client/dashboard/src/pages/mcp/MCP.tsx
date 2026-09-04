@@ -396,11 +396,11 @@ function MCPOverview() {
         they produce.
       </Page.Section.Description>
       <Page.Section.Body>
-        <routes.mcp.sources.Link>
-          <Button variant="secondary">
+        <Button variant="secondary" asChild>
+          <routes.mcp.sources.Link>
             <Button.Text>View sources</Button.Text>
-          </Button>
-        </routes.mcp.sources.Link>
+          </routes.mcp.sources.Link>
+        </Button>
       </Page.Section.Body>
     </Page.Section>
   );
