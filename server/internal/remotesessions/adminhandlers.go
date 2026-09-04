@@ -142,6 +142,17 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Not on the create form; captured by the next metadata refresh.
+		UserinfoEndpoint:                           pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:                      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		Metadata:              nil,
+		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -487,12 +498,12 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminr
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshGlobalIssuerMetadata re-reads an existing global issuer's RFC 8414

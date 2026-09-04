@@ -1,20 +1,24 @@
 package remotesessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -38,8 +42,10 @@ import (
 // the request handler.
 const discoveryHTTPTimeout = 10 * time.Second
 
-// rfc8414Document is the subset of the RFC 8414 / OpenID Connect Discovery
-// metadata document Gram cares about for hydrating a draft.
+// rfc8414Document is a discovery document as Gram reads it: the RFC 8414
+// members, the OpenID Connect Discovery members it enriches sessions with,
+// and the served (or merged) document verbatim, from which every typed field
+// is derived.
 type rfc8414Document struct {
 	Issuer                            string   `json:"issuer"`
 	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
@@ -68,6 +74,88 @@ type rfc8414Document struct {
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
 	// pre-flight outbound CIMD opt-in.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+
+	// UserinfoEndpoint is the OpenID Connect Discovery userinfo endpoint.
+	UserinfoEndpoint string `json:"userinfo_endpoint"`
+
+	// IntrospectionEndpoint is the RFC 7662 token introspection endpoint.
+	IntrospectionEndpoint string `json:"introspection_endpoint"`
+
+	// IntrospectionEndpointAuthMethodsSupported lists the client
+	// authentication methods the introspection endpoint accepts. Nil when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+
+	// IDTokenSigningAlgValuesSupported lists the JWS algorithms the issuer
+	// signs ID tokens with. Nil when the document omits the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+
+	// ClaimsSupported lists the claims the issuer can return in ID tokens and
+	// from the userinfo endpoint. Nil when the document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+
+	// BackchannelLogoutSupported reports whether the issuer supports OpenID
+	// Connect Back-Channel Logout.
+	BackchannelLogoutSupported bool `json:"backchannel_logout_supported"`
+
+	// AuthorizationResponseIssParameterSupported is RFC 9207 support: the
+	// issuer includes iss in authorization responses.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+
+	// raw is the document as the issuer served it, or, when discovery merged
+	// several, the union of their members re-serialized. The typed fields
+	// above are always derived from it, and it is persisted so fields they
+	// omit are not lost.
+	raw json.RawMessage
+
+	// dropped names the members sanitizeIssuerDocument blanked because Gram
+	// would not act on their values, so warnings can say what was not
+	// captured. raw still carries the members as served.
+	dropped []string
+}
+
+// discoveryResult is what one discovery run produced: the merged document,
+// the advisory warnings about it, and which candidate the run could not read.
+type discoveryResult struct {
+	doc      rfc8414Document
+	warnings []string
+	// unreadable is the well-known URL of a candidate that failed transiently,
+	// so a refresh keeps the stored document's members for it instead of
+	// withdrawing them; "" when every candidate answered definitively.
+	unreadable string
+}
+
+// metadataFamily is the discovery specification a well-known URL follows.
+type metadataFamily int
+
+const (
+	familyOAuthAuthorizationServer metadataFamily = iota
+	familyOpenIDConfiguration
+)
+
+// other returns the family that is not f. Discovery probes exactly two, so
+// after a primary is found the other one is the only one left to merge.
+func (f metadataFamily) other() metadataFamily {
+	switch f {
+	case familyOAuthAuthorizationServer:
+		return familyOpenIDConfiguration
+	case familyOpenIDConfiguration:
+		return familyOAuthAuthorizationServer
+	default:
+		return f
+	}
+}
+
+// issuerProbeCandidate is one well-known URL to probe and the family it
+// follows, so the discovery loop never has to infer the family from the URL.
+type issuerProbeCandidate struct {
+	url    string
+	family metadataFamily
+	// fallback marks an origin-root location probed only because the
+	// path-form issuer's own locations had no document. Such a document may
+	// describe the whole host rather than this issuer, so it is adopted only
+	// when every path-form candidate answered definitively.
+	fallback bool
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -96,12 +184,12 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshRemoteSessionIssuerMetadata re-reads a project-owned issuer's RFC 8414
@@ -295,6 +383,17 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Not on the create form; captured by the next metadata refresh.
+		UserinfoEndpoint:                           pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:                      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		Metadata:              nil,
+		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -808,7 +907,16 @@ type discoveryError struct {
 	WellKnownURL string
 	Status       int
 	cause        error
+
+	// definitive marks a refusal Gram itself made (a candidate or redirect
+	// target outside the URL policy), which says as much about the
+	// candidate as a 404 would and must not be mistaken for an outage.
+	definitive bool
 }
+
+// errDiscoveryRedirectRefused is the CheckRedirect refusal, unwrapped from
+// the transport's url.Error so a probe can tell it from a network failure.
+var errDiscoveryRedirectRefused = errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
 
 func (e *discoveryError) Error() string {
 	switch {
@@ -842,25 +950,12 @@ func (e *discoveryError) UserMessage() string {
 	}
 }
 
-// discoverIssuerMetadata fetches and parses an issuer's RFC 8414 / OpenID
-// Connect Discovery metadata document, returning the parsed body and any
-// deviations from the spec callers should be aware of. The supplied
-// guardian.Policy gates the outbound dial.
-//
-// It probes the well-known locations returned by IssuerMetadataProbeCandidates in
-// order, returning the first that yields a usable document — one carrying both
-// an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
-// those endpoints is almost always a SPA/gateway catch-all answering our
-// speculative candidate rather than real metadata, so it is skipped in favor of
-// a later candidate (e.g. the origin-style fallback); it is surfaced only as a
-// last resort when no candidate yields a usable document. When every probe
-// fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
-// in a *discoveryError so the handler can attach the upstream URL and status to
-// the user-facing error.
-// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
-// required to register Gram as an OAuth client. It is deliberately an internal
-// application return type rather than an API payload: callers must not reflect
-// upstream endpoints or registration material to untrusted clients.
+// DiscoveredIssuerMetadata is the whole discovery document as Gram persists
+// it: the OAuth core, the OpenID Connect session-enrichment members, the
+// merged document verbatim, and which candidate the run could not read. It is
+// deliberately an internal application return type rather than an API
+// payload: callers must not reflect upstream endpoints or registration
+// material to untrusted clients.
 type DiscoveredIssuerMetadata struct {
 	Issuer                            string
 	AuthorizationEndpoint             string
@@ -878,6 +973,43 @@ type DiscoveredIssuerMetadata struct {
 	CodeChallengeMethodsSupported []string
 
 	ClientIDMetadataDocumentSupported bool
+
+	// UserinfoEndpoint is the OpenID Connect userinfo endpoint, or "" when
+	// the issuer advertises none or advertises one that is not HTTPS.
+	UserinfoEndpoint string
+
+	// IntrospectionEndpoint is the RFC 7662 introspection endpoint, or ""
+	// when the issuer advertises none or advertises one that is not HTTPS.
+	IntrospectionEndpoint string
+
+	// IntrospectionEndpointAuthMethodsSupported is never nil: discovery ran,
+	// so an omitted field yields an empty slice, the persisted "captured;
+	// the upstream advertises nothing" state.
+	IntrospectionEndpointAuthMethodsSupported []string
+
+	// IDTokenSigningAlgValuesSupported is never nil, for the same reason.
+	IDTokenSigningAlgValuesSupported []string
+
+	// ClaimsSupported is never nil, for the same reason.
+	ClaimsSupported []string
+
+	// BackchannelLogoutSupported is false when the document omits the field,
+	// which is the value OpenID Back-Channel Logout defines for absence.
+	BackchannelLogoutSupported bool
+
+	// AuthorizationResponseIssParameterSupported is false when the document
+	// omits the field, which is the value RFC 9207 defines for absence.
+	AuthorizationResponseIssParameterSupported bool
+
+	// Metadata is the merged discovery document for the issuer's metadata
+	// column: the primary document's members plus any a same-issuer document
+	// added.
+	Metadata []byte
+
+	// UnreadableURL is the well-known URL of a candidate discovery could not
+	// read, for the issuer's metadata_unreadable_url column; "" when every
+	// candidate answered definitively.
+	UnreadableURL string
 }
 
 // DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
@@ -885,10 +1017,11 @@ type DiscoveredIssuerMetadata struct {
 // Platform MCP provider attachment; browser and MCP callers must never supply
 // an issuer URL to it.
 func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
-	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, policy, issuerURL)
 	if err != nil {
 		return DiscoveredIssuerMetadata{}, err
 	}
+	doc := discovered.doc
 	return DiscoveredIssuerMetadata{
 		Issuer:                            doc.Issuer,
 		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
@@ -901,22 +1034,49 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 		// An empty advertised list must survive as empty here, because nil and
 		// empty persist differently for this field (NULL "never captured" vs
-		// {} "captured, advertises nothing"). The plain append copy used by
-		// the sibling fields collapses an empty slice to nil, so it gets an
-		// orEmptySlice on top.
-		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+		// {} "captured, advertises nothing"); slices.Clone preserves that and
+		// orEmptySlice turns omission into the captured-empty state.
+		CodeChallengeMethodsSupported: orEmptySlice(slices.Clone(doc.CodeChallengeMethodsSupported)),
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
+		UserinfoEndpoint:                           doc.UserinfoEndpoint,
+		IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(slices.Clone(doc.IntrospectionEndpointAuthMethodsSupported)),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(slices.Clone(doc.IDTokenSigningAlgValuesSupported)),
+		ClaimsSupported:                            orEmptySlice(slices.Clone(doc.ClaimsSupported)),
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+		Metadata:      retainableDocument(doc.raw),
+		UnreadableURL: discovered.unreadable,
 	}, nil
 }
 
-func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
+// discoverIssuerMetadata fetches an issuer's RFC 8414 and OpenID Connect
+// Discovery documents and merges them into one, reporting the advisory
+// warnings about the result and the candidate it could not read. The
+// supplied guardian.Policy gates the outbound dial.
+//
+// It probes the well-known locations from issuerProbeCandidates in order. The
+// first document carrying both an authorization_endpoint and a token_endpoint
+// is the primary; one same-issuer document of the other family then fills in
+// the members the primary omits. A 200 that parses but lacks those endpoints
+// is almost always a catch-all answering a speculative candidate, so it is
+// returned only when no candidate yields a usable document. A candidate that
+// fails transiently is unreadable: the run still succeeds when another
+// candidate was usable and names the URL so a refresh can keep the stored
+// members for it, but an origin-root fallback is never adopted and an
+// endpoint-less document is never returned while one is unreadable, since
+// the outage may be hiding the real document. When nothing usable was read
+// the error is a *discoveryError naming the failed URL and upstream status.
+func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (discoveryResult, error) {
+	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return discoveryResult{}, &discoveryError{
 			WellKnownURL: "",
 			Status:       0,
 			cause:        fmt.Errorf("compute well-known url: %w", err),
+			definitive:   false,
 		}
 	}
 
@@ -928,19 +1088,54 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// narrow here without changing TLS verification or the transport itself.
 	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
 		if !validIssuerDiscoveryURL(req.URL) {
-			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+			return errDiscoveryRedirectRefused
 		}
 		return nil
 	}
 
+	// The first usable document is the primary and wins every member it
+	// states. RFC 8414 and OpenID Connect Discovery serve overlapping
+	// documents, and several providers publish jwks_uri, claims_supported, and
+	// the ID token signing algorithms only in the OpenID one, so after the
+	// primary the other family is probed and one same-issuer document fills
+	// in what the primary left out. There are only two families, so the loop
+	// ends as soon as the second has contributed.
 	var firstErr *discoveryError
-	var fallbackDoc rfc8414Document
-	haveFallback := false
-	for _, wellKnown := range candidates {
-		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
+	var primary, fallback *rfc8414Document
+	var primaryFamily metadataFamily
+	// unreadable records, per family, the first candidate that could not be
+	// read at all rather than one that definitively has no document. Such a
+	// candidate may be hiding fields the merge would have captured, whichever
+	// order the probes ran in and even when a later candidate of its family
+	// merged, and a refresh must not mistake their absence for withdrawal.
+	unreadable := make(map[metadataFamily]string, 2)
+	// unreadableErr is the first transient failure, returned whenever an
+	// unreadable candidate leaves the run unable to say what the issuer
+	// serves: the caller must retry rather than act on a guess.
+	var unreadableErr *discoveryError
+	for _, candidate := range candidates {
+		if primary != nil && candidate.family == primaryFamily {
+			continue
+		}
+		// An origin-root document may describe a sibling tenant or the whole
+		// host. While one of the issuer's own locations is unreadable it is
+		// not known to be the issuer's document, so it must not become the
+		// primary; only definitive misses on the path candidates reach it.
+		if candidate.fallback && primary == nil && unreadableErr != nil {
+			return discoveryResult{}, unreadableErr
+		}
+		doc, attemptErr := attemptIssuerProbe(reqCtx, client, candidate.url)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
+			}
+			if attemptErr.transient() {
+				if unreadableErr == nil {
+					unreadableErr = attemptErr
+				}
+				if _, seen := unreadable[candidate.family]; !seen {
+					unreadable[candidate.family] = candidate.url
+				}
 			}
 			continue
 		}
@@ -950,21 +1145,127 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		// metadata. Remember the first such document but keep probing — a later
 		// candidate (e.g. the origin-style fallback) may carry the real one.
 		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
-			if !haveFallback {
-				fallbackDoc = doc
-				haveFallback = true
+			if primary == nil && fallback == nil {
+				fallback = &doc
 			}
 			continue
 		}
 
-		return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		if primary == nil {
+			primary = &doc
+			primaryFamily = candidate.family
+			continue
+		}
+		// Only a document naming the same issuer may contribute: an
+		// origin-root fallback on a multi-tenant host can describe a sibling
+		// tenant, and one naming no issuer cannot be tied to this one.
+		if doc.Issuer != "" && issuerURLsEqual(doc.Issuer, primary.Issuer) {
+			union := mergeIssuerMetadata(*primary, doc)
+			primary = &union
+			break
+		}
 	}
 
-	if haveFallback {
-		return fallbackDoc, collectDiscoveryWarnings(issuerURL, fallbackDoc), nil
+	if primary != nil {
+		result := discoveryResult{
+			doc:        *primary,
+			warnings:   collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+		}
+		if result.unreadable != "" {
+			result.warnings = append(result.warnings, fmt.Sprintf("metadata document at %s was unreadable; members only it advertises were not merged", result.unreadable))
+		}
+		return result, nil
 	}
 
-	return rfc8414Document{}, nil, firstErr
+	// An endpoint-less document is only worth returning when it is all the
+	// issuer has. With a candidate unread, the real document may be behind
+	// the outage, so the run is transient rather than a verdict on the issuer.
+	if fallback != nil && unreadableErr == nil {
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
+	}
+	if unreadableErr != nil {
+		return discoveryResult{}, unreadableErr
+	}
+
+	return discoveryResult{}, firstErr
+}
+
+// mergeIssuerMetadata returns base with every top-level member of extra's
+// document that base's document does not state, then re-derives the typed
+// fields from the union so the two never disagree. A member base states,
+// even as false or empty, is kept: the primary document is authoritative for
+// flags such as CIMD support that Gram acts on. Either side without a JSON
+// object leaves base unchanged.
+func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
+	var baseMembers, extraMembers map[string]json.RawMessage
+	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
+		return base
+	}
+	if err := json.Unmarshal(extra.raw, &extraMembers); err != nil || extraMembers == nil {
+		return base
+	}
+	merged := maps.Clone(extraMembers)
+	maps.Copy(merged, baseMembers)
+	if len(merged) == len(baseMembers) {
+		return base
+	}
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return base
+	}
+	out := base
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return base
+	}
+	out.raw = raw
+	out.dropped = sanitizeIssuerDocument(&out)
+	return out
+}
+
+// documentFromRaw wraps a stored discovery document so it can be merged; the
+// typed fields stay unset because a merge derives them from raw.
+func documentFromRaw(raw []byte) rfc8414Document {
+	var doc rfc8414Document
+	doc.raw = raw
+	return doc
+}
+
+// rawDocumentIssuer reads the issuer member of a stored discovery document,
+// or "" when the document has none or cannot be read.
+func rawDocumentIssuer(raw []byte) string {
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	return doc.Issuer
+}
+
+// maxRetainedDocumentBytes caps the discovery document a row keeps verbatim.
+// Larger documents are still projected onto the typed columns.
+const maxRetainedDocumentBytes = 256 << 10
+
+// retainableDocument returns raw when a jsonb column can hold it: within the
+// size cap, valid UTF-8, and free of the \u0000 escape Go's decoder accepts
+// and Postgres rejects. Otherwise nil, which the writes store as NULL.
+func retainableDocument(raw []byte) []byte {
+	if len(raw) == 0 || len(raw) > maxRetainedDocumentBytes || !utf8.Valid(raw) || bytes.Contains(raw, []byte(`\u0000`)) {
+		return nil
+	}
+	return raw
+}
+
+// transient reports whether the probe failed in a way that says nothing about
+// whether a document exists there: no answer at all, a server error, or rate
+// limiting. A 4xx is a definitive miss, and a document that parsed but was
+// rejected keeps its 200 status and is definitive too.
+func (e *discoveryError) transient() bool {
+	if e.definitive {
+		return false
+	}
+	return e.Status == 0 || e.Status >= http.StatusInternalServerError || e.Status == http.StatusTooManyRequests
 }
 
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and
@@ -977,6 +1278,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+			definitive:   true,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
@@ -985,6 +1287,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("build discovery request: %w", err),
+			definitive:   true,
 		}
 	}
 	req.Header.Set("Accept", "application/json")
@@ -995,6 +1298,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("fetch discovery document: %w", err),
+			definitive:   errors.Is(err, errDiscoveryRedirectRefused),
 		}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
@@ -1004,6 +1308,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
+			definitive:   false,
 		}
 	}
 
@@ -1013,25 +1318,39 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("read discovery body: %w", err),
+			definitive:   false,
 		}
 	}
 
-	var doc rfc8414Document
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, &discoveryError{
-			WellKnownURL: wellKnown,
-			Status:       resp.StatusCode,
-			cause:        fmt.Errorf("decode discovery document: %w", err),
-		}
-	}
-	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
+	doc, err := decodeIssuerDocument(body, requestURL)
+	if err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        err,
+			definitive:   false,
 		}
 	}
 
+	return doc, nil
+}
+
+// decodeIssuerDocument projects a discovery document body onto its typed
+// fields: it rejects endpoints that would weaken the transport guarantee,
+// keeps the body verbatim as raw, and blanks the members Gram would not act
+// on. requested is the well-known URL the body came from, which is what the
+// loopback exception for endpoints is measured against. A stored document is
+// re-projected the same way, without a fetch.
+func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	var doc rfc8414Document
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return rfc8414Document{}, fmt.Errorf("decode discovery document: %w", err)
+	}
+	if err := validateIssuerMetadataEndpoints(doc, requested); err != nil {
+		return rfc8414Document{}, err
+	}
+	doc.raw = body
+	doc.dropped = sanitizeIssuerDocument(&doc)
 	return doc, nil
 }
 
@@ -1048,6 +1367,21 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // some gateways and SPA catch-alls serve metadata at the root regardless of the
 // issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
 func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
+	candidates, err := issuerProbeCandidates(issuerURL)
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		urls = append(urls, candidate.url)
+	}
+	return urls, nil
+}
+
+// issuerProbeCandidates lists the well-known URLs to probe for an issuer,
+// each tagged by the discovery family it follows. IssuerMetadataProbeCandidates
+// is its URL-only projection.
+func issuerProbeCandidates(issuerURL string) ([]issuerProbeCandidate, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
@@ -1060,26 +1394,26 @@ func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	path := strings.TrimSuffix(u.Path, "/")
 
 	seen := make(map[string]struct{})
-	candidates := make([]string, 0, 5)
-	add := func(raw string) {
+	candidates := make([]issuerProbeCandidate, 0, 5)
+	add := func(raw string, family metadataFamily, fallback bool) {
 		if _, ok := seen[raw]; ok {
 			return
 		}
 		seen[raw] = struct{}{}
-		candidates = append(candidates, raw)
+		candidates = append(candidates, issuerProbeCandidate{url: raw, family: family, fallback: fallback})
 	}
 
 	// RFC 8414 §3: well-known inserted between host and issuer path.
-	add(origin + "/.well-known/oauth-authorization-server" + path)
+	add(origin+"/.well-known/oauth-authorization-server"+path, familyOAuthAuthorizationServer, false)
 	// RFC 8414 §3.1 OIDC-compatible form: openid-configuration inserted between
 	// host and issuer path.
-	add(origin + "/.well-known/openid-configuration" + path)
+	add(origin+"/.well-known/openid-configuration"+path, familyOpenIDConfiguration, false)
 	if path != "" {
 		// OpenID Connect Discovery: well-known appended after the issuer path.
-		add(origin + path + "/.well-known/openid-configuration")
+		add(origin+path+"/.well-known/openid-configuration", familyOpenIDConfiguration, false)
 		// Origin-style fallback: strip the issuer path entirely.
-		add(origin + "/.well-known/oauth-authorization-server")
-		add(origin + "/.well-known/openid-configuration")
+		add(origin+"/.well-known/oauth-authorization-server", familyOAuthAuthorizationServer, true)
+		add(origin+"/.well-known/openid-configuration", familyOpenIDConfiguration, true)
 	}
 
 	return candidates, nil
@@ -1137,6 +1471,32 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 	return nil
 }
 
+// sanitizeIssuerDocument blanks the advertised URLs that Gram never dials
+// during discovery but would render or send a token to later, when they are
+// not acceptable: the revocation, userinfo, and introspection endpoints must
+// be HTTPS or local loopback, and the documentation, policy, and terms links
+// must be absolute http(s) URLs. Dropping rather than rejecting keeps an
+// otherwise usable document usable. raw keeps the original members. It
+// returns the JSON names of the members it blanked, in document order.
+func sanitizeIssuerDocument(doc *rfc8414Document) []string {
+	var dropped []string
+	sanitize := func(name string, field *string, accept func(string) string) {
+		if *field == "" {
+			return
+		}
+		if *field = accept(*field); *field == "" {
+			dropped = append(dropped, name)
+		}
+	}
+	sanitize("revocation_endpoint", &doc.RevocationEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("userinfo_endpoint", &doc.UserinfoEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("introspection_endpoint", &doc.IntrospectionEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("service_documentation", &doc.ServiceDocumentation, urls.HTTPOrEmpty)
+	sanitize("op_policy_uri", &doc.OpPolicyURI, urls.HTTPOrEmpty)
+	sanitize("op_tos_uri", &doc.OpTosURI, urls.HTTPOrEmpty)
+	return dropped
+}
+
 func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
 	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
 		return false
@@ -1157,7 +1517,7 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	if doc.Issuer == "" {
 		warnings = append(warnings, "issuer field missing from discovery document")
 	} else if !issuerURLsEqual(doc.Issuer, requestedIssuer) {
-		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", doc.Issuer, requestedIssuer))
+		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", truncateForMessage(doc.Issuer), requestedIssuer))
 	}
 	if doc.AuthorizationEndpoint == "" {
 		warnings = append(warnings, "authorization_endpoint missing from discovery document")
@@ -1167,6 +1527,17 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	for _, member := range doc.dropped {
+		switch member {
+		case "service_documentation", "op_policy_uri", "op_tos_uri":
+			warnings = append(warnings, fmt.Sprintf("%s is not an absolute http(s) URL and was not captured", member))
+		default:
+			warnings = append(warnings, fmt.Sprintf("%s is not an https URL and was not captured", member))
+		}
+	}
+	if len(doc.raw) > 0 && retainableDocument(doc.raw) == nil {
+		warnings = append(warnings, "discovery document could not be retained verbatim (size or encoding); typed fields were still captured")
 	}
 	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
 	// but MCP requires clients to refuse authorization servers that do not
@@ -1185,6 +1556,23 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 // issuerURLsEqual compares two issuer URLs ignoring trailing slashes.
 func issuerURLsEqual(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+// maxMessageValueBytes caps an upstream-controlled string quoted in a warning
+// or error, so a hostile document cannot pad what is stored and shown.
+const maxMessageValueBytes = 200
+
+// truncateForMessage shortens s to maxMessageValueBytes on a rune boundary,
+// marking the cut with an ellipsis.
+func truncateForMessage(s string) string {
+	if len(s) <= maxMessageValueBytes {
+		return s
+	}
+	cut := maxMessageValueBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 // pageLimit clamps the user-supplied limit into the documented range and

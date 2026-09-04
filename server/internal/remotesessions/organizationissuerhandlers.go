@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -145,6 +147,17 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Not on the create form; captured by the next metadata refresh.
+		UserinfoEndpoint:                           pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:                      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		Metadata:              nil,
+		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -557,12 +570,12 @@ func (s *Service) FetchIssuerMetadata(ctx context.Context, payload *orgissuersge
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshIssuerMetadata re-reads an existing issuer's RFC 8414 metadata

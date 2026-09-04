@@ -200,6 +200,26 @@ actions:
   - target: $.components.schemas.RemoteSessionIssuerDraft.properties.code_challenge_methods_supported
     update:
       nullable: true
+  # The session-enrichment capability arrays are nullable for the same reason:
+  # null ("never captured") stays distinct from [] on the wire.
+  - target: $.components.schemas.RemoteSessionIssuer.properties.introspection_endpoint_auth_methods_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuer.properties.id_token_signing_alg_values_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuer.properties.claims_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuerDraft.properties.introspection_endpoint_auth_methods_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuerDraft.properties.id_token_signing_alg_values_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuerDraft.properties.claims_supported
+    update:
+      nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
   - target: $.components.schemas.InfoResponseBody
