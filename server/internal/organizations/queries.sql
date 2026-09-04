@@ -344,6 +344,19 @@ WHERE organization_id = @organization_id
   AND expires_at > clock_timestamp()
 RETURNING *;
 
+-- name: HasPendingInvitationForEmail :one
+-- Reports whether any organization has a live invitation outstanding for this
+-- address. It is asked at first-time user creation to tell an invited signup
+-- from an organic one, so it deliberately spans every organization rather than
+-- one: the user does not exist yet and belongs to none.
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations
+  WHERE email = @email
+    AND state = 'pending'
+    AND expires_at > clock_timestamp()
+);
+
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'

@@ -790,6 +790,27 @@ func (q *Queries) HasOtherActiveOrganizationUsers(ctx context.Context, arg HasOt
 	return exists, err
 }
 
+const hasPendingInvitationForEmail = `-- name: HasPendingInvitationForEmail :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations
+  WHERE email = $1
+    AND state = 'pending'
+    AND expires_at > clock_timestamp()
+)
+`
+
+// Reports whether any organization has a live invitation outstanding for this
+// address. It is asked at first-time user creation to tell an invited signup
+// from an organic one, so it deliberately spans every organization rather than
+// one: the user does not exist yet and belongs to none.
+func (q *Queries) HasPendingInvitationForEmail(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingInvitationForEmail, email)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
 WITH pending_relationships AS (
     SELECT
