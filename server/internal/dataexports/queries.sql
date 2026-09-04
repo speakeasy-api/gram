@@ -41,6 +41,20 @@ WHERE project.organization_id = @organization_id
   AND destination.deleted IS FALSE
 ORDER BY destination.created_at, destination.id;
 
+-- List a bounded destination inventory with project metadata in one snapshot.
+-- name: ListOtelDestinationsWithProjectMetadata :many
+SELECT destination.*, project.name AS project_name, project.slug AS project_slug
+FROM otel_destinations AS destination
+JOIN projects AS project
+  ON project.id = destination.project_id
+ AND project.organization_id = destination.organization_id
+WHERE project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+  AND destination.deleted IS FALSE
+  AND (sqlc.narg('project_id')::uuid IS NULL OR destination.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY destination.created_at, destination.id
+LIMIT @result_limit;
+
 
 -- Lock a destination before merging preserved header secrets or deleting it.
 -- The lock keeps the before snapshot and subsequent mutation on one row version.
@@ -141,6 +155,20 @@ WHERE project.organization_id = @organization_id
   AND project.deleted IS FALSE
   AND route.deleted IS FALSE
 ORDER BY route.created_at, route.id;
+
+-- List a bounded route inventory with project metadata in one snapshot.
+-- name: ListDataExportRoutesWithProjectMetadata :many
+SELECT route.*, project.name AS project_name, project.slug AS project_slug
+FROM data_export_routes AS route
+JOIN projects AS project
+  ON project.id = route.project_id
+ AND project.organization_id = route.organization_id
+WHERE project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+  AND route.deleted IS FALSE
+  AND (sqlc.narg('project_id')::uuid IS NULL OR route.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY route.created_at, route.id
+LIMIT @result_limit;
 
 -- Serialize route update/delete transitions so audit snapshots describe the
 -- exact row version mutated by the transaction.
