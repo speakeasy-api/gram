@@ -69,6 +69,7 @@ func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, []string{"agent:policy_grant_create", "agent:policy_grant_update", "agent:policy_grant_delete"}, actions)
+	require.Equal(t, actions, m1OutboxActions(t, conn, "org-policy"))
 }
 
 func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) {
