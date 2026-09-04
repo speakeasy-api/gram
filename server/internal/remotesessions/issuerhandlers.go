@@ -42,8 +42,10 @@ import (
 // the request handler.
 const discoveryHTTPTimeout = 10 * time.Second
 
-// rfc8414Document is the subset of the RFC 8414 / OpenID Connect Discovery
-// metadata document Gram cares about for hydrating a draft.
+// rfc8414Document is a discovery document as Gram reads it: the RFC 8414
+// members, the OpenID Connect Discovery members it enriches sessions with,
+// and the served (or merged) document verbatim, from which every typed field
+// is derived.
 type rfc8414Document struct {
 	Issuer                            string   `json:"issuer"`
 	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
@@ -381,8 +383,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
-		// Not on the create form; discovery captures these on the next
-		// metadata refresh.
+		// Not on the create form; captured by the next metadata refresh.
 		UserinfoEndpoint:                           pgtype.Text{String: "", Valid: false},
 		IntrospectionEndpoint:                      pgtype.Text{String: "", Valid: false},
 		IntrospectionEndpointAuthMethodsSupported:  nil,
@@ -949,25 +950,12 @@ func (e *discoveryError) UserMessage() string {
 	}
 }
 
-// discoverIssuerMetadata fetches and parses an issuer's RFC 8414 / OpenID
-// Connect Discovery metadata document, returning the parsed body and any
-// deviations from the spec callers should be aware of. The supplied
-// guardian.Policy gates the outbound dial.
-//
-// It probes the well-known locations returned by IssuerMetadataProbeCandidates in
-// order, returning the first that yields a usable document — one carrying both
-// an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
-// those endpoints is almost always a SPA/gateway catch-all answering our
-// speculative candidate rather than real metadata, so it is skipped in favor of
-// a later candidate (e.g. the origin-style fallback); it is surfaced only as a
-// last resort when no candidate yields a usable document. When every probe
-// fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
-// in a *discoveryError so the handler can attach the upstream URL and status to
-// the user-facing error.
-// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
-// required to register Gram as an OAuth client. It is deliberately an internal
-// application return type rather than an API payload: callers must not reflect
-// upstream endpoints or registration material to untrusted clients.
+// DiscoveredIssuerMetadata is the whole discovery document as Gram persists
+// it: the OAuth core, the OpenID Connect session-enrichment members, the
+// merged document verbatim, and which candidate the run could not read. It is
+// deliberately an internal application return type rather than an API
+// payload: callers must not reflect upstream endpoints or registration
+// material to untrusted clients.
 type DiscoveredIssuerMetadata struct {
 	Issuer                            string
 	AuthorizationEndpoint             string
@@ -1064,6 +1052,23 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}, nil
 }
 
+// discoverIssuerMetadata fetches an issuer's RFC 8414 and OpenID Connect
+// Discovery documents and merges them into one, reporting the advisory
+// warnings about the result and the candidate it could not read. The
+// supplied guardian.Policy gates the outbound dial.
+//
+// It probes the well-known locations from issuerProbeCandidates in order. The
+// first document carrying both an authorization_endpoint and a token_endpoint
+// is the primary; one same-issuer document of the other family then fills in
+// the members the primary omits. A 200 that parses but lacks those endpoints
+// is almost always a catch-all answering a speculative candidate, so it is
+// returned only when no candidate yields a usable document. A candidate that
+// fails transiently is unreadable: the run still succeeds when another
+// candidate was usable and names the URL so a refresh can keep the stored
+// members for it, but an origin-root fallback is never adopted and an
+// endpoint-less document is never returned while one is unreadable, since
+// the outage may be hiding the real document. When nothing usable was read
+// the error is a *discoveryError naming the failed URL and upstream status.
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (discoveryResult, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
@@ -1168,7 +1173,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
 		}
 		if result.unreadable != "" {
-			result.warnings = append(result.warnings, fmt.Sprintf("metadata document at %s could not be fetched; fields it advertises were not merged", result.unreadable))
+			result.warnings = append(result.warnings, fmt.Sprintf("metadata document at %s was unreadable; members only it advertises were not merged", result.unreadable))
 		}
 		return result, nil
 	}
@@ -1530,6 +1535,9 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 		default:
 			warnings = append(warnings, fmt.Sprintf("%s is not an https URL and was not captured", member))
 		}
+	}
+	if len(doc.raw) > 0 && retainableDocument(doc.raw) == nil {
+		warnings = append(warnings, "discovery document could not be retained verbatim (size or encoding); typed fields were still captured")
 	}
 	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
 	// but MCP requires clients to refuse authorization servers that do not

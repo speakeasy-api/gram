@@ -43,6 +43,19 @@ func newIssuerPayloadForURL(slug, issuerURL string) *gen.CreateRemoteSessionIssu
 	return payload
 }
 
+// refreshIssuer refreshes the project-tier issuer id and requires success.
+func refreshIssuer(t *testing.T, ctx context.Context, ti *testInstance, id string) *types.RemoteSessionIssuerRefresh {
+	t.Helper()
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               id,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	return result
+}
+
 func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +134,7 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 // was read, the fields only it advertises are not treated as withdrawn: the
 // stored values stand and the caller is warned. A definitive miss on the next
 // refresh clears them.
-func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(t *testing.T) {
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -129,47 +142,36 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(
 	oidcStatus.Store(http.StatusOK)
 	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oidcStatus: &oidcStatus})
 
-	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial", upstream.URL))
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable", upstream.URL))
 	require.NoError(t, err)
 
-	refresh := func() *types.RemoteSessionIssuerRefresh {
-		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-		require.NoError(t, err)
-		return result
-	}
-
-	complete := refresh()
+	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 	require.Equal(t, []string{"sub", "email", "email_verified"}, complete.Issuer.ClaimsSupported)
 
 	oidcStatus.Store(http.StatusServiceUnavailable)
-	partial := refresh()
-	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI, "a transient miss does not withdraw the field")
-	require.Equal(t, upstream.URL+"/userinfo", *partial.Issuer.UserinfoEndpoint)
-	require.Equal(t, []string{"sub", "email", "email_verified"}, partial.Issuer.ClaimsSupported)
-	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "could not be fetched")
-	}), "the caller is told which candidate was skipped: %v", partial.DiscoveryWarnings)
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI, "a transient miss does not withdraw the field")
+	require.Equal(t, upstream.URL+"/userinfo", *kept.Issuer.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, kept.Issuer.ClaimsSupported)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
 
 	oidcStatus.Store(http.StatusNotFound)
-	withdrawn := refresh()
+	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
 	require.Nil(t, withdrawn.Issuer.JwksURI, "a definitive miss withdraws the field")
 	require.Nil(t, withdrawn.Issuer.UserinfoEndpoint)
 	require.Empty(t, withdrawn.Issuer.ClaimsSupported)
 	require.False(t, slices.ContainsFunc(withdrawn.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "could not be fetched")
-	}), "a 404 is definitive and raises no partial warning: %v", withdrawn.DiscoveryWarnings)
+		return strings.Contains(w, "was unreadable")
+	}), "a 404 is definitive and raises no unreadable warning: %v", withdrawn.DiscoveryWarnings)
 }
 
 // The unreadable candidate may come first: when the RFC 8414 document is
 // down and the OpenID one becomes the primary, the members only the RFC 8414
 // document carries are kept from the stored row rather than withdrawn.
-func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryWhenFirstCandidateUnreadable(t *testing.T) {
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapturedFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -177,43 +179,32 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryWhenFirstCandidateUn
 	oauthStatus.Store(http.StatusOK)
 	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oauthStatus: &oauthStatus})
 
-	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial-first", upstream.URL))
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable-first", upstream.URL))
 	require.NoError(t, err)
 
-	refresh := func() *types.RemoteSessionIssuerRefresh {
-		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-		require.NoError(t, err)
-		return result
-	}
-
-	complete := refresh()
+	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, upstream.URL+"/register", *complete.Issuer.RegistrationEndpoint)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
 	oauthStatus.Store(http.StatusServiceUnavailable)
-	partial := refresh()
-	require.Equal(t, upstream.URL+"/register", *partial.Issuer.RegistrationEndpoint, "a member only the unreadable document carries is not withdrawn")
-	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI)
-	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "could not be fetched")
-	}), "the caller is told which candidate was skipped: %v", partial.DiscoveryWarnings)
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/register", *kept.Issuer.RegistrationEndpoint, "a member only the unreadable document carries is not withdrawn")
+	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
 
 	oauthStatus.Store(http.StatusNotFound)
-	withdrawn := refresh()
+	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
 	require.Nil(t, withdrawn.Issuer.RegistrationEndpoint, "a definitive miss withdraws the member")
 	require.Equal(t, upstream.URL+"/jwks", *withdrawn.Issuer.JwksURI)
 }
 
 // A row repointed to another issuer still holds the previous issuer's
-// document. A partial refresh against the new issuer must not fill its gaps
+// document. A refresh with an unreadable candidate against the new issuer must not fill its gaps
 // from that document: the old issuer's key set or endpoints would otherwise
 // be attributed to the new one.
-func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotFillFromPreviousIssuer(t *testing.T) {
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPreviousIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -224,17 +215,8 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotFillFromPrevi
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-repointed", previous.URL))
 	require.NoError(t, err)
-	refresh := func() *types.RemoteSessionIssuerRefresh {
-		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-		require.NoError(t, err)
-		return result
-	}
-	complete := refresh()
+
+	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, previous.URL+"/jwks", *complete.Issuer.JwksURI)
 
 	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
@@ -266,12 +248,12 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotFillFromPrevi
 	})
 	require.NoError(t, err)
 
-	partial := refresh()
-	require.Nil(t, partial.Issuer.JwksURI, "the previous issuer's key set must not be attributed to the new one")
-	require.Equal(t, current.URL+"/authorize", *partial.Issuer.AuthorizationEndpoint)
-	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "could not be fetched")
-	}), "the partial state is still reported: %v", partial.DiscoveryWarnings)
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Nil(t, kept.Issuer.JwksURI, "the previous issuer's key set must not be attributed to the new one")
+	require.Equal(t, current.URL+"/authorize", *kept.Issuer.AuthorizationEndpoint)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the unreadable candidate is still reported: %v", kept.DiscoveryWarnings)
 }
 
 // A document Postgres cannot hold as jsonb is not retained verbatim; the
@@ -302,7 +284,7 @@ func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *t
 // distrust gate on its own. A primary that advertises no issuer is rejected
 // even when a transient miss on the other candidate would otherwise have let
 // the stored issuer stand in for it.
-func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotBorrowStoredIssuer(t *testing.T) {
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStoredIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -318,25 +300,20 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotBorrowStoredI
 		},
 	})
 
-	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial-issuer", upstream.URL))
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable-issuer", upstream.URL))
 	require.NoError(t, err)
 
-	refresh := func() (*types.RemoteSessionIssuerRefresh, error) {
-		return ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-	}
-
-	complete, err := refresh()
-	require.NoError(t, err)
+	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
 	dropIssuer.Store(true)
 	oidcStatus.Store(http.StatusServiceUnavailable)
-	_, err = refresh()
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "advertises no issuer")

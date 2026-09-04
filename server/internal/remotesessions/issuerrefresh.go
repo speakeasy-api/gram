@@ -35,11 +35,9 @@ func (e *untrustedDocumentError) Error() string { return e.reason }
 // tiers.
 func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) *types.RemoteSessionIssuerDraft {
 	return &types.RemoteSessionIssuerDraft{
-		Issuer:                conv.Default(doc.Issuer, issuerURL),
-		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
-		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		// The document arrives with unacceptable revocation, documentation,
-		// policy, and terms URLs already blanked by sanitizeIssuerDocument.
+		Issuer:                            conv.Default(doc.Issuer, issuerURL),
+		AuthorizationEndpoint:             conv.PtrEmpty(doc.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.PtrEmpty(doc.TokenEndpoint),
 		RevocationEndpoint:                conv.PtrEmpty(doc.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrEmpty(doc.RegistrationEndpoint),
 		JwksURI:                           conv.PtrEmpty(doc.JwksURI),
@@ -106,11 +104,11 @@ func issuerOrigin(issuerURL string) string {
 func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unreachable oops.Code) error {
 	msg, _ := discoveryFailureMessage(err)
 	_, untrusted := errors.AsType[*untrustedDocumentError](err)
-	_, unread := errors.AsType[*discoveryError](err)
+	_, fetchFailed := errors.AsType[*discoveryError](err)
 	switch {
 	case untrusted:
 		return oops.E(oops.CodeInvalid, err, "%s", msg).LogError(ctx, logger)
-	case unread:
+	case fetchFailed:
 		return oops.E(unreachable, err, "%s", msg).LogError(ctx, logger)
 	default:
 		// Unreachable today: discoverIssuerMetadata only ever returns the two

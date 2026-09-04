@@ -1800,14 +1800,20 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 }
 
 // twoDocumentServerOptions shapes the two documents twoDocumentIssuerServer
-// serves. mutateOAuth and mutateOIDC edit the respective document per
-// request; oidcStatus, when set, makes the OpenID path answer with that
-// status instead of a document whenever it is not 200.
+// serves.
 type twoDocumentServerOptions struct {
+	// mutateOAuth edits the RFC 8414 document per request, after the
+	// defaults are filled in.
 	mutateOAuth func(doc map[string]any)
-	mutateOIDC  func(doc map[string]any)
+	// mutateOIDC edits the OpenID Connect Discovery document per request,
+	// after the defaults are filled in.
+	mutateOIDC func(doc map[string]any)
+	// oauthStatus, when set, makes the RFC 8414 path answer with that status
+	// and no body whenever it is not 200, so a test can take the document
+	// down and bring it back mid-run.
 	oauthStatus *atomic.Int32
-	oidcStatus  *atomic.Int32
+	// oidcStatus does the same for the OpenID Connect Discovery path.
+	oidcStatus *atomic.Int32
 }
 
 // twoDocumentIssuerServer serves an RFC 8414 document at the OAuth path and an
@@ -2034,8 +2040,6 @@ func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlas
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	// The callback runs per request, after the assignment below, so it sees
-	// the server's final URL.
 	var server *httptest.Server
 	server = twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
