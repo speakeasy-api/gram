@@ -33,11 +33,12 @@ function assertNever(value: never): never {
  *   registered key. Treat this as a configuration error rather than as off.
  * - `"error"`: PostHog reported that its flag request failed.
  *
- * Local development and PR preview hosts (`*.dev.getgram.ai`) use a
- * deterministic provider where every flag is immediately enabled. Shared
- * staging and production still read the real PostHog project. PostHog flags
- * are rollout controls only; never use them as authorization checks or
- * entitlement enforcement.
+ * Local development uses a deterministic provider where every flag is
+ * immediately enabled. PR preview hosts (`*.dev.getgram.ai`) still read the
+ * real PostHog project so configured flags can be toggled, but a missing key
+ * fails open (treated as enabled). Shared staging and production treat a
+ * missing key as unavailable. PostHog flags are rollout controls only; never
+ * use them as authorization checks or entitlement enforcement.
  */
 export function useFeatureFlag(flag: FeatureFlag): FeatureFlagResult {
   const { telemetry, featureFlags } = useTelemetryContext();

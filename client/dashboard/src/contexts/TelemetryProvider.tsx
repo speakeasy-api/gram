@@ -22,11 +22,26 @@ const AM_TESTING_TELEMETRY = false;
 const isPublicSharePath = (): boolean =>
   window.location.pathname.startsWith("/shared/");
 
-// Localhost and PR preview hosts (*.dev.getgram.ai) skip PostHog flag
-// evaluation so gated UI such as Watchdog and Functions is visible. Shared
-// staging (dev.getgram.ai) and production stay on the real project.
+// Localhost skips PostHog flag evaluation so every flag is on. Preview
+// hosts keep talking to the real project so configured flags can be
+// toggled; only missing keys fail open (see failOpenMissingFlags).
 export const shouldUseDevTelemetry = (serverURL: string): boolean =>
-  serverURL.includes("localhost") || serverURL.includes(".dev.getgram.ai");
+  serverURL.includes("localhost");
+
+// PR preview hosts (*.dev.getgram.ai). Shared staging is the apex host
+// (dev.getgram.ai) and must not match.
+export const shouldFailOpenMissingFlags = (serverURL: string): boolean =>
+  serverURL.includes(".dev.getgram.ai");
+
+export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
+  return {
+    ...telemetry,
+    isFeatureEnabled: ((flag, options) => {
+      const result = telemetry.isFeatureEnabled(flag, options);
+      return result === undefined ? true : result;
+    }) as Telemetry["isFeatureEnabled"],
+  };
+}
 
 export const TelemetryProvider = (props: {
   children: ReactNode;
@@ -81,14 +96,22 @@ export const TelemetryProvider = (props: {
   }, []);
 
   let value: Telemetry = ph ?? nullTelemetry;
-  if (!isPublicSharePath() && shouldUseDevTelemetry(getServerURL())) {
+  let flagsInitiallyAvailable = false;
+  if (!isPublicSharePath() && shouldUseDevTelemetry(serverURL)) {
     value = AM_TESTING_TELEMETRY ? testTelemetry : devTelemetry;
+    flagsInitiallyAvailable = true;
+  } else if (
+    !isPublicSharePath() &&
+    ph &&
+    shouldFailOpenMissingFlags(serverURL)
+  ) {
+    value = failOpenMissingFlags(ph);
   }
 
   return (
     <TelemetryStateProvider
       telemetry={value}
-      featureFlagsInitiallyAvailable={value !== ph}
+      featureFlagsInitiallyAvailable={flagsInitiallyAvailable}
     >
       {props.children}
     </TelemetryStateProvider>
