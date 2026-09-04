@@ -335,5 +335,5 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 }
 
 // NOTE: The Attach/Update/Detach OAuth-proxy emit functions were removed with
-// the legacy OAuth proxy. The ActionToolset*OAuthProxy action-string constants
+// the OAuth proxy. The ActionToolset*OAuthProxy action-string constants
 // are retained because historical audit-log entries still reference them.
