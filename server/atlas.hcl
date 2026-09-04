@@ -23,3 +23,32 @@ lint {
     skip = true
   }
 }
+
+data "composite_schema" "clickhouse" {
+  schema {
+    url = "file://clickhouse/schema.sql"
+  }
+  schema {
+    url = "file://clickhouse/mart.sql"
+  }
+}
+
+env "clickhouse" {
+  dev = "docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/"
+  schema {
+    src = data.composite_schema.clickhouse.url
+  }
+  migration {
+    dir = "file://clickhouse/migrations"
+  }
+}
+
+env "clickhouse_golang_migrate" {
+  dev = "docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/"
+  schema {
+    src = data.composite_schema.clickhouse.url
+  }
+  migration {
+    dir = "file://clickhouse/local/golang_migrate?format=golang-migrate"
+  }
+}
