@@ -105,6 +105,11 @@ type rfc8414Document struct {
 	// above are always derived from it, and it is persisted so fields they
 	// omit are not lost.
 	raw json.RawMessage
+
+	// dropped names the members sanitizeIssuerDocument blanked because Gram
+	// would not act on their values, so warnings can say what was not
+	// captured. raw still carries the members as served.
+	dropped []string
 }
 
 // discoveryResult is what one discovery run produced: the merged document,
@@ -1209,7 +1214,7 @@ func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 		return base
 	}
 	out.raw = raw
-	sanitizeIssuerDocument(&out)
+	out.dropped = sanitizeIssuerDocument(&out)
 	return out
 }
 
@@ -1340,7 +1345,7 @@ func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, err
 		return rfc8414Document{}, err
 	}
 	doc.raw = body
-	sanitizeIssuerDocument(&doc)
+	doc.dropped = sanitizeIssuerDocument(&doc)
 	return doc, nil
 }
 
@@ -1466,14 +1471,25 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 // not acceptable: the revocation, userinfo, and introspection endpoints must
 // be HTTPS or local loopback, and the documentation, policy, and terms links
 // must be absolute http(s) URLs. Dropping rather than rejecting keeps an
-// otherwise usable document usable. raw keeps the original members.
-func sanitizeIssuerDocument(doc *rfc8414Document) {
-	doc.RevocationEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.RevocationEndpoint)
-	doc.UserinfoEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.UserinfoEndpoint)
-	doc.IntrospectionEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.IntrospectionEndpoint)
-	doc.ServiceDocumentation = urls.HTTPOrEmpty(doc.ServiceDocumentation)
-	doc.OpPolicyURI = urls.HTTPOrEmpty(doc.OpPolicyURI)
-	doc.OpTosURI = urls.HTTPOrEmpty(doc.OpTosURI)
+// otherwise usable document usable. raw keeps the original members. It
+// returns the JSON names of the members it blanked, in document order.
+func sanitizeIssuerDocument(doc *rfc8414Document) []string {
+	var dropped []string
+	sanitize := func(name string, field *string, accept func(string) string) {
+		if *field == "" {
+			return
+		}
+		if *field = accept(*field); *field == "" {
+			dropped = append(dropped, name)
+		}
+	}
+	sanitize("revocation_endpoint", &doc.RevocationEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("userinfo_endpoint", &doc.UserinfoEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("introspection_endpoint", &doc.IntrospectionEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("service_documentation", &doc.ServiceDocumentation, urls.HTTPOrEmpty)
+	sanitize("op_policy_uri", &doc.OpPolicyURI, urls.HTTPOrEmpty)
+	sanitize("op_tos_uri", &doc.OpTosURI, urls.HTTPOrEmpty)
+	return dropped
 }
 
 func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
@@ -1506,6 +1522,14 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	for _, member := range doc.dropped {
+		switch member {
+		case "service_documentation", "op_policy_uri", "op_tos_uri":
+			warnings = append(warnings, fmt.Sprintf("%s is not an absolute http(s) URL and was not captured", member))
+		default:
+			warnings = append(warnings, fmt.Sprintf("%s is not an https URL and was not captured", member))
+		}
 	}
 	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
 	// but MCP requires clients to refuse authorization servers that do not

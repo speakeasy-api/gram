@@ -2005,6 +2005,28 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	require.Equal(t, []string{}, discovered.IntrospectionEndpointAuthMethodsSupported, "an omitted array is captured as empty, never nil")
 }
 
+// A member the sanitizer blanks is reported, so an operator can tell a
+// provider that advertises nothing from one whose value Gram refused.
+func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["userinfo_endpoint"] = "http://idp.example/userinfo"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, draft.UserinfoEndpoint, "a plaintext userinfo endpoint is never proposed")
+	require.Contains(t, draft.DiscoveryWarnings, "userinfo_endpoint is not an https URL and was not captured")
+	require.NotNil(t, draft.JwksURI, "the rest of the OpenID document still merges")
+}
+
 // The merge gate compares issuers the way the rest of the package does,
 // ignoring a trailing slash, so an OpenID document that spells the issuer
 // with one still contributes.
