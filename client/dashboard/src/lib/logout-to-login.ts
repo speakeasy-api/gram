@@ -27,10 +27,11 @@ export async function logoutToLogin(client: LogoutClient): Promise<void> {
         }, LOGOUT_WAIT_MS);
       }),
     ]);
-  } catch {
+  } catch (error) {
     // Logout may have failed or stalled before the session was cleared.
     // Still leave so a dead or half-torn-down session is not left on
     // the dashboard.
+    console.error("logoutToLogin: logout did not complete", error);
   } finally {
     clearTimeout(timeout);
   }
