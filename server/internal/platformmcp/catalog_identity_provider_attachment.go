@@ -272,6 +272,16 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
+		// Discovery ran, so the enrichment capabilities are captured here
+		// rather than left NULL for a later refresh.
+		UserinfoEndpoint:                           conv.ToPGTextEmpty(metadata.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.ToPGTextEmpty(metadata.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  slices.Clone(metadata.IntrospectionEndpointAuthMethodsSupported),
+		IDTokenSigningAlgValuesSupported:           slices.Clone(metadata.IDTokenSigningAlgValuesSupported),
+		ClaimsSupported:                            slices.Clone(metadata.ClaimsSupported),
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
+		Metadata: metadata.Metadata,
 	})
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)

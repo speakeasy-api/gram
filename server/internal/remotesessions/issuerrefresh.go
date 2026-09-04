@@ -66,6 +66,16 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
+		// Never dialed by discovery, so a plaintext value is dropped rather
+		// than failing the document, as for the revocation endpoint.
+		UserinfoEndpoint:                           conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, "")),
+		IntrospectionEndpoint:                      conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, "")),
+		IntrospectionEndpointAuthMethodsSupported:  doc.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           doc.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            doc.ClaimsSupported,
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+
 		// Gram behavior flags, not discovered metadata. A draft never proposes
 		// them; the operator opts in on the create form.
 		Oidc:              false,
@@ -139,6 +149,17 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	doc, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
+	}
+
+	// A refresh restates the issuer's whole discovered surface, clearing what
+	// the upstream no longer advertises. That is only sound when every
+	// candidate answered definitively. When a same-origin candidate failed
+	// transiently, a field it alone advertises would read as withdrawn, so the
+	// stored row fills whatever the partial result left empty and the caller
+	// sees the warning discovery attached. Withdrawal is applied on the next
+	// complete refresh.
+	if doc.partial != "" {
+		doc = mergeIssuerMetadata(doc, issuerDocumentFromRow(issuer))
 	}
 
 	// Gram distrusts the whole document rather than salvaging parts of it. A
@@ -224,6 +245,20 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
+		// Session-enrichment capabilities. A refresh is the capture event for
+		// these nullable columns too: an omitted endpoint clears to NULL, an
+		// omitted array persists as empty, an omitted flag as false. Neither
+		// endpoint is dialed by discovery, so a plaintext value is dropped
+		// rather than failing the document, as for the revocation endpoint.
+		UserinfoEndpoint:                           conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, ""),
+		IntrospectionEndpoint:                      conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, ""),
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
+		ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+		Metadata: string(doc.raw),
+
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no
 		// longer holds the same authorization over.
@@ -239,3 +274,37 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 // allowed to write it, and only a concurrent move, rename, or delete explains
 // the miss.
 const refreshConflictMessage = "identity provider changed while its metadata was being fetched; retry the refresh"
+
+// issuerDocumentFromRow projects a stored issuer back into the discovery
+// document shape, so a partial discovery can fall back to what an earlier
+// complete one captured. Nullable columns that were never captured stay nil
+// and false, which the merge treats as unset.
+func issuerDocumentFromRow(issuer repo.RemoteSessionIssuer) rfc8414Document {
+	return rfc8414Document{
+		Issuer:                            issuer.Issuer,
+		AuthorizationEndpoint:             conv.FromPGTextOrEmpty[string](issuer.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.FromPGTextOrEmpty[string](issuer.TokenEndpoint),
+		RevocationEndpoint:                conv.FromPGTextOrEmpty[string](issuer.RevocationEndpoint),
+		RegistrationEndpoint:              conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint),
+		JwksURI:                           conv.FromPGTextOrEmpty[string](issuer.JwksUri),
+		ServiceDocumentation:              conv.FromPGTextOrEmpty[string](issuer.ServiceDocumentation),
+		OpPolicyURI:                       conv.FromPGTextOrEmpty[string](issuer.OpPolicyUri),
+		OpTosURI:                          conv.FromPGTextOrEmpty[string](issuer.OpTosUri),
+		ScopesSupported:                   issuer.ScopesSupported,
+		GrantTypesSupported:               issuer.GrantTypesSupported,
+		ResponseTypesSupported:            issuer.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported: issuer.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  conv.FromPGTextOrEmpty[string](issuer.UserinfoEndpoint),
+		IntrospectionEndpoint:             conv.FromPGTextOrEmpty[string](issuer.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  issuer.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           issuer.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            issuer.ClaimsSupported,
+		BackchannelLogoutSupported:                 issuer.BackchannelLogoutSupported.Valid && issuer.BackchannelLogoutSupported.Bool,
+		AuthorizationResponseIssParameterSupported: issuer.AuthorizationResponseIssParameterSupported.Valid && issuer.AuthorizationResponseIssParameterSupported.Bool,
+		raw:       issuer.Metadata,
+		partial:   "",
+		wellKnown: "",
+	}
+}

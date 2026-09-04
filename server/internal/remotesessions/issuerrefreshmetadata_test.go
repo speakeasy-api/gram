@@ -1,19 +1,25 @@
 package remotesessions_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -63,6 +69,144 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI)
 	require.Equal(t, []string{"openid"}, result.Issuer.ScopesSupported)
 	require.Equal(t, []string{"S256"}, result.Issuer.CodeChallengeMethodsSupported, "a refresh captures the advertised PKCE methods over the create-time NULL")
+}
+
+// A refresh is the capture event for the session-enrichment capabilities: a
+// row created from the form stores NULL for them, and the first refresh fills
+// in what the upstream advertises, including fields it publishes only in its
+// OpenID document.
+func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := twoDocumentIssuerServer(t, func(doc map[string]any) {
+		doc["introspection_endpoint"] = "https://introspect.example/introspect"
+		doc["introspection_endpoint_auth_methods_supported"] = []string{"client_secret_post"}
+		doc["authorization_response_iss_parameter_supported"] = true
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-enrich", upstream.URL))
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint, "not on the create form, so NULL until a refresh captures it")
+	require.Nil(t, created.ClaimsSupported)
+	require.Nil(t, created.BackchannelLogoutSupported)
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, upstream.URL+"/userinfo", *result.Issuer.UserinfoEndpoint)
+	require.Equal(t, "https://introspect.example/introspect", *result.Issuer.IntrospectionEndpoint)
+	require.Equal(t, []string{"client_secret_post"}, result.Issuer.IntrospectionEndpointAuthMethodsSupported)
+	require.Equal(t, []string{"RS256"}, result.Issuer.IDTokenSigningAlgValuesSupported)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, result.Issuer.ClaimsSupported)
+	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI, "jwks_uri came from the OpenID document")
+	require.NotNil(t, result.Issuer.BackchannelLogoutSupported)
+	require.True(t, *result.Issuer.BackchannelLogoutSupported)
+	require.NotNil(t, result.Issuer.AuthorizationResponseIssParameterSupported)
+	require.True(t, *result.Issuer.AuthorizationResponseIssParameterSupported)
+
+	stored := loadIssuerRow(t, ctx, ti, created)
+	var members map[string]any
+	require.NoError(t, json.Unmarshal(stored.Metadata, &members), "the merged document is persisted")
+	require.Equal(t, "kept", members["oauth_only_extension"])
+	require.Contains(t, members, "claims_supported")
+}
+
+// When a same-origin candidate fails transiently after the primary document
+// was read, the fields only it advertises are not treated as withdrawn: the
+// stored values stand and the caller is warned. A definitive miss on the next
+// refresh clears them.
+func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusOK)
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 upstream.URL,
+				"authorization_endpoint": upstream.URL + "/authorize",
+				"token_endpoint":         upstream.URL + "/token",
+			})
+		case "/.well-known/openid-configuration":
+			status := int(oidcStatus.Load())
+			if status != http.StatusOK {
+				w.WriteHeader(status)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 upstream.URL,
+				"authorization_endpoint": upstream.URL + "/authorize",
+				"token_endpoint":         upstream.URL + "/token",
+				"jwks_uri":               upstream.URL + "/jwks",
+				"userinfo_endpoint":      upstream.URL + "/userinfo",
+				"claims_supported":       []string{"sub", "email"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial", upstream.URL))
+	require.NoError(t, err)
+
+	refresh := func() *types.RemoteSessionIssuerRefresh {
+		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+			ID:               created.ID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	complete := refresh()
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+	require.Equal(t, []string{"sub", "email"}, complete.Issuer.ClaimsSupported)
+
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	partial := refresh()
+	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI, "a transient miss does not withdraw the field")
+	require.Equal(t, upstream.URL+"/userinfo", *partial.Issuer.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email"}, partial.Issuer.ClaimsSupported)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "could not be fetched")
+	}), "the caller is told which candidate was skipped: %v", partial.DiscoveryWarnings)
+
+	oidcStatus.Store(http.StatusNotFound)
+	withdrawn := refresh()
+	require.Nil(t, withdrawn.Issuer.JwksURI, "a definitive miss withdraws the field")
+	require.Nil(t, withdrawn.Issuer.UserinfoEndpoint)
+	require.Empty(t, withdrawn.Issuer.ClaimsSupported)
+	require.False(t, slices.ContainsFunc(withdrawn.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "could not be fetched")
+	}), "a 404 is definitive and raises no partial warning: %v", withdrawn.DiscoveryWarnings)
+}
+
+// loadIssuerRow reads the stored row for an issuer the test service created
+// in the test project.
+func loadIssuerRow(t *testing.T, ctx context.Context, ti *testInstance, issuer *types.RemoteSessionIssuer) repo.RemoteSessionIssuer {
+	t.Helper()
+	row, err := repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    uuid.MustParse(issuer.ID),
+		ProjectID:             uuid.NullUUID{UUID: uuid.MustParse(issuer.ProjectID), Valid: true},
+		IncludeOrganizational: false,
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return row
 }
 
 // A refresh restates the issuer's whole discovered surface, so an endpoint the

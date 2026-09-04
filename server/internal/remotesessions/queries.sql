@@ -27,6 +27,14 @@ INSERT INTO remote_session_issuers (
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
+    userinfo_endpoint,
+    introspection_endpoint,
+    introspection_endpoint_auth_methods_supported,
+    id_token_signing_alg_values_supported,
+    claims_supported,
+    backchannel_logout_supported,
+    authorization_response_iss_parameter_supported,
+    metadata,
     oidc,
     passthrough
 )
@@ -55,6 +63,17 @@ VALUES (
     -- distinct from the empty array ("the issuer advertises no methods").
     @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
+    -- Session-enrichment capabilities, nullable like
+    -- code_challenge_methods_supported: a caller without a discovery
+    -- document passes NULL ("not captured").
+    @userinfo_endpoint,
+    @introspection_endpoint,
+    @introspection_endpoint_auth_methods_supported,
+    @id_token_signing_alg_values_supported,
+    @claims_supported,
+    @backchannel_logout_supported,
+    @authorization_response_iss_parameter_supported,
+    @metadata,
     @oidc,
     @passthrough
 )
@@ -340,10 +359,15 @@ RETURNING *;
 -- an empty string and is cleared to NULL, and a *_supported array it has
 -- stopped advertising arrives as an empty array. For the capability arrays
 -- that are NOT NULL with an empty-array default, NULL is not a value they can
--- hold anyway; for the nullable code_challenge_methods_supported the empty
--- array is itself load-bearing ("captured; the upstream advertises nothing"),
--- and a refresh must never write NULL there — NULL is reserved for rows
--- discovery has not captured yet, and this query is the capture.
+-- hold anyway; for the nullable capability arrays
+-- (code_challenge_methods_supported, introspection_endpoint_auth_methods_supported,
+-- id_token_signing_alg_values_supported, claims_supported) and booleans
+-- (backchannel_logout_supported, authorization_response_iss_parameter_supported)
+-- the empty array or FALSE is itself load-bearing ("captured; the upstream
+-- advertises nothing"), and a refresh must never write NULL there — NULL is
+-- reserved for rows discovery has not captured yet, and this query is the
+-- capture. metadata is the one column a refresh may leave NULL, when the
+-- document could not be retained.
 --
 -- Scoping differs from the tier-specific updates by necessity, since one query
 -- serves project-owned, organization-level, and global rows. Rather than the
@@ -384,6 +408,14 @@ SET
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
     code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
+    userinfo_endpoint = CASE WHEN @userinfo_endpoint::text = '' THEN NULL ELSE @userinfo_endpoint::text END,
+    introspection_endpoint = CASE WHEN @introspection_endpoint::text = '' THEN NULL ELSE @introspection_endpoint::text END,
+    introspection_endpoint_auth_methods_supported = @introspection_endpoint_auth_methods_supported::text[],
+    id_token_signing_alg_values_supported = @id_token_signing_alg_values_supported::text[],
+    claims_supported = @claims_supported::text[],
+    backchannel_logout_supported = @backchannel_logout_supported::boolean,
+    authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
+    metadata = NULLIF(@metadata::text, '')::jsonb,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text

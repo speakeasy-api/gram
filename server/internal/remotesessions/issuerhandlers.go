@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -68,6 +69,56 @@ type rfc8414Document struct {
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
 	// pre-flight outbound CIMD opt-in.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+
+	// UserinfoEndpoint is the OpenID Connect Discovery userinfo endpoint.
+	UserinfoEndpoint string `json:"userinfo_endpoint"`
+
+	// IntrospectionEndpoint is the RFC 7662 token introspection endpoint.
+	IntrospectionEndpoint string `json:"introspection_endpoint"`
+
+	// IntrospectionEndpointAuthMethodsSupported lists the client
+	// authentication methods the introspection endpoint accepts. Nil when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+
+	// IDTokenSigningAlgValuesSupported lists the JWS algorithms the issuer
+	// signs ID tokens with. Nil when the document omits the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+
+	// ClaimsSupported lists the claims the issuer can return in ID tokens and
+	// from the userinfo endpoint. Nil when the document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+
+	// BackchannelLogoutSupported reports whether the issuer supports OpenID
+	// Connect Back-Channel Logout.
+	BackchannelLogoutSupported bool `json:"backchannel_logout_supported"`
+
+	// AuthorizationResponseIssParameterSupported is RFC 9207 support: the
+	// issuer includes iss in authorization responses.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+
+	// raw is the document as the issuer served it, or, when discovery merged
+	// several, the union of their members re-serialized. It is persisted so
+	// fields the typed columns omit are not lost.
+	raw json.RawMessage
+
+	// partial names the well-known URL of a same-origin candidate that failed
+	// transiently after a usable document was already found, so the merged
+	// result may be missing fields that candidate would have supplied. Empty
+	// when every candidate answered definitively.
+	partial string
+
+	// wellKnown is the URL this document was fetched from.
+	wellKnown string
+}
+
+// wellKnownFamily reports which discovery family a well-known URL belongs
+// to: "openid-configuration" or "oauth-authorization-server".
+func wellKnownFamily(wellKnown string) string {
+	if strings.Contains(wellKnown, "/.well-known/openid-configuration") {
+		return "openid-configuration"
+	}
+	return "oauth-authorization-server"
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -295,6 +346,16 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Not on the create form; discovery captures these on the next
+		// metadata refresh.
+		UserinfoEndpoint:                           pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:                      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		Metadata: nil,
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -878,6 +939,38 @@ type DiscoveredIssuerMetadata struct {
 	CodeChallengeMethodsSupported []string
 
 	ClientIDMetadataDocumentSupported bool
+
+	// UserinfoEndpoint is the OpenID Connect userinfo endpoint, or "" when
+	// the issuer advertises none or advertises one that is not HTTPS.
+	UserinfoEndpoint string
+
+	// IntrospectionEndpoint is the RFC 7662 introspection endpoint, or ""
+	// when the issuer advertises none or advertises one that is not HTTPS.
+	IntrospectionEndpoint string
+
+	// IntrospectionEndpointAuthMethodsSupported is never nil: discovery ran,
+	// so an omitted field yields an empty slice, the persisted "captured;
+	// the upstream advertises nothing" state.
+	IntrospectionEndpointAuthMethodsSupported []string
+
+	// IDTokenSigningAlgValuesSupported is never nil, for the same reason.
+	IDTokenSigningAlgValuesSupported []string
+
+	// ClaimsSupported is never nil, for the same reason.
+	ClaimsSupported []string
+
+	// BackchannelLogoutSupported is false when the document omits the field,
+	// which is the value OpenID Back-Channel Logout defines for absence.
+	BackchannelLogoutSupported bool
+
+	// AuthorizationResponseIssParameterSupported is false when the document
+	// omits the field, which is the value RFC 9207 defines for absence.
+	AuthorizationResponseIssParameterSupported bool
+
+	// Metadata is the merged discovery document for the issuer's metadata
+	// column: the primary document's members plus any a same-issuer document
+	// added.
+	Metadata []byte
 }
 
 // DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
@@ -907,6 +1000,18 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
+		// Neither endpoint is dialed by discovery, so a plaintext value is
+		// dropped like a plaintext revocation endpoint rather than failing
+		// the document: a token would cross the wire to it later.
+		UserinfoEndpoint:                           conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, ""),
+		IntrospectionEndpoint:                      conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, ""),
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(append([]string(nil), doc.IntrospectionEndpointAuthMethodsSupported...)),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(append([]string(nil), doc.IDTokenSigningAlgValuesSupported...)),
+		ClaimsSupported:                            orEmptySlice(append([]string(nil), doc.ClaimsSupported...)),
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+		Metadata: []byte(doc.raw),
 	}, nil
 }
 
@@ -933,14 +1038,35 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		return nil
 	}
 
+	// Every candidate is probed. The first usable document is the primary and
+	// wins every field it sets; later usable documents that name the same
+	// issuer fill in what it left out. RFC 8414 and OpenID Connect Discovery
+	// serve overlapping documents, and several providers publish jwks_uri,
+	// claims_supported, and the ID token signing algorithms only in the OpenID
+	// one, so stopping at the first hit would never capture them.
 	var firstErr *discoveryError
+	var primary rfc8414Document
+	havePrimary := false
 	var fallbackDoc rfc8414Document
 	haveFallback := false
 	for _, wellKnown := range candidates {
+		// Once a primary exists, only the other document family can add
+		// anything: a second RFC 8414 document is the same document at a
+		// speculative path, not a source of OIDC-only fields.
+		if havePrimary && wellKnownFamily(wellKnown) == wellKnownFamily(primary.wellKnown) {
+			continue
+		}
 		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
+			}
+			// A candidate that could not be read at all, rather than one that
+			// definitively has no document, may be hiding fields the merge
+			// would have captured. Record it so a refresh does not mistake
+			// their absence for withdrawal.
+			if havePrimary && primary.partial == "" && attemptErr.transient() {
+				primary.partial = wellKnown
 			}
 			continue
 		}
@@ -957,7 +1083,24 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			continue
 		}
 
-		return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		if !havePrimary {
+			primary = doc
+			havePrimary = true
+			continue
+		}
+		// Only a document for the same issuer may contribute: an origin-root
+		// fallback on a multi-tenant host can describe a sibling tenant.
+		if issuerURLsEqual(doc.Issuer, primary.Issuer) {
+			primary = mergeIssuerMetadata(primary, doc)
+		}
+	}
+
+	if havePrimary {
+		warnings := collectDiscoveryWarnings(issuerURL, primary)
+		if primary.partial != "" {
+			warnings = append(warnings, fmt.Sprintf("metadata document at %s could not be fetched; fields it advertises were not merged", primary.partial))
+		}
+		return primary, warnings, nil
 	}
 
 	if haveFallback {
@@ -965,6 +1108,92 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 
 	return rfc8414Document{}, nil, firstErr
+}
+
+// mergeIssuerMetadata fills the fields base leaves unset from extra: empty
+// strings, nil slices, and booleans whose member the base document does not
+// state. base keeps every value it already carries, including an explicit
+// false, so the RFC 8414 document stays authoritative for flags such as CIMD
+// support that Gram acts on. The raw documents merge the same way, key by
+// key, so the persisted document is the union with base's values winning.
+func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
+	fillString := func(dst *string, src string) {
+		if *dst == "" {
+			*dst = src
+		}
+	}
+	fillSlice := func(dst *[]string, src []string) {
+		if *dst == nil {
+			*dst = src
+		}
+	}
+	var baseMembers map[string]json.RawMessage
+	_ = json.Unmarshal(base.raw, &baseMembers)
+	fillBool := func(dst *bool, src bool, member string) {
+		if _, stated := baseMembers[member]; !stated {
+			*dst = src
+		}
+	}
+	fillString(&base.Issuer, extra.Issuer)
+	fillString(&base.AuthorizationEndpoint, extra.AuthorizationEndpoint)
+	fillString(&base.TokenEndpoint, extra.TokenEndpoint)
+	fillString(&base.RevocationEndpoint, extra.RevocationEndpoint)
+	fillString(&base.RegistrationEndpoint, extra.RegistrationEndpoint)
+	fillString(&base.JwksURI, extra.JwksURI)
+	fillString(&base.ServiceDocumentation, extra.ServiceDocumentation)
+	fillString(&base.OpPolicyURI, extra.OpPolicyURI)
+	fillString(&base.OpTosURI, extra.OpTosURI)
+	fillString(&base.UserinfoEndpoint, extra.UserinfoEndpoint)
+	fillString(&base.IntrospectionEndpoint, extra.IntrospectionEndpoint)
+	fillSlice(&base.ScopesSupported, extra.ScopesSupported)
+	fillSlice(&base.GrantTypesSupported, extra.GrantTypesSupported)
+	fillSlice(&base.ResponseTypesSupported, extra.ResponseTypesSupported)
+	fillSlice(&base.TokenEndpointAuthMethodsSupported, extra.TokenEndpointAuthMethodsSupported)
+	fillSlice(&base.CodeChallengeMethodsSupported, extra.CodeChallengeMethodsSupported)
+	fillSlice(&base.IntrospectionEndpointAuthMethodsSupported, extra.IntrospectionEndpointAuthMethodsSupported)
+	fillSlice(&base.IDTokenSigningAlgValuesSupported, extra.IDTokenSigningAlgValuesSupported)
+	fillSlice(&base.ClaimsSupported, extra.ClaimsSupported)
+	fillBool(&base.ClientIDMetadataDocumentSupported, extra.ClientIDMetadataDocumentSupported, "client_id_metadata_document_supported")
+	fillBool(&base.BackchannelLogoutSupported, extra.BackchannelLogoutSupported, "backchannel_logout_supported")
+	fillBool(&base.AuthorizationResponseIssParameterSupported, extra.AuthorizationResponseIssParameterSupported, "authorization_response_iss_parameter_supported")
+	base.raw = mergeRawDocuments(base.raw, extra.raw)
+	return base
+}
+
+// mergeRawDocuments returns base with every top-level member of extra that
+// base lacks. Either side that is not a JSON object leaves base unchanged.
+func mergeRawDocuments(base, extra json.RawMessage) json.RawMessage {
+	var baseMembers, extraMembers map[string]json.RawMessage
+	if err := json.Unmarshal(base, &baseMembers); err != nil || baseMembers == nil {
+		return base
+	}
+	if err := json.Unmarshal(extra, &extraMembers); err != nil {
+		return base
+	}
+	added := false
+	for key, value := range extraMembers {
+		if _, ok := baseMembers[key]; ok {
+			continue
+		}
+		baseMembers[key] = value
+		added = true
+	}
+	if !added {
+		return base
+	}
+	merged, err := json.Marshal(baseMembers)
+	if err != nil {
+		return base
+	}
+	return merged
+}
+
+// transient reports whether the probe failed in a way that says nothing about
+// whether a document exists there: no answer at all, a server error, or rate
+// limiting. A 4xx is a definitive miss, and a document that parsed but was
+// rejected keeps its 200 status and is definitive too.
+func (e *discoveryError) transient() bool {
+	return e.Status == 0 || e.Status >= http.StatusInternalServerError || e.Status == http.StatusTooManyRequests
 }
 
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and
@@ -1031,6 +1260,8 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			cause:        err,
 		}
 	}
+	doc.raw = body
+	doc.wellKnown = wellKnown
 
 	return doc, nil
 }

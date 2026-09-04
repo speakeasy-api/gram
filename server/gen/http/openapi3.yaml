@@ -80512,6 +80512,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
@@ -80534,6 +80545,19 @@ components:
                     type: string
                     description: The remote_session_issuer id.
                     format: uuid
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -80595,6 +80619,9 @@ components:
                 updated_at:
                     type: string
                     format: date-time
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
             description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
             required:
                 - id
@@ -80613,6 +80640,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -80630,6 +80668,19 @@ components:
                     type: array
                     items:
                         type: string
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Null when the document omits the field.
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -80672,12 +80723,17 @@ components:
                     type: array
                     items:
                         type: string
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.
             description: A draft remote_session_issuer returned by discover. Same shape as RemoteSessionIssuer minus id/project_id/timestamps, plus discovery_warnings describing any RFC 8414 deviations.
             required:
                 - issuer
                 - oidc
                 - passthrough
                 - client_id_metadata_document_supported
+                - backchannel_logout_supported
+                - authorization_response_iss_parameter_supported
                 - discovery_warnings
         RemoteSessionIssuerDuplicateMatch:
             type: object

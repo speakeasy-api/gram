@@ -121,6 +121,14 @@ func CreateIssuerGatedToolset(
 		CodeChallengeMethodsSupported:     []string{"S256"},
 		Oidc:                              false,
 		Passthrough:                       false,
+		UserinfoEndpoint:                  pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:             pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		Metadata: nil,
 	})
 	require.NoError(t, err)
 

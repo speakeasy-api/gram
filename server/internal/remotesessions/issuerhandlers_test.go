@@ -1361,7 +1361,8 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 		"/.well-known/openid-configuration/tenant",
 		"/tenant/.well-known/openid-configuration",
 		"/.well-known/oauth-authorization-server",
-	}, probedPaths, "path-aware candidates 404, fall back to origin-style")
+		"/.well-known/openid-configuration",
+	}, probedPaths, "path-aware candidates 404, fall back to origin-style; every candidate is probed so a sibling document can be merged")
 }
 
 func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
@@ -1407,7 +1408,8 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 		"/.well-known/openid-configuration/tenant",
 		"/tenant/.well-known/openid-configuration",
 		"/.well-known/oauth-authorization-server",
-	}, probedPaths, "incomplete catch-all 200s skipped until the real document")
+		"/.well-known/openid-configuration",
+	}, probedPaths, "incomplete catch-all 200s skipped until the real document; every candidate is probed so a sibling document can be merged")
 }
 
 func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *testing.T) {
@@ -1794,4 +1796,228 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// twoDocumentIssuerServer serves an RFC 8414 document at the OAuth path and an
+// OpenID Connect Discovery document at the OIDC path. The OAuth document
+// carries only the OAuth core; the OIDC one adds the OIDC-only fields several
+// real providers publish nowhere else, and is what mutate may alter.
+func twoDocumentIssuerServer(t *testing.T, mutateOIDC func(doc map[string]any)) *httptest.Server {
+	t.Helper()
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var doc map[string]any
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"registration_endpoint":                 server.URL + "/register",
+				"scopes_supported":                      []string{"read", "write"},
+				"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+				"response_types_supported":              []string{"code"},
+				"token_endpoint_auth_methods_supported": []string{"client_secret_basic"},
+				"code_challenge_methods_supported":      []string{"S256"},
+				"oauth_only_extension":                  "kept",
+			}
+		case "/.well-known/openid-configuration":
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"jwks_uri":                              server.URL + "/jwks",
+				"userinfo_endpoint":                     server.URL + "/userinfo",
+				"scopes_supported":                      []string{"openid", "email"},
+				"claims_supported":                      []string{"sub", "email", "email_verified"},
+				"id_token_signing_alg_values_supported": []string{"RS256"},
+				"backchannel_logout_supported":          true,
+			}
+			if mutateOIDC != nil {
+				mutateOIDC(doc)
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// Linear, Slack, and WorkOS publish jwks_uri, claims_supported, and the ID
+// token signing algorithms only in their OpenID document. Discovery merges it
+// into the RFC 8414 document rather than stopping at the first hit, with the
+// RFC 8414 document winning any field both set.
+func TestFetchRemoteSessionIssuerMetadata_MergesOpenIDDocumentIntoOAuthDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := twoDocumentIssuerServer(t, nil)
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI, "OIDC-only field filled from the second document")
+	require.Equal(t, server.URL+"/userinfo", *draft.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, draft.ClaimsSupported)
+	require.Equal(t, []string{"RS256"}, draft.IDTokenSigningAlgValuesSupported)
+	require.True(t, draft.BackchannelLogoutSupported)
+	require.False(t, draft.AuthorizationResponseIssParameterSupported)
+	require.Nil(t, draft.IntrospectionEndpoint)
+	require.Equal(t, []string{"read", "write"}, draft.ScopesSupported, "the RFC 8414 document wins a field both set")
+	require.Equal(t, server.URL+"/register", *draft.RegistrationEndpoint, "fields only the first document sets survive")
+	require.NotContains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+}
+
+// An OpenID document naming another issuer is a sibling tenant on a shared
+// host, not a second view of the same authorization server, and contributes
+// nothing.
+func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := twoDocumentIssuerServer(t, func(doc map[string]any) {
+		doc["issuer"] = "https://other-tenant.example"
+		doc["authorization_endpoint"] = "https://other-tenant.example/authorize"
+		doc["token_endpoint"] = "https://other-tenant.example/token"
+		doc["jwks_uri"] = "https://other-tenant.example/jwks"
+		doc["userinfo_endpoint"] = "https://other-tenant.example/userinfo"
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.JwksURI)
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.ClaimsSupported)
+	require.False(t, draft.BackchannelLogoutSupported)
+	require.Contains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+}
+
+// The persisted document is the union of the merged documents, so the OIDC
+// fields the typed columns omit and the OAuth extensions they never modelled
+// both survive verbatim.
+func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
+	t.Parallel()
+
+	server := twoDocumentIssuerServer(t, nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+
+	var merged map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &merged))
+	require.Equal(t, "kept", merged["oauth_only_extension"])
+	require.Equal(t, server.URL+"/jwks", merged["jwks_uri"])
+	require.Equal(t, []any{"read", "write"}, merged["scopes_supported"], "the first document's value wins in the raw union too")
+	require.Equal(t, server.URL+"/userinfo", discovered.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, discovered.ClaimsSupported)
+	require.Equal(t, []string{}, discovered.IntrospectionEndpointAuthMethodsSupported, "an omitted array is captured as empty, never nil")
+	require.True(t, discovered.BackchannelLogoutSupported)
+}
+
+// The merge gate compares issuers the way the rest of the package does,
+// ignoring a trailing slash, so an OpenID document that spells the issuer
+// with one still contributes.
+func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// The callback runs per request, after the assignment below, so it sees
+	// the server's final URL.
+	var server *httptest.Server
+	server = twoDocumentIssuerServer(t, func(doc map[string]any) {
+		doc["issuer"] = server.URL + "/"
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.JwksURI, "a trailing slash on the OpenID issuer does not block the merge")
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI)
+}
+
+// A flag the RFC 8414 document states explicitly, even as false, is never
+// overruled by the OpenID document: only members the primary omits are filled.
+func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var doc map[string]any
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"client_id_metadata_document_supported": false,
+			}
+		case "/.well-known/openid-configuration":
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"client_id_metadata_document_supported": true,
+				"backchannel_logout_supported":          true,
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	t.Cleanup(server.Close)
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, draft.ClientIDMetadataDocumentSupported, "an explicit false in the primary document stands")
+	require.True(t, draft.BackchannelLogoutSupported, "a member the primary omits is filled")
+}
+
+// Another issuer's document stays out of the persisted union as well as out
+// of the typed fields.
+func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := twoDocumentIssuerServer(t, func(doc map[string]any) {
+		doc["issuer"] = "https://other-tenant.example"
+	})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+
+	var members map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &members))
+	require.NotContains(t, members, "claims_supported")
+	require.Equal(t, "kept", members["oauth_only_extension"])
+	require.Empty(t, discovered.ClaimsSupported)
 }

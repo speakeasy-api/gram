@@ -77,6 +77,8 @@ describe("metadataFromIssuerDraft", () => {
       responseTypesSupported: ["code"],
       tokenEndpointAuthMethodsSupported: ["client_secret_post"],
       clientIdMetadataDocumentSupported: false,
+      backchannelLogoutSupported: false,
+      authorizationResponseIssParameterSupported: false,
       discoveryWarnings: [],
       oidc: false,
       passthrough: true,
@@ -98,6 +100,8 @@ describe("metadataFromIssuerDraft", () => {
     const metadata = metadataFromIssuerDraft({
       issuer: "https://different.example.com",
       clientIdMetadataDocumentSupported: false,
+      backchannelLogoutSupported: false,
+      authorizationResponseIssParameterSupported: false,
       discoveryWarnings: [],
       oidc: false,
       passthrough: true,

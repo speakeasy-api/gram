@@ -698,6 +698,14 @@ INSERT INTO remote_session_issuers (
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
+    userinfo_endpoint,
+    introspection_endpoint,
+    introspection_endpoint_auth_methods_supported,
+    id_token_signing_alg_values_supported,
+    claims_supported,
+    backchannel_logout_supported,
+    authorization_response_iss_parameter_supported,
+    metadata,
     oidc,
     passthrough
 )
@@ -726,36 +734,55 @@ VALUES (
     -- distinct from the empty array ("the issuer advertises no methods").
     $20,
     $21,
+    -- Session-enrichment capabilities, nullable like
+    -- code_challenge_methods_supported: a caller without a discovery
+    -- document passes NULL ("not captured").
     $22,
-    $23
+    $23,
+    $24,
+    $25,
+    $26,
+    $27,
+    $28,
+    $29,
+    $30,
+    $31
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionIssuerParams struct {
-	ProjectID                         uuid.NullUUID
-	OrganizationID                    pgtype.Text
-	Slug                              string
-	Issuer                            string
-	Name                              pgtype.Text
-	LogoAssetID                       uuid.NullUUID
-	ClientSetupDocumentationUrl       pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	JwksUri                           pgtype.Text
-	ServiceDocumentation              pgtype.Text
-	OpPolicyUri                       pgtype.Text
-	OpTosUri                          pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported bool
-	Oidc                              bool
-	Passthrough                       bool
+	ProjectID                                  uuid.NullUUID
+	OrganizationID                             pgtype.Text
+	Slug                                       string
+	Issuer                                     string
+	Name                                       pgtype.Text
+	LogoAssetID                                uuid.NullUUID
+	ClientSetupDocumentationUrl                pgtype.Text
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	RevocationEndpoint                         pgtype.Text
+	RegistrationEndpoint                       pgtype.Text
+	JwksUri                                    pgtype.Text
+	ServiceDocumentation                       pgtype.Text
+	OpPolicyUri                                pgtype.Text
+	OpTosUri                                   pgtype.Text
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          bool
+	UserinfoEndpoint                           pgtype.Text
+	IntrospectionEndpoint                      pgtype.Text
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	Metadata                                   []byte
+	Oidc                                       bool
+	Passthrough                                bool
 }
 
 // Remote session issuers — upstream Authorization Server identity records
@@ -786,6 +813,14 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
+		arg.Metadata,
 		arg.Oidc,
 		arg.Passthrough,
 	)
@@ -6159,34 +6194,50 @@ SET
     token_endpoint_auth_methods_supported = $12::text[],
     code_challenge_methods_supported = $13::text[],
     client_id_metadata_document_supported = $14::boolean,
+    userinfo_endpoint = CASE WHEN $15::text = '' THEN NULL ELSE $15::text END,
+    introspection_endpoint = CASE WHEN $16::text = '' THEN NULL ELSE $16::text END,
+    introspection_endpoint_auth_methods_supported = $17::text[],
+    id_token_signing_alg_values_supported = $18::text[],
+    claims_supported = $19::text[],
+    backchannel_logout_supported = $20::boolean,
+    authorization_response_iss_parameter_supported = $21::boolean,
+    metadata = NULLIF($22::text, '')::jsonb,
     updated_at = clock_timestamp()
-WHERE id = $15
-  AND issuer = $16::text
-  AND project_id IS NOT DISTINCT FROM $17::uuid
-  AND organization_id IS NOT DISTINCT FROM $18::text
+WHERE id = $23
+  AND issuer = $24::text
+  AND project_id IS NOT DISTINCT FROM $25::uuid
+  AND organization_id IS NOT DISTINCT FROM $26::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
-	RevocationEndpoint                string
-	RegistrationEndpoint              string
-	JwksUri                           string
-	ServiceDocumentation              string
-	OpPolicyUri                       string
-	OpTosUri                          string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported bool
-	ID                                uuid.UUID
-	Issuer                            string
-	ProjectID                         uuid.NullUUID
-	OrganizationID                    pgtype.Text
+	AuthorizationEndpoint                      string
+	TokenEndpoint                              string
+	RevocationEndpoint                         string
+	RegistrationEndpoint                       string
+	JwksUri                                    string
+	ServiceDocumentation                       string
+	OpPolicyUri                                string
+	OpTosUri                                   string
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          bool
+	UserinfoEndpoint                           string
+	IntrospectionEndpoint                      string
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 bool
+	AuthorizationResponseIssParameterSupported bool
+	Metadata                                   string
+	ID                                         uuid.UUID
+	Issuer                                     string
+	ProjectID                                  uuid.NullUUID
+	OrganizationID                             pgtype.Text
 }
 
 // Write only the columns Gram derives from an upstream RFC 8414 metadata
@@ -6203,10 +6254,15 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 // an empty string and is cleared to NULL, and a *_supported array it has
 // stopped advertising arrives as an empty array. For the capability arrays
 // that are NOT NULL with an empty-array default, NULL is not a value they can
-// hold anyway; for the nullable code_challenge_methods_supported the empty
-// array is itself load-bearing ("captured; the upstream advertises nothing"),
-// and a refresh must never write NULL there — NULL is reserved for rows
-// discovery has not captured yet, and this query is the capture.
+// hold anyway; for the nullable capability arrays
+// (code_challenge_methods_supported, introspection_endpoint_auth_methods_supported,
+// id_token_signing_alg_values_supported, claims_supported) and booleans
+// (backchannel_logout_supported, authorization_response_iss_parameter_supported)
+// the empty array or FALSE is itself load-bearing ("captured; the upstream
+// advertises nothing"), and a refresh must never write NULL there — NULL is
+// reserved for rows discovery has not captured yet, and this query is the
+// capture. metadata is the one column a refresh may leave NULL, when the
+// document could not be retained.
 //
 // Scoping differs from the tier-specific updates by necessity, since one query
 // serves project-owned, organization-level, and global rows. Rather than the
@@ -6247,6 +6303,14 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
+		arg.Metadata,
 		arg.ID,
 		arg.Issuer,
 		arg.ProjectID,
