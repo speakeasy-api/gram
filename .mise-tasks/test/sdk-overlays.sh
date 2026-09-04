@@ -66,6 +66,15 @@ speakeasy overlay apply \
   --overlay "$admin_overlay" \
   --out "$tmpdir/admin.yaml" >/dev/null 2>&1
 
+operation_rows=$(
+  yq -o=json "$tmpdir/admin.yaml" |
+    jq -r '.paths[][] | select(.operationId and (."x-speakeasy-ignore" != true)) | [.operationId, (."x-speakeasy-name-override" // "")] | @tsv'
+)
+if [ -z "$operation_rows" ]; then
+  echo "Expected active Admin operations, found none" >&2
+  exit 1
+fi
+
 while IFS=$'\t' read -r operation_id sdk_name; do
   if [[ $operation_id != admin* ]]; then
     echo "Expected stable admin-prefixed operation ID, found $operation_id" >&2
@@ -78,7 +87,4 @@ while IFS=$'\t' read -r operation_id sdk_name; do
     echo "Expected $operation_id to have SDK name $expected_name, found ${sdk_name:-none}" >&2
     exit 1
   fi
-done < <(
-  yq -o=json "$tmpdir/admin.yaml" |
-    jq -r '.paths[][] | select(.operationId and (."x-speakeasy-ignore" != true)) | [.operationId, (."x-speakeasy-name-override" // "")] | @tsv'
-)
+done <<<"$operation_rows"
