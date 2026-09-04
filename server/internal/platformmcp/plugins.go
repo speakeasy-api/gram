@@ -3,15 +3,24 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	pluginaudience "github.com/speakeasy-api/gram/server/internal/plugins/audience"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -32,11 +41,18 @@ const (
 // maxPluginPageSize bounds one page of plugin inventory.
 const maxPluginPageSize = 50
 
-// maxPluginMembers bounds the membership lists on one plugin. A plugin is a
-// curated bundle an administrator assembled; a bundle larger than this is
-// reported truncated rather than paged, because the question the tool answers
-// ("what is in this plugin") is already answered by the first hundred entries.
+// maxPluginMembers bounds every membership list returned by plugin reads. A
+// plugin or organization larger than this is reported truncated rather than
+// allowing an unbounded MCP result.
 const maxPluginMembers = 100
+
+var platformVisibleDirectoryAttributes = map[string]struct{}{
+	"cost_center_name": {},
+	"department_name":  {},
+	"division_name":    {},
+	"employee_type":    {},
+	"job_title":        {},
+}
 
 var (
 	// ErrPluginProjectNotFound is a project this principal may not read, or one
@@ -66,6 +82,17 @@ type PluginAudience struct {
 
 	// Users is how many individual principals the plugin is assigned to.
 	Users int64 `json:"users"`
+}
+
+// PluginAudienceOption is one current organization audience that can receive a
+// plugin. Reference is encrypted and short-lived; the underlying principal URN
+// never leaves the server. MemberCount is omitted for Everyone because the
+// shared dashboard audience authority does not currently calculate it.
+type PluginAudienceOption struct {
+	Kind        string        `json:"kind"`
+	DisplayName string        `json:"display_name"`
+	MemberCount *SubjectCount `json:"member_count,omitempty"`
+	Reference   string        `json:"reference"`
 }
 
 // Plugin publication states.
@@ -154,6 +181,17 @@ type ListPluginsInput struct {
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous list_plugins result"`
 }
 
+type ListPluginAudiencesInput struct {
+	ProjectID string `json:"project_id" jsonschema:"explicit project ID whose plugin audiences to list"`
+}
+
+type ListPluginAudiencesOutput struct {
+	ProjectID          string                 `json:"project_id"`
+	Audiences          []PluginAudienceOption `json:"audiences"`
+	ReferencesExpireAt string                 `json:"references_expire_at,omitempty"`
+	Truncated          bool                   `json:"truncated"`
+}
+
 type ListPluginsOutput struct {
 	// ProjectID echoes the project the plugins belong to.
 	ProjectID string `json:"project_id"`
@@ -184,6 +222,27 @@ type GetPluginOutput struct {
 	// Skills is the skills the plugin carries.
 	Skills []PluginSkill `json:"skills"`
 
+	// AssignmentVersion is an opaque optimistic-concurrency token over the
+	// plugin identity and its complete canonical assignment set. It remains
+	// valid until that state changes; a future write must also use unexpired
+	// audience references from the same or a fresher read.
+	AssignmentVersion string `json:"assignment_version"`
+
+	// Audiences are the current assignments that can be named without exposing
+	// an individual identity or stale internal principal.
+	Audiences []PluginAudienceOption `json:"audiences"`
+
+	// AudienceDetailsComplete is false when at least one current assignment
+	// cannot be safely represented as a reviewed role or directory audience.
+	AudienceDetailsComplete bool `json:"audience_details_complete"`
+
+	// AudiencesTruncated is true when more than 100 current audience assignments
+	// can be represented and the returned list is only a prefix.
+	AudiencesTruncated bool `json:"audiences_truncated"`
+
+	// ReferencesExpireAt applies to every audience reference in this result.
+	ReferencesExpireAt string `json:"references_expire_at,omitempty"`
+
 	// Truncated is true when the plugin carries more members than one result
 	// projects, so the lists above are a prefix rather than the whole bundle.
 	Truncated bool `json:"truncated"`
@@ -192,21 +251,40 @@ type GetPluginOutput struct {
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
-	db      *pgxpool.Pool
-	budget  OperationBudget
-	cursors *pluginCursorCodec
+	db                   *pgxpool.Pool
+	budget               OperationBudget
+	cursors              *pluginCursorCodec
+	audienceReferences   *subjectReferenceCodec
+	assignmentVersionKey []byte
+	now                  func() time.Time
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
-	codec, err := newPluginCursorCodec(cursorKeyMaterial)
-	if err != nil {
-		codec = nil
+	cursor, cursorErr := newPluginCursorCodec(cursorKeyMaterial)
+	references, referenceErr := newSubjectReferenceCodec(cursorKeyMaterial)
+	var versionKey []byte
+	if cursorKeyMaterial != "" {
+		digest := sha256.Sum256([]byte("platform-mcp-plugin-assignment-version:" + cursorKeyMaterial))
+		versionKey = digest[:]
 	}
-	return &PluginsService{db: db, budget: budget, cursors: codec}
+	if cursorErr != nil {
+		cursor = nil
+	}
+	if referenceErr != nil {
+		references = nil
+	}
+	return &PluginsService{
+		db:                   db,
+		budget:               budget,
+		cursors:              cursor,
+		audienceReferences:   references,
+		assignmentVersionKey: versionKey,
+		now:                  time.Now,
+	}
 }
 
 func (s *PluginsService) valid() bool {
-	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil
+	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil && s.audienceReferences != nil && len(s.assignmentVersionKey) > 0 && s.now != nil
 }
 
 func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
@@ -264,6 +342,29 @@ func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, i
 	return output, nil
 }
 
+func (s *PluginsService) ListPluginAudiences(ctx context.Context, principal Principal, input ListPluginAudiencesInput) (ListPluginAudiencesOutput, error) {
+	if !s.valid() {
+		return ListPluginAudiencesOutput{}, ErrUnavailable
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return ListPluginAudiencesOutput{}, err
+	}
+	project, err := s.resolveProject(ctx, platformrepo.New(s.db), principal, input.ProjectID)
+	if err != nil {
+		return ListPluginAudiencesOutput{}, err
+	}
+	audiences, expiresAt, truncated, err := s.resolveAudienceOptions(ctx, principal, project, nil)
+	if err != nil {
+		return ListPluginAudiencesOutput{}, err
+	}
+	return ListPluginAudiencesOutput{
+		ProjectID:          project.ID.String(),
+		Audiences:          publicAudienceOptions(audiences),
+		ReferencesExpireAt: expiresAt.Format(time.RFC3339),
+		Truncated:          truncated,
+	}, nil
+}
+
 func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, input GetPluginInput) (GetPluginOutput, error) {
 	if !s.valid() {
 		return GetPluginOutput{}, ErrUnavailable
@@ -314,15 +415,46 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	}
 	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
+	assignmentRows, err := pluginsrepo.New(s.db).ListPluginAssignments(ctx, target.ID)
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin assignments: %w", err)
+	}
+	assignments := make([]string, 0, len(assignmentRows))
+	for _, assignment := range assignmentRows {
+		// The target was resolved through organization- and project-qualified
+		// plugin reads above. Refuse an internally inconsistent assignment rather
+		// than including another organization's principal in the version.
+		if assignment.OrganizationID != principal.OrganizationID {
+			return GetPluginOutput{}, ErrPluginNotFound
+		}
+		assignments = append(assignments, assignment.PrincipalUrn)
+	}
+	availableAudiences := []resolvedPluginAudience{}
+	expiresAt := time.Time{}
+	audiencesTruncated := false
+	if len(assignments) > 0 {
+		availableAudiences, expiresAt, audiencesTruncated, err = s.resolveAudienceOptions(ctx, principal, project, assignments)
+		if err != nil {
+			return GetPluginOutput{}, err
+		}
+	}
+	currentAudiences, detailsComplete := currentPluginAudiences(availableAudiences, assignments)
 
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
 		// The two inventory rows are the same projection selected two ways, so the
 		// conversion keeps one mapping rather than a second copy of it.
-		Plugin:    pluginFromInventoryRow(platformrepo.ListPlatformMCPPluginInventoryRow(row)),
-		Servers:   make([]PluginServer, 0, len(servers)),
-		Skills:    make([]PluginSkill, 0, len(skills)),
-		Truncated: serversTruncated || skillsTruncated,
+		Plugin:                  pluginFromInventoryRow(platformrepo.ListPlatformMCPPluginInventoryRow(row)),
+		Servers:                 make([]PluginServer, 0, len(servers)),
+		Skills:                  make([]PluginSkill, 0, len(skills)),
+		AssignmentVersion:       pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments),
+		Audiences:               publicAudienceOptions(currentAudiences),
+		AudienceDetailsComplete: detailsComplete,
+		AudiencesTruncated:      audiencesTruncated,
+		Truncated:               serversTruncated || skillsTruncated,
+	}
+	if !expiresAt.IsZero() {
+		output.ReferencesExpireAt = expiresAt.Format(time.RFC3339)
 	}
 	for _, server := range servers {
 		backend := "mcp_server"
@@ -428,6 +560,143 @@ func (s *PluginsService) resolveProject(ctx context.Context, q *platformrepo.Que
 		return ResolvedProject{}, fmt.Errorf("resolve platform mcp plugin project: %w", err)
 	}
 	return ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}, nil
+}
+
+type resolvedPluginAudience struct {
+	option       PluginAudienceOption
+	principalURN string
+}
+
+func (s *PluginsService) resolveAudienceOptions(ctx context.Context, principal Principal, project ResolvedProject, selectedURNs []string) ([]resolvedPluginAudience, time.Time, bool, error) {
+	audiences, err := pluginaudience.Resolve(ctx, s.db, principal.OrganizationID)
+	if err != nil {
+		return nil, time.Time{}, false, fmt.Errorf("resolve platform mcp plugin audiences: %w", err)
+	}
+	now := s.now().UTC()
+	expiresAt := now.Add(SubjectReferenceTTL)
+	resolved, truncated, err := projectPluginAudiences(audiences, selectedURNs, func(principalURN string) (string, error) {
+		return s.audienceReferences.EncodeScoped(principal, subjectKindPluginAudience, project.ID.String(), principalURN, now)
+	})
+	if err != nil {
+		return nil, time.Time{}, false, err
+	}
+	return resolved, expiresAt, truncated, nil
+}
+
+func projectPluginAudiences(audiences []pluginaudience.Audience, selectedURNs []string, referenceFor func(string) (string, error)) ([]resolvedPluginAudience, bool, error) {
+	selected := make(map[string]struct{}, len(selectedURNs))
+	for _, principalURN := range selectedURNs {
+		selected[canonicalPluginAudienceURN(principalURN)] = struct{}{}
+	}
+	resolved := make([]resolvedPluginAudience, 0, min(len(audiences), maxPluginMembers))
+	truncated := false
+	for _, audience := range audiences {
+		displayName, visible := platformAudienceDisplayName(audience)
+		if !visible {
+			continue
+		}
+		canonicalURN := canonicalPluginAudienceURN(audience.PrincipalURN)
+		if selectedURNs != nil {
+			if _, ok := selected[canonicalURN]; !ok {
+				continue
+			}
+		}
+		if len(resolved) == maxPluginMembers {
+			truncated = true
+			break
+		}
+		reference, err := referenceFor(canonicalURN)
+		if err != nil {
+			return nil, false, err
+		}
+		var memberCount *SubjectCount
+		if audience.MemberCount != nil {
+			count := NewSubjectCount(*audience.MemberCount)
+			memberCount = &count
+		}
+		resolved = append(resolved, resolvedPluginAudience{
+			option: PluginAudienceOption{
+				Kind:        audience.Kind,
+				DisplayName: displayName,
+				MemberCount: memberCount,
+				Reference:   reference,
+			},
+			principalURN: canonicalURN,
+		})
+	}
+	return resolved, truncated, nil
+}
+
+func publicAudienceOptions(audiences []resolvedPluginAudience) []PluginAudienceOption {
+	result := make([]PluginAudienceOption, 0, len(audiences))
+	for _, audience := range audiences {
+		result = append(result, audience.option)
+	}
+	return result
+}
+
+func currentPluginAudiences(available []resolvedPluginAudience, assignments []string) ([]resolvedPluginAudience, bool) {
+	assigned := make(map[string]struct{}, len(assignments))
+	for _, principalURN := range assignments {
+		assigned[canonicalPluginAudienceURN(principalURN)] = struct{}{}
+	}
+	current := make([]resolvedPluginAudience, 0, len(assignments))
+	for _, audience := range available {
+		if _, ok := assigned[audience.principalURN]; !ok {
+			continue
+		}
+		current = append(current, audience)
+		delete(assigned, audience.principalURN)
+	}
+	return current, len(assigned) == 0
+}
+
+func pluginAssignmentVersion(key []byte, projectID, pluginID uuid.UUID, assignments []string) string {
+	canonical := slices.Clone(assignments)
+	for index := range canonical {
+		canonical[index] = canonicalPluginAudienceURN(canonical[index])
+	}
+	slices.Sort(canonical)
+	canonical = slices.Compact(canonical)
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(projectID.String()))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(pluginID.String()))
+	for _, principalURN := range canonical {
+		_, _ = mac.Write([]byte{0})
+		_, _ = mac.Write([]byte(principalURN))
+	}
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func platformAudienceDisplayName(audience pluginaudience.Audience) (string, bool) {
+	if audience.Kind != "directory_attribute" {
+		return audience.DisplayName, true
+	}
+	attribute, err := directory.ParseAttributePrincipal(audience.PrincipalURN)
+	if err != nil {
+		return "", false
+	}
+	if _, ok := platformVisibleDirectoryAttributes[attribute.Key]; !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s: %s", attribute.Key, attribute.Value), true
+}
+
+func canonicalPluginAudienceURN(value string) string {
+	if value == urn.PrincipalWildcard {
+		return value
+	}
+	if groupID, err := directory.ParseGroupPrincipal(value); err == nil {
+		return directory.GroupPrincipal(groupID)
+	}
+	if attribute, err := directory.ParseAttributePrincipal(value); err == nil {
+		return directory.AttributePrincipal(attribute.Key, attribute.Value)
+	}
+	if principal, err := urn.ParsePrincipal(value); err == nil {
+		return principal.String()
+	}
+	return value
 }
 
 func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) Plugin {

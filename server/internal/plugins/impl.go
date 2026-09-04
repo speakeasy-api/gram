@@ -33,7 +33,6 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -1102,54 +1101,20 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, err
 	}
 
-	directoryService := directory.NewService(s.db)
-	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
+	audiences, err := ResolveAudiences(ctx, s.db, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles for plugin assignments").LogError(ctx, s.logger)
-	}
-	groups, err := directoryService.ListActiveGroups(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list directory groups for plugin assignments").LogError(ctx, s.logger)
-	}
-	attributes, err := directoryService.ListActiveAttributeValues(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values for plugin assignments").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin audience options").LogError(ctx, s.logger)
 	}
 
-	result := &gen.ListAudiencesResult{
-		Audiences: make([]*gen.PluginAudience, 0, 1+len(roles)+len(groups)+len(attributes)),
-	}
-	result.Audiences = append(result.Audiences, &gen.PluginAudience{
-		Kind:         "everyone",
-		DisplayName:  "Everyone",
-		MemberCount:  nil,
-		PrincipalUrn: urn.PrincipalWildcard,
-	})
-	for _, role := range roles {
+	result := &gen.ListAudiencesResult{Audiences: make([]*gen.PluginAudience, 0, len(audiences))}
+	for _, audience := range audiences {
 		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "role",
-			DisplayName:  role.WorkosName,
-			MemberCount:  &role.MemberCount,
-			PrincipalUrn: role.RoleUrn,
+			Kind:         audience.Kind,
+			DisplayName:  audience.DisplayName,
+			MemberCount:  audience.MemberCount,
+			PrincipalUrn: audience.PrincipalURN,
 		})
 	}
-	for _, group := range groups {
-		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "directory_group",
-			DisplayName:  group.Name,
-			MemberCount:  &group.MemberCount,
-			PrincipalUrn: directory.GroupPrincipal(group.ID),
-		})
-	}
-	for _, attribute := range attributes {
-		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "directory_attribute",
-			DisplayName:  fmt.Sprintf("%s: %s", attribute.Key, attribute.Value),
-			MemberCount:  &attribute.MemberCount,
-			PrincipalUrn: directory.AttributePrincipal(attribute.Key, attribute.Value),
-		})
-	}
-
 	return result, nil
 }
 

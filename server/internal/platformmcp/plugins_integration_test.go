@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -73,6 +74,68 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	require.Len(t, seen, 2)
 }
 
+func TestListPluginAudiencesReturnsOpaqueProjectBoundReferences(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_audiences")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := testPluginTargets(conn)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+
+	result, err := service.ListPluginAudiences(ctx, principal, ListPluginAudiencesInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, project.ID.String(), result.ProjectID)
+	require.Equal(t, now.Add(SubjectReferenceTTL).Format(time.RFC3339), result.ReferencesExpireAt)
+	require.NotEmpty(t, result.Audiences)
+	require.Equal(t, PluginAudienceOption{Kind: "everyone", DisplayName: "Everyone", Reference: result.Audiences[0].Reference}, result.Audiences[0])
+
+	resolved, err := service.audienceReferences.DecodeScoped(result.Audiences[0].Reference, principal, subjectKindPluginAudience, project.ID.String(), now)
+	require.NoError(t, err)
+	require.Equal(t, urn.PrincipalWildcard, resolved)
+
+	_, otherProject := seedRegistrationLifecycle(t, ctx, conn)
+	_, err = service.ListPluginAudiences(ctx, principal, ListPluginAudiencesInput{ProjectID: otherProject.ID.String()})
+	require.ErrorIs(t, err, ErrPluginProjectNotFound)
+	_, err = service.audienceReferences.DecodeScoped(result.Audiences[0].Reference, principal, subjectKindPluginAudience, otherProject.ID.String(), now)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+}
+
+func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_assignment_version")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := testPluginTargets(conn)
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared")
+
+	before, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.NotEmpty(t, before.AssignmentVersion)
+	require.Empty(t, before.Audiences)
+	require.True(t, before.AudienceDetailsComplete)
+
+	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		PluginID:       plugin.ID,
+		OrganizationID: principal.OrganizationID,
+		PrincipalUrn:   urn.PrincipalWildcard,
+	})
+	require.NoError(t, err)
+
+	after, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.NotEqual(t, before.AssignmentVersion, after.AssignmentVersion)
+	require.Len(t, after.Audiences, 1)
+	require.Equal(t, "everyone", after.Audiences[0].Kind)
+	require.True(t, after.AudienceDetailsComplete)
+}
+
 func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	t.Parallel()
 
@@ -136,6 +199,9 @@ func TestPluginInventoryRefusesAnotherOrganizationsProject(t *testing.T) {
 	require.ErrorIs(t, err, ErrPluginProjectNotFound)
 
 	_, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: otherProject.ID.String(), Plugin: "foreign"})
+	require.ErrorIs(t, err, ErrPluginProjectNotFound)
+
+	_, err = service.ListPluginAudiences(ctx, principal, ListPluginAudiencesInput{ProjectID: otherProject.ID.String()})
 	require.ErrorIs(t, err, ErrPluginProjectNotFound)
 }
 

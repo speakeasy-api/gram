@@ -40,15 +40,17 @@ func TestValidateFeedbackInputRejectsSensitiveOrOutOfBoundsValues(t *testing.T) 
 	}
 }
 
-func TestValidateFeedbackInputAcceptsRegisteredIdentityProviderTool(t *testing.T) {
+func TestValidateFeedbackInputAcceptsRegisteredTools(t *testing.T) {
 	t.Parallel()
 
-	err := validateFeedbackInput(testPrincipal(), FeedbackInput{
-		Category:       "success",
-		ToolName:       "attach_platform_mcp_identity_provider",
-		IdempotencyKey: "feedback-identity-provider",
-	})
-	require.NoError(t, err)
+	for _, toolName := range []string{"attach_platform_mcp_identity_provider", "list_plugin_audiences"} {
+		err := validateFeedbackInput(testPrincipal(), FeedbackInput{
+			Category:       "success",
+			ToolName:       toolName,
+			IdempotencyKey: "feedback-registered-tool",
+		})
+		require.NoError(t, err, toolName)
+	}
 }
 
 func TestFeedbackNoteSafeTextAllowsOrdinaryPunctuationAndRejectsIdentifiers(t *testing.T) {
