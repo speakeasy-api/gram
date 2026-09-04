@@ -222,7 +222,7 @@ flowchart LR
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | 1h | — |
 | [`gram-risk-v1-custom-rules-analysis`](../infra/proto/gram/risk/v1/custom_rules_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_custom_rules.go`](../server/internal/background/activities/risk_analysis/scan_custom_rules.go) |
 | [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/risk/false_positive.go`](../server/internal/risk/false_positive.go)<br/>[`server/internal/scanners/publish.go`](../server/internal/scanners/publish.go) |
-| [`gram-risk-v1-finding-otel-relay-dlq`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | DLQ | — | — |
+| [`gram-risk-v1-finding-otel-relay-dlq`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | DLQ | 7d | — |
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-gitleaks-enforcement`](../infra/proto/gram/risk/v1/gitleaks_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-gitleaks-enforcer-dlq`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | DLQ | 10m | — |

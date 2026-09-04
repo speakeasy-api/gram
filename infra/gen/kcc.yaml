@@ -1678,7 +1678,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding-otel-relay
     name: gram-risk-v1-finding-otel-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
