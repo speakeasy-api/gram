@@ -21,15 +21,16 @@ gitdir="$(git rev-parse --absolute-git-dir)"
 # against stopped databases, or a paused marker over a running stack. A symlink
 # is the portable atomic test-and-set here (macOS has no flock binary).
 lock="$gitdir/gram-stack-lock"
+lock_identity="$$:pause"
 
 # `ln -s` is the atomic test-and-set: creating a symlink fails if the name
-# exists, and its target carries the owner's pid, so the lock and the identity
-# of its owner appear in one step. (A lock file written after a `mkdir` has a
-# window where it exists with no owner recorded, which another process reads as
-# abandoned.) The target is a pid string and never has to resolve.
+# exists, and its target carries the owner's pid and intended schedule state,
+# so both appear in one step. (A lock file written after a `mkdir` has a window
+# where it exists with no owner recorded, which another process reads as
+# abandoned.) The target never has to resolve.
 release_lock() {
     # Only release a lock this process still owns.
-    if [ "$(readlink "$lock" 2> /dev/null)" = "$$" ]; then
+    if [ "$(readlink "$lock" 2> /dev/null)" = "$lock_identity" ]; then
         rm -f "$lock"
     fi
 }
@@ -41,9 +42,10 @@ release_lock() {
 # which is only ever taken by exclusive create; whoever holds it re-reads the
 # owner before removing anything.
 reap_stale_lock() {
-    local reap="$lock.reap" owner
+    local reap="$lock.reap" identity owner
     ln -s "$$" "$reap" 2> /dev/null || return 1
-    owner="$(readlink "$lock" 2> /dev/null || true)"
+    identity="$(readlink "$lock" 2> /dev/null || true)"
+    owner="${identity%%:*}"
     if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
         echo "Clearing a stack lock left behind by a dead process ($owner)." >&2
         rm -f "$lock"
@@ -53,7 +55,7 @@ reap_stale_lock() {
 
 locked=false
 for _ in $(seq 1 60); do
-    if ln -s "$$" "$lock" 2> /dev/null; then
+    if ln -s "$lock_identity" "$lock" 2> /dev/null; then
         trap release_lock EXIT
         locked=true
         break
@@ -63,7 +65,8 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$locked" != true ]; then
-    owner="$(readlink "$lock" 2> /dev/null || true)"
+    identity="$(readlink "$lock" 2> /dev/null || true)"
+    owner="${identity%%:*}"
     echo "Another pause or wake (pid ${owner:-unknown}) has held this worktree's stack lock for a minute; giving up." >&2
     echo "If nothing is running, remove $lock and retry." >&2
     exit 1
@@ -73,7 +76,7 @@ fi
 # would keep firing them, accumulating executions and CPU work while the stack
 # is asleep. Pause them before stopping the worker, and remember only the ones
 # changed here so wake does not override a developer's manual pause.
-if ! mise run temporal:schedules --state pause; then
+if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
     echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
 fi
 

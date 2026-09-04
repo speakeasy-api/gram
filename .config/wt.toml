@@ -37,10 +37,10 @@ stack = "mise run git:workboot"
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
 # compose stack. post-remove would run in the primary worktree instead.
-# --keep-shared leaves the shared containers up for the other worktrees, while
-# deleting this worktree's namespace from the shared Temporal server.
+# --keep-shared leaves the shared containers up for the other worktrees;
+# --delete-namespace removes only this departing worktree's Temporal state.
 [[pre-remove]]
-nuke = "mise run nuke --keep-shared"
+nuke = "mise run nuke --keep-shared --delete-namespace"
 
 # Dashboard URL in the `wt list` URL column, dimmed when the port isn't
 # listening — so it doubles as a "is this worktree's stack up?" indicator.

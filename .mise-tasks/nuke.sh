@@ -5,23 +5,30 @@
 
 set -e
 
-# --keep-shared: leave compose.shared.yml services running. Worktree removal
-# passes this because other worktrees depend on those singletons.
+# --keep-shared leaves compose.shared.yml services running.
+# --delete-namespace removes this worktree's namespace from the shared Temporal
+# server and is reserved for worktree-removal callers.
 keep_shared=0
+delete_temporal_namespace=0
 for arg in "$@"; do
     case "$arg" in
         --keep-shared) keep_shared=1 ;;
+        --delete-namespace) delete_temporal_namespace=1 ;;
         *) echo "unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
 
-# A worktree's Temporal schedules live in the shared server, outside its
-# Compose project. Stop them before tearing down the worker. Worktree
-# namespaces follow this generated prefix; never delete the primary tree's
-# `default` namespace if somebody passes --keep-shared there by hand.
-delete_temporal_namespace=0
-if [ "$keep_shared" -eq 1 ] && [[ "$TEMPORAL_NAMESPACE" == gram-infra-* ]]; then
-    delete_temporal_namespace=1
+if [ "$delete_temporal_namespace" -eq 1 ]; then
+    if [ "$keep_shared" -ne 1 ]; then
+        echo "--delete-namespace requires --keep-shared so Temporal remains available." >&2
+        exit 1
+    fi
+    # Worktree namespaces follow this generated prefix. Refuse to delete the
+    # primary tree's `default` namespace even when explicitly requested.
+    if [[ "$TEMPORAL_NAMESPACE" != gram-infra-* ]]; then
+        echo "Refusing to delete non-worktree Temporal namespace $TEMPORAL_NAMESPACE." >&2
+        exit 1
+    fi
     if ! mise run temporal:schedules --state pause; then
         echo "⚠️  Could not pause every schedule in $TEMPORAL_NAMESPACE before cleanup." >&2
     fi
