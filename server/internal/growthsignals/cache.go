@@ -10,6 +10,9 @@ import (
 )
 
 const (
+	// lookupLoadTimeout bounds one detached enrichment query.
+	lookupLoadTimeout = 5 * time.Second
+
 	// lookupTTL bounds how stale a resolved name may be. A burst of events from
 	// one organization then costs one query rather than one per event, and a
 	// renamed organization or project catches up within the window.
@@ -65,7 +68,15 @@ func (c *lookupCache[K, V]) resolve(ctx context.Context, key K) (V, error) {
 			return cached, nil
 		}
 
-		value, err := c.load(ctx, key)
+		// The flight is shared, so it must not inherit the cancellation of
+		// whichever caller happened to start it: that caller going away would
+		// fail the lookup for everyone still waiting on it. Values are kept, so
+		// the load stays inside the originating trace, and the timeout keeps a
+		// detached query from outliving its usefulness.
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lookupLoadTimeout)
+		defer cancel()
+
+		value, err := c.load(loadCtx, key)
 		if err != nil {
 			return nil, err
 		}
