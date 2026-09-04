@@ -18,18 +18,20 @@ const (
 
 	SessionSubjectKindUser      SessionSubjectKind = "user"
 	SessionSubjectKindAPIKey    SessionSubjectKind = "apikey"
+	SessionSubjectKindAgent     SessionSubjectKind = "agent"
 	SessionSubjectKindAnonymous SessionSubjectKind = "anonymous"
 )
 
 var sessionSubjectKinds = map[SessionSubjectKind]struct{}{
 	SessionSubjectKindUser:      {},
 	SessionSubjectKindAPIKey:    {},
+	SessionSubjectKindAgent:     {},
 	SessionSubjectKindAnonymous: {},
 }
 
 // SessionSubject is the URN that may appear as the `sub` claim of a
 // Gram-issued session JWT. Format: `<kind>:<id>` where kind is exactly one of
-// `user`, `apikey`, or `anonymous`.
+// `user`, `apikey`, `agent`, or `anonymous`.
 //
 // `role` is NOT a valid session subject — roles are not authentication
 // principals; use urn.Principal for RBAC subjects.
@@ -51,6 +53,13 @@ func NewUserSubject(id string) SessionSubject {
 // NewAPIKeySubject constructs an `apikey:<uuid>` session subject.
 func NewAPIKeySubject(id uuid.UUID) SessionSubject {
 	s := SessionSubject{Kind: SessionSubjectKindAPIKey, ID: id.String(), checked: false, err: nil}
+	_ = s.validate()
+	return s
+}
+
+// NewAgentSubject constructs an `agent:<uuid>` session subject.
+func NewAgentSubject(id uuid.UUID) SessionSubject {
+	s := SessionSubject{Kind: SessionSubjectKindAgent, ID: id.String(), checked: false, err: nil}
 	_ = s.validate()
 	return s
 }
@@ -206,9 +215,9 @@ func (u *SessionSubject) validate() error {
 		return u.err
 	}
 
-	if u.Kind == SessionSubjectKindAPIKey {
+	if u.Kind == SessionSubjectKindAPIKey || u.Kind == SessionSubjectKindAgent {
 		if _, parseErr := uuid.Parse(u.ID); parseErr != nil {
-			u.err = fmt.Errorf("%w: apikey id must be a uuid", ErrInvalid)
+			u.err = fmt.Errorf("%w: %s id must be a uuid", ErrInvalid, u.Kind)
 			return u.err
 		}
 	}
