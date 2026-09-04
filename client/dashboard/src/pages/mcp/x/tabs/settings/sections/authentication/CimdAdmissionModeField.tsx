@@ -49,7 +49,7 @@ const MODE_OPTIONS: {
     // renders in the modes that consult it, so "below" would point at
     // nothing for an issuer currently on Open or Disabled.
     description:
-      "Allow well-known MCP clients verified by Gram, plus any custom URLs configured on this issuer.",
+      "Allow well-known MCP clients verified by Speakeasy, plus any custom URLs configured on this issuer.",
   },
   {
     value: WritableMode.Open,
@@ -281,7 +281,7 @@ function KnownClientsPopover() {
       </PopoverTrigger>
       <PopoverContent align="start" className="w-96">
         <Text variant="body" className="font-medium">
-          Clients verified by Gram
+          Clients verified by Speakeasy
         </Text>
         <Text muted small className="mt-1">
           Gram maintains this list; newly verified vendors may be added over

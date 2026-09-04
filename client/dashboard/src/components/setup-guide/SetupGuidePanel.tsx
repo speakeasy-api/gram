@@ -137,7 +137,7 @@ export function SetupGuidePanel({
               guideSlug={guide.slug}
             />
             <SetupGuideSection
-              heading="Set up in Gram"
+              heading="Set up in Speakeasy"
               markdown={guide.speakeasyMarkdown}
               guideSlug={guide.slug}
             />

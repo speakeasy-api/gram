@@ -76,6 +76,6 @@ export function SetupGuideCallout({
 
 function describeSetupWork(only: MCPSetupGuide | undefined): string {
   if (only)
-    return `${only.title} needs some setup before it will work in Gram.`;
-  return "This server needs some setup before it will work in Gram.";
+    return `${only.title} needs some setup before it will work in Speakeasy.`;
+  return "This server needs some setup before it will work in Speakeasy.";
 }

@@ -13,6 +13,7 @@ import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
+import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 
 function useScrollToSettingsHash() {
@@ -65,6 +66,11 @@ export function SettingsTab({
         <HeadersSection
           remoteMcpServerId={mcpServer.remoteMcpServerId}
           context={{ kind: "mcp-server" }}
+        />
+      ) : null}
+      {mcpServer.tunneledMcpServerId ? (
+        <PublicRateLimitsSection
+          tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         />
       ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}

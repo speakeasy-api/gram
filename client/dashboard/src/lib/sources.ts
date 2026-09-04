@@ -147,27 +147,8 @@ export function deriveRemoteSessionIssuerNameFromUrl(
   }
 }
 
-// remoteMcpRouteParam returns the value to embed in dashboard URLs for a
-// remote MCP server. Prefers the slug for human-friendly URLs and falls back
-// to the ID; the server's getServer endpoint accepts either.
-export function remoteMcpRouteParam(server: {
-  id: string;
-  slug?: string | null | undefined;
-}): string {
-  return server.slug?.trim() || server.id;
-}
-
 export function tunneledMcpRouteParam(server: { id: string }): string {
   return server.id;
-}
-
-// unproxiedMcpRouteParam mirrors [remoteMcpRouteParam] for unproxied MCP
-// servers.
-export function unproxiedMcpRouteParam(server: {
-  id: string;
-  slug?: string | null | undefined;
-}): string {
-  return server.slug?.trim() || server.id;
 }
 
 // mcpServerRouteParam returns the value to embed in dashboard URLs for an
@@ -189,34 +170,8 @@ export function mcpServerRouteParam(server: {
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// getRemoteMcpServerArgs maps a route-param string (which may be either an
-// ID or a slug) into the request shape that [useGetRemoteMcpServer] consumes,
-// where exactly one of `id` or `slug` must be supplied. UUID-shaped values
-// are sent as `id`; everything else as `slug`.
-export function getRemoteMcpServerArgs(idOrSlug: string): {
-  id?: string;
-  slug?: string;
-} {
-  if (uuidRegex.test(idOrSlug)) {
-    return { id: idOrSlug };
-  }
-  return { slug: idOrSlug };
-}
-
 export function getTunneledMcpServerArgs(id: string): { id: string } {
   return { id };
-}
-
-// getUnproxiedMcpServerArgs mirrors [getRemoteMcpServerArgs] for
-// unproxied MCP servers.
-export function getUnproxiedMcpServerArgs(idOrSlug: string): {
-  id?: string;
-  slug?: string;
-} {
-  if (uuidRegex.test(idOrSlug)) {
-    return { id: idOrSlug };
-  }
-  return { slug: idOrSlug };
 }
 
 // getMcpServerArgs maps a route-param string into the request shape that

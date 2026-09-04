@@ -102,11 +102,3 @@ export const ToolCollectionBadge = ({
     </Tooltip>
   );
 };
-
-export const PoweredBySpeakeasyBadge = (): ReactElement => {
-  return (
-    <Badge variant="neutral" className="bg-card">
-      <Badge.Text>Powered by Speakeasy</Badge.Text>
-    </Badge>
-  );
-};
