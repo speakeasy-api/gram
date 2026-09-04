@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
@@ -47,6 +48,8 @@ func testIdentityContext(t *testing.T, kind mcpidentity.Kind, userID string) con
 		return boundary.StampAPIKey(t.Context())
 	case mcpidentity.KindAssistant:
 		return boundary.StampAssistant(t.Context())
+	case mcpidentity.KindAgent:
+		return stampValidatedSession(t, boundary, urn.NewAgentSubject(uuid.New()))
 	case mcpidentity.KindChatSession:
 		return boundary.StampChatSession(t.Context())
 	default:

@@ -131,6 +131,7 @@ func TestParseSessionSubject(t *testing.T) {
 	t.Parallel()
 
 	apikeyID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	agentID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	tests := []struct {
 		name    string
@@ -151,6 +152,12 @@ func TestParseSessionSubject(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid agent",
+			input:   "agent:22222222-2222-2222-2222-222222222222",
+			want:    urn.NewAgentSubject(agentID),
+			wantErr: false,
+		},
+		{
 			name:    "valid anonymous",
 			input:   "anonymous:mcp-session-id",
 			want:    urn.NewAnonymousSubject("mcp-session-id"),
@@ -164,6 +171,11 @@ func TestParseSessionSubject(t *testing.T) {
 		{
 			name:    "apikey non-uuid rejected",
 			input:   "apikey:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "agent non-uuid rejected",
+			input:   "agent:not-a-uuid",
 			wantErr: true,
 		},
 		{
