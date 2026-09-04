@@ -2,35 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { logoutToLogin } from "./logout-to-login";
-
-let originalLocation: Location | undefined;
-
-function stubLocationReplace() {
-  originalLocation = window.location;
-  const replace = vi.fn();
-  // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
-  delete window.location;
-  Object.defineProperty(window, "location", {
-    configurable: true,
-    value: {
-      // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
-      ...originalLocation,
-      replace,
-    },
-  });
-  return replace;
-}
+import { LOGOUT_WAIT_MS, logoutToLogin } from "./logout-to-login";
+import { restoreLocation, stubLocationReplace } from "./stub-location-replace";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
-  if (originalLocation) {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
-    originalLocation = undefined;
-  }
+  restoreLocation();
 });
 
 describe("logoutToLogin", () => {
@@ -49,6 +27,19 @@ describe("logoutToLogin", () => {
     const logout = vi.fn().mockRejectedValue(new Error("network"));
 
     await logoutToLogin({ auth: { logout } });
+
+    expect(logout).toHaveBeenCalledOnce();
+    expect(replace).toHaveBeenCalledWith("/login");
+  });
+
+  it("still replaces the page with /login when logout never settles", async () => {
+    vi.useFakeTimers();
+    const replace = stubLocationReplace();
+    const logout = vi.fn().mockReturnValue(new Promise(() => {}));
+
+    const done = logoutToLogin({ auth: { logout } });
+    await vi.advanceTimersByTimeAsync(LOGOUT_WAIT_MS);
+    await done;
 
     expect(logout).toHaveBeenCalledOnce();
     expect(replace).toHaveBeenCalledWith("/login");
