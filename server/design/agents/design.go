@@ -76,10 +76,18 @@ var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
 	Required("grant_id")
 })
 
+var OwnerAssignmentForm = Type("AgentOwnerAssignmentForm", func() {
+	Attribute("agent_id", String, "First-class agent identifier", func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String, "Eligible same-organization human replacement owner")
+	Required("agent_id", "owner_user_id")
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("owner_user_id", String)
+	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
+	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
 	Attribute("name", String)
 	Attribute("lifecycle", Lifecycle)
 	Attribute("permissions", Permissions)
@@ -219,6 +227,23 @@ var _ = Service("agents", func() {
 			Response(StatusNoContent)
 		})
 	})
+	for _, operation := range []string{"transfer", "reassign"} {
+		Method(operation, func() {
+			Meta("openapi:operationId", operation+"Agent")
+			Meta("openapi:extension:x-speakeasy-name-override", operation)
+			Payload(func() {
+				security.SessionPayload()
+				Extend(OwnerAssignmentForm)
+			})
+			Result(Agent)
+			HTTP(func() {
+				POST("/rpc/agents." + operation)
+				security.SessionHeader()
+				Body(OwnerAssignmentForm)
+				Response(StatusOK)
+			})
+		})
+	}
 
 	for _, operation := range []string{"suspend", "resume", "revoke", "delete"} {
 		Method(operation, func() {
