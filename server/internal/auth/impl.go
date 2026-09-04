@@ -363,10 +363,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
-	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
+	upsertResult, err := s.identity.UpsertUserFromIDPWithResult(ctx, idpUser)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	userID := upsertResult.UserID
 
 	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
@@ -381,7 +382,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if supportOrgID == "" && idpUser.Sub != "" {
-		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+		syncMemberships := s.identity.SyncMembershipsFromWorkOS
+		if upsertResult.Reactivated {
+			syncMemberships = s.identity.SyncMembershipsFromWorkOSPreservingExisting
+		}
+		if err := syncMemberships(ctx, userID, idpUser.Sub); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
 		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
@@ -511,6 +516,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if orgMetadata.DisabledAt.Valid {
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
+	}
+
+	if upsertResult.Reactivated && intent != nil && intent.OrgName != "" {
+		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
+		if err != nil {
+			return s.redirectSignupError(ctx, payload, err)
+		}
 	}
 
 	session.ActiveOrganizationID = activeOrgID
@@ -1100,6 +1112,37 @@ func loadTrial(
 			EndsAt:    conv.FromPGTimestamptz(trial.EndsAt),
 		}
 	}
+}
+
+// applySignupWhitelist keeps the book-a-demo gate off for a signup that
+// reused a Gram identity. Prefer an already-whitelisted membership; otherwise
+// whitelist the org the session is about to activate.
+func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
+	if orgMetadata.Whitelisted {
+		return activeOrgID, orgMetadata, nil
+	}
+
+	for _, org := range organizations {
+		meta, err := s.orgRepo.GetOrganizationMetadata(ctx, org.ID)
+		if err != nil {
+			return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("get organization metadata: %w", err)
+		}
+		if meta.Whitelisted {
+			return org.ID, meta, nil
+		}
+	}
+
+	whitelisted, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgMetadata.ID,
+		Name:        orgMetadata.Name,
+		Slug:        orgMetadata.Slug,
+		WorkosID:    orgMetadata.WorkosID,
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
+	}
+	return whitelisted.ID, whitelisted, nil
 }
 
 // orgProvisionOptions carries the per-caller choices for a new organization.

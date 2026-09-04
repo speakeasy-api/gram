@@ -257,9 +257,22 @@ func extractSessionIDFromJWT(token string) string {
 	return claims.SID
 }
 
+// UpsertUserResult describes the Gram user selected for an IDP identity.
+type UpsertUserResult struct {
+	UserID      string
+	Reactivated bool
+}
+
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and
 // returns the user ID.
-func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (_ string, err error) {
+func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (string, error) {
+	result, err := r.UpsertUserFromIDPWithResult(ctx, idpUser)
+	return result.UserID, err
+}
+
+// UpsertUserFromIDPWithResult also reports whether login reactivated a user
+// previously deleted by WorkOS.
+func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDPUserInfo) (_ UpsertUserResult, err error) {
 	ctx, span := r.tracer.Start(ctx, "identity.upsertUserFromIDP")
 	defer func() {
 		if err != nil {
@@ -268,7 +281,7 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		span.End()
 	}()
 
-	gramUserID, admin := r.resolveGramUserID(ctx, idpUser)
+	gramUserID, admin, reactivated := r.resolveGramUserID(ctx, idpUser)
 	span.SetAttributes(
 		attr.AuthUserID(gramUserID),
 		attr.WorkOSUserID(idpUser.Sub),
@@ -283,14 +296,17 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		Admin:       admin,
 	})
 	if err != nil {
-		return "", fmt.Errorf("upsert user: %w", err)
+		return UpsertUserResult{}, fmt.Errorf("upsert user: %w", err)
 	}
 
 	if err := r.userRepo.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       gramUserID,
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
-		r.logger.ErrorContext(ctx, "failed to set workos_id on user", attr.SlogError(err))
+		return UpsertUserResult{}, fmt.Errorf("set workos_id on user: %w", err)
+	}
+	if err := r.reassignWorkOSIdentity(ctx, gramUserID, idpUser.Sub); err != nil {
+		return UpsertUserResult{}, err
 	}
 
 	if r.workosClient != nil {
@@ -312,17 +328,57 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		}
 	}
 
-	return user.ID, nil
+	return UpsertUserResult{UserID: user.ID, Reactivated: reactivated}, nil
 }
 
-func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool) {
+func (r *Resolver) reassignWorkOSIdentity(ctx context.Context, gramUserID, newWorkosID string) error {
+	if gramUserID == "" || newWorkosID == "" {
+		return nil
+	}
+
+	if err := r.orgRepo.ReassignOrganizationUserWorkOSID(ctx, orgRepo.ReassignOrganizationUserWorkOSIDParams{
+		NewWorkosUserID: conv.ToPGText(newWorkosID),
+		UserID:          conv.ToPGText(gramUserID),
+	}); err != nil {
+		return fmt.Errorf("reassign organization memberships to workos user: %w", err)
+	}
+
+	if err := r.orgRepo.LinkRoleAssignmentsToUser(ctx, orgRepo.LinkRoleAssignmentsToUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("link organization role assignments to user: %w", err)
+	}
+	if err := r.orgRepo.RetireCollidingOrganizationRoleAssignments(ctx, orgRepo.RetireCollidingOrganizationRoleAssignmentsParams{
+		UserID:          conv.ToPGText(gramUserID),
+		NewWorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("retire colliding organization role assignments: %w", err)
+	}
+	if err := r.orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignments(ctx, orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignmentsParams{
+		UserID:          conv.ToPGText(gramUserID),
+		NewWorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("retire duplicate leftover organization role assignments: %w", err)
+	}
+	if err := r.orgRepo.ReassignOrganizationRoleAssignmentWorkOSID(ctx, orgRepo.ReassignOrganizationRoleAssignmentWorkOSIDParams{
+		NewWorkosUserID: newWorkosID,
+		UserID:          conv.ToPGText(gramUserID),
+	}); err != nil {
+		return fmt.Errorf("reassign organization role assignments to workos user: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool, bool) {
 	if existing, err := r.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
-		return existing.ID, existing.Admin
+		return existing.ID, existing.Admin, existing.WorkosDeletedAt.Valid
 	}
 	if idpUser.ExternalID != "" {
-		return idpUser.ExternalID, false
+		return idpUser.ExternalID, false, false
 	}
-	return users.UserIDFromWorkOSID(idpUser.Sub), false
+	return users.UserIDFromWorkOSID(idpUser.Sub), false, false
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and
@@ -387,6 +443,16 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 // SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
 // and invalidates cached user info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
+	return r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID, false)
+}
+
+// SyncMembershipsFromWorkOSPreservingExisting imports current WorkOS
+// memberships without pruning access restored from a deleted WorkOS identity.
+func (r *Resolver) SyncMembershipsFromWorkOSPreservingExisting(ctx context.Context, gramUserID, workosUserID string) error {
+	return r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID, true)
+}
+
+func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string, preserveExisting bool) error {
 	if r.workosClient == nil || workosUserID == "" {
 		return nil
 	}
@@ -412,6 +478,7 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
+		PreserveExisting:    preserveExisting,
 	}); err != nil {
 		return fmt.Errorf("set user workos memberships: %w", err)
 	}

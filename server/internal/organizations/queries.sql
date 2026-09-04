@@ -187,9 +187,9 @@ WHERE organization_user_relationships.deleted_at IS NULL;
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 -- (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
--- the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
--- other relationships where the org has a non-NULL workos_id. Orgs without a
--- workos_id are unaffected. Other users' memberships are never modified.
+-- the provided (workos_org_id, workos_membership_id) pairs and, unless
+-- preserve_existing is true, soft-deletes any other relationships where the org
+-- has a non-NULL workos_id. Other users' memberships are never modified.
 WITH input_memberships AS (
     SELECT unnest(@workos_org_ids::text[]) AS workos_org_id,
            unnest(@workos_membership_ids::text[]) AS workos_membership_id
@@ -238,6 +238,7 @@ UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = @user_id
+  AND NOT @preserve_existing::boolean
   AND organization_user_relationships.deleted_at IS NULL
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
@@ -610,6 +611,76 @@ WHERE user_id = @user_id
   AND workos_user_id <> @workos_user_id
 ORDER BY updated_at DESC
 LIMIT 1;
+
+-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = @workos_user_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL;
+
+-- name: ReassignOrganizationUserWorkOSID :exec
+-- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- rows still pointing at a previous WorkOS user id must follow the new one.
+-- Matches any leftover id so a retry after overwrite still converges.
+UPDATE organization_user_relationships
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM @new_workos_user_id;
+
+-- name: RetireCollidingOrganizationRoleAssignments :exec
+-- Soft-delete leftover assignments that would unique-violate if remapped
+-- onto a WorkOS id that already holds the same org+role.
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = @user_id
+  AND old.workos_user_id <> @new_workos_user_id
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = @new_workos_user_id
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  );
+
+-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+-- Soft-delete extra leftover assignments that share org+role so remapping
+-- them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = sqlc.arg(user_id)
+      AND leftover.workos_user_id <> sqlc.arg(new_workos_user_id)
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id;
+
+-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+-- Move leftover assignments onto the new WorkOS id after colliding rows
+-- have been retired.
+UPDATE organization_role_assignments
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id <> @new_workos_user_id
+  AND deleted_at IS NULL;
 
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT *

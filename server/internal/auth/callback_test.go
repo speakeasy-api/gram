@@ -9,6 +9,7 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func nonceStateFromLocation(t *testing.T, location string) string {
@@ -973,4 +975,235 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, session.ActiveOrganizationID, "no intent means no org, as today")
 	})
+}
+
+func TestCallback_SignupAfterWorkOSDeleteWhitelistsActiveOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email       = "stale-org-signup@example.com"
+		oldWorkosID = "user_01STALE_DELETED"
+		newWorkosID = "user_01STALE_SIGNUP"
+		staleOrgID  = "org-stale-unwhitelisted"
+	)
+	gramUserID := uuid.New().String()
+	workosOrgID := "workos_org_stale_signup"
+
+	userInfo := &MockUserInfo{
+		UserID:        newWorkosID,
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 staleOrgID,
+		Name:               "Stale Org",
+		Slug:               staleOrgID,
+		WorkosID:           &workosOrgID,
+		UserWorkspaceSlugs: nil,
+	}, gramUserID))
+	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosID:        conv.ToPGText(oldWorkosID),
+	}))
+
+	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Fresh Signup Corp")
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "mock_code",
+		State: &stateParam,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, staleOrgID, authCtx.ActiveOrganizationID)
+	require.True(t, authCtx.Whitelisted, "signup after WorkOS deletion must clear the book-a-demo gate")
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.True(t, org.Whitelisted)
+}
+
+func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email       = "stale-org-login@example.com"
+		oldWorkosID = "user_01STALE_LOGIN_DELETED"
+		newWorkosID = "user_01STALE_LOGIN"
+		staleOrgID  = "org-stale-login-unwhitelisted"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID:        newWorkosID,
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 staleOrgID,
+		Name:               "Stale Org",
+		Slug:               staleOrgID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, gramUserID))
+	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosID:        conv.ToPGText(oldWorkosID),
+	}))
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, staleOrgID, authCtx.ActiveOrganizationID)
+	require.False(t, authCtx.Whitelisted, "ordinary login must not whitelist a gated organization")
+}
+
+func TestCallback_SignupIntentDoesNotWhitelistActiveUserOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "active-signup@example.com"
+		organizationID = "org-active-signup"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01ACTIVE_SIGNUP",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Gated Org",
+		Slug:               organizationID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+
+	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Should Not Whitelist")
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "mock_code",
+		State: &stateParam,
+	})
+	require.NoError(t, err)
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, organizationID, authCtx.ActiveOrganizationID)
+	require.False(t, authCtx.Whitelisted)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted, "signup intent alone must not bypass the book-a-demo gate")
+}
+
+func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email         = "prefer-whitelisted@example.com"
+		staleOrgID    = "org-prefer-stale"
+		whitelistedID = "org-prefer-whitelisted"
+	)
+
+	userInfo := &MockUserInfo{
+		UserID:        "user_01PREFER_WL",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	usersQueries := usersRepo.New(instance.conn)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       userInfo.UserID,
+		WorkosID: conv.ToPGText(userInfo.UserID),
+	}))
+	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosID:        conv.ToPGText(userInfo.UserID),
+	}))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 staleOrgID,
+		Name:               "Stale Org",
+		Slug:               staleOrgID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 whitelistedID,
+		Name:               "Live Org",
+		Slug:               whitelistedID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          whitelistedID,
+		Name:        "Live Org",
+		Slug:        whitelistedID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+
+	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Should Not Create")
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "mock_code",
+		State: &stateParam,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, whitelistedID, authCtx.ActiveOrganizationID)
+	require.True(t, authCtx.Whitelisted)
+
+	stale, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, staleOrgID)
+	require.NoError(t, err)
+	require.False(t, stale.Whitelisted, "signup must not whitelist a stale org when a live one exists")
 }

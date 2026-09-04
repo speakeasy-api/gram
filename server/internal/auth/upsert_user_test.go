@@ -2,11 +2,17 @@ package auth_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -124,4 +130,517 @@ func TestUpsertUserFromIDP_PreservesAdminStatus(t *testing.T) {
 	dbUser, err := usersQueries.GetUser(ctx, legacyUUID)
 	require.NoError(t, err)
 	require.True(t, dbUser.Admin, "admin flag must survive the ID migration")
+}
+
+func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate@example.com"
+		oldWorkosID    = "user_01DELETED_WORKOS"
+		newWorkosID    = "user_01RECREATED_WORKOS"
+		organizationID = "org_reactivate_deleted_user"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Reactivate Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01REACTIVATE"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, orgRepo.New(instance.conn).SetOrganizationUserWorkOSID(ctx, orgRepo.SetOrganizationUserWorkOSIDParams{
+		WorkosUserID:   conv.ToPGText(oldWorkosID),
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	}))
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01REACTIVATE"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosID:        conv.ToPGText(oldWorkosID),
+	}))
+
+	deleted, err := usersQueries.GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.True(t, deleted.DeletedAt.Valid)
+	require.True(t, deleted.WorkosDeletedAt.Valid)
+
+	isMember, err := orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
+		UserID:         gramUserID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.False(t, isMember, "soft-deleted users must stay RBAC-inactive until they sign up again")
+
+	principals, err := authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	require.Equal(t, []urn.Principal{authz.AllUsersPrincipal()}, principals)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	require.Equal(t, newWorkosID, idpUser.Sub)
+
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+	require.Equal(t, gramUserID, returnedID)
+
+	reactivated, err := usersQueries.GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.False(t, reactivated.DeletedAt.Valid, "login must clear users.deleted_at")
+	require.False(t, reactivated.WorkosDeletedAt.Valid, "login must clear users.workos_deleted_at")
+	require.True(t, reactivated.WorkosID.Valid)
+	require.Equal(t, newWorkosID, reactivated.WorkosID.String)
+
+	staleAssignments, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, staleAssignments, "role assignments must move off the deleted WorkOS identity")
+
+	reassigned, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, reassigned, 1)
+	require.Equal(t, gramUserID, reassigned[0].UserID.String)
+	require.False(t, reassigned[0].DeletedAt.Valid)
+
+	membership, err := orgRepo.New(instance.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.True(t, membership.WorkosUserID.Valid)
+	require.Equal(t, newWorkosID, membership.WorkosUserID.String)
+
+	isMember, err = orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
+		UserID:         gramUserID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, isMember)
+
+	memberRole, err := accessrepo.New(instance.conn).GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err)
+	principals, err = authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
+	}
+	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, gramUserID).String())
+	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
+}
+
+func TestUpsertUserFromIDP_MergesRoleWhenNewWorkOSIdentityAlreadyHasAssignment(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-collision@example.com"
+		oldWorkosID    = "user_01COLLISION_OLD"
+		newWorkosID    = "user_01COLLISION_NEW"
+		organizationID = "org_reactivate_role_collision"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Collision Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01COLLISION"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	assignments := accessrepo.New(instance.conn)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01COLLISION_OLD"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       newWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01COLLISION_NEW"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	stale, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	require.True(t, stale[0].DeletedAt.Valid, "colliding leftover assignment must be retired")
+
+	current, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
+}
+
+func TestUpsertUserFromIDP_ReassignsLeftoverRolesAfterWorkOSIDAlreadyUpdated(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-retry@example.com"
+		oldWorkosID    = "user_01RETRY_OLD"
+		newWorkosID    = "user_01RETRY_NEW"
+		organizationID = "org_reactivate_role_retry"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(newWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Retry Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01RETRY"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01RETRY"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	stale, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stale, "retry must still move leftover assignments off the old WorkOS id")
+
+	current, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
+}
+
+func TestUpsertUserFromIDP_LinksUnlinkedSurvivorBeforeRetiringCollision(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-unlinked@example.com"
+		oldWorkosID    = "user_01UNLINKED_OLD"
+		newWorkosID    = "user_01UNLINKED_NEW"
+		organizationID = "org_reactivate_unlinked_survivor"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Unlinked Survivor Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01UNLINKED"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	assignments := accessrepo.New(instance.conn)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01UNLINKED_OLD"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       newWorkosID,
+		UserID:             pgtype.Text{},
+		WorkosMembershipID: conv.ToPGText("om_01UNLINKED_NEW"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	stale, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	require.True(t, stale[0].DeletedAt.Valid, "colliding leftover assignment must be retired")
+
+	current, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
+	require.True(t, current[0].UserID.Valid, "surviving new-id assignment must be linked to the Gram user")
+	require.Equal(t, gramUserID, current[0].UserID.String)
+
+	memberRole, err := assignments.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err)
+	principals, err := authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
+	}
+	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
+}
+
+func TestUpsertUserFromIDP_DedupesLeftoverRolesBeforeRemap(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-dup-leftover@example.com"
+		oldWorkosID    = "user_01DUP_OLD"
+		olderWorkosID  = "user_01DUP_OLDER"
+		newWorkosID    = "user_01DUP_NEW"
+		organizationID = "org_reactivate_dup_leftover"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Duplicate Leftover Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01DUP"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	assignments := accessrepo.New(instance.conn)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       olderWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01DUP_OLDER"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01DUP_OLD"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	older, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   olderWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, older, 1)
+	require.True(t, older[0].DeletedAt.Valid, "older leftover assignment must be retired")
+
+	stale, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stale, "newest leftover assignment must remap onto the new WorkOS id")
+
+	current, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
+	require.Equal(t, gramUserID, current[0].UserID.String)
+
+	memberRole, err := assignments.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err)
+	principals, err := authz.ResolveUserPrincipals(ctx, instance.conn, organizationID, gramUserID)
+	require.NoError(t, err)
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
+	}
+	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
 }

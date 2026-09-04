@@ -1380,6 +1380,112 @@ func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkO
 	return err
 }
 
+const reassignOrganizationRoleAssignmentWorkOSID = `-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+UPDATE organization_role_assignments
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id <> $1
+  AND deleted_at IS NULL
+`
+
+type ReassignOrganizationRoleAssignmentWorkOSIDParams struct {
+	NewWorkosUserID string
+	UserID          pgtype.Text
+}
+
+// Move leftover assignments onto the new WorkOS id after colliding rows
+// have been retired.
+func (q *Queries) ReassignOrganizationRoleAssignmentWorkOSID(ctx context.Context, arg ReassignOrganizationRoleAssignmentWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationRoleAssignmentWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const reassignOrganizationUserWorkOSID = `-- name: ReassignOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM $1
+`
+
+type ReassignOrganizationUserWorkOSIDParams struct {
+	NewWorkosUserID pgtype.Text
+	UserID          pgtype.Text
+}
+
+// Login reuses a Gram user after WorkOS delete-and-signup, so membership
+// rows still pointing at a previous WorkOS user id must follow the new one.
+// Matches any leftover id so a retry after overwrite still converges.
+func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg ReassignOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationUserWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = $1
+  AND old.workos_user_id <> $2
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = $2
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  )
+`
+
+type RetireCollidingOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete leftover assignments that would unique-violate if remapped
+// onto a WorkOS id that already holds the same org+role.
+func (q *Queries) RetireCollidingOrganizationRoleAssignments(ctx context.Context, arg RetireCollidingOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireCollidingOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
+const retireDuplicateLeftoverOrganizationRoleAssignments = `-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = $1
+      AND leftover.workos_user_id <> $2
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id
+`
+
+type RetireDuplicateLeftoverOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete extra leftover assignments that share org+role so remapping
+// them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+func (q *Queries) RetireDuplicateLeftoverOrganizationRoleAssignments(ctx context.Context, arg RetireDuplicateLeftoverOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireDuplicateLeftoverOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :exec
 UPDATE organization_invitations
 SET state = 'revoked',
@@ -1553,6 +1659,26 @@ func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, a
 	return err
 }
 
+const setOrganizationUserWorkOSID = `-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND user_id = $3
+  AND deleted_at IS NULL
+`
+
+type SetOrganizationUserWorkOSIDParams struct {
+	WorkosUserID   pgtype.Text
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) SetOrganizationUserWorkOSID(ctx context.Context, arg SetOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserWorkOSID, arg.WorkosUserID, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const setSCIMEnabled = `-- name: SetSCIMEnabled :exec
 UPDATE organization_metadata
 SET scim_enabled = $1,
@@ -1597,8 +1723,8 @@ func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) er
 
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
 WITH input_memberships AS (
-    SELECT unnest($2::text[]) AS workos_org_id,
-           unnest($3::text[]) AS workos_membership_id
+    SELECT unnest($3::text[]) AS workos_org_id,
+           unnest($4::text[]) AS workos_membership_id
 ),
 resolved AS (
     SELECT organization_metadata.id AS organization_id,
@@ -1644,6 +1770,7 @@ UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = $1
+  AND NOT $2::boolean
   AND organization_user_relationships.deleted_at IS NULL
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
@@ -1653,17 +1780,23 @@ WHERE organization_user_relationships.user_id = $1
 
 type SetUserWorkOSMembershipsParams struct {
 	UserID              pgtype.Text
+	PreserveExisting    bool
 	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
 
 // Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 // (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
-// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
-// other relationships where the org has a non-NULL workos_id. Orgs without a
-// workos_id are unaffected. Other users' memberships are never modified.
+// the provided (workos_org_id, workos_membership_id) pairs and, unless
+// preserve_existing is true, soft-deletes any other relationships where the org
+// has a non-NULL workos_id. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
-	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	_, err := q.db.Exec(ctx, setUserWorkOSMemberships,
+		arg.UserID,
+		arg.PreserveExisting,
+		arg.WorkosOrgIds,
+		arg.WorkosMembershipIds,
+	)
 	return err
 }
 
