@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- shared status labels keep columns and cards consistent
 import type {
   SetupTask,
   SetupTaskStatus,
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { cn } from "@/lib/utils";
 
-export const SETUP_TASK_STATUS_LABELS: Record<SetupTaskStatus, string> = {
+const SETUP_TASK_STATUS_LABELS: Record<SetupTaskStatus, string> = {
   todo: "To do",
   in_progress: "In progress",
   awaiting_support: "Awaiting support",
@@ -166,7 +165,7 @@ export function SetupTaskCard({
         ) : null}
       </button>
 
-      <div className="ml-5 flex w-full shrink-0 items-center justify-end gap-2 sm:ml-0 sm:w-auto">
+      <div className="ml-5 flex w-[calc(100%_-_1.25rem)] shrink-0 items-center justify-end gap-2 sm:ml-0 sm:w-auto">
         {ownerLabel ? (
           <div
             className="hidden max-w-36 items-center gap-2 text-xs text-muted-foreground sm:flex"
