@@ -316,7 +316,7 @@ function recorded(value: unknown): string {
         typeof value === "number" ||
         typeof value === "boolean"
       ? String(value)
-      : "Not recorded";
+      : (JSON.stringify(value) ?? "Not recorded");
 }
 
 function snapshotKeys(

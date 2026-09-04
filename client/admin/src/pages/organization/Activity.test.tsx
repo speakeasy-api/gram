@@ -582,6 +582,57 @@ describe("Activity", () => {
     ).toContain("Tierenterprise");
   });
 
+  it.each([
+    [
+      "trial tier object",
+      { trial: { tier: { name: "enterprise" } } },
+      {},
+      '{"name":"enterprise"}',
+    ],
+    [
+      "trial tier array",
+      { trial: { tier: ["enterprise"] } },
+      {},
+      '["enterprise"]',
+    ],
+    [
+      "account type object",
+      {},
+      { account_type: { name: "enterprise" } },
+      '{"name":"enterprise"}',
+    ],
+    [
+      "account type array",
+      {},
+      { account_type: ["enterprise"] },
+      '["enterprise"]',
+    ],
+    ["missing tier", {}, {}, "Not recorded"],
+    ["null tier", { trial: { tier: null } }, {}, "Not recorded"],
+    ["empty tier", { trial: { tier: "" } }, {}, "Not recorded"],
+  ])(
+    "renders %s in trial facts",
+    async (_name, afterSnapshot, metadata, expected) => {
+      mocks.listOrganizationActivity.mockResolvedValue({
+        logs: [
+          anActivityLog({
+            action: "organization:enterprise_trial_armed",
+            afterSnapshot,
+            metadata,
+          }),
+        ],
+      });
+
+      await renderWithApp(<Activity org={ORG} />);
+      const facts = await screen.findByRole("region", {
+        name: "Enterprise trial started",
+      });
+      expect(
+        within(facts).getByText("Tier").nextElementSibling?.textContent,
+      ).toBe(expected);
+    },
+  );
+
   it("renders malformed trial dates without breaking the feed", async () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
