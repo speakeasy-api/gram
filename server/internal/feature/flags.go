@@ -23,6 +23,11 @@ const (
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
+	// FlagAgentManagementM1 gates the first-class agent management API while
+	// administrator grants are backfilled and the M1 safety suite is promoted.
+	// It is evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagementM1 Flag = "gram-agent-management-m1"
+
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
