@@ -624,14 +624,19 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
-		// Provider transcripts occasionally carry NUL, which Postgres text and
-		// jsonb columns reject; neutralize it before metering so the reading
-		// reflects what is actually stored.
-		param.Content = ReplaceNUL(param.Content)
-		param.ContentRaw = replaceNULInJSON(param.ContentRaw)
-		param.ExternalUserID.String = ReplaceNUL(param.ExternalUserID.String)
-		param.ExternalMessageID.String = ReplaceNUL(param.ExternalMessageID.String)
-		param.UserAgent.String = ReplaceNUL(param.UserAgent.String)
+		// Provider transcripts occasionally carry NUL, which Postgres text
+		// columns reject; drop it before metering so the reading reflects
+		// what is actually stored.
+		param.Content = StripNUL(param.Content)
+		param.ExternalUserID.String = StripNUL(param.ExternalUserID.String)
+		param.ExternalMessageID.String = StripNUL(param.ExternalMessageID.String)
+		param.UserAgent.String = StripNUL(param.UserAgent.String)
+		// content_raw is an optional inline copy and jsonb rejects U+0000;
+		// readers fall back to content when it is empty, so drop it rather
+		// than rewrite the JSON.
+		if bytes.Contains(param.ContentRaw, jsonNULEscape) || bytes.IndexByte(param.ContentRaw, 0) >= 0 {
+			param.ContentRaw = nil
+		}
 		readings, err := w.meterMessage(ctx, meterMessageInput{
 			organizationID:        organizationID,
 			projectID:             projectID,

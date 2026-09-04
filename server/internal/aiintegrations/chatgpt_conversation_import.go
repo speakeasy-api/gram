@@ -355,7 +355,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 		// Events within a file are chronological, so the last one seen is
 		// the newest.
 		state.latest = event
-		if title := chat.ReplaceNUL(strings.TrimSpace(event.Conversation.Title)); title != "" {
+		if title := chat.StripNUL(strings.TrimSpace(event.Conversation.Title)); title != "" {
 			state.title = title
 		}
 	}

@@ -639,5 +639,5 @@ func parseCodexCloudEvents(file codexapi.LogFile, body []byte) ([]codexCloudEven
 // truncated by runes so multi-byte text stays valid. Empty when no prompt was
 // seen — the upsert then sends NULL and preserves any stored title.
 func codexCloudChatTitle(prompt string) string {
-	return conv.TruncateString(chat.ReplaceNUL(strings.TrimSpace(prompt)), codexCloudTitleMaxRunes)
+	return conv.TruncateString(chat.StripNUL(strings.TrimSpace(prompt)), codexCloudTitleMaxRunes)
 }
