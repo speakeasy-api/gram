@@ -11,12 +11,7 @@ import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
-import {
-  getMcpServerArgs,
-  remoteMcpRouteParam,
-  tunneledMcpRouteParam,
-  unproxiedMcpRouteParam,
-} from "@/lib/sources";
+import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -129,26 +124,15 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "Speakeasy authentication is configured; upstream identity providers are optional.";
   }
 
+  // Source detail pages are gone; the description still explains the backend,
+  // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
-  let sourceHref = routes.mcp.sources.href();
   if (mcpServer?.remoteMcpServerId) {
     sourceDescription = "Backed by a remote MCP server.";
-    sourceHref = routes.mcp.sources.source.href(
-      "remotemcp",
-      remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
-    );
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = "Backed by a tunneled MCP server.";
-    sourceHref = routes.mcp.sources.source.href(
-      "tunneledmcp",
-      tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
-    );
   } else if (mcpServer?.unproxiedMcpServerId) {
     sourceDescription = "Backed by an unproxied MCP server.";
-    sourceHref = routes.mcp.sources.source.href(
-      "unproxiedmcp",
-      unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
-    );
   }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
@@ -181,7 +165,6 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Source",
           description: sourceDescription,
           ready: isSourceBacked,
-          href: sourceHref,
         },
         {
           key: "plugin",

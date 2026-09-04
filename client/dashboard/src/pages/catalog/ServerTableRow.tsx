@@ -1,12 +1,10 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ArrowRight, Check } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMemo } from "react";
-import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
 import { ManualSetupBadge } from "./ManualSetupBadge";
@@ -16,16 +14,15 @@ interface ServerTableRowProps {
   detailHref: string;
   /** Whether this catalog server is already installed in the project. */
   isAdded: boolean;
-  isSelected?: boolean;
-  onToggleSelect?: () => void;
+  /** Starts the install flow for this one server. */
+  onAdd: () => void;
 }
 
 export function ServerTableRow({
   server,
   detailHref,
   isAdded,
-  isSelected,
-  onToggleSelect,
+  onAdd,
 }: ServerTableRowProps): JSX.Element {
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
@@ -38,15 +35,10 @@ export function ServerTableRow({
   // misleading. Hide it for them.
   const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
 
-  const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
-    e.stopPropagation();
-    onToggleSelect?.();
-  };
-
   return (
     <DotRow
-      onClick={handleRowClick}
-      className={cn(isAdded && "border-l-success/50 border-l-2")}
+      href={detailHref}
+      ariaLabel={`View ${displayName}`}
       icon={
         server.iconUrl ? (
           <img
@@ -57,17 +49,6 @@ export function ServerTableRow({
         ) : undefined
       }
     >
-      {/* Selection */}
-      <td className="w-10 px-3 py-3">
-        {isSelected ? (
-          <div className="bg-foreground flex size-4 items-center justify-center">
-            <Check className="text-background size-3" strokeWidth={3} />
-          </div>
-        ) : (
-          <div className="border-border size-4 border" />
-        )}
-      </td>
-
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
@@ -115,16 +96,23 @@ export function ServerTableRow({
         />
       </td>
 
-      {/* View */}
-      <td className="px-3 py-3">
-        <Link to={detailHref} onClick={(e) => e.stopPropagation()}>
-          <Button variant="secondary" size="sm">
-            <Button.Text>View</Button.Text>
-            <Button.RightIcon>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button.RightIcon>
-          </Button>
-        </Link>
+      {/* Add — sits above the row's stretched link overlay so it stays
+          clickable without navigating. */}
+      <td className="relative z-20 px-3 py-3">
+        <Button
+          variant={isAdded ? "secondary" : "primary"}
+          size="sm"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onAdd();
+          }}
+        >
+          <Button.LeftIcon>
+            <Plus className="h-3.5 w-3.5" />
+          </Button.LeftIcon>
+          <Button.Text>{isAdded ? "Add again" : "Add"}</Button.Text>
+        </Button>
       </td>
     </DotRow>
   );

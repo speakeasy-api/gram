@@ -11,7 +11,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
   formatTunneledMcpDisplay,
-  sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -176,8 +175,6 @@ export function SourceCard({
   const config = sourceTypeConfig[asset.type];
   const sourceTypeLabel = config.label;
 
-  const sourceKind = sourceTypeToUrnKind(asset.type);
-
   // Remote/tunneled/unproxied MCP deletion lives in Settings because it
   // touches linked server/endpoint state.
   const actions =
@@ -252,11 +249,7 @@ export function SourceCard({
 
   return (
     <CardContextMenu actions={actions}>
-      <routes.mcp.sources.source.Link
-        key={asset.id}
-        params={[sourceKind, asset.slug]}
-        className="block h-full hover:no-underline"
-      >
+      <span>
         <Card.Entity icon={iconContent}>
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
@@ -300,7 +293,7 @@ export function SourceCard({
             </div>
           </div>
         </Card.Entity>
-      </routes.mcp.sources.source.Link>
+      </span>
     </CardContextMenu>
   );
 }

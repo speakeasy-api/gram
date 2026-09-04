@@ -490,3 +490,26 @@ html.chat-launching::view-transition-new(root) {
   }
 }
 
+
+/* Icon tile breathes while the pointer is over the card, alongside the
+   confetti. Paired with it rather than standing alone: the burst is the
+   arrival, the pulse is what keeps the card feeling live during a long hover. */
+@keyframes icon-hover-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.group:hover .icon-hover-pulse {
+  animation: icon-hover-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .icon-hover-pulse {
+    animation: none;
+  }
+}

@@ -116,7 +116,14 @@ export function SidePanelSurface(): React.JSX.Element | null {
       inert={closing}
       style={{ width }}
       className={cn(
-        "bg-surface-primary relative my-2 mr-2 flex shrink-0 flex-col shadow-sm",
+        // Reads as a pane of the app rather than a card floating over it: the
+        // page surface, and a left border doing the separating. The inset card
+        // treatment left a white panel on a white page in light mode, where
+        // only the shadow distinguished the two.
+        // z-10: the page header's crosshatch rule ends in a node that overhangs
+        // its pane by a few pixels, which lands on this panel's edge now that
+        // the panel sits flush against it.
+        "bg-background border-border relative z-10 flex shrink-0 flex-col border-l",
         closing ? "side-panel-exit" : "side-panel-enter",
       )}
       onKeyDown={(event) => {

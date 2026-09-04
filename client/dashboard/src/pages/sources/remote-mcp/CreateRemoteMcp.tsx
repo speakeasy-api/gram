@@ -232,9 +232,9 @@ function CreateRemoteMcpForm() {
                 {verify.isPending
                   ? "Verifying"
                   : isPending
-                    ? "Adding"
+                    ? "Saving"
                     : isVerified
-                      ? "Add server"
+                      ? "Save"
                       : "Verify connectivity"}
               </Button.Text>
             </Button>

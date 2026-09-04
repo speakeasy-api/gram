@@ -877,6 +877,10 @@ export function InsightsProvider({
   // resolved when the dock is opened OR when on a chat route, so the page has a
   // live runtime without the user touching the dock first.
   const onChatRoute = /\/chat(\/|$)/.test(pathname);
+  // The add flows (/mcp/add and everything under it) are focused tasks with
+  // their own primary action and a deliberately empty sidebar. The docked
+  // composer sits over that work and competes with it, so hide it there.
+  const onAddFlowRoute = /\/mcp\/add(\/|$)/.test(pathname);
   // On a chat route the page owns the chat and the dock is hidden, so collapse
   // the dock (a maximize leaves it expanded). The shared runtime stays mounted
   // via onChatRoute, so this collapse never unmounts it.
@@ -898,7 +902,8 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
+  const hideTrigger =
+    (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const selectedSkillIdsRef = useRef(selectedSkillIds);

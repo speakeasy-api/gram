@@ -105,6 +105,8 @@ const breadcrumbSubstitutions = {
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",
   // Segments of the unified MCP add flow (S-853).
+  add: "Add Server",
+  "from-existing-source": "From Existing Source",
   openapi: "OpenAPI",
   remote: "Remote MCP",
   tunneled: "Tunneled MCP",

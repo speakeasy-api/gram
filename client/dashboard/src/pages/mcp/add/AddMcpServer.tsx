@@ -1,8 +1,7 @@
 import { InputDialog } from "@/components/input-dialog";
-import confetti from "canvas-confetti";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
-import { Grid } from "@/components/ui/Grid";
+import { useIconConfetti } from "@/components/icon-confetti";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -17,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Blocks,
+  Boxes,
   Cable,
   Cloud,
   Code,
@@ -24,7 +24,7 @@ import {
   Layers,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link, Outlet } from "react-router";
 import { toast } from "sonner";
 
@@ -42,92 +42,6 @@ type AddOption = {
   onSelect?: () => void;
 };
 
-// Brand language palette. canvas-confetti parses hex only, so the tokens are
-// resolved from CSS at first use (they are hsl()) and cached.
-const CONFETTI_TOKENS = [
-  "brand-ruby",
-  "brand-go",
-  "brand-python",
-  "brand-swift",
-  "brand-java",
-  "brand-terraform",
-  "brand-unity",
-  "brand-php",
-  "brand-c",
-];
-
-let confettiColorCache: string[] | null = null;
-
-function brandConfettiColors(): string[] {
-  if (confettiColorCache) return confettiColorCache;
-  const probe = document.createElement("span");
-  probe.style.display = "none";
-  document.body.appendChild(probe);
-  const colors = CONFETTI_TOKENS.map((token) => {
-    probe.style.color = `var(--color-${token})`;
-    const rgb = getComputedStyle(probe).color.match(/\d+/g);
-    if (!rgb) return "#888888";
-    return `#${rgb
-      .slice(0, 3)
-      .map((n) => Number(n).toString(16).padStart(2, "0"))
-      .join("")}`;
-  });
-  probe.remove();
-  confettiColorCache = colors;
-  return colors;
-}
-
-/**
- * Hover burst on the card's icon rail, fired through canvas-confetti so the
- * pieces get real physics — per-particle velocity, drift, gravity and tumble,
- * different on every fire. Sits behind the icon tile: the rail is given
- * `isolate` so `-z-10` lands between the rail's own background and the tile,
- * the same layering the assistants card uses for its brand mesh.
- *
- * The canvas is per-card and only ~160px wide, so the defaults (tuned for a
- * full-screen cannon) are scaled down: slower launch, smaller pieces, and a
- * short life so nothing lingers after the pointer leaves.
- */
-function useIconConfetti(): {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  fire: () => void;
-} {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fireRef = useRef<confetti.CreateTypes | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    fireRef.current = confetti.create(canvas, { resize: true });
-    return () => {
-      fireRef.current?.reset();
-      fireRef.current = null;
-    };
-  }, []);
-
-  const fire = useCallback(() => {
-    void fireRef.current?.({
-      particleCount: 110,
-      spread: 360,
-      // Tuned for a ~160px canvas: a slow launch with heavy drag keeps the
-      // pieces inside the rail long enough to read, where the full-screen
-      // defaults would shoot them off-canvas within a few frames.
-      startVelocity: 11,
-      gravity: 0.55,
-      decay: 0.93,
-      scalar: 0.6,
-      ticks: 160,
-      origin: { x: 0.5, y: 0.5 },
-      colors: brandConfettiColors(),
-      // The library honours the OS setting itself, so there is no separate
-      // guard to keep in sync.
-      disableForReducedMotion: true,
-    });
-  }, []);
-
-  return { canvasRef, fire };
-}
-
 function AddOptionCard({
   href,
   onSelect,
@@ -135,11 +49,12 @@ function AddOptionCard({
   title,
   description,
 }: AddOption): JSX.Element {
-  const { canvasRef, fire } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconConfetti();
   const body = (
     <Card.Entity
       icon={icon}
       iconRailClassName="isolate"
+      iconTileClassName="icon-hover-pulse"
       overlay={
         <canvas
           ref={canvasRef}
@@ -173,7 +88,7 @@ function AddOptionCard({
 
   if (!href) {
     return (
-      <div className="h-full" onMouseEnter={fire}>
+      <div className="h-full" onMouseEnter={start} onMouseLeave={stop}>
         {body}
       </div>
     );
@@ -181,7 +96,8 @@ function AddOptionCard({
   return (
     <Link
       to={href}
-      onMouseEnter={fire}
+      onMouseEnter={start}
+      onMouseLeave={stop}
       className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {body}
@@ -190,14 +106,17 @@ function AddOptionCard({
 }
 
 function AddOptionGrid({ options }: { options: AddOption[] }): JSX.Element {
+  // Two columns at most. The page column is capped at max-w-7xl (1280px) and
+  // each card spends a fixed 160px on its icon rail, so a third column leaves
+  // the copy about 240px and it wraps to four lines. The 1→2 step is a
+  // container query rather than a viewport one: the sidebar narrows this
+  // column, so viewport width says nothing about the room the cards have.
   return (
-    <Grid columns={{ xs: 1, md: 2, "2xl": 3 }} gap={3}>
+    <div className="@4xl/main:grid-cols-2 grid grid-cols-1 gap-4">
       {options.map((option) => (
-        <Grid.Item key={option.title}>
-          <AddOptionCard {...option} />
-        </Grid.Item>
+        <AddOptionCard key={option.title} {...option} />
       ))}
-    </Grid>
+    </div>
   );
 }
 
@@ -298,6 +217,13 @@ export default function AddMcpServer(): JSX.Element {
       title: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
     },
+    {
+      href: routes.mcp.add.fromSource.href(),
+      icon: <Boxes className="text-foreground size-10" strokeWidth={1.25} />,
+      title: "From an existing source",
+      description:
+        "Build a server from an OpenAPI document or function this project already has.",
+    },
     ...(isFunctionsEnabled
       ? [
           {
@@ -318,44 +244,46 @@ export default function AddMcpServer(): JSX.Element {
       title="Add MCP server"
       description="Bring a server under the gateway so you can put it in front of your people."
     >
-      <SettingsSection>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Add a server</SettingsSection.Title>
-          <SettingsSection.Description>
-            Pick the option that matches how the server is reached.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <AddOptionGrid options={connectOptions} />
-      </SettingsSection>
-
-      {gatewaysEnabled && (
+      {/* SettingsPage stacks its sections at gap-8, and Page.Section already
+          carries its own bottom margin — together that leaves a hole between
+          the page title and the first group of options. One wrapper with its
+          own spacing keeps the page tight without changing the shared
+          template for every page that uses it. */}
+      <div className="-mt-6 flex flex-col gap-6">
         <SettingsSection>
           <SettingsSection.Header>
-            <SettingsSection.Title>Group servers</SettingsSection.Title>
+            <SettingsSection.Title>Add a server</SettingsSection.Title>
             <SettingsSection.Description>
-              Put several servers behind a single address so people connect once
-              instead of per server.
+              Pick the option that matches how the server is reached.
             </SettingsSection.Description>
           </SettingsSection.Header>
-          <AddOptionGrid options={gatewayOptions} />
+          <AddOptionGrid options={connectOptions} />
         </SettingsSection>
-      )}
 
-      <SettingsSection>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Advanced</SettingsSection.Title>
-          <SettingsSection.Description>
-            Build a server from your own API or code instead of connecting one
-            that already exists.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <AddOptionGrid options={advancedOptions} />
-        <Text muted small>
-          Already uploaded something?{" "}
-          <routes.mcp.sources.Link>Browse sources</routes.mcp.sources.Link> to
-          manage the OpenAPI documents and functions in this project.
-        </Text>
-      </SettingsSection>
+        {gatewaysEnabled && (
+          <SettingsSection>
+            <SettingsSection.Header>
+              <SettingsSection.Title>Group servers</SettingsSection.Title>
+              <SettingsSection.Description>
+                Put several servers behind a single address so people connect
+                once instead of per server.
+              </SettingsSection.Description>
+            </SettingsSection.Header>
+            <AddOptionGrid options={gatewayOptions} />
+          </SettingsSection>
+        )}
+
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Advanced</SettingsSection.Title>
+            <SettingsSection.Description>
+              Build a server from your own API or code instead of connecting one
+              that already exists.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <AddOptionGrid options={advancedOptions} />
+        </SettingsSection>
+      </div>
 
       <InputDialog
         open={gatewayDialogOpen}

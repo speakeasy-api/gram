@@ -10,23 +10,18 @@ import { Navigate, useParams } from "react-router";
  * command palette.
  */
 
+// Sources no longer has a page of its own; the add flow is where its two
+// remaining kinds are reached.
 export function RedirectToSources(): JSX.Element {
   const routes = useRoutes();
-  return <Navigate to={routes.mcp.sources.href()} replace />;
+  return <Navigate to={routes.mcp.add.href()} replace />;
 }
 
+// Source detail pages are gone: the servers they described live on the MCP
+// inventory, so old links land there.
 export function RedirectToSourceDetail(): JSX.Element {
   const routes = useRoutes();
-  const { sourceKind, sourceSlug } = useParams();
-  if (!sourceKind || !sourceSlug) {
-    return <Navigate to={routes.mcp.sources.href()} replace />;
-  }
-  return (
-    <Navigate
-      to={routes.mcp.sources.source.href(sourceKind, sourceSlug)}
-      replace
-    />
-  );
+  return <Navigate to={routes.mcp.href()} replace />;
 }
 
 export function RedirectToAddRemoteMcp(): JSX.Element {

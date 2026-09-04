@@ -10,7 +10,6 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { CommandBar } from "@/pages/catalog/CommandBar";
 import {
   type PulseMCPServer,
   useIsCatalogServerInstalled,
@@ -36,7 +35,6 @@ import {
 } from "./catalog-filter-schema";
 import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
-import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
 
@@ -123,13 +121,8 @@ function CatalogInner() {
     [pageState.category, pageState.sort, filters],
   );
 
-  // Selection state from URL (persists across navigation)
-  const { selectedServers, toggleServerSelection, clearSelection } =
-    useSelectionState();
-
   const [viewMode, setViewMode] = useViewMode();
   const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
-  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   const {
     data,
@@ -170,13 +163,11 @@ function CatalogInner() {
     [filters],
   );
 
-  const getSelectedServerObjects = () =>
-    filteredServers.filter((s) =>
-      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
-    );
-
-  const handleAdd = () => {
-    setAddingServers(getSelectedServerObjects());
+  // One server at a time: the card's own Add button opens the install dialog
+  // for that server. The dialog still takes a list, so a future bulk path can
+  // reuse it unchanged.
+  const handleAdd = (server: PulseMCPServer) => {
+    setAddingServers([server]);
   };
 
   return (
@@ -231,10 +222,7 @@ function CatalogInner() {
             ))}
           </div>
         ) : viewMode === "grid" ? (
-          <div
-            ref={setGridElement}
-            className="grid grid-cols-1 gap-6 xl:grid-cols-2"
-          >
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {filteredServers.map((server) => {
               const serverKey = `${server.registryId}-${server.registrySpecifier}`;
               return (
@@ -245,14 +233,13 @@ function CatalogInner() {
                     encodeURIComponent(server.registrySpecifier),
                   )}
                   isAdded={isServerAdded(server)}
-                  isSelected={selectedServers.has(serverKey)}
-                  onToggleSelect={() => toggleServerSelection(serverKey)}
+                  onAdd={() => handleAdd(server)}
                 />
               );
             })}
           </div>
         ) : (
-          <div ref={setGridElement}>
+          <div>
             <DotTable
               headers={[
                 { label: "", className: "w-10" },
@@ -273,8 +260,7 @@ function CatalogInner() {
                       encodeURIComponent(server.registrySpecifier),
                     )}
                     isAdded={isServerAdded(server)}
-                    isSelected={selectedServers.has(serverKey)}
-                    onToggleSelect={() => toggleServerSelection(serverKey)}
+                    onAdd={() => handleAdd(server)}
                   />
                 );
               })}
@@ -306,22 +292,13 @@ function CatalogInner() {
         projectSlug={project.slug}
         open={addingServers.length > 0}
         onOpenChange={(open) => {
-          if (!open) {
-            setAddingServers([]);
-            clearSelection();
-          }
+          if (!open) setAddingServers([]);
         }}
         onInstallFinished={
           attachToGatewayId
             ? (result) => void attachInstalledToGateway(result)
             : undefined
         }
-      />
-      <CommandBar
-        selectedCount={selectedServers.size}
-        onAdd={handleAdd}
-        onClear={clearSelection}
-        containerElement={gridElement}
       />
     </>
   );

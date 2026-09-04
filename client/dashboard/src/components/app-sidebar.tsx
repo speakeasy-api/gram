@@ -92,7 +92,6 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
-  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
@@ -116,14 +115,6 @@ export function AppSidebar({
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
-
-  const isWideSidebarDetailRoute =
-    routes.mcp.details.active ||
-    routes.mcp.x.active ||
-    routes.mcp.gateway.active ||
-    routes.mcp.builtIn.active ||
-    routes.skills.detail.active ||
-    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -248,14 +239,6 @@ export function AppSidebar({
               { item: routes.plugins, ...accessFor(routes.plugins) },
               { item: routes.environments, ...accessFor(routes.environments) },
               { item: routes.playground, ...accessFor(routes.playground) },
-              ...(isDeploymentsPageEnabled
-                ? [
-                    {
-                      item: routes.deployments,
-                      ...accessFor(routes.deployments),
-                    },
-                  ]
-                : []),
             ]}
           />
 
@@ -292,15 +275,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar
-      collapsible="icon"
-      style={
-        isWideSidebarDetailRoute
-          ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
-          : undefined
-      }
-      {...props}
-    >
+    <Sidebar collapsible="icon" {...props}>
       {/* Logo row only — the project switcher now lives in the page header.
           The row is exactly --header-height and closes with the same crosshatch
           rule the page header uses, so the divider reads as one line running

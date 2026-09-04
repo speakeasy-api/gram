@@ -50,6 +50,7 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
+import CreateFromSource from "./pages/mcp/add/CreateFromSource";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -139,9 +140,7 @@ import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
-import SourceDetails from "./pages/sources/SourceDetails";
 import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -454,6 +453,11 @@ const ROUTE_STRUCTURE = {
               },
             },
           },
+          fromSource: {
+            title: "From Existing Source",
+            url: "from-existing-source",
+            component: CreateFromSource,
+          },
           openapi: {
             title: "Add OpenAPI",
             url: "openapi",
@@ -463,25 +467,6 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
             component: FunctionsOnboarding,
-          },
-        },
-      },
-      // Sources are demoted to a sub-concept of MCP: reachable from the
-      // "advanced" entry on the add page and from the server detail pages they
-      // back, but no longer a peer navigation item. Whether the reusable-source
-      // model earns its own surface at all is still open — remote, tunneled and
-      // unproxied sources are 1:1 with their mcp_servers row, while OpenAPI
-      // documents and functions genuinely fan out across servers.
-      sources: {
-        title: "Sources",
-        url: "sources",
-        component: SourcesRoot,
-        indexComponent: SourcesPage,
-        subPages: {
-          source: {
-            title: "Source Details",
-            url: ":sourceKind/:sourceSlug",
-            component: SourceDetails,
           },
         },
       },

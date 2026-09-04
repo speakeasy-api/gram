@@ -410,8 +410,7 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
-  const remoteSettingsHref = `${routes.mcp.sources.source.href(
-    "remotemcp",
+  const remoteSettingsHref = `${routes.mcp.x.settings.href(
     remoteMcpServerId,
   )}#settings`;
 

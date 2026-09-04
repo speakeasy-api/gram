@@ -187,7 +187,7 @@ function SourcesGroup({ onNavigate }: GroupProps) {
           sublabel={source.kind}
           icon="file-code"
           onSelect={() => {
-            routes.mcp.sources.source.goTo(source.kind, source.slug);
+            routes.mcp.goTo();
             onNavigate();
           }}
         />
