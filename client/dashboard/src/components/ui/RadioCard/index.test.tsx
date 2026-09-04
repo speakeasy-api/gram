@@ -395,7 +395,11 @@ describe("RadioCard", () => {
 
     const radio = screen.getByRole("radio", { name: "Action choice" });
     expect(screen.getByTestId("leading")).toBeTruthy();
-    expect(radio.getAttribute("aria-describedby")).not.toBeNull();
+    const descriptionId = radio.getAttribute("aria-describedby");
+    expect(descriptionId).not.toBeNull();
+    expect(document.getElementById(descriptionId!)?.textContent).toBe(
+      "Action description",
+    );
   });
 
   it("forwards the orientation prop to the radio group", () => {
