@@ -10,6 +10,8 @@ import (
 )
 
 func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
@@ -53,7 +55,7 @@ func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
 	_, err = service.Get(ctx, &gen.GetPayload{ID: created.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	rows, err := conn.Query(t.Context(), `SELECT action FROM audit_logs WHERE organization_id = $1 AND subject_id = $2 ORDER BY seq`, "org-a", created.ID)
+	rows, err := conn.Query(t.Context(), `SELECT action FROM audit_logs WHERE organization_id = $1 AND subject_id = $2 ORDER BY seq`, "org-a", created.ID) //nolint:glint // notestingrawsql: directly verifies ordered transactional audit side effects
 	require.NoError(t, err)
 	defer rows.Close()
 	var actions []string
@@ -74,6 +76,8 @@ func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
 }
 
 func TestFailedLifecycleMutationDoesNotEmitAudit(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
@@ -86,12 +90,14 @@ func TestFailedLifecycleMutationDoesNotEmitAudit(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	var count int
-	err = conn.QueryRow(t.Context(), `SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND subject_id = $2`, "org-a", created.ID).Scan(&count)
+	err = conn.QueryRow(t.Context(), `SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND subject_id = $2`, "org-a", created.ID).Scan(&count) //nolint:glint // notestingrawsql: directly verifies rollback of the audit side effect
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 }
 
 func TestNameConflictIsScopedToActiveOrganizationAgents(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")

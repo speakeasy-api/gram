@@ -47,12 +47,15 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeAgentWrite:              GrantSurfaceAccess,
 	ScopeAgentAuthorize:          GrantSurfaceAccess,
 	ScopeAgentTransfer:           GrantSurfaceAccess,
+
+	scopeMCPApprovalReadTombstone:   "",
+	scopeMCPApprovalDecideTombstone: "",
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.
 func GrantSurfaceForScope(scope Scope) (GrantSurface, bool) {
 	surface, ok := scopeGrantSurfaces[scope]
-	return surface, ok
+	return surface, ok && surface != ""
 }
 
 // ValidateScopeGrantSurface verifies that the requested surface owns writes for

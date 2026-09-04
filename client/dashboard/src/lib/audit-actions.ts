@@ -13,6 +13,12 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:create",
+  "agent:delete",
+  "agent:rename",
+  "agent:resume",
+  "agent:revoke",
+  "agent:suspend",
   "ai_integration:delete",
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
@@ -257,6 +263,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+
+    case "agent:create":
+      return "created agent";
+    case "agent:delete":
+      return "deleted agent";
+    case "agent:rename":
+      return "renamed agent";
+    case "agent:resume":
+      return "resumed agent";
+    case "agent:revoke":
+      return "revoked agent";
+    case "agent:suspend":
+      return "suspended agent";
 
     case "ai_integration:upsert":
       return "configured AI integration";
