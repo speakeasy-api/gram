@@ -20,11 +20,8 @@ import {
   useOrganization,
   useSession,
 } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useOrgRoutes } from "@/routes";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupTaskDialog } from "./components/setup-task-dialog";
@@ -55,33 +52,6 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   );
 }
 
-function FlagUnavailable({
-  status,
-}: {
-  status: "disabled" | "missing" | "error";
-}): JSX.Element {
-  const routes = useOrgRoutes();
-  const detail =
-    status === "disabled"
-      ? "The setup board is not enabled for this organization."
-      : "The setup board rollout configuration is unavailable.";
-  return (
-    <BoardPage>
-      <Alert variant="info">
-        <div>
-          <AlertTitle>Setup board unavailable</AlertTitle>
-          <AlertDescription>
-            {detail} The existing setup wizard is still available.
-          </AlertDescription>
-          <routes.setup.Link className="mt-3 inline-block">
-            Open setup wizard
-          </routes.setup.Link>
-        </div>
-      </Alert>
-    </BoardPage>
-  );
-}
-
 function BoardLoading(): JSX.Element {
   return (
     <BoardPage>
@@ -97,12 +67,6 @@ function BoardLoading(): JSX.Element {
 }
 
 export default function SetupBoard(): JSX.Element {
-  const flag = useFeatureFlag(FEATURE_FLAGS.setupBoard);
-
-  if (flag.status === "loading") return <BoardLoading />;
-  if (flag.status !== "enabled")
-    return <FlagUnavailable status={flag.status} />;
-
   return (
     <RequireScope scope="org:read" level="page">
       <SetupBoardInner />
@@ -247,10 +211,7 @@ function SetupBoardInner(): JSX.Element {
         <Alert variant="error">
           <div>
             <AlertTitle>Could not load setup tasks</AlertTitle>
-            <AlertDescription>
-              Refresh the board to try again. The existing setup wizard remains
-              available.
-            </AlertDescription>
+            <AlertDescription>Refresh the board to try again.</AlertDescription>
             <Button
               className="mt-3"
               variant="secondary"

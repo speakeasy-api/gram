@@ -12,12 +12,6 @@ import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import SetupBoard from "./SetupBoard";
 
 const mocks = vi.hoisted(() => ({
-  flagStatus: "enabled" as
-    | "loading"
-    | "enabled"
-    | "disabled"
-    | "missing"
-    | "error",
   platformAdmin: false,
   canAdmin: true,
   setupQuery: vi.fn(),
@@ -81,10 +75,6 @@ vi.mock("@/components/ui/MoreActions", () => ({
   ),
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flagStatus }),
-}));
-
 vi.mock("@/hooks/useOrganizationSetupTasks", () => ({
   useOrganizationSetupTasks: (...args: unknown[]) => mocks.setupQuery(...args),
 }));
@@ -99,17 +89,6 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.canAdmin }),
-}));
-
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: {
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/setup">{children}</a>
-      ),
-    },
-    setupBoard: { goTo: vi.fn() },
-  }),
 }));
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -253,7 +232,6 @@ const hiddenTask: SetupTask = {
 
 beforeEach(() => {
   cleanup();
-  mocks.flagStatus = "enabled";
   mocks.platformAdmin = false;
   mocks.canAdmin = true;
   mocks.setupQuery.mockReset();
@@ -334,6 +312,33 @@ describe("SetupBoard", () => {
     expect(mocks.invalidate).toHaveBeenCalled();
   });
 
+  it("moves a task to the status column it is dropped into", async () => {
+    render(<SetupBoard />);
+
+    const draggedTask = screen.getByTestId("setup-task-draggable-connect-idp");
+    const destination = screen.getByTestId("setup-column-in_progress");
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+
+    fireEvent.dragStart(draggedTask, { dataTransfer });
+    fireEvent.dragOver(destination, { dataTransfer });
+    expect(screen.getByTestId("setup-task-drop-space")).toBeTruthy();
+    fireEvent.drop(destination, { dataTransfer });
+
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({
+        request: {
+          updateSetupTaskRequestBody: {
+            taskKey: "connect-idp",
+            status: "in_progress",
+          },
+        },
+      }),
+    );
+  });
+
   it("disables task openers without status permission", () => {
     mocks.canAdmin = false;
     render(<SetupBoard />);
@@ -369,27 +374,16 @@ describe("SetupBoard", () => {
     expect(screen.queryByRole("button", { name: /Move to/ })).toBeNull();
   });
 
-  it.each(["disabled", "missing", "error"] as const)(
-    "keeps the wizard available when the flag is %s",
-    (status) => {
-      mocks.flagStatus = status;
-      render(<SetupBoard />);
-      expect(screen.getByText("Setup board unavailable")).toBeTruthy();
-      expect(
-        screen.getByRole("link", { name: "Open setup wizard" }),
-      ).toBeTruthy();
-      expect(mocks.setupQuery).not.toHaveBeenCalled();
-    },
-  );
-
   it("renders loading and query error states", () => {
-    mocks.flagStatus = "loading";
+    mocks.setupQuery.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
     const view = render(<SetupBoard />);
     expect(document.querySelector(".h-80")).toBeTruthy();
-    expect(mocks.setupQuery).not.toHaveBeenCalled();
 
     view.unmount();
-    mocks.flagStatus = "enabled";
     mocks.setupQuery.mockReturnValue({
       data: undefined,
       isPending: false,

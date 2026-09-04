@@ -71,7 +71,6 @@ import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -1428,14 +1427,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupWizard,
-    outsideMainLayout: true,
-  },
-  setupBoard: {
-    title: "Setup board",
-    url: "setup/board",
-    icon: "columns-3",
-    stage: "preview",
     component: SetupBoard,
     outsideMainLayout: true,
   },

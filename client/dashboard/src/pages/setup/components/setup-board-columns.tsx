@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { LayoutGroup, motion } from "motion/react";
 import type {
   SetupTask,
   SetupTaskStatus,
@@ -55,6 +56,12 @@ export function SetupBoardColumns({
   onRetryInvite,
 }: SetupBoardColumnsProps): JSX.Element {
   const [mobileStatus, setMobileStatus] = useState<SetupTaskStatus>("todo");
+  const [draggedTaskKey, setDraggedTaskKey] = useState<string | null>(null);
+  const [draggedTaskHeight, setDraggedTaskHeight] = useState(0);
+  const [dropTarget, setDropTarget] = useState<{
+    status: SetupTaskStatus;
+    index: number;
+  } | null>(null);
   const taskTitles = new Map(allTasks.map((task) => [task.key, task.title]));
   const counts = new Map(
     SETUP_BOARD_STATUSES.map((status) => [
@@ -62,6 +69,51 @@ export function SetupBoardColumns({
       tasks.filter((task) => task.status === status).length,
     ]),
   );
+  const draggedTask = tasks.find((task) => task.key === draggedTaskKey);
+
+  const canMoveTask = (task: SetupTask): boolean => {
+    const assignedToCurrentUser =
+      task.assignee?.userId === currentUserId ||
+      task.assignee?.email.toLowerCase() === currentUserEmail.toLowerCase();
+    const completedByFact =
+      "completedByFact" in task && task.completedByFact === true;
+    return (
+      !pending &&
+      !task.hidden &&
+      task.blockedBy.length === 0 &&
+      !completedByFact &&
+      (canAdmin || assignedToCurrentUser)
+    );
+  };
+
+  const clearDrag = () => {
+    setDraggedTaskKey(null);
+    setDraggedTaskHeight(0);
+    setDropTarget(null);
+  };
+
+  const updateDropTarget = (status: SetupTaskStatus, index: number) => {
+    if (
+      !draggedTask ||
+      !canMoveTask(draggedTask) ||
+      draggedTask.status === status
+    ) {
+      setDropTarget(null);
+      return;
+    }
+    setDropTarget({ status, index });
+  };
+
+  const dropTask = (status: SetupTaskStatus) => {
+    if (
+      draggedTask &&
+      canMoveTask(draggedTask) &&
+      draggedTask.status !== status
+    ) {
+      onStatusChange(draggedTask, status);
+    }
+    clearDrag();
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-auto">
@@ -110,48 +162,133 @@ export function SetupBoardColumns({
                   {columnTasks.length}
                 </span>
               </header>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-                {columnTasks.length === 0 ? (
-                  <p className="border border-dashed p-4 text-center text-sm text-muted-foreground">
-                    No tasks
-                  </p>
-                ) : null}
-                {columnTasks.map((task) => {
-                  const assignedToCurrentUser =
-                    task.assignee?.userId === currentUserId ||
-                    task.assignee?.email.toLowerCase() ===
-                      currentUserEmail.toLowerCase();
-                  const canOpen = canAdmin || assignedToCurrentUser;
-                  const canChangeStatus =
-                    task.blockedBy.length === 0 && canOpen;
-                  return (
-                    <SetupTaskCard
-                      key={task.key}
-                      task={task}
-                      blockedTitles={task.blockedBy.map(
-                        (key) => taskTitles.get(key) ?? key,
-                      )}
-                      canChangeStatus={canChangeStatus}
-                      canOpen={canOpen}
-                      canAssign={canAdmin}
-                      isPlatformAdmin={isPlatformAdmin}
-                      pending={pending}
-                      retryInvite={
-                        retryInviteKeys.has(task.key)
-                          ? () => onRetryInvite(task)
-                          : undefined
-                      }
-                      onOpen={() => onOpen(task)}
-                      onStatusChange={(nextStatus) =>
-                        onStatusChange(task, nextStatus)
-                      }
-                      onAssign={() => onAssign(task)}
-                      onRemind={() => onRemind(task)}
-                      onHiddenChange={(hidden) => onHiddenChange(task, hidden)}
+              <LayoutGroup id={`setup-column-${status}`}>
+                <div
+                  className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3"
+                  data-testid={`setup-column-${status}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    updateDropTarget(status, columnTasks.length);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    dropTask(status);
+                  }}
+                >
+                  {columnTasks.length === 0 && dropTarget?.status !== status ? (
+                    <p className="border border-dashed p-4 text-center text-sm text-muted-foreground">
+                      No tasks
+                    </p>
+                  ) : null}
+                  {columnTasks.map((task, index) => {
+                    const assignedToCurrentUser =
+                      task.assignee?.userId === currentUserId ||
+                      task.assignee?.email.toLowerCase() ===
+                        currentUserEmail.toLowerCase();
+                    const canOpen = canAdmin || assignedToCurrentUser;
+                    const canChangeStatus =
+                      task.blockedBy.length === 0 && canOpen;
+                    const draggable = canMoveTask(task);
+                    const showDropSpace =
+                      dropTarget?.status === status &&
+                      dropTarget.index === index;
+                    return (
+                      <Fragment key={task.key}>
+                        {showDropSpace ? (
+                          <motion.div
+                            layout
+                            data-testid="setup-task-drop-space"
+                            className="border border-dashed border-neutral-hover bg-surface-primary-default/50"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: draggedTaskHeight, opacity: 1 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                          />
+                        ) : null}
+                        <motion.div
+                          layout
+                          initial={{ opacity: 1 }}
+                          animate={{
+                            opacity: draggedTaskKey === task.key ? 0.4 : 1,
+                          }}
+                          transition={{ duration: 0.15, ease: "easeOut" }}
+                        >
+                          <div
+                            draggable={draggable}
+                            data-testid={`setup-task-draggable-${task.key}`}
+                            className={cn(
+                              draggable && "cursor-grab active:cursor-grabbing",
+                            )}
+                            onDragStart={(event) => {
+                              if (!draggable) {
+                                event.preventDefault();
+                                return;
+                              }
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData(
+                                "text/plain",
+                                task.key,
+                              );
+                              setDraggedTaskKey(task.key);
+                              setDraggedTaskHeight(
+                                event.currentTarget.offsetHeight,
+                              );
+                            }}
+                            onDragEnd={clearDrag}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              const bounds =
+                                event.currentTarget.getBoundingClientRect();
+                              const insertionIndex =
+                                event.clientY > bounds.top + bounds.height / 2
+                                  ? index + 1
+                                  : index;
+                              updateDropTarget(status, insertionIndex);
+                            }}
+                          >
+                            <SetupTaskCard
+                              task={task}
+                              blockedTitles={task.blockedBy.map(
+                                (key) => taskTitles.get(key) ?? key,
+                              )}
+                              canChangeStatus={canChangeStatus}
+                              canOpen={canOpen}
+                              canAssign={canAdmin}
+                              isPlatformAdmin={isPlatformAdmin}
+                              pending={pending}
+                              retryInvite={
+                                retryInviteKeys.has(task.key)
+                                  ? () => onRetryInvite(task)
+                                  : undefined
+                              }
+                              onOpen={() => onOpen(task)}
+                              onStatusChange={(nextStatus) =>
+                                onStatusChange(task, nextStatus)
+                              }
+                              onAssign={() => onAssign(task)}
+                              onRemind={() => onRemind(task)}
+                              onHiddenChange={(hidden) =>
+                                onHiddenChange(task, hidden)
+                              }
+                            />
+                          </div>
+                        </motion.div>
+                      </Fragment>
+                    );
+                  })}
+                  {dropTarget?.status === status &&
+                  dropTarget.index === columnTasks.length ? (
+                    <motion.div
+                      layout
+                      data-testid="setup-task-drop-space"
+                      className="border border-dashed border-neutral-hover bg-surface-primary-default/50"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: draggedTaskHeight, opacity: 1 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
                     />
-                  );
-                })}
-              </div>
+                  ) : null}
+                </div>
+              </LayoutGroup>
             </section>
           );
         })}

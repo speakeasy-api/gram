@@ -15,7 +15,6 @@ export const FEATURE_FLAGS = {
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
   riskWatchdog: "gram-risk-watchdog",
-  setupBoard: "gram-setup-board",
   tunneledMcp: "gram-tunneled-mcp",
   userSessionsDashboard: "user-sessions-dashboard",
 } as const;
