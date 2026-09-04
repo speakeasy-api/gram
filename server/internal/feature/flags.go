@@ -27,6 +27,10 @@ const (
 	// administrator grants are backfilled and the M1 safety suite is promoted.
 	// It is evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagementM1 Flag = "gram-agent-management-m1"
+	// FlagAgentCredentialsM2 gates agent credential issuance and management until
+	// the integrated M2 authorization safety suite has passed. It is evaluated
+	// per organization and fails closed unless explicitly on.
+	FlagAgentCredentialsM2 Flag = "gram-agent-credentials-m2"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
