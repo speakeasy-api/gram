@@ -408,6 +408,11 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 // all in the inventory either way.
 const maxDeviceActivitiesPerSync = 10
 
+// propertyDeviceOwnerEmail carries the MDM-assigned user of a device. It is a
+// property rather than the actor because the owner did not do anything: a
+// scheduled sync observed their device.
+const propertyDeviceOwnerEmail = "device_owner_email"
+
 // deviceSighting is a device this sync inserted for the first time. It holds
 // only what the activity reports, so the vendor payload does not travel.
 type deviceSighting struct {
@@ -419,11 +424,27 @@ type deviceSighting struct {
 // reportFirstSeen announces devices that appeared in this snapshot. Devices
 // are organization-scoped: no MDM table carries a project, so these activities
 // never claim one.
+//
+// Reporting is at-most-once by design. A sync that inserts rows and then fails
+// on a later page has already committed those rows, so the retry sees them as
+// existing and reports nothing. The alternative — persisting pending sightings
+// so a retry could finish announcing them — buys durability for an ops
+// notification at the cost of a table and its own failure modes. The devices
+// are in the inventory either way; only the Slack line is lost.
 func (s *Syncer) reportFirstSeen(ctx context.Context, organizationID string, sightings []deviceSighting) {
 	for _, sighting := range sightings {
 		name := sighting.hostname
 		if name == "" {
 			name = sighting.externalID
+		}
+
+		// The device's assigned user is its owner, not the actor: nobody
+		// performed this, a scheduled inventory sync observed it. Reporting
+		// them as the actor would attribute the event to them and attach it to
+		// their PostHog person, so the owner travels as a plain property.
+		extra := map[string]string{}
+		if sighting.userEmail != "" {
+			extra[propertyDeviceOwnerEmail] = sighting.userEmail
 		}
 
 		s.growth.Emit(ctx, growthsignals.ActivityEvent{
@@ -432,13 +453,13 @@ func (s *Syncer) reportFirstSeen(ctx context.Context, organizationID string, sig
 			ProjectID:      uuid.Nil,
 			ActorID:        "",
 			ActorType:      "",
-			ActorEmail:     sighting.userEmail,
+			ActorEmail:     "",
 			ActorName:      "",
 			SubjectName:    name,
 			ActingSurface:  "",
 			AuditAction:    "",
 			DashboardURL:   "",
-			Extra:          map[string]string{},
+			Extra:          extra,
 		})
 	}
 }

@@ -323,7 +323,7 @@ button linking to the subject in the Gram dashboard.
 1. Ship the Go change. Events begin flowing to PostHog with no destinations
    consuming them yet, so Slack stays quiet.
 2. Confirm `gram_activity` volume and shape in PostHog over a day.
-3. Create the six new destinations disabled, test-invoke each, enable them.
+3. Create the five new destinations disabled, test-invoke each, enable them.
 4. Disable the eleven old destinations in the same sitting, so there is no
    window of doubled notifications.
 5. After a week of clean signal, delete the eleven disabled destinations.
@@ -341,7 +341,7 @@ button linking to the subject in the Gram dashboard.
 
 ## Appendix: the shared Slack message template
 
-All six destinations use one template, so every Gram notification reads the same
+All five destinations use one template, so every Gram notification reads the same
 way regardless of channel. PostHog's Slack destination templates support hog
 expressions, including `??` and ternaries, which today's destinations already use.
 
