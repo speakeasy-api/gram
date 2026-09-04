@@ -9,12 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
 } from "@/lib/adminQueries";
 import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
