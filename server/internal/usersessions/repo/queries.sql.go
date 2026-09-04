@@ -108,6 +108,9 @@ INSERT INTO user_sessions (
     user_session_issuer_id,
     user_session_client_id,
     subject_urn,
+    authorizer_user_id,
+    delegated_grants,
+    delegated_grants_version,
     jti,
     refresh_token_hash,
     refresh_expires_at,
@@ -124,20 +127,26 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10,
+    $11
 )
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
-	UserSessionIssuerID uuid.UUID
-	UserSessionClientID uuid.NullUUID
-	SubjectUrn          urn.SessionSubject
-	Jti                 string
-	RefreshTokenHash    string
-	RefreshExpiresAt    pgtype.Timestamptz
-	ExpiresAt           pgtype.Timestamptz
-	ToolSelection       []byte
+	UserSessionIssuerID    uuid.UUID
+	UserSessionClientID    uuid.NullUUID
+	SubjectUrn             urn.SessionSubject
+	AuthorizerUserID       pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	Jti                    string
+	RefreshTokenHash       string
+	RefreshExpiresAt       pgtype.Timestamptz
+	ExpiresAt              pgtype.Timestamptz
+	ToolSelection          []byte
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -148,6 +157,9 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
 		arg.Jti,
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresAt,
@@ -997,6 +1009,44 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getUserSessionPrincipalCredentialByJTI = `-- name: GetUserSessionPrincipalCredentialByJTI :one
+SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
+`
+
+type GetUserSessionPrincipalCredentialByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+type GetUserSessionPrincipalCredentialByJTIRow struct {
+	OrganizationID         pgtype.Text
+	SubjectUrn             urn.SessionSubject
+	AuthorizerUserID       pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+}
+
+// Authoritative serve-path lookup for an agent session's immutable credential
+// profile. It intentionally bypasses caches so direct session revocation and
+// expiry remain authoritative on every admission.
+func (q *Queries) GetUserSessionPrincipalCredentialByJTI(ctx context.Context, arg GetUserSessionPrincipalCredentialByJTIParams) (GetUserSessionPrincipalCredentialByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionPrincipalCredentialByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i GetUserSessionPrincipalCredentialByJTIRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 	)
 	return i, err
 }
