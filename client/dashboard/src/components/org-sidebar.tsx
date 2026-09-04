@@ -255,14 +255,7 @@ export function OrgSidebar({
                     : []),
                   {
                     item: orgRoutes.agents,
-                    scope: [
-                      "org:read",
-                      "org:admin",
-                      "agent:read",
-                      "agent:write",
-                      "agent:authorize",
-                      "agent:transfer",
-                    ],
+                    scope: ["org:read", "org:admin", "agent:read"],
                   },
                   { item: orgRoutes.access, scope: orgReadOrAdmin },
                 ]}
