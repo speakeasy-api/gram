@@ -547,55 +547,6 @@ export type AdminInferenceKey = Omit<
   disable_causes: string[] | null;
 };
 
-export type AdminOrganizationFeatures = {
-  authz_challenge_logging_enabled: boolean;
-  customer_managed_encryption_keys_enabled: boolean;
-  custom_model_keys_enabled: boolean;
-  platform_mcp_enabled: boolean;
-  remote_session_auto_refresh_enabled: boolean;
-  session_portability_enabled: boolean;
-  sso_enabled: boolean;
-  scim_enabled: boolean;
-};
-
-export type AdminOrganizationFeatureName =
-  | "authz_challenge_logging"
-  | "customer_managed_encryption_keys"
-  | "custom_model_keys"
-  | "platform_mcp"
-  | "remote_session_auto_refresh"
-  | "session_portability"
-  | "sso"
-  | "scim";
-
-export function getOrganizationFeatures(
-  organizationID: string,
-): Promise<AdminOrganizationFeatures> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminOrganizationFeatures>(
-    `/admin/organization.features?${qs}`,
-  );
-}
-
-export function setOrganizationFeature(input: {
-  organizationID: string;
-  featureName: AdminOrganizationFeatureName;
-  enabled: boolean;
-}): Promise<AdminOrganizationFeatures> {
-  return gramAdminMutation<AdminOrganizationFeatures>(
-    "/admin/organization.features",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organization_id: input.organizationID,
-        feature_name: input.featureName,
-        enabled: input.enabled,
-      }),
-    },
-  );
-}
-
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
 export type AdminOrganizationChatAnalysisSettings = {
