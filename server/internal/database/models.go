@@ -2317,6 +2317,8 @@ type RiskPolicy struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	JudgeTemperature     pgtype.Float8
+	JudgeFailOpen        pgtype.Bool
 	Score                float64
 	Version              int64
 	CreatedAt            pgtype.Timestamptz

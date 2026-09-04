@@ -5538,10 +5538,18 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- For policy_type = 'prompt_based': the prompt-based guardrail the LLM judge
   -- evaluates each in-scope message against. NULL for standard policies.
   prompt TEXT,
-  -- For policy_type = 'prompt_based': per-policy judge model configuration
-  -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
-  -- standard policies.
+  -- For policy_type = 'prompt_based': per-policy judge model configuration as a
+  -- JSON object. Superseded by judge_temperature and judge_fail_open below;
+  -- retained until those are backfilled and the readers are cut over, then
+  -- dropped in a contract migration. NULL for standard policies.
   model_config JSONB,
+  -- For policy_type = 'prompt_based': sampling temperature for the LLM judge.
+  -- NULL means the judge default (a low value, for deterministic verdicts).
+  judge_temperature DOUBLE PRECISION,
+  -- For policy_type = 'prompt_based': behavior when the LLM judge errors or
+  -- times out. TRUE allows the message, FALSE blocks it. NULL means the judge
+  -- default (fail-open).
+  judge_fail_open BOOLEAN,
   -- CVSS-style severity (0.1-10) the policy author assigns to findings this
   -- policy produces. Purely descriptive; changing it does NOT bump `version`
   -- or re-scan messages. Bounds are validated in the application layer.
