@@ -33,19 +33,9 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 
 	grants := make([]authz.Grant, 0, len(rows))
 	for _, row := range rows {
-		scope := authz.Scope(row.Scope)
-		if ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
-			continue
+		if grant, ok := normalizeAgentPolicyGrant(row); ok {
+			grants = append(grants, grant)
 		}
-		selector, err := authz.SelectorFromRow(row.Selectors)
-		if err != nil || authz.ValidateSelector(scope, selector) != nil {
-			continue
-		}
-		grants = append(grants, authz.Grant{
-			PrincipalUrn: canonical.String(),
-			Scope:        scope,
-			Selector:     selector,
-		})
 	}
 
 	return grants, nil
@@ -84,25 +74,29 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 	}
 
 	for _, row := range rows {
-		principal := row.PrincipalUrn.String()
-		agentID, ok := agentIDByPrincipal[principal]
-		if !ok {
-			continue
+		agentID, known := agentIDByPrincipal[row.PrincipalUrn.String()]
+		grant, valid := normalizeAgentPolicyGrant(row)
+		if known && valid {
+			policies[agentID] = append(policies[agentID], grant)
 		}
-		scope := authz.Scope(row.Scope)
-		if ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
-			continue
-		}
-		selector, err := authz.SelectorFromRow(row.Selectors)
-		if err != nil || authz.ValidateSelector(scope, selector) != nil {
-			continue
-		}
-		policies[agentID] = append(policies[agentID], authz.Grant{
-			PrincipalUrn: principal,
-			Scope:        scope,
-			Selector:     selector,
-		})
 	}
 
 	return policies, nil
+}
+
+func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Grant, bool) {
+	var invalid authz.Grant
+	scope := authz.Scope(row.Scope)
+	if ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
+		return invalid, false
+	}
+	selector, err := authz.SelectorFromRow(row.Selectors)
+	if err != nil || authz.ValidateSelector(scope, selector) != nil {
+		return invalid, false
+	}
+	return authz.Grant{
+		PrincipalUrn: row.PrincipalUrn.String(),
+		Scope:        scope,
+		Selector:     selector,
+	}, true
 }
