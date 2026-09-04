@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/instances"
@@ -714,6 +715,18 @@ func newStartCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			authzProvisioner := authz.NewProvisioner(db)
 
+			siteURL, err := url.Parse(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("failed to parse site url: %w", err)
+			}
+
+			// Growth activities enrich against the primary rather than a read
+			// replica: these events describe a write that just happened, so
+			// replica lag would leave the new row unresolvable exactly when it
+			// is most interesting. The lookups are TTL-cached, so the cost is
+			// per active organization rather than per event.
+			growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -726,6 +739,7 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				growthEmitter,
 				cache.SuffixNone,
 			)
 
@@ -805,10 +819,6 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
-			siteURL, err := url.Parse(c.String("site-url"))
-			if err != nil {
-				return fmt.Errorf("failed to parse site url: %w", err)
-			}
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, siteURL.String())

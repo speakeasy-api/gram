@@ -22,12 +22,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -133,6 +135,7 @@ type Resolver struct {
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
+	growth        *growthsignals.Emitter
 }
 
 func NewResolver(
@@ -147,6 +150,7 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	growth *growthsignals.Emitter,
 	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
@@ -162,6 +166,7 @@ func NewResolver(
 		userRepo:      userRepo,
 		pylon:         pylon,
 		posthog:       posthog,
+		growth:        growth,
 	}
 }
 
@@ -310,6 +315,8 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		}); err != nil {
 			r.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
 		}
+
+		r.emitSignup(ctx, user.Email, user.DisplayName)
 	}
 
 	return user.ID, nil
@@ -689,4 +696,41 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		WorkOSUserID:         user.WorkosID.String,
 		WorkOSMembershipID:   membershipID,
 	}, nil
+}
+
+// emitSignup reports a first-time signup and says whether it was invited or
+// organic. The distinction is asked for at exactly this moment because it is
+// only knowable here: the user row has just been created, so a live invitation
+// addressed to them means somebody asked them to join, and its absence means
+// they arrived on their own. A moment later the invitation is accepted and the
+// evidence is gone.
+//
+// A failed lookup reports neither, rather than guessing "organic" and
+// overstating self-serve growth.
+func (r *Resolver) emitSignup(ctx context.Context, email, displayName string) {
+	extra := map[string]string{}
+	invited, err := r.orgRepo.HasPendingInvitationForEmail(ctx, email)
+	switch {
+	case err != nil:
+		r.logger.ErrorContext(ctx, "failed to classify signup source", attr.SlogError(err))
+	case invited:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceInvited
+	default:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceOrganic
+	}
+
+	r.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityUserSignedUp,
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      displayName,
+		SubjectName:    displayName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          extra,
+	})
 }
