@@ -97,6 +97,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1311,6 +1312,12 @@ func newStartCommand() *cli.Command {
 			}
 			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+			// Ordering invariant: recovery and context-enrichment middleware stay
+			// outside bandwidth metering so panics and pre-handler rejections are
+			// not billable and validated custom-domain context is available.
+			// Middleware outside this boundary must not consume request bodies or
+			// transform successful response bodies; those bytes would not be counted.
+			mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			// LiteLLM dispatch must run before canonical OTLP ingest because
