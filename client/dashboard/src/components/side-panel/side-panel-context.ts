@@ -30,10 +30,8 @@ export type SidePanelDescriptor =
       props: { sourceKind: "openapi" | "function"; assetId: string };
     });
 
-export const SIDE_PANEL_WIDTH_KEY = "gram.side-panel.width";
-
-// The panel opens at its widest and is only ever dragged narrower, so the
-// worst case a page has to reflow into is fixed at SIDE_PANEL_MAX_WIDTH.
+// The panel is always its maximum width, narrowing only when the viewport
+// cannot hold it, so this is also the worst case a page has to reflow into.
 export const SIDE_PANEL_MAX_WIDTH = 560;
 export const SIDE_PANEL_MIN_WIDTH = 360;
 

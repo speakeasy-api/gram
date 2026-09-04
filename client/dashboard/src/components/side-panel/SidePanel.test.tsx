@@ -13,18 +13,19 @@ vi.mock("./panel-kinds", () => ({
   SidePanelKind: ({ descriptor }: { descriptor: { kind: string } }) => (
     <div data-testid="panel-body">rendered {descriptor.kind}</div>
   ),
+  SidePanelKindHeaderAction: () => null,
 }));
 
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: mocks.useIsMobile,
 }));
 
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { SidePanelProvider, SidePanelSurface } from "./SidePanel";
 import {
   clampSidePanelWidth,
   SIDE_PANEL_MAX_WIDTH,
   SIDE_PANEL_MIN_WIDTH,
-  SIDE_PANEL_WIDTH_KEY,
   useSidePanel,
 } from "./side-panel-context";
 
@@ -49,6 +50,15 @@ function OpenButton(chrome: PanelChrome) {
   );
 }
 
+function NavigateButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => void navigate("/two")}>
+      navigate
+    </button>
+  );
+}
+
 // null opens a panel without that line, which a bare `undefined` cannot express
 // past the default.
 function harness(
@@ -56,10 +66,17 @@ function harness(
   chrome: Omit<PanelChrome, "subtitle"> = {},
 ) {
   return render(
-    <SidePanelProvider>
-      <OpenButton subtitle={subtitle ?? undefined} {...chrome} />
-      <SidePanelSurface />
-    </SidePanelProvider>,
+    <MemoryRouter initialEntries={["/one"]}>
+      <SidePanelProvider>
+        <OpenButton subtitle={subtitle ?? undefined} {...chrome} />
+        <NavigateButton />
+        <Routes>
+          <Route path="/one" element={null} />
+          <Route path="/two" element={null} />
+        </Routes>
+        <SidePanelSurface />
+      </SidePanelProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -210,76 +227,32 @@ describe("SidePanelSurface", () => {
     expect(screen.queryByRole("complementary")).toBeTruthy();
   });
 
-  it("resizes by keyboard and remembers the width", () => {
+  it("closes when the page it belongs to goes away", async () => {
     harness();
     fireEvent.click(screen.getByRole("button", { name: "open" }));
+    expect(screen.queryByRole("complementary")).toBeTruthy();
 
-    const handle = screen.getByRole("separator", { name: "Resize panel" });
-    // Right narrows: the panel grows leftwards, into the page.
-    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    fireEvent.click(screen.getByRole("button", { name: "navigate" }));
 
-    const narrowed = SIDE_PANEL_MAX_WIDTH - 16;
-    expect(
-      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
-        .width,
-    ).toBe(`${narrowed}px`);
-    expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBe(
-      String(narrowed),
-    );
+    await waitForElementToBeRemoved(() => screen.queryByRole("complementary"));
   });
 
-  it("resizes by dragging, committing the width only on release", () => {
+  it("closes on a click outside it, like every other sheet", async () => {
     harness();
     fireEvent.click(screen.getByRole("button", { name: "open" }));
 
-    const handle = screen.getByRole("separator", { name: "Resize panel" });
-    handle.setPointerCapture = () => {};
-    handle.releasePointerCapture = () => {};
+    fireEvent.pointerDown(document.body);
 
-    // Dispatched back to back, as they can arrive in one task: the handlers
-    // must not depend on a re-render having landed between them.
-    fireEvent.pointerDown(handle, { clientX: 800, pointerId: 1 });
-    fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
-
-    const narrowed = SIDE_PANEL_MAX_WIDTH - 100;
-    expect(
-      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
-        .width,
-    ).toBe(`${narrowed}px`);
-    expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBeNull();
-
-    fireEvent.pointerUp(handle, { clientX: 900, pointerId: 1 });
-
-    expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBe(
-      String(narrowed),
-    );
+    await waitForElementToBeRemoved(() => screen.queryByRole("complementary"));
   });
 
-  it("drops a drag the browser takes over, without committing its width", () => {
+  it("stays open for a pointer landing inside it", () => {
     harness();
     fireEvent.click(screen.getByRole("button", { name: "open" }));
 
-    const handle = screen.getByRole("separator", { name: "Resize panel" });
-    handle.setPointerCapture = () => {};
-    handle.releasePointerCapture = () => {};
+    fireEvent.pointerDown(screen.getByTestId("panel-body"));
 
-    fireEvent.pointerDown(handle, { clientX: 800, pointerId: 1 });
-    fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
-    fireEvent.pointerCancel(handle, { clientX: 900, pointerId: 1 });
-
-    const panelWidth = () =>
-      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
-        .width;
-
-    // Back to the stored width, and nothing persisted.
-    expect(panelWidth()).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
-    expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBeNull();
-
-    // The drag is over: a pointer merely passing over the grip afterwards must
-    // not carry on resizing from where it left off.
-    fireEvent.pointerMove(handle, { clientX: 1000, pointerId: 1 });
-
-    expect(panelWidth()).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
+    expect(screen.queryByRole("complementary")).toBeTruthy();
   });
 
   it("gives the viewport back on mobile, keeping the panel for when it widens", () => {
@@ -290,21 +263,5 @@ describe("SidePanelSurface", () => {
     // A phone viewport has no room to split: the panel's own minimum would
     // leave the page a sliver.
     expect(screen.queryByRole("complementary")).toBeNull();
-  });
-
-  it("will not let the keyboard push the panel past its bounds", () => {
-    harness();
-    fireEvent.click(screen.getByRole("button", { name: "open" }));
-
-    const handle = screen.getByRole("separator", { name: "Resize panel" });
-    fireEvent.keyDown(handle, { key: "ArrowLeft" });
-
-    expect(
-      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
-        .width,
-    ).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
-    expect(handle.getAttribute("aria-valuemin")).toBe(
-      String(SIDE_PANEL_MIN_WIDTH),
-    );
   });
 });

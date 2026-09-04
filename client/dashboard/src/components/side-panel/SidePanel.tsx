@@ -1,21 +1,17 @@
 import { Text } from "@/components/ui/Text";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { cn } from "@/lib/utils";
-import { BookOpen, ExternalLink, GripVertical, X } from "lucide-react";
+import { BookOpen, ExternalLink, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SidePanelKind } from "./panel-kinds";
+import { useLocation } from "react-router";
+import { SidePanelKind, SidePanelKindHeaderAction } from "./panel-kinds";
 import {
   clampSidePanelWidth,
   SIDE_PANEL_MAX_WIDTH,
-  SIDE_PANEL_MIN_WIDTH,
-  SIDE_PANEL_WIDTH_KEY,
   SidePanelContext,
   useSidePanel,
   type SidePanelDescriptor,
 } from "./side-panel-context";
-
-const KEYBOARD_STEP = 16;
 
 // Paired with `.side-panel-exit` in App.css: the panel has to stay mounted for
 // as long as its collapse takes, or the page would snap back to full width
@@ -25,10 +21,11 @@ const EXIT_MS = 200;
 /**
  * Holds the open panel for the whole project app.
  *
- * Mounted above the router outlet so a panel survives navigation: you can open
- * a setup guide on one page and keep reading it while you follow its steps on
- * another. `children` is the same element across state changes, so opening and
- * closing re-renders only the components that read this context, not the page.
+ * The panel belongs to the page that opened it, so navigating closes it: a
+ * sheet describing something on the page behind it is stale the moment that
+ * page goes away. `children` is the same element across state changes, so
+ * opening and closing re-renders only the components that read this context,
+ * not the page.
  */
 export function SidePanelProvider({
   children,
@@ -38,6 +35,11 @@ export function SidePanelProvider({
   const [descriptor, setDescriptor] = useState<SidePanelDescriptor | null>(
     null,
   );
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    setDescriptor(null);
+  }, [pathname]);
 
   const value = useMemo(
     () => ({
@@ -70,14 +72,8 @@ export function SidePanelSurface(): React.JSX.Element | null {
   // Trails the descriptor by one exit animation, so a closed panel keeps
   // rendering its last contents while it collapses.
   const [shown, setShown] = useState(descriptor);
-  const [storedWidth, setStoredWidth] = useLocalStorageState(
-    SIDE_PANEL_WIDTH_KEY,
-    SIDE_PANEL_MAX_WIDTH,
-  );
-  // Held separately from the stored width so a drag repaints every frame but
-  // only touches localStorage once, on release.
-  const [draggedWidth, setDraggedWidth] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
@@ -96,6 +92,20 @@ export function SidePanelSurface(): React.JSX.Element | null {
     return () => clearTimeout(timer);
   }, [descriptor]);
 
+  // Dismisses like every other sheet in the app: a click on the page behind
+  // it closes it. On pointerdown rather than click, so a press that starts
+  // outside and drags across the panel still counts as outside. Skipped while
+  // nothing is open so the app carries no listener it does not need.
+  useEffect(() => {
+    if (!descriptor) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const panel = panelRef.current;
+      if (panel && !panel.contains(event.target as Node)) closePanel();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [descriptor, closePanel]);
+
   // Nothing opens the panel on mobile, but a window narrowed after it opened
   // would leave the page a sliver: the panel's own minimum is wider than what
   // is left of a phone viewport. The descriptor is kept, so widening the window
@@ -104,13 +114,15 @@ export function SidePanelSurface(): React.JSX.Element | null {
 
   const closing = !descriptor;
 
-  const width = clampSidePanelWidth(draggedWidth ?? storedWidth, viewportWidth);
+  // One width, yielding only to a viewport too narrow to hold it.
+  const width = clampSidePanelWidth(SIDE_PANEL_MAX_WIDTH, viewportWidth);
 
   // Borderless, matching SidebarInset: the gutter and the shadow separate the
   // panel from the page exactly as they separate the page from the sidebar. A
   // border reads as a floating card sitting on top of the app.
   return (
     <aside
+      ref={panelRef}
       // The header's two lines read as one name: "Google BigQuery MCP setup guide".
       aria-label={[shown.title, shown.subtitle].filter(Boolean).join(" ")}
       inert={closing}
@@ -127,15 +139,6 @@ export function SidePanelSurface(): React.JSX.Element | null {
         if (event.key === "Escape") closePanel();
       }}
     >
-      <SidePanelResizeHandle
-        width={width}
-        onPreview={setDraggedWidth}
-        onCommit={(next) => {
-          setStoredWidth(next);
-          setDraggedWidth(null);
-        }}
-      />
-      {/* Clips inside the handle so the grip can sit out in the gutter. */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Held at the panel's finished width: only the aside's width animates,
             and contents that resized along with it would re-wrap every frame.
@@ -165,6 +168,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <SidePanelKindHeaderAction descriptor={shown} />
               {/* The panel holds a reading copy; this is where the same
                   material lives on the docs site. A new tab, so following it
                   does not abandon a half-finished setup behind it. */}
@@ -195,92 +199,5 @@ export function SidePanelSurface(): React.JSX.Element | null {
         </div>
       </div>
     </aside>
-  );
-}
-
-/**
- * The grip on the panel's leading edge, by pointer or by arrow key.
- *
- * Reports a width twice over a drag: `onPreview` for every frame in flight and
- * `onCommit` once on release, so the panel repaints continuously while only
- * the settled width is worth persisting. Keyboard steps land settled, so they
- * only commit. A preview of `null` discards a drag the browser took away.
- */
-function SidePanelResizeHandle({
-  width,
-  onPreview,
-  onCommit,
-}: {
-  width: number;
-  onPreview: (width: number | null) => void;
-  onCommit: (width: number) => void;
-}): React.JSX.Element {
-  const [dragging, setDragging] = useState(false);
-  // A ref, not state: pointerdown and pointermove can land in the same task,
-  // and a guard reading state would still see the pre-drag value.
-  const drag = useRef<{ x: number; width: number } | null>(null);
-
-  // The panel grows leftwards, into the page, so travel is measured backwards
-  // and ArrowLeft is the one that widens.
-  const resizeTo = (next: number) =>
-    clampSidePanelWidth(next, window.innerWidth);
-  const draggedTo = (start: { x: number; width: number }, clientX: number) =>
-    resizeTo(start.width + (start.x - clientX));
-
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      aria-valuenow={width}
-      aria-valuemin={SIDE_PANEL_MIN_WIDTH}
-      aria-valuemax={SIDE_PANEL_MAX_WIDTH}
-      tabIndex={0}
-      onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = { x: event.clientX, width };
-        setDragging(true);
-      }}
-      onPointerMove={(event) => {
-        const start = drag.current;
-        if (!start) return;
-        onPreview(draggedTo(start, event.clientX));
-      }}
-      onPointerUp={(event) => {
-        const start = drag.current;
-        if (!start) return;
-        event.currentTarget.releasePointerCapture(event.pointerId);
-        onCommit(draggedTo(start, event.clientX));
-        drag.current = null;
-        setDragging(false);
-      }}
-      // A drag the browser takes over (a touch that becomes a scroll, a device
-      // that goes away) ends here rather than at pointerup. Left unhandled, the
-      // handle keeps its start point, and the next pointer merely passing over
-      // the grip would carry on resizing with nothing held down. The in-flight
-      // width is dropped rather than committed: a canceled drag is not a width
-      // anyone chose.
-      onPointerCancel={() => {
-        drag.current = null;
-        setDragging(false);
-        onPreview(null);
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        const step = event.key === "ArrowLeft" ? KEYBOARD_STEP : -KEYBOARD_STEP;
-        onCommit(resizeTo(width + step));
-      }}
-      className="group absolute inset-y-0 -left-2 z-10 flex w-2 cursor-col-resize items-center justify-center outline-none"
-    >
-      <div
-        className={cn(
-          "bg-card text-muted-foreground group-hover:text-foreground group-focus-visible:border-primary flex h-8 w-4 items-center justify-center border shadow-sm",
-          dragging && "text-foreground",
-        )}
-      >
-        <GripVertical className="size-3.5" />
-      </div>
-    </div>
   );
 }
