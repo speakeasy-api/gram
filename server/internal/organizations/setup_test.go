@@ -291,7 +291,7 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	if useRealFeatures {
 		featureChecker = features
 	}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service:  svc,
@@ -349,7 +349,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 		"team_invite": "team-invite-test-id",
 	}), true)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

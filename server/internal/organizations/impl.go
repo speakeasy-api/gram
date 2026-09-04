@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -119,6 +120,7 @@ type Service struct {
 	trial             trialemails.Notifier
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
+	growth            *growthsignals.Emitter
 	serverURL         string // API server URL; used to build invite links
 	siteURL           string // frontend URL; used for post-callback browser redirects
 	audit             *audit.Logger
@@ -129,7 +131,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -150,6 +152,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trial:             trialNotifier,
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
+		growth:            growthEmitter,
 		serverURL:         serverURL,
 		siteURL:           siteURL,
 		audit:             auditLogger,
@@ -1497,6 +1500,21 @@ func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email
 	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{"created_via": "platform_admin_invite"}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set platform admin invite created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
+
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityOrganizationCreated,
+		OrganizationID: org.ID,
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      "",
+		SubjectName:    org.Name,
+		ActingSurface:  string(audit.SurfaceAdmin),
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{"created_via": "platform_admin_invite"},
+	})
 }
 
 func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invite orgrepo.OrganizationInvitation, org orgrepo.OrganizationMetadatum, gramUserID, workosUserID string) {
