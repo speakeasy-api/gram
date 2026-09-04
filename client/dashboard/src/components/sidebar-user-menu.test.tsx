@@ -7,6 +7,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  restoreLocation,
+  stubLocationReplace,
+} from "@/lib/stub-location-replace";
+
 const orgSlug = vi.hoisted(() => ({ current: "acme" }));
 const isPlatformAdmin = vi.hoisted(() => vi.fn(() => true));
 const exploreDemoGoTo = vi.hoisted(() => vi.fn());
@@ -104,6 +109,7 @@ afterEach(() => {
   isPlatformAdmin.mockReturnValue(true);
   exploreDemoGoTo.mockReset();
   logout.mockReset().mockResolvedValue(undefined);
+  restoreLocation();
 });
 
 describe("SidebarUserMenu", () => {
@@ -217,65 +223,29 @@ describe("SidebarUserMenu", () => {
   });
 
   it("logs out and leaves the page when Log out is clicked", async () => {
-    const originalLocation = window.location;
-    const replace = vi.fn();
-    // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
-    delete window.location;
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
-        ...originalLocation,
-        replace,
-      },
+    const replace = stubLocationReplace();
+
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+    fireEvent.click(screen.getByText("Log out"));
+
+    await vi.waitFor(() => {
+      expect(logout).toHaveBeenCalledOnce();
+      expect(replace).toHaveBeenCalledWith("/login");
     });
-
-    try {
-      render(<SidebarUserMenu />);
-      fireEvent.click(screen.getByTestId("user-menu-trigger"));
-      fireEvent.click(screen.getByText("Log out"));
-
-      await vi.waitFor(() => {
-        expect(logout).toHaveBeenCalledOnce();
-        expect(replace).toHaveBeenCalledWith("/login");
-      });
-    } finally {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        value: originalLocation,
-      });
-    }
   });
 
   it("still leaves the page when logout rejects", async () => {
-    logout.mockRejectedValueOnce(new Error("aborted"));
-    const originalLocation = window.location;
-    const replace = vi.fn();
-    // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
-    delete window.location;
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
-        ...originalLocation,
-        replace,
-      },
+    logout.mockRejectedValueOnce(new Error("network"));
+    const replace = stubLocationReplace();
+
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+    fireEvent.click(screen.getByText("Log out"));
+
+    await vi.waitFor(() => {
+      expect(replace).toHaveBeenCalledWith("/login");
     });
-
-    try {
-      render(<SidebarUserMenu />);
-      fireEvent.click(screen.getByTestId("user-menu-trigger"));
-      fireEvent.click(screen.getByText("Log out"));
-
-      await vi.waitFor(() => {
-        expect(replace).toHaveBeenCalledWith("/login");
-      });
-    } finally {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        value: originalLocation,
-      });
-    }
   });
 
   it("hides Explore demo org while already in the demo org", () => {
