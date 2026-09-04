@@ -2280,11 +2280,9 @@ trackedFiles:
   src/react-query/agentsDeletePolicyGrant.ts: {}
   src/react-query/agentsListPolicyGrants.core.ts: {}
   src/react-query/agentsListPolicyGrants.ts: {}
-  src/react-query/agentsReassign.ts: {}
   src/react-query/agentsResume.ts: {}
   src/react-query/agentsRevoke.ts: {}
   src/react-query/agentsSuspend.ts: {}
-  src/react-query/agentsTransfer.ts: {}
   src/react-query/agentsUpdatePolicyGrant.ts: {}
   src/react-query/aiDetections.core.ts: {}
   src/react-query/aiDetections.ts: {}
@@ -2817,6 +2815,7 @@ trackedFiles:
   src/react-query/publishPlugins.ts: {}
   src/react-query/publishStatus.core.ts: {}
   src/react-query/publishStatus.ts: {}
+  src/react-query/reassignAgent.ts: {}
   src/react-query/recheckPlatformMCPOnboardingReadiness.ts: {}
   src/react-query/recordMcpApprovalDecision.ts: {}
   src/react-query/recordPlatformMCPAgentConfigurationCopied.ts: {}
@@ -3064,6 +3063,7 @@ trackedFiles:
   src/react-query/toolVariationGroups.ts: {}
   src/react-query/toolset.core.ts: {}
   src/react-query/toolset.ts: {}
+  src/react-query/transferAgent.ts: {}
   src/react-query/trigger.core.ts: {}
   src/react-query/trigger.ts: {}
   src/react-query/triggerChatAnalysis.ts: {}

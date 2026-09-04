@@ -241,9 +241,9 @@ func (c *Client) ValidateIDToken(ctx context.Context, idToken string) (token *Va
 //  2. Posthog "is_first_time_user_signup" event — only fires when the upsert
 //     creates a fresh row. No-ops if posthog is nil.
 //  3. WorkOS membership sync — reconciles the user's WorkOS identity and
-//     organization-membership records. Best-effort; errors are logged and
-//     swallowed (RBAC features degrade gracefully without WorkOS data).
-//     No-ops if workos is nil.
+//     organization-membership records. WorkOS lookup failures are best-effort,
+//     but database reconciliation failures reject bootstrap so revoked access
+//     cannot survive a rolled-back owner-loss transaction. No-ops if workos is nil.
 //
 // Returns the upserted user row so callers don't need to re-query.
 func (c *Client) BootstrapUser(ctx context.Context, token *ValidatedToken) (row userRepo.UpsertUserRow, err error) {
@@ -276,19 +276,16 @@ func (c *Client) BootstrapUser(ctx context.Context, token *ValidatedToken) (row 
 	}
 
 	if err := c.syncWorkOSMemberships(ctx, row); err != nil {
-		// Per legacy contract: WorkOS sync errors are logged inside the helper
-		// and don't propagate. We only land here on a logic bug in the helper.
-		c.logger.ErrorContext(ctx, "workos membership sync returned error", attr.SlogError(err))
+		return userRepo.UpsertUserRow{}, fmt.Errorf("sync workos memberships: %w", err)
 	}
 
 	return row, nil
 }
 
 // syncWorkOSMemberships reconciles the user's WorkOS identity and membership
-// records against what WorkOS currently reports. Best-effort: failures are
-// logged and swallowed because WorkOS data only feeds RBAC features that
-// degrade gracefully without it. Mirrors the prior implementation in
-// auth/sessions/speakeasyconnections.go.
+// records against what WorkOS currently reports. WorkOS lookup failures remain
+// best-effort. Database failures propagate because membership loss and its
+// ownership latch must commit atomically.
 func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.UpsertUserRow) error {
 	if c.workos == nil {
 		return nil
@@ -335,35 +332,25 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 
 	tx, err := c.db.Begin(ctx)
 	if err != nil {
-		c.logger.ErrorContext(ctx, "failed to begin workos membership sync", attr.SlogError(err))
-		return nil
+		return fmt.Errorf("begin workos membership sync: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	qtx := orgRepo.New(tx)
-	lost, err := qtx.LockWorkOSMembershipsMissingFromSet(ctx, orgRepo.LockWorkOSMembershipsMissingFromSetParams{
-		UserID:       conv.ToPGText(user.ID),
-		WorkosOrgIds: workosOrgIDs,
-	})
-	if err != nil {
-		c.logger.ErrorContext(ctx, "failed to lock removed workos memberships", attr.SlogError(err))
-		return nil
-	}
-	if err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+	lost, err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              conv.ToPGText(user.ID),
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
-		c.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
-		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("set user workos memberships: %w", err)
 	}
 	for _, membership := range lost {
 		if err := agentownership.LatchOwnerLossByMembership(ctx, tx, membership.OrganizationID, user.ID, agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil); err != nil {
-			c.logger.ErrorContext(ctx, "failed to latch agent owner membership loss", attr.SlogError(err))
-			return nil
+			return fmt.Errorf("latch agent owner membership loss: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
-		c.logger.ErrorContext(ctx, "failed to commit workos membership sync", attr.SlogError(err))
+		return fmt.Errorf("commit workos membership sync: %w", err)
 	}
 
 	return nil

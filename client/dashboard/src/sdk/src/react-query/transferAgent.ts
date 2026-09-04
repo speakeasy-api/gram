@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsReassign } from "../funcs/agentsReassign.js";
+import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ReassignAgentRequest,
-  ReassignAgentSecurity,
-} from "../models/operations/reassignagent.js";
+  TransferAgentRequest,
+  TransferAgentSecurity,
+} from "../models/operations/transferagent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AgentsReassignMutationVariables = {
-  request: ReassignAgentRequest;
-  security?: ReassignAgentSecurity | undefined;
+export type TransferAgentMutationVariables = {
+  request: TransferAgentRequest;
+  security?: TransferAgentSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type AgentsReassignMutationData = ManagedAgent;
+export type TransferAgentMutationData = ManagedAgent;
 
-export type AgentsReassignMutationError =
+export type TransferAgentMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,46 +51,46 @@ export type AgentsReassignMutationError =
   | SDKValidationError;
 
 /**
- * reassign agents
+ * transfer agents
  */
-export function useAgentsReassignMutation(
+export function useTransferAgentMutation(
   options?: MutationHookOptions<
-    AgentsReassignMutationData,
-    AgentsReassignMutationError,
-    AgentsReassignMutationVariables
+    TransferAgentMutationData,
+    TransferAgentMutationError,
+    TransferAgentMutationVariables
   >,
 ): UseMutationResult<
-  AgentsReassignMutationData,
-  AgentsReassignMutationError,
-  AgentsReassignMutationVariables
+  TransferAgentMutationData,
+  TransferAgentMutationError,
+  TransferAgentMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAgentsReassignMutation(client, options),
+    ...buildTransferAgentMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAgentsReassign(): MutationKey {
-  return ["@gram/client", "agents", "reassign"];
+export function mutationKeyTransferAgent(): MutationKey {
+  return ["@gram/client", "agents", "transfer"];
 }
 
-export function buildAgentsReassignMutation(
+export function buildTransferAgentMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AgentsReassignMutationVariables,
-  ) => Promise<AgentsReassignMutationData>;
+    variables: TransferAgentMutationVariables,
+  ) => Promise<TransferAgentMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAgentsReassign(),
-    mutationFn: function agentsReassignMutationFn({
+    mutationKey: mutationKeyTransferAgent(),
+    mutationFn: function transferAgentMutationFn({
       request,
       security,
       options,
-    }): Promise<AgentsReassignMutationData> {
+    }): Promise<TransferAgentMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -103,7 +103,7 @@ export function buildAgentsReassignMutation(
           ),
         },
       };
-      return unwrapAsync(agentsReassign(
+      return unwrapAsync(agentsTransfer(
         client$,
         request,
         security,
