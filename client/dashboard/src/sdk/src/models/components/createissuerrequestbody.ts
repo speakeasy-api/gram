@@ -67,6 +67,10 @@ export type CreateIssuerRequestBody = {
    */
   registrationEndpoint?: string | undefined;
   /**
+   * Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.
+   */
+  resourceIndicatorSupported?: boolean | undefined;
+  /**
    * Response types advertised by the issuer.
    */
   responseTypesSupported?: Array<string> | undefined;
@@ -74,6 +78,10 @@ export type CreateIssuerRequestBody = {
    * Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
    */
   revocationEndpoint?: string | undefined;
+  /**
+   * Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+   */
+  scopeOverride?: Array<string> | undefined;
   /**
    * Scopes advertised by the issuer.
    */
@@ -113,8 +121,10 @@ export type CreateIssuerRequestBody$Outbound = {
   passthrough?: boolean | undefined;
   project_id?: string | undefined;
   registration_endpoint?: string | undefined;
+  resource_indicator_supported?: boolean | undefined;
   response_types_supported?: Array<string> | undefined;
   revocation_endpoint?: string | undefined;
+  scope_override?: Array<string> | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug: string;
@@ -143,8 +153,10 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     passthrough: z.optional(z.boolean()),
     projectId: z.optional(z.string()),
     registrationEndpoint: z.optional(z.string()),
+    resourceIndicatorSupported: z.optional(z.boolean()),
     responseTypesSupported: z.optional(z.array(z.string())),
     revocationEndpoint: z.optional(z.string()),
+    scopeOverride: z.optional(z.array(z.string())),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
@@ -165,8 +177,10 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       opTosUri: "op_tos_uri",
       projectId: "project_id",
       registrationEndpoint: "registration_endpoint",
+      resourceIndicatorSupported: "resource_indicator_supported",
       responseTypesSupported: "response_types_supported",
       revocationEndpoint: "revocation_endpoint",
+      scopeOverride: "scope_override",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",

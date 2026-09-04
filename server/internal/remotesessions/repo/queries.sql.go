@@ -426,6 +426,8 @@ SET
     claims_supported = NULL,
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
+    scope_override = NULL,
+    resource_indicator_supported = NULL,
     metadata = NULL,
     metadata_fetched_at = NULL,
     metadata_unreadable_url = NULL,
@@ -721,6 +723,8 @@ INSERT INTO remote_session_issuers (
     claims_supported,
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
+    scope_override,
+    resource_indicator_supported,
     metadata,
     metadata_fetched_at,
     metadata_unreadable_url,
@@ -762,11 +766,15 @@ VALUES (
     $26,
     $27,
     $28,
+    -- Operator knobs, nullable: NULL is "not set" for the scope override and
+    -- "not yet learned" for resource-indicator support.
     $29,
     $30,
     $31,
     $32,
-    $33
+    $33,
+    $34,
+    $35
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
@@ -800,6 +808,8 @@ type CreateRemoteSessionIssuerParams struct {
 	ClaimsSupported                            []string
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
+	ScopeOverride                              []string
+	ResourceIndicatorSupported                 pgtype.Bool
 	Metadata                                   []byte
 	MetadataFetchedAt                          pgtype.Timestamptz
 	MetadataUnreadableUrl                      pgtype.Text
@@ -846,6 +856,8 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.ClaimsSupported,
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
+		arg.ScopeOverride,
+		arg.ResourceIndicatorSupported,
 		arg.Metadata,
 		arg.MetadataFetchedAt,
 		arg.MetadataUnreadableUrl,
@@ -3911,7 +3923,11 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.scope_override                       AS scope_override,
     i.code_challenge_methods_supported     AS code_challenge_methods_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
+    i.metadata                             AS issuer_metadata,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_client_user_session_issuers AS link
@@ -3934,24 +3950,28 @@ type ListRemoteSessionClientsForUserSessionIssuerParams struct {
 }
 
 type ListRemoteSessionClientsForUserSessionIssuerRow struct {
-	ClientID                      uuid.UUID
-	ExternalClientID              string
-	ClientSecretEncrypted         pgtype.Text
-	TokenEndpointAuthMethod       pgtype.Text
-	ClientScope                   []string
-	ClientAudience                pgtype.Text
-	LegacyCallbackUrl             bool
-	RemoteSessionIssuerID         uuid.UUID
-	IssuerSlug                    string
-	IssuerName                    pgtype.Text
-	IssuerLogoAssetID             uuid.NullUUID
-	IssuerUrl                     string
-	AuthorizationEndpoint         pgtype.Text
-	TokenEndpoint                 pgtype.Text
-	ScopesSupported               []string
-	CodeChallengeMethodsSupported []string
-	Passthrough                   bool
-	Oidc                          bool
+	ClientID                                   uuid.UUID
+	ExternalClientID                           string
+	ClientSecretEncrypted                      pgtype.Text
+	TokenEndpointAuthMethod                    pgtype.Text
+	ClientScope                                []string
+	ClientAudience                             pgtype.Text
+	LegacyCallbackUrl                          bool
+	RemoteSessionIssuerID                      uuid.UUID
+	IssuerSlug                                 string
+	IssuerName                                 pgtype.Text
+	IssuerLogoAssetID                          uuid.NullUUID
+	IssuerUrl                                  string
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	ScopesSupported                            []string
+	ScopeOverride                              []string
+	CodeChallengeMethodsSupported              []string
+	ResourceIndicatorSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	IssuerMetadata                             []byte
+	Passthrough                                bool
+	Oidc                                       bool
 }
 
 // Joined client + issuer view used by the consent renderer and the
@@ -3985,7 +4005,11 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.AuthorizationEndpoint,
 			&i.TokenEndpoint,
 			&i.ScopesSupported,
+			&i.ScopeOverride,
 			&i.CodeChallengeMethodsSupported,
+			&i.ResourceIndicatorSupported,
+			&i.AuthorizationResponseIssParameterSupported,
+			&i.IssuerMetadata,
 			&i.Passthrough,
 			&i.Oidc,
 		); err != nil {
@@ -4277,6 +4301,7 @@ SELECT
   s.remote_session_client_id,
   s.auto_refresh,
   s.resource,
+  s.scopes,
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
@@ -4317,6 +4342,7 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	RemoteSessionClientID  uuid.UUID
 	AutoRefresh            bool
 	Resource               pgtype.Text
+	Scopes                 []string
 	AccessExpiresAt        pgtype.Timestamptz
 	AuthorizationExpiresAt pgtype.Timestamptz
 	RefreshExpiresAt       pgtype.Timestamptz
@@ -4375,6 +4401,7 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.RemoteSessionClientID,
 			&i.AutoRefresh,
 			&i.Resource,
+			&i.Scopes,
 			&i.AccessExpiresAt,
 			&i.AuthorizationExpiresAt,
 			&i.RefreshExpiresAt,
@@ -5253,6 +5280,40 @@ func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg S
 	return i, err
 }
 
+const setRemoteSessionIssuerResourceIndicatorSupported = `-- name: SetRemoteSessionIssuerResourceIndicatorSupported :execrows
+UPDATE remote_session_issuers
+SET resource_indicator_supported = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND (project_id = $3::uuid OR (project_id IS NULL AND organization_id = $4::text))
+  AND deleted IS FALSE
+`
+
+type SetRemoteSessionIssuerResourceIndicatorSupportedParams struct {
+	ResourceIndicatorSupported bool
+	ID                         uuid.UUID
+	ProjectID                  uuid.UUID
+	OrganizationID             string
+}
+
+// Records what a completed login taught the remote-login callback about RFC
+// 8707 support. Scoped to rows the login's tenant owns: the project's own
+// issuers and its organization's. Platform-catalog rows are shared across
+// tenants and are never written from a login flow; the callback logs those
+// for an operator to set instead.
+func (q *Queries) SetRemoteSessionIssuerResourceIndicatorSupported(ctx context.Context, arg SetRemoteSessionIssuerResourceIndicatorSupportedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerResourceIndicatorSupported,
+		arg.ResourceIndicatorSupported,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec
 UPDATE remote_sessions s
 SET updated_at = $1
@@ -5647,10 +5708,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    -- An empty array clears the override to NULL ("not set"); an omitted narg
+    -- keeps it. resource_indicator_supported has no clear path: an operator
+    -- states a fact or leaves the learned one alone.
+    scope_override = CASE
+        WHEN $20::text[] IS NULL THEN scope_override
+        WHEN cardinality($20::text[]) = 0 THEN NULL
+        ELSE $20::text[]
+    END,
+    resource_indicator_supported = COALESCE($21, resource_indicator_supported),
+    oidc = COALESCE($22, oidc),
+    passthrough = COALESCE($23, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $24 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
@@ -5674,6 +5744,8 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
+	ScopeOverride                     []string
+	ResourceIndicatorSupported        pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
@@ -5702,6 +5774,8 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.ScopeOverride,
+		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,
@@ -5878,10 +5952,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    -- An empty array clears the override to NULL ("not set"); an omitted narg
+    -- keeps it. resource_indicator_supported has no clear path: an operator
+    -- states a fact or leaves the learned one alone.
+    scope_override = CASE
+        WHEN $20::text[] IS NULL THEN scope_override
+        WHEN cardinality($20::text[]) = 0 THEN NULL
+        ELSE $20::text[]
+    END,
+    resource_indicator_supported = COALESCE($21, resource_indicator_supported),
+    oidc = COALESCE($22, oidc),
+    passthrough = COALESCE($23, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND organization_id = $23 AND deleted IS FALSE
+WHERE id = $24 AND organization_id = $25 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
@@ -5905,6 +5988,8 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
+	ScopeOverride                     []string
+	ResourceIndicatorSupported        pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
@@ -5934,6 +6019,8 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.ScopeOverride,
+		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,
@@ -6140,10 +6227,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    -- An empty array clears the override to NULL ("not set"); an omitted narg
+    -- keeps it. resource_indicator_supported has no clear path: an operator
+    -- states a fact or leaves the learned one alone.
+    scope_override = CASE
+        WHEN $20::text[] IS NULL THEN scope_override
+        WHEN cardinality($20::text[]) = 0 THEN NULL
+        ELSE $20::text[]
+    END,
+    resource_indicator_supported = COALESCE($21, resource_indicator_supported),
+    oidc = COALESCE($22, oidc),
+    passthrough = COALESCE($23, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND project_id = $23 AND deleted IS FALSE
+WHERE id = $24 AND project_id = $25 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_unreadable_url, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
@@ -6167,6 +6263,8 @@ type UpdateRemoteSessionIssuerParams struct {
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
+	ScopeOverride                     []string
+	ResourceIndicatorSupported        pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
@@ -6203,6 +6301,8 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.ScopeOverride,
+		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,

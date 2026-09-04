@@ -68250,6 +68250,9 @@ components:
                 registration_endpoint:
                     type: string
                     description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+                resource_indicator_supported:
+                    type: boolean
+                    description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.'
                 response_types_supported:
                     type: array
                     items:
@@ -68258,6 +68261,11 @@ components:
                 revocation_endpoint:
                     type: string
                     description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+                scope_override:
+                    type: array
+                    items:
+                        type: string
+                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
                 scopes_supported:
                     type: array
                     items:
@@ -68744,6 +68752,9 @@ components:
                 registration_endpoint:
                     type: string
                     description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+                resource_indicator_supported:
+                    type: boolean
+                    description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.'
                 response_types_supported:
                     type: array
                     items:
@@ -68752,6 +68763,11 @@ components:
                 revocation_endpoint:
                     type: string
                     description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+                scope_override:
+                    type: array
+                    items:
+                        type: string
+                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
                 scopes_supported:
                     type: array
                     items:
@@ -80592,6 +80608,9 @@ components:
                 registration_endpoint:
                     type: string
                     description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+                resource_indicator_supported:
+                    type: boolean
+                    description: Whether the issuer accepts the RFC 8707 resource parameter. Null until learned. False once a login succeeded only after the resource parameter was dropped, or when an operator states it.
                 response_types_supported:
                     type: array
                     items:
@@ -80599,6 +80618,11 @@ components:
                 revocation_endpoint:
                     type: string
                     description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+                scope_override:
+                    type: array
+                    items:
+                        type: string
+                    description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
                 scopes_supported:
                     type: array
                     items:
@@ -80702,6 +80726,9 @@ components:
                 registration_endpoint:
                     type: string
                     description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+                resource_indicator_supported:
+                    type: boolean
+                    description: Whether the issuer accepts the RFC 8707 resource parameter. Never proposed by discovery, so always null on a draft.
                 response_types_supported:
                     type: array
                     items:
@@ -80709,6 +80736,11 @@ components:
                 revocation_endpoint:
                     type: string
                     description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+                scope_override:
+                    type: array
+                    items:
+                        type: string
+                    description: Operator-pinned scope request. Never proposed by discovery, so always null on a draft.
                 scopes_supported:
                     type: array
                     items:
@@ -89378,6 +89410,9 @@ components:
                 registration_endpoint:
                     type: string
                     description: Upstream RFC 7591 registration endpoint.
+                resource_indicator_supported:
+                    type: boolean
+                    description: Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.
                 response_types_supported:
                     type: array
                     items:
@@ -89385,6 +89420,11 @@ components:
                 revocation_endpoint:
                     type: string
                     description: Upstream RFC 7009 revocation endpoint.
+                scope_override:
+                    type: array
+                    items:
+                        type: string
+                    description: Set or clear the operator-pinned scope request. Omitting the field leaves the stored value unchanged; an empty array clears it.
                 scopes_supported:
                     type: array
                     items:

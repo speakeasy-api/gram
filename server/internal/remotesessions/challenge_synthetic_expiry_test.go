@@ -165,9 +165,85 @@ type syntheticExpiryEnv struct {
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
+	issuerID       uuid.UUID
 	clientID       uuid.UUID
 	subject        urn.SessionSubject
 	session        repo.RemoteSession
+	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
+	// for the login, so a test can assert on its query parameters.
+	authURL string
+}
+
+// callback drives HandleRemoteLoginCallback with the given query string, as
+// the upstream provider's redirect would.
+func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+rawQuery, nil)
+	w := httptest.NewRecorder()
+	err := env.mgr.HandleRemoteLoginCallback(w, req)
+	if err != nil {
+		err = fmt.Errorf("handle remote login callback: %w", err)
+	}
+	return w, err
+}
+
+// syntheticLoginOptions shapes the issuer, client, and callback of a
+// synthetic login; the zero value is the plain AIS-115 fixture.
+type syntheticLoginOptions struct {
+	issuerScopes               []string
+	clientScope                []string
+	scopeOverride              []string
+	issParameterSupported      pgtype.Bool
+	resourceIndicatorSupported pgtype.Bool
+	resource                   string
+	callbackQuery              func(url.Values)
+	// issuerMetadata is the discovery document stored on the issuer row.
+	issuerMetadata []byte
+	// globalIssuer creates the issuer in the platform catalog (no project, no
+	// organization) instead of the test project.
+	globalIssuer bool
+}
+
+type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withIssuerScopes(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
+}
+
+func withClientScope(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.clientScope = scopes }
+}
+
+func withScopeOverride(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.scopeOverride = scopes }
+}
+
+func withIssParameterSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issParameterSupported = pgtype.Bool{Bool: supported, Valid: true} }
+}
+
+func withResourceIndicatorSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) {
+		o.resourceIndicatorSupported = pgtype.Bool{Bool: supported, Valid: true}
+	}
+}
+
+func withResource(resource string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.resource = resource }
+}
+
+func withIssuerMetadata(document string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadata = []byte(document) }
+}
+
+func withGlobalIssuer() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.globalIssuer = true }
+}
+
+// withCallbackQuery edits the query the provider's redirect carries before the
+// callback reads it; code and state are already set.
+func withCallbackQuery(edit func(url.Values)) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.callbackQuery = edit }
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -175,10 +251,10 @@ type syntheticExpiryEnv struct {
 // HandleRemoteLoginCallback, returning the request context plus the persisted
 // remote_sessions row and the handles needed to resolve it. slugSuffix keeps
 // fixtures unique per test.
-func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv) {
+func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv) {
 	t.Helper()
 
-	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler)
+	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler, opts...)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, callback.Code)
 
@@ -196,8 +272,13 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 // callback. The callback's recorder and error come back unasserted, so a test
 // can exercise a code exchange the callback is expected to reject; the
 // returned env carries no session row.
-func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
+func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
 	t.Helper()
+
+	options := syntheticLoginOptions{issuerScopes: []string{"channels:history"}}
+	for _, opt := range opts {
+		opt(&options)
+	}
 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -231,8 +312,15 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
 
 	q := repo.New(ti.conn)
+	issuerProject := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	issuerOrganization := conv.ToPGText(authCtx.ActiveOrganizationID)
+	if options.globalIssuer {
+		issuerProject = uuid.NullUUID{}
+		issuerOrganization = pgtype.Text{}
+	}
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ProjectID:                         issuerProject,
+		OrganizationID:                    issuerOrganization,
 		Slug:                              "synthetic-expiry-issuer-" + slugSuffix,
 		Issuer:                            "https://idp.example.com",
 		Name:                              pgtype.Text{String: "", Valid: false},
@@ -241,12 +329,16 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
 		JwksUri:                           pgtype.Text{String: "", Valid: false},
-		ScopesSupported:                   []string{"channels:history"},
+		ScopesSupported:                   options.issuerScopes,
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"none"},
 		Oidc:                              false,
 		Passthrough:                       false,
+		AuthorizationResponseIssParameterSupported: options.issParameterSupported,
+		ScopeOverride:              options.scopeOverride,
+		ResourceIndicatorSupported: options.resourceIndicatorSupported,
+		Metadata:                   options.issuerMetadata,
 	})
 	require.NoError(t, err)
 
@@ -261,7 +353,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
-		Scope:                   nil,
+		Scope:                   options.clientScope,
 	})
 	require.NoError(t, err)
 
@@ -286,6 +378,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Subject:             &subject,
 		McpSlug:             "synthetic-mcp-" + slugSuffix,
 		FinalRedirectURI:    "",
+		Resource:            options.resource,
 	}, clients[0])
 	require.NoError(t, err)
 
@@ -296,15 +389,13 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	// The upstream code is single-use and opaque to the mock; any non-empty
 	// value drives exchangeCode against the token server.
-	cbReq := httptest.NewRequest(http.MethodGet,
-		"/mcp/remote_login_callback?code=upstream-code&state="+url.QueryEscape(state), nil)
-	cbW := httptest.NewRecorder()
-	callbackErr := mgr.HandleRemoteLoginCallback(cbW, cbReq)
-	if callbackErr != nil {
-		callbackErr = fmt.Errorf("handle remote login callback: %w", callbackErr)
+	cbQuery := url.Values{}
+	cbQuery.Set("code", "upstream-code")
+	cbQuery.Set("state", state)
+	if options.callbackQuery != nil {
+		options.callbackQuery(cbQuery)
 	}
-
-	return ctx, syntheticExpiryEnv{
+	env := syntheticExpiryEnv{
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
@@ -313,7 +404,13 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
+		issuerID:       issuer.ID,
 		clientID:       client.ID,
 		subject:        subject,
-	}, cbW, callbackErr
+		session:        repo.RemoteSession{},
+		authURL:        authURL,
+	}
+	cbW, callbackErr := env.callback(t, cbQuery.Encode())
+
+	return ctx, env, cbW, callbackErr
 }

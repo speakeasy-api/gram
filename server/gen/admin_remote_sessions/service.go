@@ -200,6 +200,14 @@ type CreateGlobalIssuerPayload struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unknown until learned: Gram records false once a login succeeded only after
+	// the resource parameter was dropped.
+	ResourceIndicatorSupported *bool
 }
 
 // DeleteGlobalClientPayload is the payload type of the adminRemoteSessions
@@ -492,6 +500,12 @@ type UpdateGlobalIssuerPayload struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool
+	// Set or clear the operator-pinned scope request. Omitting the field leaves
+	// the stored value unchanged; an empty array clears it.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

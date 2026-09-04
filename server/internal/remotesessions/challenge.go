@@ -33,6 +33,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -121,8 +123,42 @@ type RemoteLoginState struct {
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
-	AutoRefresh *bool     `json:"auto_refresh,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	AutoRefresh *bool `json:"auto_refresh,omitempty"`
+	// Scopes is the scope set requested on the authorize redirect. It is
+	// recorded on the session when the token response omits scope, which RFC
+	// 6749 §5.1 defines as "identical to the scope requested".
+	Scopes []string `json:"scopes,omitempty"`
+	// OmitResource keeps Resource off the authorize redirect and the code
+	// exchange while still recording it on the session, for issuers known to
+	// reject RFC 8707. False for in-flight states minted before this field.
+	OmitResource bool `json:"omit_resource,omitempty"`
+	// ResourceRetried marks the single retry leg the callback mints after an
+	// invalid_target answer. A retry leg that is refused again fails the login.
+	ResourceRetried bool `json:"resource_retried,omitempty"`
+	// ExpectedIssuer is the issuer identifier the RFC 9207 iss callback
+	// parameter must equal. Empty skips the check: the issuer does not
+	// advertise the parameter, or the state predates the field.
+	ExpectedIssuer string `json:"expected_issuer,omitempty"`
+	// IssuerURL is the stored issuer URL, carried for the callback's logs.
+	IssuerURL string    `json:"issuer_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// parent rebuilds the ParentChallenge this state was minted from, so the
+// callback can mint a sibling leg for the same login.
+func (s RemoteLoginState) parent() ParentChallenge {
+	return ParentChallenge{
+		ID:                  s.ParentChallengeID,
+		ProjectID:           s.ProjectID,
+		OrganizationID:      s.OrganizationID,
+		UserSessionIssuerID: s.UserSessionIssuerID,
+		Subject:             s.Subject,
+		McpSlug:             s.McpSlug,
+		RouteBase:           s.RouteBase,
+		FinalRedirectURI:    s.FinalRedirectURI,
+		Resource:            s.Resource,
+		AutoRefresh:         s.AutoRefresh,
+	}
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -206,13 +242,34 @@ type Client struct {
 	// store, invalid when the issuer has no logo.
 	IssuerLogoAssetID uuid.NullUUID
 
-	IssuerURL             string
+	IssuerURL string
+
+	// IssuerIdentifier is the issuer identifier the authorization server
+	// advertises in its discovery document, falling back to IssuerURL when no
+	// document is stored. It is what an RFC 9207 iss parameter must equal.
+	IssuerIdentifier string
+
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	// ClientScope, when non-empty, overrides IssuerScopesSupported in the
-	// OAuth dance.
+	// ClientScope is the client's stored scope: the protected resource's
+	// scopes_supported copied at registration, or an operator's explicit
+	// choice. Non-empty, it is the base of the requested scope set in place
+	// of IssuerScopesSupported.
 	ClientScope           []string
 	IssuerScopesSupported []string
+
+	// IssuerScopeOverride is the operator-pinned scope request on the issuer.
+	// Nil when unset; set, it is requested verbatim.
+	IssuerScopeOverride []string
+
+	// IssuerResourceIndicatorSupported is whether the issuer accepts the RFC
+	// 8707 resource parameter. Nil means not yet learned, which sends it.
+	IssuerResourceIndicatorSupported *bool
+
+	// IssuerAuthorizationResponseIssParameterSupported is whether the issuer
+	// advertises the RFC 9207 iss parameter on authorization responses, in
+	// which case the callback requires and validates it.
+	IssuerAuthorizationResponseIssParameterSupported bool
 
 	// IssuerCodeChallengeMethodsSupported carries the issuer's stored
 	// code_challenge_methods_supported for flow-time PKCE telemetry. Nil means
@@ -230,11 +287,43 @@ type Client struct {
 	LegacyCallbackUrl bool
 }
 
-func (c Client) resolveScopes() []string {
-	if len(c.ClientScope) > 0 {
-		return c.ClientScope
+// standardScopes are the OpenID Connect and OAuth scopes the dance always
+// asks for when the issuer advertises them: openid, email and profile give
+// the session an identity, and offline_access is what several providers
+// require before they issue a refresh token.
+var standardScopes = []string{"openid", "email", "profile", "offline_access"}
+
+// RequestedScopes resolves the scope set sent on the authorize redirect.
+//
+// Precedence:
+//  1. IssuerScopeOverride, when set, is requested verbatim.
+//  2. Otherwise the base is ClientScope when non-empty, else
+//     IssuerScopesSupported.
+//  3. Each of openid, email, profile and offline_access is appended to the
+//     base when IssuerScopesSupported advertises it and the base lacks it.
+//
+// widened lists what step 3 added on top of a non-empty ClientScope, so the
+// caller can flag that a scope an operator narrowed is being widened.
+func (c Client) RequestedScopes() (scopes []string, widened []string) {
+	if c.IssuerScopeOverride != nil {
+		return slices.Clone(c.IssuerScopeOverride), nil
 	}
-	return c.IssuerScopesSupported
+	base := c.IssuerScopesSupported
+	narrowed := len(c.ClientScope) > 0
+	if narrowed {
+		base = c.ClientScope
+	}
+	scopes = slices.Clone(base)
+	for _, scope := range standardScopes {
+		if slices.Contains(scopes, scope) || !slices.Contains(c.IssuerScopesSupported, scope) {
+			continue
+		}
+		scopes = append(scopes, scope)
+		if narrowed {
+			widened = append(widened, scope)
+		}
+	}
+	return scopes, widened
 }
 
 // ListClients returns the joined client + issuer rows linked to a user
@@ -253,22 +342,26 @@ func (m *ChallengeManager) ListClients(
 	out := make([]Client, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Client{
-			ID:                                  r.ClientID,
-			RemoteSessionIssuerID:               r.RemoteSessionIssuerID,
-			ExternalClientID:                    r.ExternalClientID,
-			ClientSecretEncrypted:               conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:                          r.IssuerSlug,
-			IssuerName:                          conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:                   r.IssuerLogoAssetID,
-			IssuerURL:                           r.IssuerUrl,
-			AuthorizationEndpoint:               conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:                       conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:                         r.ClientScope,
-			IssuerScopesSupported:               r.ScopesSupported,
-			IssuerCodeChallengeMethodsSupported: r.CodeChallengeMethodsSupported,
-			Audience:                            conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:                         r.Passthrough,
-			LegacyCallbackUrl:                   r.LegacyCallbackUrl,
+			ID:                               r.ClientID,
+			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
+			ExternalClientID:                 r.ExternalClientID,
+			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
+			IssuerSlug:                       r.IssuerSlug,
+			IssuerName:                       conv.FromPGText[string](r.IssuerName),
+			IssuerLogoAssetID:                r.IssuerLogoAssetID,
+			IssuerURL:                        r.IssuerUrl,
+			IssuerIdentifier:                 conv.Default(rawDocumentIssuer(r.IssuerMetadata), r.IssuerUrl),
+			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+			ClientScope:                      r.ClientScope,
+			IssuerScopesSupported:            r.ScopesSupported,
+			IssuerScopeOverride:              r.ScopeOverride,
+			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
+			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
+			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
+			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+			Passthrough:                                      r.Passthrough,
+			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
 		})
 	}
 	return out, nil
@@ -310,6 +403,9 @@ type RemoteSessionState struct {
 	CanRefresh             bool
 	// Resource is the RFC 8707 resource recorded on the grant, if any.
 	Resource string
+	// Scopes is the scope set the grant carries, as the provider reported it
+	// at exchange time or, when it reported none, as it was requested.
+	Scopes []string
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -364,6 +460,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			CanRefresh:             row.CanRefresh,
 			Resource:               row.Resource.String,
+			Scopes:                 row.Scopes,
 		}
 	}
 	return statuses, nil
@@ -489,9 +586,23 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
+	return m.mintAuthorization(ctx, parent, client, false)
+}
+
+// mintAuthorization is BuildAuthorizationUrl with the retry marker the
+// callback sets on the one leg it mints itself after an invalid_target answer.
+func (m *ChallengeManager) mintAuthorization(
+	ctx context.Context,
+	parent ParentChallenge,
+	client Client,
+	resourceRetried bool,
+) (string, error) {
 	// Counted at entry, before any validation or the Redis write, so a flow
-	// that dies on an unrelated error here still lands in the census.
-	m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+	// that dies on an unrelated error here still lands in the census. A retry
+	// leg is the same login and is not counted again.
+	if !resourceRetried {
+		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+	}
 
 	if client.AuthorizationEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
@@ -531,6 +642,26 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
+	scopes, widened := client.RequestedScopes()
+	if len(widened) > 0 {
+		m.logger.InfoContext(ctx, "requested scope widens the client's configured scope",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthScopeAdded(strings.Join(widened, " ")),
+		)
+	}
+	// The resource is still recorded on the session either way: a grant with
+	// no resource is unroutable, and the issuer refusing the parameter says
+	// nothing about which upstream the grant is for.
+	omitResource := parent.Resource != "" && client.IssuerResourceIndicatorSupported != nil && !*client.IssuerResourceIndicatorSupported
+	expectedIssuer := ""
+	if client.IssuerAuthorizationResponseIssParameterSupported {
+		expectedIssuer = client.IssuerIdentifier
+	}
+
 	state := RemoteLoginState{
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
@@ -547,6 +678,11 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		RouteBase:             parent.RouteBase,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		AutoRefresh:           parent.AutoRefresh,
+		Scopes:                scopes,
+		OmitResource:          omitResource,
+		ResourceRetried:       resourceRetried,
+		ExpectedIssuer:        expectedIssuer,
+		IssuerURL:             client.IssuerURL,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -560,13 +696,13 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	q.Set("state", stateParam)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
-	if scopes := client.resolveScopes(); len(scopes) > 0 {
+	if len(scopes) > 0 {
 		q.Set("scope", strings.Join(scopes, " "))
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
 	}
-	if parent.Resource != "" {
+	if parent.Resource != "" && !omitResource {
 		q.Set("resource", parent.Resource)
 	}
 	for _, ic := range m.authorizeInterceptors {
@@ -591,26 +727,24 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	logger := m.logger
 
 	q := r.URL.Query()
-	if errCode := q.Get("error"); errCode != "" {
-		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
-			attr.SlogOAuthError(errCode),
-			attr.SlogOAuthErrorDescription(q.Get("error_description")),
-		)
-	}
+	errCode := q.Get("error")
 	stateID := q.Get("state")
 	if stateID == "" {
+		if errCode != "" {
+			return denied(ctx, logger, q)
+		}
 		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
-	}
-	code := q.Get("code")
-	if code == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Single-use state: GETDEL so a duplicate callback can't double-exchange
 	// the code. The upstream code itself is also single-use, but defense in
-	// depth keeps the failure mode obvious.
+	// depth keeps the failure mode obvious. A denial is read after the state
+	// is consumed, so the issuer that answered it is known.
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
+		if errCode != "" {
+			return denied(ctx, logger, q)
+		}
 		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
 	mcpSlug := state.McpSlug
@@ -633,6 +767,28 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	)
 	if state.Resource != "" {
 		logger = logger.With(attr.SlogOAuthResource(state.Resource))
+	}
+
+	// RFC 9207 §2.4: an issuer that advertises iss on authorization responses
+	// must send it, and it must name the issuer this leg was started against.
+	// Checked before anything is trusted from the response, denial included,
+	// so a mixed-up or forged answer neither burns the code nor teaches Gram
+	// anything about the issuer.
+	if state.ExpectedIssuer != "" && q.Get("iss") != state.ExpectedIssuer {
+		return oops.E(oops.CodeUnauthorized, nil, "remote login callback did not identify the expected issuer").LogWarn(ctx, logger,
+			attr.SlogOAuthIssuer(state.ExpectedIssuer),
+		)
+	}
+
+	if errCode != "" {
+		if errCode == oautherr.CodeInvalidTarget {
+			return m.retryWithoutResource(ctx, w, r, logger, state, oautherr.RFC6749Error{Code: errCode, Description: q.Get("error_description"), URI: q.Get("error_uri")})
+		}
+		return denied(ctx, logger, q)
+	}
+	code := q.Get("code")
+	if code == "" {
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
@@ -670,6 +826,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
+		var oauthErr oautherr.RFC6749Error
+		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
+			return m.retryWithoutResource(ctx, w, r, logger, state, err)
+		}
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 
@@ -729,7 +889,12 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()
 	authorizationExpires := expirationDeadline(now, authorizationLifetime, authorizationLifetimeReported)
 
+	// RFC 6749 §5.1: a response that omits scope granted exactly what was
+	// requested, so the requested set is what the session records.
 	scopes := tok.Scopes()
+	if len(scopes) == 0 {
+		scopes = state.Scopes
+	}
 	if scopes == nil {
 		scopes = []string{}
 	}
@@ -797,6 +962,30 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
+	// A login that succeeded only once the resource parameter was dropped is
+	// the one evidence that the issuer rejects RFC 8707, and the one a user
+	// cannot forge from the browser, so it is what gets recorded. Tenant-owned
+	// issuers are written; a platform-catalog issuer is shared across tenants
+	// and is only reported, for an operator to set.
+	if state.ResourceRetried && state.OmitResource {
+		n, err := txQueries.SetRemoteSessionIssuerResourceIndicatorSupported(ctx, remotesessions_repo.SetRemoteSessionIssuerResourceIndicatorSupportedParams{
+			ResourceIndicatorSupported: false,
+			ID:                         client.RemoteSessionIssuerID,
+			ProjectID:                  state.ProjectID,
+			OrganizationID:             state.OrganizationID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record resource indicator support").LogError(ctx, logger)
+		}
+		if n == 0 {
+			logger.WarnContext(ctx, "platform-catalog identity provider rejects the RFC 8707 resource parameter; set resource_indicator_supported on it",
+				attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
+				attr.SlogOAuthIssuer(state.IssuerURL),
+				attr.SlogOrganizationID(state.OrganizationID),
+			)
+		}
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
@@ -811,6 +1000,59 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		redirect = state.FinalRedirectURI
 	}
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	return nil
+}
+
+// denied turns an RFC 6749 §4.1.2.1 error redirect into the callback's
+// rejection.
+func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
+	errCode := q.Get("error")
+	return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
+		attr.SlogOAuthError(errCode),
+		attr.SlogOAuthErrorDescription(q.Get("error_description")),
+	)
+}
+
+// retryWithoutResource is the one recovery the callback makes from an
+// invalid_target answer, whether it arrived on the authorize redirect or from
+// the token endpoint: mint a fresh leg of the same login that keeps the
+// resource off the wire and send the user back through the provider. It runs
+// at most once per login. A leg that never sent the resource, or that already
+// is the retry, is refused like any other denial, so an issuer answering
+// invalid_target for some other reason cannot loop the user.
+//
+// Nothing is persisted here. The answer on the authorize redirect is a query
+// string anyone holding a live state can craft, so the issuer's flag is only
+// written once the retry leg's own code exchange succeeds.
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, state RemoteLoginState, cause error) error {
+	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
+	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
+		return oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+	}
+
+	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
+	}
+	idx := slices.IndexFunc(clients, func(c Client) bool { return c.ID == state.RemoteSessionClientID })
+	if idx < 0 {
+		return oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+	}
+	client := clients[idx]
+
+	logger.WarnContext(ctx, "identity provider rejected the RFC 8707 resource parameter; retrying the login without it",
+		attr.SlogOAuthIssuer(client.IssuerURL),
+		attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
+		attr.SlogError(cause),
+	)
+
+	unsupported := false
+	client.IssuerResourceIndicatorSupported = &unsupported
+	authURL, err := m.mintAuthorization(ctx, state.parent(), client, true)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
+	}
+	http.Redirect(w, r, authURL, http.StatusSeeOther)
 	return nil
 }
 
@@ -874,7 +1116,7 @@ func (m *ChallengeManager) exchangeCode(
 	if audience != "" {
 		form.Set("audience", audience)
 	}
-	if state.Resource != "" {
+	if state.Resource != "" && !state.OmitResource {
 		form.Set("resource", state.Resource)
 	}
 
@@ -894,6 +1136,9 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("read token response body: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
+		if parsed, ok := oautherr.ParseTokenError(body); ok {
+			return tokenResponse{}, fmt.Errorf("token endpoint %s: %w", resp.Status, parsed)
+		}
 		return tokenResponse{}, fmt.Errorf("token endpoint %s: %s", resp.Status, string(body))
 	}
 	var tok tokenResponse

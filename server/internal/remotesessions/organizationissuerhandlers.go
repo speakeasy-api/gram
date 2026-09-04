@@ -155,9 +155,11 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		ClaimsSupported:                            nil,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
-		Metadata:              nil,
-		MetadataFetchedAt:     pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		MetadataUnreadableUrl: pgtype.Text{String: "", Valid: false},
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataUnreadableUrl:                      pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -498,6 +500,8 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
 		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		ScopeOverride:                     payload.ScopeOverride,
+		ResourceIndicatorSupported:        conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
 		ID:                                issuerID,
