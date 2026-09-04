@@ -2722,6 +2722,7 @@ func (s *Service) persistPluginAPIKeys(
 			KeyURN:           urn.NewAPIKey(createdKey.ID),
 			KeyName:          candidate.keyName,
 			Scopes:           scopes,
+			AgentCredential:  nil,
 		}); err != nil {
 			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
 		}

@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	keys "github.com/speakeasy-api/gram/server/gen/keys"
 	goa "goa.design/goa/v3/pkg"
@@ -23,13 +24,28 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 	{
 		err = json.Unmarshal([]byte(keysCreateKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"scopes\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }'")
 		}
-		if body.Scopes == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+		if utf8.RuneCountInString(body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
 		}
-		if len(body.Scopes) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1, true))
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if body.DelegatedGrantsVersion != nil {
+			if *body.DelegatedGrantsVersion < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.delegated_grants_version", *body.DelegatedGrantsVersion, 1, true))
+			}
+		}
+		for _, e := range body.RequestedGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.ExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -42,15 +58,95 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 		}
 	}
 	v := &keys.CreateKeyPayload{
-		Name: body.Name,
+		Name:                   body.Name,
+		AgentID:                body.AgentID,
+		DelegatedGrantsVersion: body.DelegatedGrantsVersion,
+		ExpiresAt:              body.ExpiresAt,
 	}
 	if body.Scopes != nil {
 		v.Scopes = make([]string, len(body.Scopes))
 		for i, val := range body.Scopes {
 			v.Scopes[i] = val
 		}
+	}
+	if body.RequestedGrants != nil {
+		v.RequestedGrants = make([]*keys.AgentPolicyGrantForm, len(body.RequestedGrants))
+		for i, val := range body.RequestedGrants {
+			if val == nil {
+				v.RequestedGrants[i] = nil
+				continue
+			}
+			v.RequestedGrants[i] = marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRotateKeyPayload builds the payload for the keys rotateKey endpoint
+// from CLI flags.
+func BuildRotateKeyPayload(keysRotateKeyBody string, keysRotateKeySessionToken string) (*keys.RotateKeyPayload, error) {
+	var err error
+	var body RotateKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(keysRotateKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.RequestedGrants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("requested_grants", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
+		}
+		if body.DelegatedGrantsVersion < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.delegated_grants_version", body.DelegatedGrantsVersion, 1, true))
+		}
+		for _, e := range body.RequestedGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.ExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if keysRotateKeySessionToken != "" {
+			sessionToken = &keysRotateKeySessionToken
+		}
+	}
+	v := &keys.RotateKeyPayload{
+		ID:                     body.ID,
+		Name:                   body.Name,
+		DelegatedGrantsVersion: body.DelegatedGrantsVersion,
+		ExpiresAt:              body.ExpiresAt,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	}
+	if body.RequestedGrants != nil {
+		v.RequestedGrants = make([]*keys.AgentPolicyGrantForm, len(body.RequestedGrants))
+		for i, val := range body.RequestedGrants {
+			if val == nil {
+				v.RequestedGrants[i] = nil
+				continue
+			}
+			v.RequestedGrants[i] = marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
+		}
 	} else {
-		v.Scopes = []string{}
+		v.RequestedGrants = []*keys.AgentPolicyGrantForm{}
 	}
 	v.SessionToken = sessionToken
 
@@ -59,7 +155,18 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 
 // BuildListKeysPayload builds the payload for the keys listKeys endpoint from
 // CLI flags.
-func BuildListKeysPayload(keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {
+func BuildListKeysPayload(keysListKeysAgentID string, keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {
+	var err error
+	var agentID *string
+	{
+		if keysListKeysAgentID != "" {
+			agentID = &keysListKeysAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if keysListKeysSessionToken != "" {
@@ -67,6 +174,7 @@ func BuildListKeysPayload(keysListKeysSessionToken string) (*keys.ListKeysPayloa
 		}
 	}
 	v := &keys.ListKeysPayload{}
+	v.AgentID = agentID
 	v.SessionToken = sessionToken
 
 	return v, nil

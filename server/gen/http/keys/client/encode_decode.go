@@ -252,6 +252,240 @@ func DecodeCreateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildRotateKeyRequest instantiates a HTTP request object with method and
+// path set to call the "keys" service "rotateKey" endpoint
+func (c *Client) BuildRotateKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RotateKeyKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "rotateKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRotateKeyRequest returns an encoder for requests sent to the keys
+// rotateKey server.
+func EncodeRotateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.RotateKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "rotateKey", "*keys.RotateKeyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRotateKeyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("keys", "rotateKey", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRotateKeyResponse returns a decoder for responses returned by the keys
+// rotateKey endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeRotateKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRotateKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RotateKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			res := NewRotateKeyKeyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RotateKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RotateKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RotateKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RotateKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RotateKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RotateKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RotateKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RotateKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+				}
+				err = ValidateRotateKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+				}
+				return nil, NewRotateKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RotateKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+				}
+				err = ValidateRotateKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+				}
+				return nil, NewRotateKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "rotateKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RotateKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "rotateKey", err)
+			}
+			err = ValidateRotateKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "rotateKey", err)
+			}
+			return nil, NewRotateKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "rotateKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListKeysRequest instantiates a HTTP request object with method and path
 // set to call the "keys" service "listKeys" endpoint
 func (c *Client) BuildListKeysRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -279,6 +513,11 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.AgentID != nil {
+			values.Add("agent_id", *p.AgentID)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -932,24 +1171,157 @@ func DecodeVerifyKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody builds a
+// value of type *AgentPolicyGrantFormRequestBody from a value of type
+// *keys.AgentPolicyGrantForm.
+func marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody(v *keys.AgentPolicyGrantForm) *AgentPolicyGrantFormRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPolicyGrantFormRequestBody{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody builds a
+// value of type *AgentPolicySelectorRequestBody from a value of type
+// *keys.AgentPolicySelector.
+func marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v *keys.AgentPolicySelector) *AgentPolicySelectorRequestBody {
+	res := &AgentPolicySelectorRequestBody{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm builds a
+// value of type *keys.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormRequestBody.
+func marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBody) *keys.AgentPolicyGrantForm {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentPolicyGrantForm{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector builds a
+// value of type *keys.AgentPolicySelector from a value of type
+// *AgentPolicySelectorRequestBody.
+func marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPolicySelectorRequestBody) *keys.AgentPolicySelector {
+	res := &keys.AgentPolicySelector{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAgentDelegatedPolicyResponseBodyToKeysAgentDelegatedPolicy builds a
+// value of type *keys.AgentDelegatedPolicy from a value of type
+// *AgentDelegatedPolicyResponseBody.
+func unmarshalAgentDelegatedPolicyResponseBodyToKeysAgentDelegatedPolicy(v *AgentDelegatedPolicyResponseBody) *keys.AgentDelegatedPolicy {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentDelegatedPolicy{}
+	res.Requested = make([]*keys.AgentDelegatedGrant, len(v.Requested))
+	for i, val := range v.Requested {
+		if val == nil {
+			res.Requested[i] = nil
+			continue
+		}
+		res.Requested[i] = unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant(val)
+	}
+	res.Effective = make([]*keys.AgentDelegatedGrant, len(v.Effective))
+	for i, val := range v.Effective {
+		if val == nil {
+			res.Effective[i] = nil
+			continue
+		}
+		res.Effective[i] = unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant(val)
+	}
+
+	return res
+}
+
+// unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant builds a
+// value of type *keys.AgentDelegatedGrant from a value of type
+// *AgentDelegatedGrantResponseBody.
+func unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant(v *AgentDelegatedGrantResponseBody) *keys.AgentDelegatedGrant {
+	res := &keys.AgentDelegatedGrant{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector builds a
+// value of type *keys.AgentPolicySelector from a value of type
+// *AgentPolicySelectorResponseBody.
+func unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector(v *AgentPolicySelectorResponseBody) *keys.AgentPolicySelector {
+	res := &keys.AgentPolicySelector{
+		ResourceKind:   *v.ResourceKind,
+		ResourceID:     *v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
 // unmarshalKeyResponseBodyToKeysKey builds a value of type *keys.Key from a
 // value of type *KeyResponseBody.
 func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 	res := &keys.Key{
-		ID:              *v.ID,
-		OrganizationID:  *v.OrganizationID,
-		ProjectID:       v.ProjectID,
-		CreatedByUserID: *v.CreatedByUserID,
-		Name:            *v.Name,
-		KeyPrefix:       *v.KeyPrefix,
-		Key:             v.Key,
-		CreatedAt:       *v.CreatedAt,
-		UpdatedAt:       *v.UpdatedAt,
-		LastAccessedAt:  v.LastAccessedAt,
+		ID:                     *v.ID,
+		OrganizationID:         *v.OrganizationID,
+		ProjectID:              v.ProjectID,
+		CreatedByUserID:        *v.CreatedByUserID,
+		Name:                   *v.Name,
+		KeyPrefix:              *v.KeyPrefix,
+		Key:                    v.Key,
+		SubjectUrn:             v.SubjectUrn,
+		DelegatedGrantsVersion: v.DelegatedGrantsVersion,
+		ExpiresAt:              v.ExpiresAt,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
+		LastAccessedAt:         v.LastAccessedAt,
 	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
 		res.Scopes[i] = val
+	}
+	if v.DelegatedGrants != nil {
+		res.DelegatedGrants = unmarshalAgentDelegatedPolicyResponseBodyToKeysAgentDelegatedPolicy(v.DelegatedGrants)
 	}
 
 	return res

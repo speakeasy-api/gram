@@ -136,7 +136,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
-		"keys (create-key|list-keys|revoke-key|verify-key)",
+		"keys (create-key|rotate-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
@@ -1512,7 +1512,12 @@ func ParseEndpoint(
 		keysCreateKeyBodyFlag         = keysCreateKeyFlags.String("body", "REQUIRED", "")
 		keysCreateKeySessionTokenFlag = keysCreateKeyFlags.String("session-token", "", "")
 
+		keysRotateKeyFlags            = flag.NewFlagSet("rotate-key", flag.ExitOnError)
+		keysRotateKeyBodyFlag         = keysRotateKeyFlags.String("body", "REQUIRED", "")
+		keysRotateKeySessionTokenFlag = keysRotateKeyFlags.String("session-token", "", "")
+
 		keysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		keysListKeysAgentIDFlag      = keysListKeysFlags.String("agent-id", "", "")
 		keysListKeysSessionTokenFlag = keysListKeysFlags.String("session-token", "", "")
 
 		keysRevokeKeyFlags            = flag.NewFlagSet("revoke-key", flag.ExitOnError)
@@ -4218,6 +4223,7 @@ func ParseEndpoint(
 
 	keysFlags.Usage = keysUsage
 	keysCreateKeyFlags.Usage = keysCreateKeyUsage
+	keysRotateKeyFlags.Usage = keysRotateKeyUsage
 	keysListKeysFlags.Usage = keysListKeysUsage
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
@@ -5787,6 +5793,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-key":
 				epf = keysCreateKeyFlags
+
+			case "rotate-key":
+				epf = keysRotateKeyFlags
 
 			case "list-keys":
 				epf = keysListKeysFlags
@@ -8133,9 +8142,12 @@ func ParseEndpoint(
 			case "create-key":
 				endpoint = c.CreateKey()
 				data, err = keysc.BuildCreateKeyPayload(*keysCreateKeyBodyFlag, *keysCreateKeySessionTokenFlag)
+			case "rotate-key":
+				endpoint = c.RotateKey()
+				data, err = keysc.BuildRotateKeyPayload(*keysRotateKeyBodyFlag, *keysRotateKeySessionTokenFlag)
 			case "list-keys":
 				endpoint = c.ListKeys()
-				data, err = keysc.BuildListKeysPayload(*keysListKeysSessionTokenFlag)
+				data, err = keysc.BuildListKeysPayload(*keysListKeysAgentIDFlag, *keysListKeysSessionTokenFlag)
 			case "revoke-key":
 				endpoint = c.RevokeKey()
 				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeySessionTokenFlag)
@@ -15541,6 +15553,7 @@ func keysUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] keys COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-key: Create a new api key`)
+	fmt.Fprintln(os.Stderr, `    rotate-key: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.`)
 	fmt.Fprintln(os.Stderr, `    list-keys: List all api keys for an organization`)
 	fmt.Fprintln(os.Stderr, `    revoke-key: Revoke a api key`)
 	fmt.Fprintln(os.Stderr, `    verify-key: Verify an api key`)
@@ -15565,12 +15578,33 @@ func keysCreateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"name\": \"abc123\",\n      \"scopes\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func keysRotateKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] keys rotate-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysListKeysUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] keys list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -15579,11 +15613,12 @@ func keysListKeysUsage() {
 	fmt.Fprintln(os.Stderr, `List all api keys for an organization`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys list-keys --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys list-keys --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func keysRevokeKeyUsage() {

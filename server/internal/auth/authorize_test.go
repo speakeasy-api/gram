@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
 
@@ -303,7 +304,7 @@ func TestAuthorizePrincipalAPIKeyUsesLiveAgentAdmission(t *testing.T) {
 	require.NoError(t, err)
 	apiKey, err := keysrepo.New(instance.conn).GetAPIKeyByKeyHash(ctx, keyHash)
 	require.NoError(t, err)
-	_, err = keysrepo.New(instance.conn).DeleteAPIKey(ctx, keysrepo.DeleteAPIKeyParams{ID: apiKey.ID, OrganizationID: organizationID})
+	_, err = keysrepo.New(instance.conn).DeleteAgentAPIKey(ctx, keysrepo.DeleteAgentAPIKeyParams{ID: apiKey.ID, OrganizationID: organizationID, SubjectUrn: pgtype.Text{String: apiKey.SubjectUrn.String, Valid: true}})
 	require.NoError(t, err)
 
 	start := make(chan struct{})

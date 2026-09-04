@@ -19,6 +19,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -45,6 +47,8 @@ type Service struct {
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
 	audit       *audit.Logger
+	authorizer  *agentmanagement.Authorizer
+	features    feature.Provider
 	keyPrefix   string
 }
 
@@ -58,10 +62,15 @@ func NewService(
 	env string,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	featureProviders ...feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	fullKeyPrefix := auth.APIKeyPrefix(env)
+	var features feature.Provider
+	if len(featureProviders) > 0 {
+		features = featureProviders[0]
+	}
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
 		logger:      logger,
@@ -72,6 +81,8 @@ func NewService(
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
+		authorizer:  agentmanagement.NewAuthorizer(authzEngine),
+		features:    features,
 		keyPrefix:   fullKeyPrefix,
 	}
 }
@@ -100,9 +111,12 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	// during ingestion, so reserving the namespaces prevents user-created keys
 	// from becoming ambiguous with server-minted key purposes.
 	for _, reserved := range []string{auth.PluginAPIKeyNamePrefix, auth.LiteLLMAPIKeyNamePrefix} {
-		if strings.HasPrefix(payload.Name, reserved) {
+		if strings.HasPrefix(strings.TrimSpace(payload.Name), reserved) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", reserved).LogError(ctx, s.logger)
 		}
+	}
+	if payload.AgentID != nil || payload.DelegatedGrantsVersion != nil || payload.RequestedGrants != nil || payload.ExpiresAt != nil {
+		return s.createAgentKey(ctx, payload)
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
@@ -177,6 +191,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          payload.Name,
 		Scopes:           finalScopes,
+		AgentCredential:  nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").LogError(ctx, s.logger)
 	}
@@ -186,17 +201,21 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	}
 
 	return &gen.Key{
-		ID:              createdKey.ID.String(),
-		Name:            createdKey.Name,
-		OrganizationID:  createdKey.OrganizationID,
-		ProjectID:       conv.FromNullableUUID(createdKey.ProjectID),
-		Key:             &fullKey,
-		KeyPrefix:       createdKey.KeyPrefix,
-		Scopes:          createdKey.Scopes,
-		CreatedByUserID: createdKey.CreatedByUserID,
-		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       createdKey.UpdatedAt.Time.Format(time.RFC3339),
-		LastAccessedAt:  nil,
+		ID:                     createdKey.ID.String(),
+		Name:                   createdKey.Name,
+		OrganizationID:         createdKey.OrganizationID,
+		ProjectID:              conv.FromNullableUUID(createdKey.ProjectID),
+		Key:                    &fullKey,
+		KeyPrefix:              createdKey.KeyPrefix,
+		Scopes:                 createdKey.Scopes,
+		CreatedByUserID:        createdKey.CreatedByUserID,
+		SubjectUrn:             nil,
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: nil,
+		ExpiresAt:              nil,
+		CreatedAt:              createdKey.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              createdKey.UpdatedAt.Time.Format(time.RFC3339),
+		LastAccessedAt:         nil,
 	}, nil
 }
 
@@ -204,6 +223,9 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if payload.AgentID != nil {
+		return s.listAgentKeys(ctx, *payload.AgentID)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -223,17 +245,21 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		}
 
 		result = append(result, &gen.Key{
-			ID:              key.ID.String(),
-			Name:            key.Name,
-			OrganizationID:  key.OrganizationID,
-			ProjectID:       conv.FromNullableUUID(key.ProjectID),
-			Key:             nil,
-			KeyPrefix:       key.KeyPrefix,
-			Scopes:          key.Scopes,
-			CreatedByUserID: key.CreatedByUserID,
-			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
-			LastAccessedAt:  lastAccessedAt,
+			ID:                     key.ID.String(),
+			Name:                   key.Name,
+			OrganizationID:         key.OrganizationID,
+			ProjectID:              conv.FromNullableUUID(key.ProjectID),
+			Key:                    nil,
+			KeyPrefix:              key.KeyPrefix,
+			Scopes:                 key.Scopes,
+			CreatedByUserID:        key.CreatedByUserID,
+			SubjectUrn:             nil,
+			DelegatedGrants:        nil,
+			DelegatedGrantsVersion: nil,
+			ExpiresAt:              nil,
+			CreatedAt:              key.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:              key.UpdatedAt.Time.Format(time.RFC3339),
+			LastAccessedAt:         lastAccessedAt,
 		})
 	}
 
@@ -244,6 +270,28 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+	keyID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
+	}
+	loaded, loadErr := s.repo.GetAPIKeyByID(ctx, repo.GetAPIKeyByIDParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID})
+	if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, loadErr, "load API key for revocation").LogError(ctx, s.logger)
+	}
+	if loadErr == nil && loaded.SubjectUrn.Valid {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "access agent API keys").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		if err := s.revokeLoadedAgentKey(ctx, tx, loaded); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "save agent API key revocation").LogError(ctx, s.logger)
+		}
+		return nil
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
@@ -256,11 +304,6 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	kr := s.repo.WithTx(dbtx)
-
-	keyID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
-	}
 
 	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
 		ID:             keyID,
@@ -293,6 +336,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyURN:           urn.NewAPIKey(keyID),
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
+		AgentCredential:  nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").LogError(ctx, s.logger)
 	}

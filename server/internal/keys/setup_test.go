@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -30,7 +31,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -53,6 +54,7 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	keyAuth        *auth.ByKey
+	features       *feature.InMemory
 }
 
 func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
@@ -77,7 +79,12 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	features := &feature.InMemory{}
+	features.SetFlag(feature.FlagAgentCredentialsM2, authCtx.ActiveOrganizationID, true)
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger, features)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{
@@ -85,6 +92,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		keyAuth:        keyAuth,
+		features:       features,
 	}
 }
 

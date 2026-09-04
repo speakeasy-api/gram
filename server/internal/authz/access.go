@@ -23,6 +23,14 @@ const (
 	selectorMatchStrict
 )
 
+// WithStrictSelectorMatch returns a copy that only accepts grants whose every
+// selector constraint is represented by this check. Use it when proving that
+// requested authority is no broader than a live grant.
+func (c Check) WithStrictSelectorMatch() Check {
+	c.selectorMatch = selectorMatchStrict
+	return c
+}
+
 func (c Check) matchesAllowSelector(selector Selector) bool {
 	if c.selectorMatch == selectorMatchStrict {
 		return selector.StrictMatches(c.selector())
