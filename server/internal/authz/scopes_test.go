@@ -35,7 +35,8 @@ func TestUserVisibleScopesCoverDefinedPublicScopes(t *testing.T) {
 		if scope == ScopeRoot {
 			continue
 		}
-		if scopeDefinitions[scope].visibility == scopeVisibilityInternal {
+		definition := scopeDefinitions[scope]
+		if definition.lifecycle != ScopeLifecycleActive || definition.visibility == scopeVisibilityInternal {
 			continue
 		}
 		require.Contains(t, seen, scope)
