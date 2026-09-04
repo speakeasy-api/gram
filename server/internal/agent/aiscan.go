@@ -165,7 +165,17 @@ func (s *Service) reportFirstDetected(ctx context.Context, organizationID string
 			ActingSurface:  "",
 			AuditAction:    "",
 			DashboardURL:   "",
-			Extra:          map[string]string{propertyAgentTargetID: targetID},
+			Extra: map[string]string{
+				propertyAgentTargetID: targetID,
+				// Two scans for the same organization and target can overlap:
+				// both pass the pre-insert lookup, both see it as unseen, and
+				// both report. The claim is not atomic and making it so would
+				// cost a lock on a scan path that is otherwise append-only, so
+				// the report carries a key derived from what it asserts —
+				// this target was first seen in this organization — and PostHog
+				// collapses the duplicates.
+				propertyInsertID: "agent_first_detected:" + organizationID + ":" + targetID,
+			},
 		})
 	}
 }
@@ -173,3 +183,6 @@ func (s *Service) reportFirstDetected(ctx context.Context, organizationID string
 // propertyAgentTargetID is the catalog id behind a detected agent, kept
 // alongside the display name so a renamed catalog entry stays traceable.
 const propertyAgentTargetID = "agent_target_id"
+
+// propertyInsertID is PostHog's deduplication key.
+const propertyInsertID = "$insert_id"
