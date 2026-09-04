@@ -233,7 +233,6 @@ upserted AS (
         deleted_at = NULL,
         updated_at = clock_timestamp()
     WHERE organization_user_relationships.deleted IS FALSE
-       OR organization_user_relationships.workos_last_event_id IS NULL
        OR organization_user_relationships.workos_membership_id IS DISTINCT FROM EXCLUDED.workos_membership_id
     RETURNING organization_id
 )
