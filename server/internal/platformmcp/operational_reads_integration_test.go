@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -74,6 +76,118 @@ func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), secret)
+}
+
+func TestCreateDataExportRequiresExplicitConfirmation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_confirmation")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+
+	_, err = reader.CreateDataExport(ctx, principal, CreateDataExportInput{
+		ProjectID:     project.ID.String(),
+		Name:          "Confirmed collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "product_telemetry",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		Confirmed:     false,
+	})
+	require.ErrorIs(t, err, ErrDataExportConfirmationRequired)
+
+	queries := dataexportsrepo.New(conn)
+	destinations, err := queries.ListOtelDestinations(ctx, dataexportsrepo.ListOtelDestinationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	routes, err := queries.ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, destinations)
+	require.Empty(t, routes)
+}
+
+func TestCreateDataExportCommitsDestinationRouteAndAuditAtomically(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+
+	destinationAuditBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOtelDestinationCreate)
+	require.NoError(t, err)
+	routeAuditBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionDataExportRouteCreate)
+	require.NoError(t, err)
+
+	enabled := false
+	output, err := reader.CreateDataExport(ctx, principal, CreateDataExportInput{
+		ProjectSlug:   project.Slug,
+		Name:          "  Platform MCP collector  ",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "risk_findings",
+		SensitiveData: "include",
+		Enabled:       &enabled,
+		Confirmed:     true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Platform MCP collector", output.Destination.Name)
+	require.Equal(t, "https://otel.example.test/v1", output.Destination.EndpointURL)
+	require.Equal(t, "include", output.Destination.SensitiveData)
+	require.Empty(t, output.Destination.Headers)
+	require.Equal(t, output.Destination.ID, output.Route.DestinationID)
+	require.Equal(t, "risk_findings", output.Route.DataSource)
+	require.False(t, output.Route.Enabled)
+	require.True(t, strings.HasSuffix(output.ManagementURL, "/data/exports"))
+
+	queries := dataexportsrepo.New(conn)
+	destinations, err := queries.ListOtelDestinations(ctx, dataexportsrepo.ListOtelDestinationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, destinations, 1)
+	require.False(t, destinations[0].HeadersEncrypted.Valid)
+	routes, err := queries.ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, routes, 1)
+
+	destinationAuditAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOtelDestinationCreate)
+	require.NoError(t, err)
+	require.Equal(t, destinationAuditBefore+1, destinationAuditAfter)
+	routeAuditAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionDataExportRouteCreate)
+	require.NoError(t, err)
+	require.Equal(t, routeAuditBefore+1, routeAuditAfter)
+	destinationAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOtelDestinationCreate)
+	require.NoError(t, err)
+	require.Equal(t, principal.UserID, destinationAudit.ActorID)
+
+	_, err = reader.CreateDataExport(ctx, principal, CreateDataExportInput{
+		ProjectID:   project.ID.String(),
+		Name:        "Duplicate route destination",
+		EndpointURL: "https://other.example.test/v1",
+		DataSource:  "risk_findings",
+		Confirmed:   true,
+	})
+	require.ErrorIs(t, err, ErrDataExportRouteConflict)
+	destinations, err = queries.ListOtelDestinations(ctx, dataexportsrepo.ListOtelDestinationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, destinations, 1, "the conflicting destination must roll back with its route")
 }
 
 type recordingRecentToolCallReader struct {

@@ -80,6 +80,32 @@ func validateDestinationURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
+// DestinationConfiguration is a validated OTEL destination without secret
+// headers. It is shared by management and agentic mutation surfaces.
+type DestinationConfiguration struct {
+	Name          string
+	EndpointURL   string
+	SensitiveData string
+}
+
+// NormalizeDestinationConfiguration applies the canonical destination
+// validation used by the management API.
+func NormalizeDestinationConfiguration(rawName, rawEndpointURL, rawSensitiveData string) (DestinationConfiguration, error) {
+	name, err := validateDestinationName(rawName)
+	if err != nil {
+		return DestinationConfiguration{}, err
+	}
+	endpointURL, err := validateDestinationURL(rawEndpointURL)
+	if err != nil {
+		return DestinationConfiguration{}, err
+	}
+	policy, err := parseSensitiveData(rawSensitiveData)
+	if err != nil {
+		return DestinationConfiguration{}, oops.E(oops.CodeInvalid, err, "invalid sensitive_data")
+	}
+	return DestinationConfiguration{Name: name, EndpointURL: endpointURL, SensitiveData: string(policy)}, nil
+}
+
 type destinationHeaderInput struct {
 	name     string
 	value    string

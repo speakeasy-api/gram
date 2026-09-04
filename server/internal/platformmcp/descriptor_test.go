@@ -178,9 +178,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	}
 
 	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall is external-only in v1: the
-	// shared project-assistant surface must not serve user-personal
-	// cross-project transcripts.
+	// compatibility deployment. Session recall stays external-only because it
+	// contains user-personal cross-project transcripts. Data exports stay
+	// external-only because creation can send future project data off-platform.
 	for _, name := range []string{
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
@@ -189,8 +189,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",
+		"create_data_export",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
 
 	// The reads, registration paths, and persisted readiness projections are

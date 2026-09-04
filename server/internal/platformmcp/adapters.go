@@ -285,28 +285,30 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	reader             *readmodel.Reader
-	inventory          *platformrepo.Queries
-	inventoryCursor    *inventoryCursorCodec
-	metadataVersionKey []byte
-	riskReads          *RiskReadService
-	dataExports        *DataExportReadService
-	recentToolCalls    *RecentToolCallReadService
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	reader              *readmodel.Reader
+	inventory           *platformrepo.Queries
+	inventoryCursor     *inventoryCursorCodec
+	metadataVersionKey  []byte
+	riskReads           *RiskReadService
+	dataExports         *DataExportReadService
+	dataExportMutations *dataExportMutationService
+	recentToolCalls     *RecentToolCallReadService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:             logger.With(attr.SlogComponent("platformmcp")),
-		db:                 db,
-		reader:             readmodel.New(db),
-		inventory:          platformrepo.New(db),
-		inventoryCursor:    nil,
-		metadataVersionKey: nil,
-		riskReads:          nil,
-		dataExports:        nil,
-		recentToolCalls:    nil,
+		logger:              logger.With(attr.SlogComponent("platformmcp")),
+		db:                  db,
+		reader:              readmodel.New(db),
+		inventory:           platformrepo.New(db),
+		inventoryCursor:     nil,
+		metadataVersionKey:  nil,
+		riskReads:           nil,
+		dataExports:         nil,
+		dataExportMutations: nil,
+		recentToolCalls:     nil,
 	}
 }
 

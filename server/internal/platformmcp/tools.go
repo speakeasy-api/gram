@@ -172,6 +172,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 		}, "\n\n"),
 		PageSize: 32,
 	})
@@ -186,6 +187,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerDataExportTools(reg, postgresReader)
 		}
+		if postgresReader.dataExportMutations == nil {
+			registerUnavailableDataExportMutationTool(reg)
+		} else {
+			registerDataExportMutationTool(reg, postgresReader)
+		}
 		if postgresReader.recentToolCalls == nil {
 			registerUnavailableRecentToolCallTools(reg)
 		} else {
@@ -194,6 +200,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
+		registerUnavailableDataExportMutationTool(reg)
 		registerUnavailableRecentToolCallTools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
