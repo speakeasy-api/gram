@@ -22,9 +22,8 @@ const (
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
-	// FlagAgentManagement gates the first-class agent management API while
-	// administrator grants are backfilled. It is evaluated per organization
-	// and fails closed unless explicitly on.
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
