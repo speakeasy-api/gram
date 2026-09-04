@@ -911,11 +911,12 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
 	// caller authenticated *as* the key — treating it as first-party would let
 	// an end user's chat-session token read every project chat. Only direct
-	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
-	// token has none, so gate the exemption on the scopes being present.
+	// Gram-Key auth carries a trusted authorization mode (auth.KeyBasedAuth); a
+	// chat-session token has none, so gate the exemption on that private marker.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
-	isAPIKeyChatSession := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) == 0
+	_, hasDirectAPIKeyAuthorization := contextvalues.APIKeyAuthorization(ctx)
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && hasDirectAPIKeyAuthorization
+	isAPIKeyChatSession := authCtx.APIKeyID != "" && !hasDirectAPIKeyAuthorization
 	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {

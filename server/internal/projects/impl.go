@@ -546,6 +546,10 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
 	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
 		OrganizationID: payload.OrganizationID,
 		Whitelisted:    payload.Whitelisted,

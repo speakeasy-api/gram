@@ -115,6 +115,9 @@ func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (Delegate
 	if err := rejectDuplicateJSONKeys(raw); err != nil {
 		return DelegatedPolicy{}, invalidDelegatedPolicy("decode: %v", err)
 	}
+	if err := rejectNonCanonicalDelegatedPolicyFields(raw); err != nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("decode: %v", err)
+	}
 
 	var wire struct {
 		Requested []DelegatedPolicyGrant `json:"requested"`
@@ -308,6 +311,32 @@ func cloneSelector(selector Selector) Selector {
 	cloned := make(Selector, len(selector))
 	maps.Copy(cloned, selector)
 	return cloned
+}
+
+func rejectNonCanonicalDelegatedPolicyFields(raw []byte) error {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("decode policy envelope: %w", err)
+	}
+	if len(envelope) != 2 || envelope["requested"] == nil || envelope["effective"] == nil {
+		return errors.New("policy envelope fields must be exactly requested and effective")
+	}
+	for _, field := range []string{"requested", "effective"} {
+		var grants []json.RawMessage
+		if err := json.Unmarshal(envelope[field], &grants); err != nil {
+			return fmt.Errorf("decode %s grants: %w", field, err)
+		}
+		for i, rawGrant := range grants {
+			var grant map[string]json.RawMessage
+			if err := json.Unmarshal(rawGrant, &grant); err != nil {
+				return fmt.Errorf("decode %s grant %d: %w", field, i, err)
+			}
+			if len(grant) != 2 || grant["scope"] == nil || grant["selector"] == nil {
+				return fmt.Errorf("%s grant %d fields must be exactly scope and selector", field, i)
+			}
+		}
+	}
+	return nil
 }
 
 func rejectDuplicateJSONKeys(raw []byte) error {

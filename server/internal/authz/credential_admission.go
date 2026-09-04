@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -44,6 +47,27 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 		return ctx, fmt.Errorf("begin credential admission snapshot: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		apiKeyID, parseErr := uuid.Parse(authCtx.APIKeyID)
+		if parseErr != nil {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		_, err = keysrepo.New(tx).GetActivePrincipalAPIKeyForAdmission(ctx, keysrepo.GetActivePrincipalAPIKeyForAdmissionParams{
+			ID:                     apiKeyID,
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			SubjectUrn:             pgtype.Text{String: actor.String(), Valid: true},
+			AuthorizerUserID:       credential.AuthorizerUserID,
+			DelegatedGrants:        credential.DelegatedGrants,
+			DelegatedGrantsVersion: pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true},
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		if err != nil {
+			return ctx, fmt.Errorf("revalidate principal API key: %w", err)
+		}
+	}
 
 	agent, err := agents.ResolvePrincipal(ctx, tx, authCtx.ActiveOrganizationID, actor)
 	if err != nil {

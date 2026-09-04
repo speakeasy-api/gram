@@ -84,6 +84,8 @@ func TestPrincipalAPIKeySupportsOnlyPrincipalSafeTransportRoutes(t *testing.T) {
 	require.False(t, principalAPIKeySupportsTransportScopes(nil))
 	require.True(t, principalAPIKeySupportsTransportScopes([]string{"consumer"}))
 	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer"}))
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer", "consumer"}))
+	require.False(t, principalAPIKeySupportsTransportScopes([]string{"producer", "agent"}))
 	for _, scope := range []string{"agent", "agent_user", "chat", "hooks", "unknown"} {
 		require.False(t, principalAPIKeySupportsTransportScopes([]string{scope}), scope)
 	}

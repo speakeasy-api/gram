@@ -13,6 +13,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -65,6 +66,57 @@ func TestPrincipalCredentialAdmissionRejectsEachParentGate(t *testing.T) {
 			fixture := newCredentialAdmissionFixture(t)
 			mutate(t, fixture)
 			_, err := fixture.engine.PrepareContext(fixture.requestContext)
+			requireUnauthorized(t, err)
+		})
+	}
+}
+
+func TestPrincipalAPIKeyAdmissionRevalidatesCredentialActivity(t *testing.T) {
+	t.Parallel()
+
+	for name, mutate := range map[string]func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID){
+		"deleted": func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID) {
+			t.Helper()
+			_, err := keysrepo.New(fixture.db).DeleteAPIKey(t.Context(), keysrepo.DeleteAPIKeyParams{ID: keyID, OrganizationID: fixture.organizationID})
+			require.NoError(t, err)
+		},
+		"expired": func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID) {
+			t.Helper()
+			//nolint:glint // notestingrawsql: simulate expiry after the credential profile was loaded
+			_, err := fixture.db.Exec(t.Context(), `UPDATE api_keys SET expires_at = statement_timestamp() - INTERVAL '1 second' WHERE id = $1 AND organization_id = $2`, keyID, fixture.organizationID)
+			require.NoError(t, err)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newCredentialAdmissionFixture(t)
+			authCtx, ok := contextvalues.GetAuthContext(fixture.requestContext)
+			require.True(t, ok)
+			actor, ok := contextvalues.AuthenticatedActor(fixture.requestContext)
+			require.True(t, ok)
+			credential, ok := contextvalues.PrincipalCredentialAuthorization(fixture.requestContext)
+			require.True(t, ok)
+
+			keyID := uuid.New()
+			keyHash := uuid.NewString()
+			created, err := keysrepo.New(fixture.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+				OrganizationID: fixture.organizationID, CreatedByUserID: fixture.authorizerUserID,
+				Name: "admission-" + keyID.String(), KeyPrefix: "gram_test", KeyHash: keyHash, Scopes: []string{"producer"},
+			})
+			require.NoError(t, err)
+			//nolint:glint // notestingrawsql: AIM-194 owns the principal-key writer; this seeds its immutable profile
+			_, err = fixture.db.Exec(t.Context(), `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = statement_timestamp() + INTERVAL '1 day' WHERE id = $4`,
+				actor.String(), credential.DelegatedGrants, credential.DelegatedGrantsVersion, created.ID)
+			require.NoError(t, err)
+
+			keyAuth := *authCtx
+			keyAuth.APIKeyID = created.ID.String()
+			requestContext := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &keyAuth, actor, credential)
+			_, err = fixture.engine.PrepareContext(requestContext)
+			require.NoError(t, err)
+
+			mutate(t, fixture, created.ID)
+			_, err = fixture.engine.PrepareContext(requestContext)
 			requireUnauthorized(t, err)
 		})
 	}
