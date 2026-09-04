@@ -58,11 +58,11 @@ export function SidePanelProvider({
 }
 
 /**
- * The panel itself, rendered as a sibling of the page content so the page
- * reflows around it rather than being covered by it.
+ * The panel itself, floating over the page content rather than displacing it.
  *
- * Deliberately not a dialog: no overlay, no focus trap, no click-outside. The
- * whole point is that the app stays usable while this is open, so Escape
+ * Dismisses like the app's other sheets — a click outside closes it — but it
+ * is still not a dialog: no overlay and no focus trap, so the page behind it
+ * stays legible and usable right up until the click that closes it. Escape
  * closes it only when focus is already inside, leaving Escape free for the
  * dialogs, popovers and command palette on the left.
  */

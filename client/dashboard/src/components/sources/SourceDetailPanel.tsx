@@ -61,16 +61,16 @@ async function downloadSource({
 
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoked a task later: browsers that start the download asynchronously
+  // read the URL after click() returns, and pulling it out from under them
+  // saves an empty file.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 // The file the user gets back should be named like the thing they picked, and
