@@ -1,6 +1,7 @@
 package activities_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -17,6 +18,30 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
+type tenantDimensionLeaseCache struct {
+	cache.Cache
+	beforeAcquire func(context.Context) error
+	acquiredOwner string
+	releasedOwner string
+}
+
+func (c *tenantDimensionLeaseCache) AcquireLease(ctx context.Context, _ string, owner string, _ time.Duration) (bool, error) {
+	c.acquiredOwner = owner
+	beforeAcquire := c.beforeAcquire
+	c.beforeAcquire = nil
+	if beforeAcquire != nil {
+		if err := beforeAcquire(ctx); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (c *tenantDimensionLeaseCache) ReleaseLeaseIfOwner(_ context.Context, _ string, owner string) (bool, error) {
+	c.releasedOwner = owner
+	return owner == c.acquiredOwner, nil
+}
+
 // This test replaces package-global ClickHouse dimension tables and therefore
 // must not overlap another tenant-dimension generation swap.
 func TestSyncTenantDimensions_PublishesReportingProjectionAndLifecycleChanges(t *testing.T) { //nolint:paralleltest // Swaps package-global ClickHouse tables.
@@ -24,8 +49,6 @@ func TestSyncTenantDimensions_PublishesReportingProjectionAndLifecycleChanges(t 
 	conn, err := infra.CloneTestDatabase(t, "sync_tenant_dimensions")
 	require.NoError(t, err)
 	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
 	orgID := "org-tenant-dimensions"
@@ -108,12 +131,25 @@ func TestSyncTenantDimensions_PublishesReportingProjectionAndLifecycleChanges(t 
 	})
 	require.NoError(t, err)
 
-	activity := activities.NewSyncTenantDimensions(testenv.NewLogger(t), conn, chConn, cache.NewRedisCacheAdapter(redisClient))
+	leaseCache := &tenantDimensionLeaseCache{
+		Cache: cache.NoopCache,
+		beforeAcquire: func(ctx context.Context) error {
+			return fixtures.SetProjectSlugFixture(ctx, testrepo.SetProjectSlugFixtureParams{
+				Slug: "lease-snapshot-project",
+				ID:   project.ID,
+			})
+		},
+		acquiredOwner: "",
+		releasedOwner: "",
+	}
+	activity := activities.NewSyncTenantDimensions(testenv.NewLogger(t), conn, chConn, leaseCache)
 	result, err := activity.Do(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Organizations)
 	require.Equal(t, 1, result.Projects)
 	require.Zero(t, result.OrphanProjects)
+	require.NotEmpty(t, leaseCache.acquiredOwner)
+	require.Equal(t, leaseCache.acquiredOwner, leaseCache.releasedOwner)
 
 	var emptyOrganizationCount uint64
 	require.NoError(t, chConn.QueryRow(ctx, `
@@ -187,7 +223,7 @@ func TestSyncTenantDimensions_PublishesReportingProjectionAndLifecycleChanges(t 
 		WHERE p.id = ?`, project.ID).Scan(
 		&projectSlug, &projectCreatedAt, &projectUpdatedAt, &projectDeletedAt, &joinedOrganizationSlug,
 	))
-	require.Equal(t, "tenant-dimensions-project", projectSlug)
+	require.Equal(t, "lease-snapshot-project", projectSlug)
 	require.Equal(t, "tenant-dimensions-org", joinedOrganizationSlug)
 	require.Equal(t, project.CreatedAt.Time.UTC(), projectCreatedAt)
 	require.Equal(t, project.UpdatedAt.Time.UTC(), projectUpdatedAt)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,8 +20,11 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// tenantDimensionsReplaceLockTTL outlives one activity attempt and the longest
-// ClickHouse statement that can still complete after its caller times out.
+// tenantDimensionsReplaceLockTTL outlives one activity attempt (2m
+// StartToClose) plus the longest ClickHouse statement that can still land
+// afterwards: SELECT and INSERT pipelines are bounded by the connection's 60s
+// max_execution_time, while DDL lock acquisition is bounded by the server's
+// 120s lock_acquire_timeout. Revisit this TTL if either bound is raised.
 const tenantDimensionsReplaceLockTTL = 5 * time.Minute
 
 const tenantDimensionsReplaceLockKey = "tenant-dimensions:replace-lock"
@@ -63,6 +67,35 @@ type SyncTenantDimensionsResult struct {
 
 // Do reads and publishes one complete tenant dimension generation.
 func (s *SyncTenantDimensions) Do(ctx context.Context) (*SyncTenantDimensionsResult, error) {
+	leases, ok := s.cache.(cache.LeaseCache)
+	if !ok {
+		return nil, fmt.Errorf("tenant dimension cache does not support ownership-aware leases")
+	}
+
+	leaseOwner := uuid.NewString()
+	claimed, err := leases.AcquireLease(ctx, tenantDimensionsReplaceLockKey, leaseOwner, tenantDimensionsReplaceLockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("claim tenant dimension replacement lease: %w", err)
+	}
+	if !claimed {
+		return nil, fmt.Errorf("tenant dimension replacement already in progress")
+	}
+
+	keepLeaseUntilExpiry := false
+	defer func() {
+		if keepLeaseUntilExpiry {
+			return
+		}
+
+		released, err := leases.ReleaseLeaseIfOwner(context.WithoutCancel(ctx), tenantDimensionsReplaceLockKey, leaseOwner)
+		switch {
+		case err != nil:
+			s.logger.WarnContext(ctx, "failed to release tenant dimension replacement lease", attr.SlogError(err))
+		case !released:
+			s.logger.WarnContext(ctx, "tenant dimension replacement lease expired before release")
+		}
+	}()
+
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:       pgx.RepeatableRead,
 		AccessMode:     pgx.ReadOnly,
@@ -112,23 +145,14 @@ func (s *SyncTenantDimensions) Do(ctx context.Context) (*SyncTenantDimensionsRes
 		}
 	}
 
-	claimed, err := s.cache.Add(ctx, tenantDimensionsReplaceLockKey, tenantDimensionsReplaceLockTTL)
-	if err != nil {
-		return nil, fmt.Errorf("claim tenant dimension replacement lock: %w", err)
-	}
-	if !claimed {
-		return nil, fmt.Errorf("tenant dimension replacement already in progress")
-	}
+	keepLeaseUntilExpiry = true
 
 	if err := s.telemetry.ReplaceTenantDimensions(ctx, organizations, projects); err != nil {
-		// Keep the claim until its TTL after a failed or ambiguous ClickHouse
+		// Keep the lease until its TTL after a failed or ambiguous ClickHouse
 		// statement so a delayed predecessor cannot overwrite a newer generation.
 		return nil, fmt.Errorf("replace tenant dimensions: %w", err)
 	}
-
-	if err := s.cache.Delete(context.WithoutCancel(ctx), tenantDimensionsReplaceLockKey); err != nil {
-		s.logger.WarnContext(ctx, "failed to release tenant dimension replacement lock", attr.SlogError(err))
-	}
+	keepLeaseUntilExpiry = false
 
 	result := &SyncTenantDimensionsResult{
 		Organizations:  len(organizations),
