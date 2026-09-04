@@ -9,7 +9,8 @@ import (
 )
 
 // IsAbsoluteHTTP reports whether raw is an absolute http(s) URL carrying a
-// host.
+// host and no userinfo, which Go's client would send as a Basic
+// Authorization header.
 //
 // url.Parse alone is not a validation: it accepts "javascript:alert(1)",
 // "mailto:x@example.com", and bare relative strings like "docs" without error.
@@ -21,7 +22,7 @@ func IsAbsoluteHTTP(raw string) bool {
 		return false
 	}
 
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
 }
 
 // IsAbsoluteHTTPS reports whether raw is an absolute HTTPS URL carrying a host.
@@ -35,7 +36,7 @@ func IsAbsoluteHTTPS(raw string) bool {
 		return false
 	}
 
-	return u.Scheme == "https" && u.Host != ""
+	return u.Scheme == "https" && u.Host != "" && u.User == nil
 }
 
 // IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Gram may
@@ -58,7 +59,7 @@ func IsAbsoluteHTTPSOrLoopback(raw string) bool {
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "http" || u.Host == "" {
+	if err != nil || u.Scheme != "http" || u.Host == "" || u.User != nil {
 		return false
 	}
 

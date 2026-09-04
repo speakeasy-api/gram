@@ -1,6 +1,7 @@
 package remotesessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -874,7 +876,16 @@ type discoveryError struct {
 	WellKnownURL string
 	Status       int
 	cause        error
+
+	// definitive marks a refusal Gram itself made (a candidate or redirect
+	// target outside the URL policy), which says as much about the
+	// candidate as a 404 would and must not be mistaken for an outage.
+	definitive bool
 }
+
+// errDiscoveryRedirectRefused is the CheckRedirect refusal, unwrapped from
+// the transport's url.Error so a probe can tell it from a network failure.
+var errDiscoveryRedirectRefused = errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
 
 func (e *discoveryError) Error() string {
 	switch {
@@ -1012,7 +1023,7 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		ClaimsSupported:                            orEmptySlice(slices.Clone(doc.ClaimsSupported)),
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
-		Metadata: []byte(doc.raw),
+		Metadata: retainableDocument(doc.raw),
 	}, nil
 }
 
@@ -1023,6 +1034,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			WellKnownURL: "",
 			Status:       0,
 			cause:        fmt.Errorf("compute well-known url: %w", err),
+			definitive:   false,
 		}
 	}
 
@@ -1034,7 +1046,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// narrow here without changing TLS verification or the transport itself.
 	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
 		if !validIssuerDiscoveryURL(req.URL) {
-			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+			return errDiscoveryRedirectRefused
 		}
 		return nil
 	}
@@ -1049,6 +1061,13 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	var firstErr *discoveryError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
+	merged := false
+	// unreadable records, per family, the first candidate that could not be
+	// read at all rather than one that definitively has no document. Such a
+	// candidate may be hiding fields the merge would have captured, whichever
+	// order the probes ran in, and a refresh must not mistake their absence
+	// for withdrawal.
+	var unreadable [2]string
 	for _, candidate := range candidates {
 		if primary != nil && candidate.family == primaryFamily {
 			continue
@@ -1058,12 +1077,8 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			if firstErr == nil {
 				firstErr = attemptErr
 			}
-			// A candidate that could not be read at all, rather than one that
-			// definitively has no document, may be hiding fields the merge
-			// would have captured. Record it so a refresh does not mistake
-			// their absence for withdrawal.
-			if primary != nil && primary.partial == "" && attemptErr.transient() {
-				primary.partial = candidate.url
+			if attemptErr.transient() && unreadable[candidate.family] == "" {
+				unreadable[candidate.family] = candidate.url
 			}
 			continue
 		}
@@ -1084,13 +1099,19 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			primaryFamily = candidate.family
 			continue
 		}
-		// Only a document for the same issuer may contribute: an origin-root
-		// fallback on a multi-tenant host can describe a sibling tenant.
-		if issuerURLsEqual(doc.Issuer, primary.Issuer) {
-			merged := mergeIssuerMetadata(*primary, doc)
-			primary = &merged
+		// Only a document naming the same issuer may contribute: an
+		// origin-root fallback on a multi-tenant host can describe a sibling
+		// tenant, and one naming no issuer cannot be tied to this one.
+		if doc.Issuer != "" && issuerURLsEqual(doc.Issuer, primary.Issuer) {
+			union := mergeIssuerMetadata(*primary, doc)
+			primary = &union
+			merged = true
 			break
 		}
+	}
+
+	if primary != nil && !merged {
+		primary.partial = unreadable[1-primaryFamily]
 	}
 
 	if primary != nil {
@@ -1119,7 +1140,7 @@ func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
 		return base
 	}
-	if err := json.Unmarshal(extra.raw, &extraMembers); err != nil {
+	if err := json.Unmarshal(extra.raw, &extraMembers); err != nil || extraMembers == nil {
 		return base
 	}
 	merged := maps.Clone(extraMembers)
@@ -1148,11 +1169,40 @@ func documentFromRaw(raw []byte) rfc8414Document {
 	return doc
 }
 
+// rawDocumentIssuer reads the issuer member of a stored discovery document,
+// or "" when the document has none or cannot be read.
+func rawDocumentIssuer(raw []byte) string {
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	return doc.Issuer
+}
+
+// maxRetainedDocumentBytes caps the discovery document a row keeps verbatim.
+// Larger documents are still projected onto the typed columns.
+const maxRetainedDocumentBytes = 256 << 10
+
+// retainableDocument returns raw when a jsonb column can hold it: within the
+// size cap, valid UTF-8, and free of the \u0000 escape Go's decoder accepts
+// and Postgres rejects. Otherwise nil, which the writes store as NULL.
+func retainableDocument(raw []byte) []byte {
+	if len(raw) == 0 || len(raw) > maxRetainedDocumentBytes || !utf8.Valid(raw) || bytes.Contains(raw, []byte(`\u0000`)) {
+		return nil
+	}
+	return raw
+}
+
 // transient reports whether the probe failed in a way that says nothing about
 // whether a document exists there: no answer at all, a server error, or rate
 // limiting. A 4xx is a definitive miss, and a document that parsed but was
 // rejected keeps its 200 status and is definitive too.
 func (e *discoveryError) transient() bool {
+	if e.definitive {
+		return false
+	}
 	return e.Status == 0 || e.Status >= http.StatusInternalServerError || e.Status == http.StatusTooManyRequests
 }
 
@@ -1166,6 +1216,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+			definitive:   true,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
@@ -1174,6 +1225,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("build discovery request: %w", err),
+			definitive:   true,
 		}
 	}
 	req.Header.Set("Accept", "application/json")
@@ -1184,6 +1236,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("fetch discovery document: %w", err),
+			definitive:   errors.Is(err, errDiscoveryRedirectRefused),
 		}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
@@ -1193,6 +1246,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
+			definitive:   false,
 		}
 	}
 
@@ -1202,6 +1256,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("read discovery body: %w", err),
+			definitive:   false,
 		}
 	}
 
@@ -1211,6 +1266,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("decode discovery document: %w", err),
+			definitive:   false,
 		}
 	}
 	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
@@ -1218,6 +1274,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        err,
+			definitive:   false,
 		}
 	}
 	doc.raw = body
@@ -1250,8 +1307,9 @@ func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	return urls, nil
 }
 
-// issuerProbeCandidates is IssuerMetadataProbeCandidates with each URL tagged
-// by the discovery family it follows.
+// issuerProbeCandidates lists the well-known URLs to probe for an issuer,
+// each tagged by the discovery family it follows. IssuerMetadataProbeCandidates
+// is its URL-only projection.
 func issuerProbeCandidates(issuerURL string) ([]issuerProbeCandidate, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {

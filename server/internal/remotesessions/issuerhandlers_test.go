@@ -1806,6 +1806,7 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 type twoDocumentServerOptions struct {
 	mutateOAuth func(doc map[string]any)
 	mutateOIDC  func(doc map[string]any)
+	oauthStatus *atomic.Int32
 	oidcStatus  *atomic.Int32
 }
 
@@ -1820,6 +1821,12 @@ func twoDocumentIssuerServer(t *testing.T, opts twoDocumentServerOptions) *httpt
 		var doc map[string]any
 		switch r.URL.Path {
 		case "/.well-known/oauth-authorization-server":
+			if opts.oauthStatus != nil {
+				if status := int(opts.oauthStatus.Load()); status != http.StatusOK {
+					w.WriteHeader(status)
+					return
+				}
+			}
 			doc = map[string]any{
 				"issuer":                                server.URL,
 				"authorization_endpoint":                server.URL + "/authorize",
@@ -1925,6 +1932,56 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 	require.Nil(t, draft.ClaimsSupported)
 	require.False(t, draft.BackchannelLogoutSupported)
 	require.Contains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+}
+
+// A document naming no issuer cannot be tied to the primary, so it
+// contributes nothing even when the primary names none either.
+func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeDocumentWithoutIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+		mutateOAuth: func(doc map[string]any) { delete(doc, "issuer") },
+		mutateOIDC:  func(doc map[string]any) { delete(doc, "issuer") },
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.JwksURI)
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.ClaimsSupported)
+}
+
+// Enrichment endpoints are dialled with a bearer token, so a plaintext one
+// outside loopback is dropped from the typed fields while the rest of the
+// document still merges.
+func TestFetchRemoteSessionIssuerMetadata_DropsPlaintextEnrichmentEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["userinfo_endpoint"] = "http://idp.example.com/userinfo"
+		doc["introspection_endpoint"] = "http://idp.example.com/introspect"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.IntrospectionEndpoint)
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI, "the rest of the OpenID document still merges")
+	require.Equal(t, []string{"sub", "email", "email_verified"}, draft.ClaimsSupported)
 }
 
 // The persisted document is the union of the merged documents, so the OIDC

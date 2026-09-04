@@ -188,18 +188,17 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		}
 	}
 
-	// A refresh restates the issuer's whole discovered surface, clearing what
-	// the upstream no longer advertises. That is only sound when every
-	// candidate answered definitively. When a same-origin candidate failed
-	// transiently, a member it alone advertises would read as withdrawn, so
-	// the previously stored document fills whatever the partial result left
-	// out and the caller sees the warning discovery attached. Withdrawal is
-	// applied on the next complete refresh. A row with no stored document has
-	// nothing to fall back to and is refreshed as if complete. The fill runs
-	// only after the gate above has judged the fetched document on its own:
-	// a stored member must never satisfy a check the upstream failed.
+	// A refresh restates the issuer's whole discovered surface, so a member
+	// only an unreadable candidate advertises would read as withdrawn. The
+	// stored document fills those gaps until the next complete refresh, but
+	// only when it describes this issuer: a row repointed to another issuer
+	// must not inherit the old one's endpoints. The fill runs after the gate
+	// above so a stored member never satisfies a check the upstream failed.
 	if doc.partial != "" {
-		doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
+		storedIssuer := rawDocumentIssuer(issuer.Metadata)
+		if storedIssuer != "" && (issuerURLsEqual(storedIssuer, issuer.Issuer) || issuerURLsEqual(storedIssuer, issuerOrigin(issuer.Issuer))) {
+			doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
+		}
 	}
 
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
@@ -248,7 +247,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
-		Metadata: string(doc.raw),
+		Metadata: string(retainableDocument(doc.raw)),
 
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no

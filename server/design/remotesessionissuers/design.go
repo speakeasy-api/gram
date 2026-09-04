@@ -649,16 +649,6 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 
 	Description("A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.")
 
-	// nullableCapability declares a discovered capability array whose wire
-	// form keeps null ("never captured") distinct from [] ("captured;
-	// advertises nothing"): the struct tag suppresses omitempty, paired with a
-	// nullable:true patch in overlays/goa.yaml.
-	nullableCapability := func(name, description string) {
-		Attribute(name, ArrayOf(String), description, func() {
-			Meta("struct:tag:json", name)
-		})
-	}
-
 	Attribute("id", String, "The remote_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
@@ -715,16 +705,6 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Meta("struct:pkg:path", "types")
 
 	Description("A draft remote_session_issuer returned by discover. Same shape as RemoteSessionIssuer minus id/project_id/timestamps, plus discovery_warnings describing any RFC 8414 deviations.")
-
-	// nullableCapability declares a discovered capability array whose wire
-	// form keeps null ("never captured") distinct from [] ("captured;
-	// advertises nothing"): the struct tag suppresses omitempty, paired with a
-	// nullable:true patch in overlays/goa.yaml.
-	nullableCapability := func(name, description string) {
-		Attribute(name, ArrayOf(String), description, func() {
-			Meta("struct:tag:json", name)
-		})
-	}
 
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
@@ -826,3 +806,13 @@ var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func
 
 	Required("items")
 })
+
+// nullableCapability declares a discovered capability array whose wire form
+// keeps null ("never captured") distinct from [] ("captured; advertises
+// nothing"): the struct tag suppresses omitempty, paired with a nullable:true
+// patch in overlays/goa.yaml.
+func nullableCapability(name, description string) {
+	Attribute(name, ArrayOf(String), description, func() {
+		Meta("struct:tag:json", name)
+	})
+}

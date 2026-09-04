@@ -166,6 +166,138 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(
 	}), "a 404 is definitive and raises no partial warning: %v", withdrawn.DiscoveryWarnings)
 }
 
+// The unreadable candidate may come first: when the RFC 8414 document is
+// down and the OpenID one becomes the primary, the members only the RFC 8414
+// document carries are kept from the stored row rather than withdrawn.
+func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryWhenFirstCandidateUnreadable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oauthStatus atomic.Int32
+	oauthStatus.Store(http.StatusOK)
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oauthStatus: &oauthStatus})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial-first", upstream.URL))
+	require.NoError(t, err)
+
+	refresh := func() *types.RemoteSessionIssuerRefresh {
+		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+			ID:               created.ID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	complete := refresh()
+	require.Equal(t, upstream.URL+"/register", *complete.Issuer.RegistrationEndpoint)
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	oauthStatus.Store(http.StatusServiceUnavailable)
+	partial := refresh()
+	require.Equal(t, upstream.URL+"/register", *partial.Issuer.RegistrationEndpoint, "a member only the unreadable document carries is not withdrawn")
+	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "could not be fetched")
+	}), "the caller is told which candidate was skipped: %v", partial.DiscoveryWarnings)
+
+	oauthStatus.Store(http.StatusNotFound)
+	withdrawn := refresh()
+	require.Nil(t, withdrawn.Issuer.RegistrationEndpoint, "a definitive miss withdraws the member")
+	require.Equal(t, upstream.URL+"/jwks", *withdrawn.Issuer.JwksURI)
+}
+
+// A row repointed to another issuer still holds the previous issuer's
+// document. A partial refresh against the new issuer must not fill its gaps
+// from that document: the old issuer's key set or endpoints would otherwise
+// be attributed to the new one.
+func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryDoesNotFillFromPreviousIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	previous := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	current := twoDocumentIssuerServer(t, twoDocumentServerOptions{oidcStatus: &oidcStatus})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-repointed", previous.URL))
+	require.NoError(t, err)
+	refresh := func() *types.RemoteSessionIssuerRefresh {
+		result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+			ID:               created.ID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		return result
+	}
+	complete := refresh()
+	require.Equal(t, previous.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              nil,
+		Issuer:                            conv.PtrEmpty(current.URL),
+		Name:                              nil,
+		LogoAssetID:                       nil,
+		ClientSetupDocumentationURL:       nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RevocationEndpoint:                nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ServiceDocumentation:              nil,
+		OpPolicyURI:                       nil,
+		OpTosURI:                          nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		CodeChallengeMethodsSupported:     nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+		ClientIDMetadataDocumentSupported: nil,
+	})
+	require.NoError(t, err)
+
+	partial := refresh()
+	require.Nil(t, partial.Issuer.JwksURI, "the previous issuer's key set must not be attributed to the new one")
+	require.Equal(t, current.URL+"/authorize", *partial.Issuer.AuthorizationEndpoint)
+	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "could not be fetched")
+	}), "the partial state is still reported: %v", partial.DiscoveryWarnings)
+}
+
+// A document Postgres cannot hold as jsonb is not retained verbatim; the
+// typed columns still capture it and the refresh succeeds.
+func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["vendor_note"] = "a\x00b"
+	}})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-nul", upstream.URL))
+	require.NoError(t, err)
+
+	refreshed, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, upstream.URL+"/jwks", *refreshed.Issuer.JwksURI)
+	require.Nil(t, loadIssuerRow(t, ctx, ti, refreshed.Issuer).Metadata, "the verbatim document is dropped, not the refresh")
+}
+
 // The stored document only fills gaps after the fetched one has passed the
 // distrust gate on its own. A primary that advertises no issuer is rejected
 // even when a transient miss on the other candidate would otherwise have let
