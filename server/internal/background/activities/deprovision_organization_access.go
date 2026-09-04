@@ -57,17 +57,21 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p de
 	if err != nil {
 		return effects, fmt.Errorf("mark organization membership deleted for workos user %q: %w", p.workosUserID, err)
 	}
-	ownerUserID := p.gramUserID
+	owners := make(map[string]struct{}, len(ownerUserIDs)+1)
+	if p.gramUserID != "" {
+		owners[p.gramUserID] = struct{}{}
+	}
 	for _, candidate := range ownerUserIDs {
-		if candidate.Valid {
-			ownerUserID = candidate.String
-			break
+		if candidate.Valid && candidate.String != "" {
+			owners[candidate.String] = struct{}{}
 		}
 	}
-	if err := agentownership.LatchOwnerLossByMembership(
-		ctx, dbtx, p.organizationID, ownerUserID, p.ownerLossReason, agentownership.SystemActor, nil,
-	); err != nil {
-		return effects, fmt.Errorf("latch agent owner membership loss: %w", err)
+	for ownerUserID := range owners {
+		if err := agentownership.LatchOwnerLossByMembership(
+			ctx, dbtx, p.organizationID, ownerUserID, p.ownerLossReason, agentownership.SystemActor, nil,
+		); err != nil {
+			return effects, fmt.Errorf("latch agent owner membership loss: %w", err)
+		}
 	}
 
 	workosUserID := p.workosUserID
