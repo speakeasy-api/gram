@@ -5,8 +5,8 @@ export const DEMO_ORG_SLUG = "acme-demo";
 
 // The demo org is seeded with a single project. New visitors land here so
 // they see sample data instead of the empty org home.
-export const DEMO_PROJECT_SLUG = "default";
-export const DEMO_APP_ORIGIN = "https://app.getgram.ai";
+const DEMO_PROJECT_SLUG = "default";
+const DEMO_APP_ORIGIN = "https://app.getgram.ai";
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
 
