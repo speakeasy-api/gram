@@ -156,8 +156,8 @@ describe("DemoBookingFlow", () => {
     expect(screen.queryByText(/Details prefilled/)).toBeNull();
   });
 
-  it("fires booked_demo on a Cal bookingSuccessful message", () => {
-    render(<DemoBookingFlow />);
+  it("attributes booked_demo to the caller's source", () => {
+    render(<DemoBookingFlow telemetrySource="inference_cap" />);
 
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -175,7 +175,7 @@ describe("DemoBookingFlow", () => {
         first_name: "Jane",
         last_name: "Smith",
         email: "jane@acme.com",
-        source: "book_demo",
+        source: "inference_cap",
       }),
     );
   });

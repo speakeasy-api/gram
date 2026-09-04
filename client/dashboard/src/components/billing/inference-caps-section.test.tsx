@@ -35,6 +35,30 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => mocks.session(),
 }));
 
+vi.mock("@/pages/demo/components/booking-calendar/BookingCalendarLink", () => ({
+  BookingCalendarLink: ({
+    children,
+    eventLabel,
+    formDefaults,
+    telemetrySource,
+  }: {
+    children: ReactNode;
+    eventLabel?: string;
+    formDefaults?: Record<string, string | undefined>;
+    telemetrySource?: string;
+  }) => (
+    <button
+      type="button"
+      data-event-label={eventLabel}
+      data-form-source={formDefaults?.source}
+      data-form-notes={formDefaults?.notes}
+      data-telemetry-source={telemetrySource}
+    >
+      {children}
+    </button>
+  ),
+}));
+
 vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
   // The hook options are part of what's under test — the section has to opt out
   // of the shared throwOnError — so the arguments are forwarded, not dropped.
@@ -1148,6 +1172,18 @@ describe("InferenceCapsSection", () => {
       name: "Talk to us",
     });
     expect(salesTrigger.getAttribute("type")).toBe("button");
+    expect(salesTrigger.getAttribute("data-event-label")).toBe(
+      "Inference caps — 30 min",
+    );
+    expect(salesTrigger.getAttribute("data-form-source")).toBe(
+      "Dashboard: Inference caps",
+    );
+    expect(salesTrigger.getAttribute("data-form-notes")).toBe(
+      "Request inference cap above $10,000",
+    );
+    expect(salesTrigger.getAttribute("data-telemetry-source")).toBe(
+      "inference_cap",
+    );
   });
 
   // The endpoint is admin-only, so a member gets the amounts they are spending
