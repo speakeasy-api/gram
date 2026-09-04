@@ -29,7 +29,7 @@ func (a staticSessionAuthorizer) AuthorizeWithPostAuthenticationCheck(
 	return ctx, check(ctx)
 }
 
-type recordingM1Features struct {
+type recordingAgentManagementFeatures struct {
 	evaluation feature.Evaluation
 	err        error
 	flag       feature.Flag
@@ -37,19 +37,19 @@ type recordingM1Features struct {
 	groups     map[string]string
 }
 
-func (*recordingM1Features) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+func (*recordingAgentManagementFeatures) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, nil
 }
 
-func (*recordingM1Features) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+func (*recordingAgentManagementFeatures) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	return false, nil
 }
 
-func (*recordingM1Features) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+func (*recordingAgentManagementFeatures) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
 	return nil, nil
 }
 
-func (f *recordingM1Features) EvaluateFlag(_ context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+func (f *recordingAgentManagementFeatures) EvaluateFlag(_ context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
 	f.flag = flag
 	f.distinctID = distinctID
 	f.groups = groups
@@ -66,10 +66,10 @@ func TestAgentManagementRolloutGateRequiresAuthoritativeEnablement(t *testing.T)
 		wantErr    bool
 		wantLookup bool
 	}{
-		{name: "enabled", features: &recordingM1Features{evaluation: feature.EvaluationEnabled}, wantLookup: true},
-		{name: "disabled", features: &recordingM1Features{evaluation: feature.EvaluationDisabled}, wantErr: true, wantLookup: true},
-		{name: "indeterminate", features: &recordingM1Features{evaluation: feature.EvaluationIndeterminate}, wantErr: true, wantLookup: true},
-		{name: "provider error", features: &recordingM1Features{err: backendFailure}, wantErr: true, wantLookup: true},
+		{name: "enabled", features: &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}, wantLookup: true},
+		{name: "disabled", features: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}, wantErr: true, wantLookup: true},
+		{name: "indeterminate", features: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}, wantErr: true, wantLookup: true},
+		{name: "provider error", features: &recordingAgentManagementFeatures{err: backendFailure}, wantErr: true, wantLookup: true},
 		{name: "missing provider", wantErr: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestAgentManagementRolloutGateRequiresAuthoritativeEnablement(t *testing.T)
 				require.NoError(t, err)
 			}
 
-			flags, ok := test.features.(*recordingM1Features)
+			flags, ok := test.features.(*recordingAgentManagementFeatures)
 			if !test.wantLookup {
 				require.False(t, ok)
 				return
@@ -109,9 +109,9 @@ func TestGeneratedAgentManagementEndpointsCannotBypassRolloutGate(t *testing.T) 
 		name     string
 		features feature.Provider
 	}{
-		{name: "disabled", features: &recordingM1Features{evaluation: feature.EvaluationDisabled}},
-		{name: "indeterminate", features: &recordingM1Features{evaluation: feature.EvaluationIndeterminate}},
-		{name: "provider error", features: &recordingM1Features{err: backendFailure}},
+		{name: "disabled", features: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
+		{name: "indeterminate", features: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
+		{name: "provider error", features: &recordingAgentManagementFeatures{err: backendFailure}},
 		{name: "missing provider"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -137,7 +137,7 @@ func TestGeneratedAgentManagementEndpointsCannotBypassRolloutGate(t *testing.T) 
 func TestAgentManagementRolloutGateRejectsMissingTenantContextBeforeEvaluation(t *testing.T) {
 	t.Parallel()
 
-	features := &recordingM1Features{evaluation: feature.EvaluationEnabled}
+	features := &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	service := &Service{logger: testenv.NewLogger(t), features: features}
 
 	requireOopsCode(t, service.requireAgentManagementEnabled(t.Context()), oops.CodeNotFound)
