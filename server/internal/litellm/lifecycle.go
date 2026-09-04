@@ -87,7 +87,7 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	projectUUID := uuid.NullUUID{UUID: projectID, Valid: true}
-	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(key.ID), KeyName: key.Name, Scopes: key.Scopes}); err != nil {
+	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(key.ID), KeyName: key.Name, Scopes: key.Scopes, AgentCredential: nil}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log LiteLLM API key creation").LogError(ctx, s.logger)
 	}
 	if err := s.audit.LogLiteLLMInstanceCreate(ctx, dbtx, audit.LogLiteLLMInstanceCreateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, InstanceURN: urn.NewLiteLLMInstance(instance.ID), InstanceName: instance.Name}); err != nil {
@@ -196,10 +196,10 @@ func (s *Service) RotateInstanceKey(ctx context.Context, payload *gen.RotateInst
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	projectUUID := uuid.NullUUID{UUID: projectID, Valid: true}
-	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(newKey.ID), KeyName: newKey.Name, Scopes: newKey.Scopes}); err != nil {
+	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(newKey.ID), KeyName: newKey.Name, Scopes: newKey.Scopes, AgentCredential: nil}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log rotated LiteLLM API key creation").LogError(ctx, s.logger)
 	}
-	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(oldKey.ID), KeyName: oldKey.Name, Scopes: oldKey.Scopes}); err != nil {
+	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(oldKey.ID), KeyName: oldKey.Name, Scopes: oldKey.Scopes, AgentCredential: nil}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log previous LiteLLM API key revocation").LogError(ctx, s.logger)
 	}
 	if err := s.audit.LogLiteLLMInstanceRotateKey(ctx, dbtx, audit.LogLiteLLMInstanceRotateKeyEvent{
@@ -259,7 +259,7 @@ func (s *Service) RevokeInstance(ctx context.Context, payload *gen.RevokeInstanc
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	projectUUID := uuid.NullUUID{UUID: projectID, Valid: true}
-	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(oldKey.ID), KeyName: oldKey.Name, Scopes: oldKey.Scopes}); err != nil {
+	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectUUID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, KeyURN: urn.NewAPIKey(oldKey.ID), KeyName: oldKey.Name, Scopes: oldKey.Scopes, AgentCredential: nil}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log LiteLLM API key revocation").LogError(ctx, s.logger)
 	}
 	if err := s.audit.LogLiteLLMInstanceRevoke(ctx, dbtx, audit.LogLiteLLMInstanceRevokeEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil, InstanceURN: urn.NewLiteLLMInstance(instance.ID), InstanceName: instance.Name}); err != nil {

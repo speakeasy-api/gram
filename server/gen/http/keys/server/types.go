@@ -64,7 +64,7 @@ type CreateKeyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The store prefix of the api key for recognition
 	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
@@ -99,7 +99,7 @@ type RotateKeyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The store prefix of the api key for recognition
 	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
@@ -1083,7 +1083,7 @@ type KeyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The store prefix of the api key for recognition
 	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Legacy transport scopes; always empty for agent keys
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
@@ -2055,6 +2055,11 @@ func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
+	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
@@ -2094,6 +2099,11 @@ func ValidateRotateKeyRequestBody(body *RotateKeyRequestBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
+	}
 	if body.DelegatedGrantsVersion != nil {
 		if *body.DelegatedGrantsVersion < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.delegated_grants_version", *body.DelegatedGrantsVersion, 1, true))
@@ -2130,8 +2140,8 @@ func ValidateAgentPolicyGrantFormRequestBody(body *AgentPolicyGrantFormRequestBo
 		}
 	}
 	if body.Effect != nil {
-		if !(*body.Effect == "allow" || *body.Effect == "deny") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
 		}
 	}
 	if body.Selector != nil {

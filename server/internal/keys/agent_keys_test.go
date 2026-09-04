@@ -2,6 +2,7 @@ package keys_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,10 +137,53 @@ func TestKeysService_AgentKeyAllowsExactAuthorizeGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, authCtx.UserID, created.CreatedByUserID, "caller remains the immutable authorizer")
 
-	_, err = ti.conn.Exec(ctx, "DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3", authCtx.ActiveOrganizationID, "user:"+authCtx.UserID, string(authz.ScopeAgentAuthorize))
+	authorizeSelector, err := authz.NewSelector(authz.ScopeAgentAuthorize, agent.ID.String()).MarshalJSON()
 	require.NoError(t, err)
+	deleted, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		Scope:          string(authz.ScopeAgentAuthorize),
+		Selectors:      authorizeSelector,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
 	_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agent.ID.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestKeysService_AgentKeyRejectsBroaderRequestThanLiveGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	authCtx := testAuthContext(t, ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: authCtx.UserID, Name: "strict-delegation-" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	serverID := uuid.NewString()
+	narrowSelector := authz.NewSelector(authz.ScopeMCPConnect, serverID)
+	narrowSelector[authz.SelectorKeyTool] = "allowed-tool"
+	upsertGrantSelector(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authz.ScopeMCPConnect, narrowSelector)
+	upsertGrantSelector(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeMCPConnect, narrowSelector)
+
+	payload := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+	payload.RequestedGrants = []*gen.AgentPolicyGrantForm{{
+		Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID},
+	}}
+	_, err = ti.service.CreateKey(ctx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestKeysService_AgentGateDoesNotBlockOrdinaryKeyCreation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "ordinary key", Scopes: []string{auth.APIKeyScopeConsumer.String()}})
+	require.NoError(t, err)
+	require.NotNil(t, created.Key)
 }
 
 func TestKeysService_AgentKeyRequiresOrdinaryHumanSession(t *testing.T) {
@@ -186,6 +230,7 @@ func TestKeysService_AgentKeyParentAdmission(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
+//nolint:paralleltest,tparallel // Subtests share mutable feature-flag state.
 func TestKeysService_AgentKeyValidation(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +256,9 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 			p.RequestedGrants = append(p.RequestedGrants, cloneGrant(p.RequestedGrants[0]))
 		}, code: oops.CodeBadRequest},
 		{name: "overbroad policy", mutate: func(p *gen.CreateKeyPayload) { p.RequestedGrants[0].Scope = string(authz.ScopeProjectWrite) }, code: oops.CodeForbidden},
+		{name: "reserved plugin name", mutate: func(p *gen.CreateKeyPayload) { p.Name = "  " + auth.PluginAPIKeyNamePrefix + "agent" }, code: oops.CodeBadRequest},
+		{name: "reserved LiteLLM name", mutate: func(p *gen.CreateKeyPayload) { p.Name = auth.LiteLLMAPIKeyNamePrefix + "agent" }, code: oops.CodeBadRequest},
+		{name: "name too long", mutate: func(p *gen.CreateKeyPayload) { p.Name = strings.Repeat("a", 256) }, code: oops.CodeBadRequest},
 		{name: "expired", mutate: func(p *gen.CreateKeyPayload) {
 			value := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 			p.ExpiresAt = &value
@@ -246,7 +294,12 @@ func createAgentKeyFixture(t *testing.T, ctx context.Context, ti *testInstance) 
 
 func upsertGrant(t *testing.T, ctx context.Context, ti *testInstance, principal urn.Principal, scope authz.Scope, resourceID string) {
 	t.Helper()
-	selectors, err := authz.NewSelector(scope, resourceID).MarshalJSON()
+	upsertGrantSelector(t, ctx, ti, principal, scope, authz.NewSelector(scope, resourceID))
+}
+
+func upsertGrantSelector(t *testing.T, ctx context.Context, ti *testInstance, principal urn.Principal, scope authz.Scope, selector authz.Selector) {
+	t.Helper()
+	selectors, err := selector.MarshalJSON()
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID, PrincipalUrn: principal, Scope: string(scope), Selectors: selectors,
@@ -267,17 +320,11 @@ func agentAPIKeyScheme() *security.APIKeyScheme {
 	return &security.APIKeyScheme{Name: constants.KeySecurityScheme, RequiredScopes: []string{auth.APIKeyScopeConsumer.String()}}
 }
 
-//go:fix inline
-func stringPtr(value string) *string { return new(value) }
-
-//go:fix inline
-func intPtr(value int) *int { return new(value) }
-
 func cloneGrant(grant *gen.AgentPolicyGrantForm) *gen.AgentPolicyGrantForm {
-	copy := *grant
+	cloned := *grant
 	selector := *grant.Selector
-	copy.Selector = &selector
-	return &copy
+	cloned.Selector = &selector
+	return &cloned
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -77,13 +77,10 @@ func TestPrincipalAPIKeyAdmissionRevalidatesCredentialActivity(t *testing.T) {
 	for name, mutate := range map[string]func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID){
 		"deleted": func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID) {
 			t.Helper()
+			actor, ok := contextvalues.AuthenticatedActor(fixture.requestContext)
+			require.True(t, ok)
 			_, err := keysrepo.New(fixture.db).DeleteAgentAPIKey(t.Context(), keysrepo.DeleteAgentAPIKeyParams{
-				ID:             keyID,
-				OrganizationID: fixture.organizationID,
-				SubjectUrn: pgtype.Text{
-					String: urn.NewPrincipal(urn.PrincipalTypeAgent, fixture.agentID.String()).String(),
-					Valid:  true,
-				},
+				ID: keyID, OrganizationID: fixture.organizationID, SubjectUrn: conv.ToPGText(actor.String()),
 			})
 			require.NoError(t, err)
 		},

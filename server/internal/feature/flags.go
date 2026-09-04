@@ -30,7 +30,7 @@ const (
 	// FlagAgentCredentialsM2 gates agent credential issuance and management until
 	// the integrated M2 authorization safety suite has passed. It is evaluated
 	// per organization and fails closed unless explicitly on.
-	FlagAgentCredentialsM2 Flag = "gram-agent-credentials-m2"
+	FlagAgentCredentialsM2 Flag = "gram-agent-credentials-m2" //nolint:gosec // G101: a feature flag name, not a credential.
 
 	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
 	// authorization challenge. It remains independently default-off until the M2

@@ -23014,6 +23014,14 @@ paths:
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
+          description: When set, list keys for this first-class agent
+          in: query
+          name: agent_id
+          schema:
+            description: When set, list keys for this first-class agent
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -23176,6 +23184,92 @@ paths:
       x-speakeasy-name-override: revokeById
       x-speakeasy-react-hook:
         name: RevokeAPIKey
+  /rpc/keys.rotate:
+    post:
+      description: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
+      operationId: rotateAPIKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateKeyForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotateKey keys
+      tags:
+        - keys
+      x-speakeasy-name-override: rotate
   /rpc/keys.verify:
     get:
       description: Verify an api key
@@ -64995,6 +65089,30 @@ components:
         - current_period_end
         - cancel_at_period_end
         - payment_failed
+    AgentDelegatedGrant:
+      type: object
+      properties:
+        scope:
+          type: string
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - selector
+    AgentDelegatedPolicy:
+      type: object
+      properties:
+        effective:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+        requested:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+      required:
+        - requested
+        - effective
     AgentIDForm:
       type: object
       properties:
@@ -67956,18 +68074,35 @@ components:
     CreateKeyForm:
       type: object
       properties:
+        agent_id:
+          type: string
+          description: First-class agent subject. Omit for an ordinary API key.
+          format: uuid
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version. Required for agent keys.
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          description: Agent credential expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
         name:
           type: string
           description: The name of the key
+          maxLength: 255
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: Exact allow grants approved for an agent credential
         scopes:
           type: array
           items:
             type: string
-          description: The scopes of the key that determines its permissions.
-          minItems: 1
+          description: Legacy transport scopes. Omitted or empty defaults to consumer for ordinary keys; agent keys require no scopes.
       required:
         - name
-        - scopes
     CreateMcpEndpointForm:
       type: object
       properties:
@@ -74000,13 +74135,23 @@ components:
           format: date-time
         created_by_user_id:
           type: string
-          description: The ID of the user who created this key
+          description: The human creator; immutable authorizer for agent keys
+        delegated_grants:
+          $ref: '#/components/schemas/AgentDelegatedPolicy'
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+        expires_at:
+          type: string
+          description: Required expiry for an agent key; legacy keys may not expire.
+          format: date-time
         id:
           type: string
           description: The ID of the key
         key:
           type: string
-          description: The token of the api key (only returned on key creation)
+          description: The token of the api key (only returned on key creation or rotation)
         key_prefix:
           type: string
           description: The store prefix of the api key for recognition
@@ -74027,7 +74172,10 @@ components:
           type: array
           items:
             type: string
-          description: List of permission scopes for this key
+          description: Legacy transport scopes; always empty for agent keys
+        subject_urn:
+          type: string
+          description: Principal authenticated by this key; agent keys use agent:<uuid>
         updated_at:
           type: string
           description: When the key was last updated.
@@ -82230,6 +82378,41 @@ components:
         - project_id
         - project_name
         - is_domain_root
+    RotateKeyForm:
+      type: object
+      properties:
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          description: Replacement expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
+        id:
+          type: string
+          description: API key identifier to replace
+          format: uuid
+        name:
+          type: string
+          description: The name of the replacement key
+          maxLength: 255
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: New exact allow grants approved for the replacement credential
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Legacy transport scopes; agent rotation requires an empty array
+      required:
+        - id
+        - name
+        - delegated_grants_version
+        - requested_grants
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:

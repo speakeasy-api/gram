@@ -3,8 +3,10 @@ package keys
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +31,7 @@ import (
 const (
 	defaultAgentAPIKeyLifetime = 90 * 24 * time.Hour
 	maxAgentAPIKeyLifetime     = 365 * 24 * time.Hour
+	maxAPIKeyNameRunes         = 255
 )
 
 type preparedAgentKey struct {
@@ -94,7 +97,7 @@ func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.Li
 
 	human, _, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize agent API key listing: %w", err)
 	}
 	subjectURN := agentSubjectURN(agentID)
 	rows, err := repo.New(tx).ListAgentAPIKeys(ctx, repo.ListAgentAPIKeysParams{
@@ -192,7 +195,7 @@ func (s *Service) revokeLoadedAgentKey(ctx context.Context, tx pgx.Tx, key repo.
 	}
 	human, _, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
-		return err
+		return fmt.Errorf("authorize agent API key revocation: %w", err)
 	}
 	revoked, err := repo.New(tx).DeleteAgentAPIKey(ctx, repo.DeleteAgentAPIKeyParams{ID: key.ID, OrganizationID: human.Auth.ActiveOrganizationID, SubjectUrn: conv.ToPGText(key.SubjectUrn.String)})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -212,6 +215,9 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not be empty")
+	}
+	if utf8.RuneCountInString(name) > maxAPIKeyNameRunes {
+		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not exceed %d characters", maxAPIKeyNameRunes)
 	}
 	if versionRaw != int(authz.CurrentDelegatedPolicyVersion) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, authz.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
@@ -252,16 +258,15 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 }
 
 func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, policy authz.DelegatedPolicy) (agentmanagement.HumanContext, error) {
-	human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
+	human, observedAgent, err := s.authorizer.RequireAgent(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
-		return agentmanagement.HumanContext{}, err
-	}
-	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return agentmanagement.HumanContext{}, fmt.Errorf("authorize agent API key issuance: %w", err)
 	}
 
+	// Owner-loss paths lock the owner membership before the agent. Pin the
+	// observed owner in the same order, then lock and reauthorize the agent.
 	_, err = orgrepo.New(tx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(agent.OwnerUserID),
+		UserID:         conv.ToPGText(observedAgent.OwnerUserID),
 		OrganizationID: human.Auth.ActiveOrganizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -269,6 +274,14 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 	}
 	if err != nil {
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "lock active agent owner").LogError(ctx, s.logger)
+	}
+
+	human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
+	if err != nil {
+		return agentmanagement.HumanContext{}, fmt.Errorf("reauthorize agent API key issuance: %w", err)
+	}
+	if agent.OwnerUserID != observedAgent.OwnerUserID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
@@ -310,7 +323,7 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		SubjectUrn:             conv.ToPGText(prepared.subjectURN),
 		DelegatedGrants:        prepared.policyJSON,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(prepared.version), Valid: true},
-		ExpiresAt:              pgtype.Timestamptz{Time: prepared.expiresAt, Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: prepared.expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "create agent API key").LogError(ctx, s.logger)
@@ -318,9 +331,10 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 	expiresAt := prepared.expiresAt.Format(time.RFC3339Nano)
 	if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 		OrganizationID:   human.Auth.ActiveOrganizationID,
-		ProjectID:        uuid.NullUUID{},
+		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID),
 		ActorDisplayName: human.Auth.Email,
+		ActorSlug:        nil,
 		KeyURN:           urn.NewAPIKey(created.ID),
 		KeyName:          created.Name,
 		Scopes:           []string{},
@@ -340,9 +354,10 @@ func (s *Service) logAgentKeyRevoke(ctx context.Context, tx pgx.Tx, human agentm
 	}
 	if err := s.audit.LogKeyRevoke(ctx, tx, audit.LogKeyRevokeEvent{
 		OrganizationID:   human.Auth.ActiveOrganizationID,
-		ProjectID:        uuid.NullUUID{},
+		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID),
 		ActorDisplayName: human.Auth.Email,
+		ActorSlug:        nil,
 		KeyURN:           urn.NewAPIKey(key.ID),
 		KeyName:          key.Name,
 		Scopes:           []string{},
@@ -360,7 +375,7 @@ func agentKeyModel(key repo.ApiKey, secret *string) (*gen.Key, error) {
 	version := authz.DelegatedPolicyVersion(key.DelegatedGrantsVersion.Int32)
 	policy, err := authz.DecodeDelegatedPolicy(version, key.DelegatedGrants)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode delegated agent API key policy: %w", err)
 	}
 	versionValue := int(version)
 	subjectURN := key.SubjectUrn.String
@@ -393,7 +408,7 @@ func agentKeyAuditMetadata(key repo.ApiKey) (*audit.AgentKeyCredentialMetadata, 
 		return nil, errors.New("incomplete agent API key profile")
 	}
 	if _, err := authz.DecodeDelegatedPolicy(authz.DelegatedPolicyVersion(key.DelegatedGrantsVersion.Int32), key.DelegatedGrants); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate delegated agent API key policy: %w", err)
 	}
 	return &audit.AgentKeyCredentialMetadata{
 		SubjectURN: key.SubjectUrn.String, DelegatedGrants: key.DelegatedGrants, DelegatedGrantsVersion: key.DelegatedGrantsVersion.Int32, ExpiresAt: key.ExpiresAt.Time.Format(time.RFC3339Nano),
@@ -412,7 +427,7 @@ func checksForDelegatedPolicy(policy authz.DelegatedPolicy) []authz.Check {
 		}
 		checks = append(checks, authz.Check{
 			Scope: grant.Scope, ResourceKind: grant.Selector[authz.SelectorKeyResourceKind], ResourceID: grant.Selector[authz.SelectorKeyResourceID], Dimensions: dimensions,
-		})
+		}.WithStrictSelectorMatch())
 	}
 	return checks
 }
@@ -431,12 +446,15 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 }
 
 func selectorModel(selector authz.Selector) *gen.AgentPolicySelector {
-	model := &gen.AgentPolicySelector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID]}
-	model.Disposition = mapStringPtr(selector, authz.SelectorKeyDisposition)
-	model.Tool = mapStringPtr(selector, authz.SelectorKeyTool)
-	model.ProjectID = mapStringPtr(selector, authz.SelectorKeyProjectID)
-	model.ServerURL = mapStringPtr(selector, authz.SelectorKeyServerURL)
-	model.ServerIdentity = mapStringPtr(selector, authz.SelectorKeyServerIdentity)
+	model := &gen.AgentPolicySelector{
+		ResourceKind:   selector[authz.SelectorKeyResourceKind],
+		ResourceID:     selector[authz.SelectorKeyResourceID],
+		Disposition:    mapStringPtr(selector, authz.SelectorKeyDisposition),
+		Tool:           mapStringPtr(selector, authz.SelectorKeyTool),
+		ProjectID:      mapStringPtr(selector, authz.SelectorKeyProjectID),
+		ServerURL:      mapStringPtr(selector, authz.SelectorKeyServerURL),
+		ServerIdentity: mapStringPtr(selector, authz.SelectorKeyServerIdentity),
+	}
 	return model
 }
 
@@ -496,7 +514,7 @@ func agentIDFromKey(key repo.ApiKey) (uuid.UUID, error) {
 func (s *Service) requireAgentCredentialsEnabled(ctx context.Context) error {
 	human, err := s.authorizer.RequireHuman(ctx, s.db)
 	if err != nil {
-		return err
+		return fmt.Errorf("require human session for agent credentials: %w", err)
 	}
 	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentCredentialsM2, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
 	if evaluation != feature.EvaluationEnabled {
