@@ -3,6 +3,7 @@ import _Cal, { getCalApi } from "@calcom/embed-react";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { BOOKING_CALENDAR_LINK, splitDisplayName } from "./booking-calendar";
+import { cn } from "@/lib/utils";
 
 type CalProps = Parameters<typeof _Cal>[0];
 const Cal = _Cal as unknown as (props: CalProps) => React.ReactElement | null;
@@ -48,11 +49,13 @@ export type BookingFormDefaults = Record<string, string | undefined>;
 export type BookingCalendarProps = {
   eventLabel?: string;
   formDefaults?: BookingFormDefaults;
+  className?: string;
 };
 
 export function BookingCalendar({
   eventLabel = "AI transformation — 30 min",
   formDefaults,
+  className,
 }: BookingCalendarProps): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
@@ -94,7 +97,7 @@ export function BookingCalendar({
   const prefill = [email, companyName].filter(Boolean).join(" · ");
 
   return (
-    <div className="bg-card">
+    <div className={cn("bg-card w-full", className)}>
       <div className="w-full overflow-hidden border-b border-edge">
         <div className="flex py-4 items-baseline gap-4 border-b border-edge px-6">
           <span className="auth-mono text-xs">{eventLabel}</span>

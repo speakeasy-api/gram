@@ -1,4 +1,3 @@
-import { LockoutPaygCheckoutPanel } from "@/components/billing/lockout-payg-checkout-panel";
 import { BookingCalendar } from "./booking-calendar/BookingCalendar";
 import type { BookingFormDefaults } from "./booking-calendar/BookingCalendar";
 
@@ -23,10 +22,13 @@ export function DemoBookingFlow({
   formDefaults?: BookingFormDefaults;
 } = {}): JSX.Element {
   return (
-    <div className="flex w-full flex-col items-center gap-2">
+    <div className="flex w-full max-w-4xl flex-col items-center gap-2">
       {intro}
-      <LockoutPaygCheckoutPanel />
-      <BookingCalendar eventLabel={eventLabel} formDefaults={formDefaults} />
+      <BookingCalendar
+        eventLabel={eventLabel}
+        formDefaults={formDefaults}
+        className="border"
+      />
     </div>
   );
 }
