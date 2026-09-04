@@ -74,6 +74,9 @@ func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizati
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
 		}
+		if principal.Type == urn.PrincipalTypeAgent {
+			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, nil, "agent principal assignments are not supported: %s", raw)
+		}
 		if principal.Type != urn.PrincipalTypeRole {
 			return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, URN: principal.String()}, nil
 		}
