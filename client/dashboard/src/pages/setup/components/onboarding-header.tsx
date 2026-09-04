@@ -15,14 +15,8 @@ export function OnboardingHeader({
 }: OnboardingHeaderProps): JSX.Element {
   return (
     <header className="border-border bg-background w-full border-b">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4 sm:px-0">
-        <div className="flex items-center gap-3">
-          <GramLogo variant="horizontal" className="w-32" />
-          <div className="bg-border hidden h-5 w-px sm:block" />
-          <span className="text-foreground hidden text-sm font-medium sm:block">
-            Setup organization
-          </span>
-        </div>
+      <div className="flex w-full items-center justify-between px-4 py-4">
+        <GramLogo variant="horizontal" className="w-32" />
         <div className="flex items-center gap-2">
           <Button
             asChild
