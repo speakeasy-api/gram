@@ -30,7 +30,12 @@ vi.mock("@/contexts/Sdk", async () => {
 // The route table pulls in every page; the provider only reads the org-level
 // path list from it.
 vi.mock("@/routes", () => ({
-  orgRoutePaths: ["data", "data/event-feed", "data/exports"],
+  orgRoutePaths: [
+    "data",
+    "data/event-feed",
+    "data/exports",
+    "agent-management",
+  ],
 }));
 
 vi.mock("@/pages/demo/BookDemo", () => ({
@@ -258,6 +263,25 @@ describe("AuthProvider legacy project redirects", () => {
 
     expect(screen.getByTestId("location").textContent).toBe(
       "/test-org/projects/data/toolsets?status=enabled#latest",
+    );
+  });
+
+  it("preserves a legacy project whose slug is agents", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [{ ...ORG, projects: [{ ...PROJECT, slug: "agents" }] }],
+        organization: {
+          ...ORG,
+          projects: [{ ...PROJECT, slug: "agents" }],
+        },
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/test-org/agents");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/projects/agents",
     );
   });
 });

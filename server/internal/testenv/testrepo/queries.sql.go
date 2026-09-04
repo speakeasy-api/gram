@@ -2305,6 +2305,24 @@ func (q *Queries) SetAgentInvalidLifecycleFixture(ctx context.Context, id uuid.U
 	return err
 }
 
+const setAgentOwnerFixture = `-- name: SetAgentOwnerFixture :exec
+UPDATE agents
+SET owner_user_id = $1
+WHERE organization_id = $2 AND id = $3
+`
+
+type SetAgentOwnerFixtureParams struct {
+	OwnerUserID    string
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+func (q *Queries) SetAgentOwnerFixture(ctx context.Context, arg SetAgentOwnerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAgentOwnerFixture, arg.OwnerUserID, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const setAgentOwnerLatchFixture = `-- name: SetAgentOwnerLatchFixture :exec
 UPDATE agents
 SET owner_reassignment_required_at = clock_timestamp(),

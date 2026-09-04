@@ -207,7 +207,11 @@ function AgentSettings({
         </Button>
       }
     >
-      <AgentIdentity agent={agentQuery.data} refresh={refresh} />
+      <AgentIdentity
+        key={agentQuery.data.id}
+        agent={agentQuery.data}
+        refresh={refresh}
+      />
       <AgentLifecycle
         agent={agentQuery.data}
         refresh={refresh}
@@ -304,7 +308,6 @@ function AgentLifecycle({
 }) {
   const [confirm, setConfirm] = useState<"revoke" | "delete" | null>(null);
   const common = {
-    onSuccess: refresh,
     onError: (error: Error) =>
       toast.error(error.message || "Unable to update agent"),
   };

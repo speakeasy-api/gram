@@ -1397,7 +1397,7 @@ const ORG_ROUTE_STRUCTURE = {
   },
   agents: {
     title: "Agents",
-    url: "agents",
+    url: "agent-management",
     icon: "bot",
     component: AgentsPage,
   },

@@ -10,30 +10,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type fakeAuthorizationEngine struct {
-	allowed map[string]bool
-	checks  []authz.Check
+	allowed          map[string]bool
+	checks           []authz.Check
+	loadedGrantsOnly bool
 }
 
-func (f *fakeAuthorizationEngine) Require(_ context.Context, checks ...authz.Check) error {
+func (f *fakeAuthorizationEngine) EvaluateLoadedGrants(_ context.Context, grants []authz.Grant, checks ...authz.Check) error {
 	f.checks = append(f.checks, checks...)
 	for _, check := range checks {
-		if !f.allowed[checkKey(check)] {
+		allowed := authz.GrantsSatisfy(grants, check)
+		if !f.loadedGrantsOnly {
+			allowed = allowed || f.allowed[checkKey(check)]
+		}
+		if !allowed {
 			return oops.C(oops.CodeForbidden)
 		}
 	}
 	return nil
-}
-
-func (f *fakeAuthorizationEngine) Evaluate(_ context.Context, checks ...authz.Check) (bool, error) {
-	for _, check := range checks {
-		if !f.allowed[checkKey(check)] {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func checkKey(check authz.Check) string { return string(check.Scope) + ":" + check.ResourceID }
@@ -105,7 +102,11 @@ func TestFormerOwnerLosesIntrinsicPredicates(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "former-owner")
 	seedOrganizationUser(t, conn, "org-a", "current-owner")
 	agent := createAgent(t, conn, "org-a", "former-owner", "Transferred agent")
-	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_user_id = 'current-owner' WHERE id = $1`, agent.ID) //nolint:glint // notestingrawsql: simulates AIM-184 ownership transfer without introducing that excluded API
+	err := testrepo.New(conn).SetAgentOwnerFixture(t.Context(), testrepo.SetAgentOwnerFixtureParams{
+		OrganizationID: "org-a",
+		ID:             agent.ID,
+		OwnerUserID:    "current-owner",
+	})
 	require.NoError(t, err)
 
 	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
@@ -120,7 +121,7 @@ func TestOwnerPredicateRequiresUnblockedCurrentOwnership(t *testing.T) {
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	agent := createAgent(t, conn, "org-a", "owner", "Latched agent")
-	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_reassignment_required_at = clock_timestamp(), owner_reassignment_reason = 'owner_inactive' WHERE id = $1`, agent.ID) //nolint:glint // notestingrawsql: simulates the AIM-184 owner-loss latch without introducing that excluded API
+	err := testrepo.New(conn).SetAgentOwnerLatchFixture(t.Context(), agent.ID)
 	require.NoError(t, err)
 
 	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
@@ -191,6 +192,26 @@ func TestSelectedAgentDenialsDoNotDiscloseExistenceOrTenant(t *testing.T) {
 		_, _, err := authorizer.RequireAgent(ctx, conn, id, OwnedAgentRead)
 		requireOopsCode(t, err, oops.CodeForbidden)
 	}
+}
+
+func TestRequireAgentRejectsStalePreparedGrants(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	agent := createAgent(t, conn, "org-a", "owner", "Revoked grant agent")
+	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}
+	allow(engine, authz.ScopeAgentRead, agent.ID)
+	authorizer := NewAuthorizer(engine)
+	ctx := authz.GrantsToContext(
+		validatedHumanContext(t, "org-a", "caller"),
+		[]authz.Grant{authz.NewGrant(authz.ScopeAgentRead, agent.ID.String())},
+	)
+
+	_, _, err := authorizer.RequireAgent(ctx, conn, agent.ID, OwnedAgentRead)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {

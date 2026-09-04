@@ -893,6 +893,12 @@ VALUES (@organization_id, NULL, @name);
 DELETE FROM organization_user_relationships
 WHERE organization_id = @organization_id AND user_id = @user_id;
 
+-- name: SetAgentOwnerFixture :exec
+-- TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+UPDATE agents
+SET owner_user_id = @owner_user_id
+WHERE organization_id = @organization_id AND id = @id;
+
 -- name: SetAgentSuspendedFixture :exec
 UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @id;
 
