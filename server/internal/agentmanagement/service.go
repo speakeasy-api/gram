@@ -28,18 +28,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type sessionAuthorizer interface {
+	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
+}
+
 type Service struct {
 	tracer     trace.Tracer
 	logger     *slog.Logger
 	db         *pgxpool.Pool
-	auth       *auth.Auth
+	auth       sessionAuthorizer
 	authorizer *Authorizer
 	audit      *audit.Logger
+	features   feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -52,6 +58,7 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 	return &Service{
@@ -61,6 +68,7 @@ func NewService(
 		auth:       auth.New(logger, db, sessionManager, authzEngine),
 		authorizer: NewAuthorizer(authzEngine),
 		audit:      auditLogger,
+		features:   features,
 	}
 }
 
@@ -72,7 +80,37 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	authorizedCtx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return authorizedCtx, fmt.Errorf("authorize agent management session: %w", err)
+	}
+	if err := s.requireM1Enabled(authorizedCtx); err != nil {
+		return authorizedCtx, err
+	}
+	return authorizedCtx, nil
+}
+
+func (s *Service) requireM1Enabled(ctx context.Context) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	evaluation, err := feature.EvaluateFlag(
+		ctx,
+		s.features,
+		feature.FlagAgentManagementM1,
+		authCtx.ActiveOrganizationID,
+		feature.OrgProjectGroups(authCtx.OrganizationSlug, ""),
+	)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to evaluate agent management rollout flag", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	return nil
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.ManagedAgent, error) {

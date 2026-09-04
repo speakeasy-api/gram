@@ -2,6 +2,7 @@ package agentmanagement
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"log/slog"
 	"os"
@@ -9,12 +10,17 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -69,6 +75,35 @@ func createAgent(t *testing.T, conn *pgxpool.Pool, organizationID, ownerUserID, 
 	})
 	require.NoError(t, err)
 	return agent
+}
+
+func m1OutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID string) []string {
+	t.Helper()
+
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+
+	actions := make([]string, 0)
+	for _, row := range rows {
+		if row.OrganizationID != organizationID {
+			continue
+		}
+		var attributes map[string]string
+		require.NoError(t, json.Unmarshal(row.Attributes, &attributes))
+		if attributes["event_type"] != string(events.AgentV1.EventType()) {
+			continue
+		}
+
+		var event webhooksv1.Event
+		require.NoError(t, proto.Unmarshal(row.Message, &event))
+		var payload events.AuditLogCreatedPayloadV1
+		require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+		require.Equal(t, organizationID, payload.OrganizationID)
+		require.Equal(t, "agent", payload.SubjectType)
+		actions = append(actions, payload.Action)
+	}
+
+	return actions
 }
 
 func newTestService(conn *pgxpool.Pool, engine authorizationEngine) *Service {
