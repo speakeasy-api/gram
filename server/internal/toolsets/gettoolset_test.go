@@ -97,7 +97,7 @@ func TestToolsetsService_GetToolset_ExternalOAuthResponseSources(t *testing.T) {
 		require.Equal(t, issuer, *result.ExternalOauthServer.AuthorizationServerIssuer)
 	})
 
-	t.Run("legacy metadata", func(t *testing.T) {
+	t.Run("metadata-based configuration", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, ti := newTestToolsetsService(t)

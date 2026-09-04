@@ -353,8 +353,8 @@ func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger,
 // serveLegacyToolsetProtectedResource resolves and writes RFC 9728
 // protected-resource metadata for a toolset via the legacy wellknown
 // resolver. A nil result means the toolset carries no OAuth configuration —
-// 404. resourceURL is emitted verbatim as `resource`; legacy metadata-backed
-// configurations also use it in `authorization_servers`, while issuer-only
+// 404. resourceURL is emitted verbatim as `resource`; metadata-based
+// configurations also use it in `authorization_servers`, while issuer-based
 // configurations advertise their stored provider issuer.
 func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, resourceURL string) error {
 	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(ctx, logger, s.db, &s.toolsetCache, toolset, resourceURL)
