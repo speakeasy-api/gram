@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,10 +12,7 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import {
-  ListKeysResult,
-  ListKeysResult$inboundSchema,
-} from "../models/components/listkeysresult.js";
+import { Key, Key$inboundSchema } from "../models/components/key.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +28,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListAPIKeysRequest,
-  ListAPIKeysRequest$outboundSchema,
-  ListAPIKeysSecurity,
-} from "../models/operations/listapikeys.js";
+  RotateAPIKeyRequest,
+  RotateAPIKeyRequest$outboundSchema,
+  RotateAPIKeySecurity,
+} from "../models/operations/rotateapikey.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listKeys keys
+ * rotateKey keys
  *
  * @remarks
- * List all api keys for an organization
+ * Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
  */
-export function keysList(
+export function keysRotate(
   client: GramCore,
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request: RotateAPIKeyRequest,
+  security?: RotateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListKeysResult,
+    Key,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +70,13 @@ export function keysList(
 
 async function $do(
   client: GramCore,
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request: RotateAPIKeyRequest,
+  security?: RotateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListKeysResult,
+      Key,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,24 +92,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(z.optional(ListAPIKeysRequest$outboundSchema), value),
+    (value) => z.parse(RotateAPIKeyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.RotateKeyForm, { explode: true });
 
-  const path = pathToFunc("/rpc/keys.list")();
-
-  const query = encodeFormQuery({
-    "agent_id": payload?.agent_id,
-  });
+  const path = pathToFunc("/rpc/keys.rotate")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -131,7 +125,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listAPIKeys",
+    operationID: "rotateAPIKey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -145,11 +139,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -176,7 +169,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListKeysResult,
+    Key,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -187,7 +180,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListKeysResult$inboundSchema),
+    M.json(200, Key$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
