@@ -34,6 +34,9 @@ type ExternalOAuthToolsetOpts struct {
 	// (e.g. dev-idp via devidptest) should pass the bytes returned by the
 	// server's metadata helper here (e.g. inst.OAuth21Metadata(t)).
 	Metadata []byte
+	// AuthorizationServerIssuer configures provider-hosted discovery. When set,
+	// Metadata must be nil to preserve the database source XOR.
+	AuthorizationServerIssuer *string
 }
 
 // CreateExternalOAuthToolset creates a toolset linked to an external OAuth server.
@@ -52,7 +55,8 @@ func CreateExternalOAuthToolset(
 	}
 	slug := opts.Slug + "-" + suffix
 
-	if opts.Metadata == nil {
+	var err error
+	if opts.Metadata == nil && opts.AuthorizationServerIssuer == nil {
 		meta := map[string]any{
 			"issuer":                   "https://test-oauth-server.example.com",
 			"authorization_endpoint":   "https://test-oauth-server.example.com/authorize",
@@ -60,7 +64,6 @@ func CreateExternalOAuthToolset(
 			"response_types_supported": []string{"code"},
 			"grant_types_supported":    []string{"authorization_code"},
 		}
-		var err error
 		opts.Metadata, err = json.Marshal(meta)
 		require.NoError(t, err)
 	}
@@ -68,11 +71,24 @@ func CreateExternalOAuthToolset(
 	oauthRepo := oauth_repo.New(conn)
 	toolsetsRepo := toolsets_repo.New(conn)
 
-	serverMetadata, err := oauthRepo.CreateExternalOAuthServerMetadata(ctx, oauth_repo.CreateExternalOAuthServerMetadataParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      "external-oauth-" + suffix,
-		Metadata:  opts.Metadata,
-	})
+	var serverMetadata oauth_repo.ExternalOauthServerMetadatum
+	if opts.AuthorizationServerIssuer == nil {
+		serverMetadata, err = oauthRepo.CreateExternalOAuthServerMetadata(ctx, oauth_repo.CreateExternalOAuthServerMetadataParams{
+			ProjectID: *authCtx.ProjectID,
+			Slug:      "external-oauth-" + suffix,
+			Metadata:  opts.Metadata,
+		})
+	} else {
+		err = conn.QueryRow(ctx, `
+			INSERT INTO external_oauth_server_metadata (project_id, slug, authorization_server_issuer)
+			VALUES ($1, $2, $3)
+			RETURNING id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted
+		`, *authCtx.ProjectID, "external-oauth-"+suffix, *opts.AuthorizationServerIssuer).Scan(
+			&serverMetadata.ID, &serverMetadata.ProjectID, &serverMetadata.Slug, &serverMetadata.Metadata,
+			&serverMetadata.AuthorizationServerIssuer, &serverMetadata.CreatedAt, &serverMetadata.UpdatedAt,
+			&serverMetadata.DeletedAt, &serverMetadata.Deleted,
+		)
+	}
 	require.NoError(t, err)
 
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{

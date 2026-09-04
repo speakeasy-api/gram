@@ -176,7 +176,11 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Attribute("id", String, "The ID of the external OAuth server")
 	Attribute("project_id", String, "The project ID this external OAuth server belongs to")
 	Attribute("slug", Slug, "The slug of the external OAuth server")
-	Attribute("metadata", Any, "The metadata for the external OAuth server")
+	Attribute("metadata", Any, "The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
+	Attribute("authorization_server_issuer", String, "The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present.", func() {
+		Format(FormatURI)
+		MaxLength(500)
+	})
 	Attribute("created_at", String, func() {
 		Description("When the external OAuth server was created.")
 		Format(FormatDateTime)
@@ -185,7 +189,7 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 		Description("When the external OAuth server was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "slug", "metadata", "created_at", "updated_at")
+	Required("id", "project_id", "slug", "created_at", "updated_at")
 })
 
 var ExternalOAuthServerForm = Type("ExternalOAuthServerForm", func() {

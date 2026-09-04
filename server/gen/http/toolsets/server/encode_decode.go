@@ -3846,12 +3846,13 @@ func marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(v *types.E
 		return nil
 	}
 	res := &ExternalOAuthServerResponseBody{
-		ID:        v.ID,
-		ProjectID: v.ProjectID,
-		Slug:      string(v.Slug),
-		Metadata:  v.Metadata,
-		CreatedAt: v.CreatedAt,
-		UpdatedAt: v.UpdatedAt,
+		ID:                        v.ID,
+		ProjectID:                 v.ProjectID,
+		Slug:                      string(v.Slug),
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+		CreatedAt:                 v.CreatedAt,
+		UpdatedAt:                 v.UpdatedAt,
 	}
 
 	return res

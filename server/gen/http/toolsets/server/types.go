@@ -3795,8 +3795,12 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The slug of the external OAuth server
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The metadata for the external OAuth server
-	Metadata any `form:"metadata" json:"metadata" xml:"metadata"`
+	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
+	// one of metadata and authorization_server_issuer is present.
+	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
+	// Exactly one of authorization_server_issuer and metadata is present.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// When the external OAuth server was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the external OAuth server was last updated.
