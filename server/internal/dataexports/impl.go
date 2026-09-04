@@ -196,17 +196,9 @@ func (s *Service) createOtelDestination(ctx context.Context, authCtx *contextval
 		return nil, oops.E(oops.CodeInvalid, errors.New("missing OTEL configuration"), "otel configuration is required")
 	}
 
-	name, err := validateDestinationName(payload.Name)
+	configuration, err := NormalizeDestinationConfiguration(payload.Name, payload.Otel.EndpointURL, payload.SensitiveData)
 	if err != nil {
 		return nil, err
-	}
-	endpointURL, err := validateDestinationURL(payload.Otel.EndpointURL)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := parseSensitiveData(payload.SensitiveData)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid sensitive_data")
 	}
 	headerInputs := make([]destinationHeaderInput, len(payload.Otel.Headers))
 	for i, input := range payload.Otel.Headers {
@@ -238,10 +230,10 @@ func (s *Service) createOtelDestination(ctx context.Context, authCtx *contextval
 	row, err := repo.New(dbtx).CreateOtelDestination(ctx, repo.CreateOtelDestinationParams{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
-		Name:             name,
-		EndpointUrl:      endpointURL,
+		Name:             configuration.Name,
+		EndpointUrl:      configuration.EndpointURL,
 		HeadersEncrypted: headersEncrypted,
-		SensitiveData:    conv.ToPGText(string(policy)),
+		SensitiveData:    conv.ToPGText(configuration.SensitiveData),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create OTEL destination").LogError(ctx, logger)
@@ -262,7 +254,7 @@ func (s *Service) createOtelDestination(ctx context.Context, authCtx *contextval
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination creation").LogError(ctx, logger)
 	}
 
-	return buildOtelDestinationView(row, headers, string(policy)), nil
+	return buildOtelDestinationView(row, headers, configuration.SensitiveData), nil
 }
 
 func (s *Service) UpdateDestination(ctx context.Context, payload *gen.UpdateDestinationPayload) (*gen.Destination, error) {
@@ -295,18 +287,11 @@ func (s *Service) updateOtelDestination(ctx context.Context, authCtx *contextval
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid destination id")
 	}
-	name, err := validateDestinationName(payload.Name)
+	configuration, err := NormalizeDestinationConfiguration(payload.Name, payload.Otel.EndpointURL, payload.SensitiveData)
 	if err != nil {
 		return nil, err
 	}
-	endpointURL, err := validateDestinationURL(payload.Otel.EndpointURL)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := parseSensitiveData(payload.SensitiveData)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid sensitive_data")
-	}
+	policy := sensitiveData(configuration.SensitiveData)
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -362,10 +347,10 @@ func (s *Service) updateOtelDestination(ctx context.Context, authCtx *contextval
 	beforeSnapshot := destinationSnapshot(before.Name, before.EndpointUrl, existingHeaders, beforePolicy)
 
 	after, err := queries.UpdateOtelDestination(ctx, repo.UpdateOtelDestinationParams{
-		Name:             name,
-		EndpointUrl:      endpointURL,
+		Name:             configuration.Name,
+		EndpointUrl:      configuration.EndpointURL,
 		HeadersEncrypted: headersEncrypted,
-		SensitiveData:    conv.ToPGText(string(policy)),
+		SensitiveData:    conv.ToPGText(configuration.SensitiveData),
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		ID:               destinationID,
@@ -392,7 +377,7 @@ func (s *Service) updateOtelDestination(ctx context.Context, authCtx *contextval
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination update").LogError(ctx, logger)
 	}
 
-	return buildOtelDestinationView(after, headers, string(policy)), nil
+	return buildOtelDestinationView(after, headers, configuration.SensitiveData), nil
 }
 
 func (s *Service) DeleteDestination(ctx context.Context, payload *gen.DeleteDestinationPayload) error {
@@ -536,7 +521,7 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		return nil, err
 	}
 
-	source, err := parseDataSource(payload.DataSource)
+	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
 	}
@@ -555,7 +540,7 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	row, err := queries.CreateDataExportRoute(ctx, repo.CreateDataExportRouteParams{
 		OrganizationID:    authCtx.ActiveOrganizationID,
 		ProjectID:         *authCtx.ProjectID,
-		DataSource:        string(source),
+		DataSource:        source,
 		Enabled:           payload.Enabled,
 		OtelDestinationID: destinationID,
 	})
@@ -597,7 +582,7 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid route id")
 	}
-	source, err := parseDataSource(payload.DataSource)
+	source, err := NormalizeDataSource(payload.DataSource)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
 	}
@@ -626,7 +611,7 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		return nil, err
 	}
 	after, err := queries.UpdateDataExportRoute(ctx, repo.UpdateDataExportRouteParams{
-		DataSource:        string(source),
+		DataSource:        source,
 		Enabled:           payload.Enabled,
 		OtelDestinationID: destinationID,
 		OrganizationID:    authCtx.ActiveOrganizationID,

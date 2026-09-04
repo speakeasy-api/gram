@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -10,11 +11,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -24,6 +27,14 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 	parsed, err := url.Parse(raw)
 	require.NoError(t, err)
 	return parsed
+}
+
+func TestOperationalReadersRequireHTTPSDashboardURL(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, validDashboardURL(mustParseURL(t, "https://app.getgram.test")))
+	require.False(t, validDashboardURL(mustParseURL(t, "http://localhost:5173")))
+	require.False(t, validDashboardURL(mustParseURL(t, "https://user@app.getgram.test")))
 }
 
 func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
@@ -76,6 +87,67 @@ func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), secret)
+}
+
+func TestListDataExportsBoundsReadsAndUsesJoinedProjectMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_bounded_data_exports")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	queries := dataexportsrepo.New(conn)
+	dataSources := []string{"product_telemetry", "risk_findings"}
+	names := []string{"First collector", "Second collector"}
+	endpoints := []string{"https://first.example.test/v1", "https://second.example.test/v1"}
+	for i, dataSource := range dataSources {
+		destination, createErr := queries.CreateOtelDestination(ctx, dataexportsrepo.CreateOtelDestinationParams{
+			OrganizationID:   principal.OrganizationID,
+			ProjectID:        project.ID,
+			Name:             names[i],
+			EndpointUrl:      endpoints[i],
+			HeadersEncrypted: pgtype.Text{},
+			SensitiveData:    pgtype.Text{String: "exclude", Valid: true},
+		})
+		require.NoError(t, createErr)
+		_, createErr = queries.CreateDataExportRoute(ctx, dataexportsrepo.CreateDataExportRouteParams{
+			OrganizationID:    principal.OrganizationID,
+			ProjectID:         project.ID,
+			DataSource:        dataSource,
+			Enabled:           true,
+			OtelDestinationID: uuid.NullUUID{UUID: destination.ID, Valid: true},
+		})
+		require.NoError(t, createErr)
+	}
+
+	destinationRows, err := queries.ListOtelDestinationsWithProjectMetadata(ctx, dataexportsrepo.ListOtelDestinationsWithProjectMetadataParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      uuid.NullUUID{},
+		ResultLimit:    1,
+	})
+	require.NoError(t, err)
+	require.Len(t, destinationRows, 1)
+	require.Equal(t, project.Name, destinationRows[0].ProjectName)
+	require.Equal(t, project.Slug, destinationRows[0].ProjectSlug)
+	routeRows, err := queries.ListDataExportRoutesWithProjectMetadata(ctx, dataexportsrepo.ListDataExportRoutesWithProjectMetadataParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      uuid.NullUUID{},
+		ResultLimit:    1,
+	})
+	require.NoError(t, err)
+	require.Len(t, routeRows, 1)
+	require.Equal(t, project.Name, routeRows[0].ProjectName)
+	require.Equal(t, project.Slug, routeRows[0].ProjectSlug)
+
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExports(testenv.NewEncryptionClient(t), mustParseURL(t, "https://app.getgram.test"))
+	output, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{Limit: 1})
+	require.NoError(t, err)
+	require.True(t, output.Truncated)
+	require.Len(t, output.Destinations, 1)
+	require.Len(t, output.Routes, 1)
+	require.Equal(t, project.Name, output.Destinations[0].ProjectName)
+	require.Equal(t, project.Slug, output.Routes[0].ProjectSlug)
 }
 
 func TestCreateDataExportRequiresExplicitConfirmation(t *testing.T) {
@@ -190,6 +262,64 @@ func TestCreateDataExportCommitsDestinationRouteAndAuditAtomically(t *testing.T)
 	require.Len(t, destinations, 1, "the conflicting destination must roll back with its route")
 }
 
+func TestCreateDataExportReturnsStructuredRecoverableRefusals(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_refusals")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+
+	base := CreateDataExportInput{
+		ProjectID:     project.ID.String(),
+		Name:          "Collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "product_telemetry",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		Confirmed:     true,
+	}
+	invalidEndpoint := base
+	invalidEndpoint.EndpointURL = "https://otel.example.test/v1?token=secret"
+	_, err = reader.CreateDataExport(ctx, principal, invalidEndpoint)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput)
+	require.Equal(t, "invalid_input", requireDataExportRefusal(t, err).Code)
+
+	invalidSource := base
+	invalidSource.DataSource = "unknown"
+	_, err = reader.CreateDataExport(ctx, principal, invalidSource)
+	require.ErrorIs(t, err, ErrDataExportInvalidInput)
+	require.Equal(t, "invalid_input", requireDataExportRefusal(t, err).Code)
+
+	missingProject := base
+	missingProject.ProjectID = ""
+	missingProject.ProjectSlug = "missing-project"
+	_, err = reader.CreateDataExport(ctx, principal, missingProject)
+	require.ErrorIs(t, err, ErrForbidden)
+	require.Equal(t, "project_not_found", requireDataExportRefusal(t, err).Code)
+
+	result, ok := dataExportMutationToolResult(errors.New("database unavailable"))
+	require.False(t, ok)
+	require.Nil(t, result)
+}
+
+func requireDataExportRefusal(t *testing.T, err error) dataExportMutationRefusal {
+	t.Helper()
+
+	result, ok := dataExportMutationToolResult(err)
+	require.True(t, ok)
+	require.NotNil(t, result)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var refusal dataExportMutationRefusal
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &refusal))
+	return refusal
+}
+
 type recordingRecentToolCallReader struct {
 	params telemetryrepo.ListToolUsageTracesParams
 	rows   []telemetryrepo.ToolUsageTraceSummary
@@ -208,6 +338,12 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_recent_tool_calls")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	servers, err := mcpserversrepo.New(conn).ListMCPServersForTelemetryByProjectID(ctx, project.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.True(t, servers[0].RemoteMcpServerID.Valid)
+	require.True(t, servers[0].Name.Valid)
+	require.True(t, servers[0].Slug.Valid)
 	fixedNow := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	statusCode := int32(500)
 	client := "claude-code"
@@ -256,6 +392,13 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	require.Equal(t, defaultRecentToolCallLimit+1, telemetry.params.Limit)
 	require.Empty(t, telemetry.params.Query)
 	require.Empty(t, telemetry.params.Filters)
+	require.Empty(t, telemetry.params.HostedMCPMatchers)
+	require.Equal(t, []telemetryrepo.MCPServerMatcher{{
+		SourceID:    servers[0].RemoteMcpServerID.UUID.String(),
+		TargetType:  telemetryrepo.ToolUsageTargetTypeHostedMCP,
+		TargetID:    servers[0].Slug.String,
+		TargetLabel: servers[0].Name.String,
+	}}, telemetry.params.MCPServerMatchers)
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)

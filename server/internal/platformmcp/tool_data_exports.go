@@ -33,7 +33,7 @@ func newDataExportReadService(db *pgxpool.Pool, encryptionClient *encryption.Cli
 }
 
 func validDashboardURL(value *url.URL) bool {
-	return value != nil && (value.Scheme == "http" || value.Scheme == "https") && value.Host != "" && value.User == nil
+	return value != nil && value.Scheme == "https" && value.Host != "" && value.User == nil
 }
 
 // WithDataExports enables the safe data export inventory on this reader.
@@ -92,46 +92,47 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 		return ListDataExportsOutput{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
 	}
 
-	projects, selectedProject, err := r.dataExportProjects(ctx, principal, input)
+	organization, err := organizationsrepo.New(r.dataExports.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	if err != nil {
-		return ListDataExportsOutput{}, err
+		return ListDataExportsOutput{}, fmt.Errorf("resolve data export organization: %w", err)
 	}
-
-	query := dataexportsrepo.New(r.dataExports.db)
-	var destinations []dataexportsrepo.OtelDestination
-	var routes []dataexportsrepo.DataExportRoute
-	if selectedProject != nil {
-		destinations, err = query.ListOtelDestinations(ctx, dataexportsrepo.ListOtelDestinationsParams{
-			OrganizationID: principal.OrganizationID,
-			ProjectID:      selectedProject.ID,
-		})
-		if err == nil {
-			routes, err = query.ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
-				OrganizationID: principal.OrganizationID,
-				ProjectID:      selectedProject.ID,
-			})
+	projectID := uuid.NullUUID{}
+	if input.ProjectID != "" || input.ProjectSlug != "" {
+		selectedProject, resolveErr := r.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
+		if resolveErr != nil {
+			return ListDataExportsOutput{}, resolveErr
 		}
-	} else {
-		destinations, err = query.ListOtelDestinationsByOrganizationID(ctx, principal.OrganizationID)
-		if err == nil {
-			routes, err = query.ListDataExportRoutesByOrganizationID(ctx, principal.OrganizationID)
-		}
-	}
-	if err != nil {
-		return ListDataExportsOutput{}, fmt.Errorf("list platform data exports: %w", err)
+		projectID = uuid.NullUUID{UUID: selectedProject.ID, Valid: true}
 	}
 
 	limit := boundedLimit(input.Limit)
+	query := dataexportsrepo.New(r.dataExports.db)
+	destinations, err := query.ListOtelDestinationsWithProjectMetadata(ctx, dataexportsrepo.ListOtelDestinationsWithProjectMetadataParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID,
+		ResultLimit:    int32(limit + 1),
+	})
+	if err != nil {
+		return ListDataExportsOutput{}, fmt.Errorf("list platform data export destinations: %w", err)
+	}
+	routes, err := query.ListDataExportRoutesWithProjectMetadata(ctx, dataexportsrepo.ListDataExportRoutesWithProjectMetadataParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID,
+		ResultLimit:    int32(limit + 1),
+	})
+	if err != nil {
+		return ListDataExportsOutput{}, fmt.Errorf("list platform data export routes: %w", err)
+	}
+
 	destinations, destinationsTruncated := boundedRows(destinations, limit)
 	routes, routesTruncated := boundedRows(routes, limit)
 	output := ListDataExportsOutput{
 		Destinations:  make([]DataExportDestination, 0, len(destinations)),
 		Routes:        make([]DataExportRoute, 0, len(routes)),
-		ManagementURL: r.dataExports.dashboardURL.JoinPath(projects.organizationSlug, "data", "exports").String(),
+		ManagementURL: r.dataExports.dashboardURL.JoinPath(organization.Slug, "data", "exports").String(),
 		Truncated:     destinationsTruncated || routesTruncated,
 	}
 	for _, row := range destinations {
-		project := projects.byID[row.ProjectID]
 		headers, decodeErr := dataexports.DecodeDestinationHeaderMetadata(r.dataExports.encryption, row.HeadersEncrypted)
 		if decodeErr != nil {
 			return ListDataExportsOutput{}, fmt.Errorf("decode data export destination headers: %w", decodeErr)
@@ -147,8 +148,8 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 		output.Destinations = append(output.Destinations, DataExportDestination{
 			ID:            row.ID.String(),
 			ProjectID:     row.ProjectID.String(),
-			ProjectName:   project.Name,
-			ProjectSlug:   project.Slug,
+			ProjectName:   row.ProjectName,
+			ProjectSlug:   row.ProjectSlug,
 			Name:          row.Name,
 			Type:          "otel",
 			EndpointURL:   row.EndpointUrl,
@@ -157,48 +158,17 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 		})
 	}
 	for _, row := range routes {
-		project := projects.byID[row.ProjectID]
 		output.Routes = append(output.Routes, DataExportRoute{
 			ID:            row.ID.String(),
 			ProjectID:     row.ProjectID.String(),
-			ProjectName:   project.Name,
-			ProjectSlug:   project.Slug,
+			ProjectName:   row.ProjectName,
+			ProjectSlug:   row.ProjectSlug,
 			DataSource:    row.DataSource,
 			Enabled:       row.Enabled,
 			DestinationID: uuidString(row.OtelDestinationID),
 		})
 	}
 	return output, nil
-}
-
-type dataExportProjects struct {
-	organizationSlug string
-	byID             map[uuid.UUID]Project
-}
-
-func (r *PostgresReader) dataExportProjects(ctx context.Context, principal Principal, input ListDataExportsInput) (dataExportProjects, *ResolvedProject, error) {
-	organization, err := organizationsrepo.New(r.dataExports.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
-	if err != nil {
-		return dataExportProjects{}, nil, fmt.Errorf("resolve data export organization: %w", err)
-	}
-	result := dataExportProjects{organizationSlug: organization.Slug, byID: map[uuid.UUID]Project{}}
-	if input.ProjectID != "" || input.ProjectSlug != "" {
-		selected, resolveErr := r.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
-		if resolveErr != nil {
-			return dataExportProjects{}, nil, resolveErr
-		}
-		result.byID[selected.ID] = Project{ID: selected.ID.String(), Name: selected.Name, Slug: selected.Slug}
-		return result, &selected, nil
-	}
-
-	rows, err := r.reader.ListProjects(ctx, principal.OrganizationID)
-	if err != nil {
-		return dataExportProjects{}, nil, fmt.Errorf("list data export projects: %w", err)
-	}
-	for _, row := range rows {
-		result.byID[row.ID] = Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug}
-	}
-	return result, nil, nil
 }
 
 func registerDataExportTools(reg *Registrar, reader *PostgresReader) {

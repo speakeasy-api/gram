@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	telemetrysvc "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -100,12 +101,17 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		statuses = []string{outcome}
 	}
 
+	hostedMCPMatchers, mcpServerMatchers, err := telemetrysvc.LoadToolUsageMatchers(ctx, r.db, project.ID)
+	if err != nil {
+		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call matchers: %w", err)
+	}
+
 	rows, err := r.recentToolCalls.telemetry.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
 		GramProjectID:      project.ID.String(),
 		TimeStart:          window.start.UnixNano(),
 		TimeEnd:            window.end.UnixNano(),
-		HostedMCPMatchers:  nil,
-		MCPServerMatchers:  nil,
+		HostedMCPMatchers:  hostedMCPMatchers,
+		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,

@@ -25,6 +25,7 @@ import (
 
 var (
 	ErrDataExportConfirmationRequired = errors.New("data export creation requires confirmation")
+	ErrDataExportInvalidInput         = errors.New("invalid data export input")
 	ErrDataExportRouteConflict        = errors.New("a data export route already exists for this source")
 )
 
@@ -69,7 +70,12 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 		return CreateDataExportOutput{}, ErrDataExportConfirmationRequired
 	}
 	if (input.ProjectID == "") == (input.ProjectSlug == "") {
-		return CreateDataExportOutput{}, fmt.Errorf("exactly one of project_id or project_slug is required")
+		return CreateDataExportOutput{}, fmt.Errorf("%w: exactly one of project_id or project_slug is required", ErrDataExportInvalidInput)
+	}
+	if input.ProjectID != "" {
+		if _, parseErr := uuid.Parse(input.ProjectID); parseErr != nil {
+			return CreateDataExportOutput{}, fmt.Errorf("%w: invalid project_id: %w", ErrDataExportInvalidInput, parseErr)
+		}
 	}
 	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
 	if err != nil {
@@ -86,11 +92,11 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 	}
 	configuration, err := dataexports.NormalizeDestinationConfiguration(input.Name, input.EndpointURL, sensitiveData)
 	if err != nil {
-		return CreateDataExportOutput{}, fmt.Errorf("validate data export destination: %w", err)
+		return CreateDataExportOutput{}, fmt.Errorf("%w: validate data export destination: %w", ErrDataExportInvalidInput, err)
 	}
-	dataSource := input.DataSource
-	if dataSource != dataexports.DataSourceProductTelemetry && dataSource != dataexports.DataSourceRiskFindings {
-		return CreateDataExportOutput{}, fmt.Errorf("data_source must be one of product_telemetry, risk_findings")
+	dataSource, err := dataexports.NormalizeDataSource(input.DataSource)
+	if err != nil {
+		return CreateDataExportOutput{}, fmt.Errorf("%w: validate data_source: %w", ErrDataExportInvalidInput, err)
 	}
 	enabled := true
 	if input.Enabled != nil {
@@ -222,6 +228,10 @@ func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 		refusal = dataExportMutationRefusal{Code: "confirmation_required", Message: "Show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask the user to confirm before creating the export."}
 	case errors.Is(err, ErrDataExportRouteConflict):
 		refusal = dataExportMutationRefusal{Code: "conflict", Message: "This project already has an export route for that data source. Read the current exports and manage the existing route instead."}
+	case errors.Is(err, ErrDataExportInvalidInput):
+		refusal = dataExportMutationRefusal{Code: "invalid_input", Message: "Choose exactly one existing project, provide a valid HTTP or HTTPS endpoint without credentials, query parameters, or fragments, and use a supported data source and sensitive-data policy."}
+	case errors.Is(err, ErrForbidden):
+		refusal = dataExportMutationRefusal{Code: "project_not_found", Message: "No accessible project matched that project ID or slug. Read the project inventory and choose one of the returned projects."}
 	default:
 		return nil, false
 	}
