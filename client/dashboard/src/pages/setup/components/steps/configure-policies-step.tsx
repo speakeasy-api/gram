@@ -314,7 +314,10 @@ export function ConfigurePoliciesStep({
                   },
                 ),
               }
-            : { messageTypes: [...nextCfg.messageTypes] }),
+            : {
+                messageTypes: [...nextCfg.messageTypes],
+                detectionScopes: [],
+              }),
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -474,6 +477,9 @@ export function ConfigurePoliciesStep({
     let next: CategoryConfig | undefined;
     setConfigs((prev) => {
       const types = new Set(prev[cat].messageTypes);
+      if (!recommendedScopesEnabled && types.has(t) && types.size === 1) {
+        return prev;
+      }
       if (types.has(t)) types.delete(t);
       else types.add(t);
       next = { ...prev[cat], messageTypes: types };
@@ -728,7 +734,12 @@ export function ConfigurePoliciesStep({
                           <Checkbox
                             id={id}
                             checked={checked}
-                            disabled={!activeConfig.enabled}
+                            disabled={
+                              !activeConfig.enabled ||
+                              (!recommendedScopesEnabled &&
+                                checked &&
+                                activeConfig.messageTypes.size === 1)
+                            }
                             onCheckedChange={() =>
                               toggleMessageType(activeCategory, t)
                             }
