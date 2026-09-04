@@ -29,7 +29,8 @@ const (
 // HumanContext is identity proven by an ordinary, nonsupport Gram session and
 // an active organization membership.
 type HumanContext struct {
-	Auth *contextvalues.AuthContext
+	Auth   *contextvalues.AuthContext
+	grants []authz.Grant
 }
 
 // AgentPermissions reports the four independent management decisions for a
@@ -43,8 +44,7 @@ type AgentPermissions struct {
 }
 
 type authorizationEngine interface {
-	Require(context.Context, ...authz.Check) error
-	Evaluate(context.Context, ...authz.Check) (bool, error)
+	EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error
 }
 
 // Authorizer implements the reusable human-only agent management seam.
@@ -94,7 +94,16 @@ func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanCon
 		return HumanContext{}, fmt.Errorf("lock active organization membership: %w", err)
 	}
 
-	return HumanContext{Auth: authCtx}, nil
+	principals, err := authz.ResolveUserPrincipals(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID)
+	if err != nil {
+		return HumanContext{}, fmt.Errorf("resolve live authorization principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, dbtx, authCtx.ActiveOrganizationID, principals)
+	if err != nil {
+		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
+	}
+
+	return HumanContext{Auth: authCtx, grants: grants}, nil
 }
 
 // RequireCreate authorizes a prospective agent ID and locks the eligible owner
@@ -123,7 +132,7 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID 
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.Require(ctx, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
+	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
 		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
 	}
 	return human, nil
@@ -171,7 +180,7 @@ func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID u
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.Require(ctx, agentCheck(scope, agent.ID)); err != nil {
+	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(scope, agent.ID)); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -187,31 +196,12 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
 	}
 
-	read, err := a.evaluate(ctx, authz.ScopeAgentRead, agent.ID)
-	if err != nil {
-		return AgentPermissions{}, err
-	}
-	write, err := a.evaluate(ctx, authz.ScopeAgentWrite, agent.ID)
-	if err != nil {
-		return AgentPermissions{}, err
-	}
-	authorize, err := a.evaluate(ctx, authz.ScopeAgentAuthorize, agent.ID)
-	if err != nil {
-		return AgentPermissions{}, err
-	}
-	transfer, err := a.evaluate(ctx, authz.ScopeAgentTransfer, agent.ID)
-	if err != nil {
-		return AgentPermissions{}, err
-	}
-	return AgentPermissions{Read: read, Write: write, Authorize: authorize, Transfer: transfer}, nil
-}
-
-func (a *Authorizer) evaluate(ctx context.Context, scope authz.Scope, agentID uuid.UUID) (bool, error) {
-	allowed, err := a.authz.Evaluate(ctx, agentCheck(scope, agentID))
-	if err != nil {
-		return false, fmt.Errorf("evaluate %s for selected agent: %w", scope, err)
-	}
-	return allowed, nil
+	return AgentPermissions{
+		Read:      authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentRead, agent.ID)),
+		Write:     authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentWrite, agent.ID)),
+		Authorize: authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
+		Transfer:  authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentTransfer, agent.ID)),
+	}, nil
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {

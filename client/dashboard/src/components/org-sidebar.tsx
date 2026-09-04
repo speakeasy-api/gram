@@ -99,6 +99,7 @@ export function OrgSidebar({
     orgRoutes.auditLogs,
     orgRoutes.killswitch,
     orgRoutes.deviceAgent,
+    orgRoutes.agents,
     orgRoutes.access,
   ].some((r) => r.active);
 
@@ -142,6 +143,7 @@ export function OrgSidebar({
     orgRoutes.auditLogs,
     orgRoutes.killswitch,
     orgRoutes.deviceAgent,
+    orgRoutes.agents,
     orgRoutes.access,
     orgRoutes.mcpSessions,
     orgRoutes.identity,
@@ -249,6 +251,17 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
+                  {
+                    item: orgRoutes.agents,
+                    scope: [
+                      "org:read",
+                      "org:admin",
+                      "agent:read",
+                      "agent:write",
+                      "agent:authorize",
+                      "agent:transfer",
+                    ],
+                  },
                   { item: orgRoutes.access, scope: orgReadOrAdmin },
                 ]}
               />

@@ -6,7 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
@@ -73,6 +75,31 @@ func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
 		"agent:revoke",
 		"agent:delete",
 	}, actions)
+}
+
+func TestAuditFailureRollsBackLifecycleMutation(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Rollback agent"})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).RejectPublishOutboxWritesFixture(t.Context()))
+
+	_, err = service.Suspend(ctx, &gen.SuspendPayload{AgentID: created.ID})
+	require.Error(t, err)
+	agentID, err := parseAgentID(created.ID)
+	require.NoError(t, err)
+	stored, err := agentsrepo.New(conn).GetAgentByID(t.Context(), agentsrepo.GetAgentByIDParams{
+		OrganizationID: "org-a",
+		ID:             agentID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.SuspendedAt.Valid, "the mutation must roll back when its audit outbox write fails")
 }
 
 func TestFailedLifecycleMutationDoesNotEmitAudit(t *testing.T) {
