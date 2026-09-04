@@ -131,18 +131,30 @@ export function SetupTaskCard({
         disabled={pending || task.hidden || !canOpen}
         aria-describedby={descriptionId}
       >
-        <h3 className="font-medium text-foreground">{task.title}</h3>
-        <p id={descriptionId} className="text-sm text-muted-foreground">
+        <span
+          role="heading"
+          aria-level={3}
+          className="block font-medium text-foreground"
+        >
+          {task.title}
+        </span>
+        <span
+          id={descriptionId}
+          className="block text-sm text-muted-foreground"
+        >
           {task.description}
-        </p>
+        </span>
         {blocked ? (
-          <p className="border-l-2 border-warning-default pl-2 text-xs text-default-warning">
+          <span className="block border-l-2 border-warning-default pl-2 text-xs text-default-warning">
             Blocked by {blockedTitles.join(", ")}
-          </p>
+          </span>
         ) : null}
         {task.hidden ? <Badge size="sm">Hidden</Badge> : null}
         {ownerLabel ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+            title={ownerLabel}
+          >
             <Avatar className="size-6">
               {task.assignee?.photoUrl ? (
                 <AvatarImage src={task.assignee.photoUrl} alt="" />
@@ -150,9 +162,11 @@ export function SetupTaskCard({
               <AvatarFallback>{initials(ownerLabel)}</AvatarFallback>
             </Avatar>
             <span className="truncate">{ownerLabel}</span>
-          </div>
+          </span>
         ) : (
-          <p className="text-xs text-muted-foreground">No owner assigned</p>
+          <span className="block text-xs text-muted-foreground">
+            No owner assigned
+          </span>
         )}
       </button>
 
