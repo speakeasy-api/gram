@@ -308,7 +308,7 @@ func TestHandleGetProtectedResource_ToolsetBackendWithExternalOAuth(t *testing.T
 		upstreamIssuer *string
 	}{
 		{name: "upstream issuer", slug: "mcp-pr-external", upstreamIssuer: &upstreamIssuer},
-		{name: "Gram-hosted", slug: "mcp-pr-legacy-external"},
+		{name: "metadata-based", slug: "mcp-pr-metadata-external"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

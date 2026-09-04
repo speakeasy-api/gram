@@ -99,8 +99,8 @@ type OAuthRepo interface {
 // URL uses an `mcp_endpoints.slug` instead — see the companion
 // resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
 //
-// resourceURL is the absolute URL of the protected resource. For legacy
-// metadata-backed external OAuth configurations, protected-resource metadata
+// resourceURL is the absolute URL of the protected resource. For metadata-based
+// External OAuth configurations, protected-resource metadata
 // also advertises this value as its authorization server, so it becomes the
 // served document's `issuer` so the metadata satisfies RFC 8414 §3.3 (the
 // served `issuer` must equal the issuer identifier the client fetched it
@@ -136,7 +136,7 @@ func ResolveOAuthServerMetadataFromToolset(
 		// `/.well-known/oauth-authorization-server/...` URL. RFC 8414 §3.3
 		// requires the served `issuer` to equal the issuer identifier the
 		// client used to fetch the document — here the Gram resource URL that
-		// legacy protected-resource metadata advertises in
+		// metadata-based protected-resource metadata advertises in
 		// `authorization_servers` — so a spec-compliant MCP client does not
 		// reject the metadata on a mismatch. The upstream's own
 		// authorization/token/registration endpoints are preserved verbatim;
@@ -192,9 +192,9 @@ func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage,
 // Metadata for a toolset, or nil if the toolset is not OAuth-protected.
 //
 // resourceURL is the absolute URL of the protected resource (the runtime MCP
-// endpoint). It is always emitted verbatim as `resource`. Legacy metadata-backed
+// endpoint). It is always emitted verbatim as `resource`. Metadata-based
 // configurations also advertise it as their Gram-hosted authorization server;
-// provider-hosted configurations advertise their exact stored issuer instead.
+// issuer-based configurations advertise their exact stored issuer instead.
 func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
