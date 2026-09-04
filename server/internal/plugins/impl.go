@@ -1440,7 +1440,13 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
+	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
+	}
+
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	cfg.HooksAPIKey = candidate.fullKey
 	// The script's plugin key and hook approvals must name the codex plugin as
 	// it exists in the published repo, which a rollout-gated carry may have
 	// pinned under a pre-rename org name.
@@ -1449,6 +1455,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate codex install script").LogError(ctx, s.logger)
+	}
+
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
 	return &gen.DownloadCodexInstallScriptResult{
