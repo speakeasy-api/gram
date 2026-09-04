@@ -579,7 +579,10 @@ func refreshSessionTokens(
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
 	}
-	if resource != "" {
+	// An issuer known to reject RFC 8707 gets no resource on the refresh
+	// grant either; the session still carries it for routing.
+	omitResource := client.ResourceIndicatorSupported.Valid && !client.ResourceIndicatorSupported.Bool
+	if resource != "" && !omitResource {
 		form.Set("resource", resource)
 	}
 

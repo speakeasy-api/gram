@@ -39,6 +39,8 @@ INSERT INTO remote_session_issuers (
     claims_supported,
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
+    scope_override,
+    resource_indicator_supported,
     metadata,
     metadata_fetched_at,
     metadata_last_error,
@@ -82,6 +84,10 @@ VALUES (
     @claims_supported,
     @backchannel_logout_supported,
     @authorization_response_iss_parameter_supported,
+    -- Operator knobs, nullable: NULL is "not set" for the scope override and
+    -- "not yet learned" for resource-indicator support.
+    @scope_override,
+    @resource_indicator_supported,
     @metadata,
     @metadata_fetched_at,
     NULLIF(@metadata_last_error::text, ''),
@@ -161,6 +167,8 @@ SET
     claims_supported = NULL,
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
+    scope_override = NULL,
+    resource_indicator_supported = NULL,
     metadata = NULL,
     metadata_fetched_at = NULL,
     metadata_last_error = NULL,
@@ -378,6 +386,13 @@ SET
     claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
     backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
     authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
+    scope_override = CASE
+        WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
+        WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
+        ELSE sqlc.narg('scope_override')::text[]
+    END,
+    resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -478,6 +493,16 @@ UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
+
+-- name: SetRemoteSessionIssuerResourceIndicatorSupported :execrows
+-- Records RFC 8707 rejection learned by a login. Tenant-owned rows only;
+-- catalog rows are shared and never written from a login.
+UPDATE remote_session_issuers
+SET resource_indicator_supported = @resource_indicator_supported::boolean,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
+  AND deleted IS FALSE;
 
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete
@@ -1038,6 +1063,7 @@ SELECT
   s.remote_session_client_id,
   s.auto_refresh,
   s.resource,
+  s.scopes,
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
@@ -1109,6 +1135,7 @@ SELECT
     i.token_endpoint                       AS token_endpoint,
     i.revocation_endpoint                  AS revocation_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_clients AS c
@@ -1163,7 +1190,11 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.scope_override                       AS scope_override,
     i.code_challenge_methods_supported     AS code_challenge_methods_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
+    i.metadata                             AS issuer_metadata,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_client_user_session_issuers AS link
@@ -1762,6 +1793,13 @@ SET
     claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
     backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
     authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
+    scope_override = CASE
+        WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
+        WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
+        ELSE sqlc.narg('scope_override')::text[]
+    END,
+    resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -2285,6 +2323,13 @@ SET
     claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
     backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
     authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
+    scope_override = CASE
+        WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
+        WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
+        ELSE sqlc.narg('scope_override')::text[]
+    END,
+    resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

@@ -112,6 +112,14 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Omitting the field stores null ("not captured").
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unknown until learned: Gram records false once a login succeeded only after
+	// the resource parameter was dropped.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerRequestBody is the type of the
@@ -191,6 +199,12 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Omitting the field leaves the stored value unchanged.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Set or clear the operator-pinned scope request. Omitting the field leaves
+	// the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // FetchRemoteSessionIssuerMetadataResponseBody is the type of the
@@ -254,6 +268,12 @@ type FetchRemoteSessionIssuerMetadataResponseBody struct {
 	// Whether the discovery document advertises the RFC 9207 iss parameter in
 	// authorization responses; false when the document omits the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request. Never proposed by discovery, so always null
+	// on a draft.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Never proposed
+	// by discovery, so always null on a draft.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
 }
@@ -349,9 +369,16 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Null until discovery captures the field.
-	AuthorizationResponseIssParameterSupported *bool   `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
-	CreatedAt                                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Null until
+	// learned. False once a login succeeded only after the resource parameter was
+	// dropped, or when an operator states it.
+	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -432,9 +459,16 @@ type UpdateRemoteSessionIssuerResponseBody struct {
 	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Null until discovery captures the field.
-	AuthorizationResponseIssParameterSupported *bool   `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
-	CreatedAt                                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Null until
+	// learned. False once a login succeeded only after the resource parameter was
+	// dropped, or when an operator states it.
+	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListRemoteSessionIssuersResponseBody is the type of the
@@ -523,9 +557,16 @@ type GetRemoteSessionIssuerResponseBody struct {
 	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Null until discovery captures the field.
-	AuthorizationResponseIssParameterSupported *bool   `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
-	CreatedAt                                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Null until
+	// learned. False once a login succeeded only after the resource parameter was
+	// dropped, or when an operator states it.
+	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetRemoteSessionIssuerDuplicatePreflightResponseBody is the type of the
@@ -2148,9 +2189,16 @@ type RemoteSessionIssuerResponseBody struct {
 	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Null until discovery captures the field.
-	AuthorizationResponseIssParameterSupported *bool   `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
-	CreatedAt                                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Null until
+	// learned. False once a login succeeded only after the resource parameter was
+	// dropped, or when an operator states it.
+	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -2222,6 +2270,7 @@ func NewCreateRemoteSessionIssuerRequestBody(p *remotesessionissuers.CreateRemot
 		IntrospectionEndpoint:             p.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        p.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: p.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 p.ResourceIndicatorSupported,
 	}
 	if p.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(p.ScopesSupported))
@@ -2269,6 +2318,12 @@ func NewCreateRemoteSessionIssuerRequestBody(p *remotesessionissuers.CreateRemot
 		body.ClaimsSupported = make([]string, len(p.ClaimsSupported))
 		for i, val := range p.ClaimsSupported {
 			body.ClaimsSupported[i] = val
+		}
+	}
+	if p.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(p.ScopeOverride))
+		for i, val := range p.ScopeOverride {
+			body.ScopeOverride[i] = val
 		}
 	}
 	return body
@@ -2300,6 +2355,7 @@ func NewUpdateRemoteSessionIssuerRequestBody(p *remotesessionissuers.UpdateRemot
 		IntrospectionEndpoint:             p.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        p.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: p.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 p.ResourceIndicatorSupported,
 	}
 	if p.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(p.ScopesSupported))
@@ -2349,6 +2405,12 @@ func NewUpdateRemoteSessionIssuerRequestBody(p *remotesessionissuers.UpdateRemot
 			body.ClaimsSupported[i] = val
 		}
 	}
+	if p.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(p.ScopeOverride))
+		for i, val := range p.ScopeOverride {
+			body.ScopeOverride[i] = val
+		}
+	}
 	return body
 }
 
@@ -2373,6 +2435,7 @@ func NewFetchRemoteSessionIssuerMetadataRemoteSessionIssuerDraftOK(body *FetchRe
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        *body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: *body.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -2420,6 +2483,12 @@ func NewFetchRemoteSessionIssuerMetadataRemoteSessionIssuerDraftOK(body *FetchRe
 		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
 		for i, val := range body.ClaimsSupported {
 			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 	v.DiscoveryWarnings = make([]string, len(body.DiscoveryWarnings))
@@ -2782,8 +2851,9 @@ func NewCreateRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateRemoteSession
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
-		CreatedAt: *body.CreatedAt,
-		UpdatedAt: *body.UpdatedAt,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
+		CreatedAt:                                  *body.CreatedAt,
+		UpdatedAt:                                  *body.UpdatedAt,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -2831,6 +2901,12 @@ func NewCreateRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateRemoteSession
 		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
 		for i, val := range body.ClaimsSupported {
 			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 
@@ -3015,8 +3091,9 @@ func NewUpdateRemoteSessionIssuerRemoteSessionIssuerOK(body *UpdateRemoteSession
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
-		CreatedAt: *body.CreatedAt,
-		UpdatedAt: *body.UpdatedAt,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
+		CreatedAt:                                  *body.CreatedAt,
+		UpdatedAt:                                  *body.UpdatedAt,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -3064,6 +3141,12 @@ func NewUpdateRemoteSessionIssuerRemoteSessionIssuerOK(body *UpdateRemoteSession
 		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
 		for i, val := range body.ClaimsSupported {
 			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 
@@ -3416,8 +3499,9 @@ func NewGetRemoteSessionIssuerRemoteSessionIssuerOK(body *GetRemoteSessionIssuer
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
-		CreatedAt: *body.CreatedAt,
-		UpdatedAt: *body.UpdatedAt,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
+		CreatedAt:                                  *body.CreatedAt,
+		UpdatedAt:                                  *body.UpdatedAt,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -3465,6 +3549,12 @@ func NewGetRemoteSessionIssuerRemoteSessionIssuerOK(body *GetRemoteSessionIssuer
 		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
 		for i, val := range body.ClaimsSupported {
 			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 

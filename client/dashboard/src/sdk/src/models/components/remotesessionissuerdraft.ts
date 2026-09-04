@@ -81,11 +81,19 @@ export type RemoteSessionIssuerDraft = {
    * Upstream RFC 7591 registration endpoint; null for issuers without DCR.
    */
   registrationEndpoint?: string | undefined;
+  /**
+   * Whether the issuer accepts the RFC 8707 resource parameter. Never proposed by discovery, so always null on a draft.
+   */
+  resourceIndicatorSupported?: boolean | undefined;
   responseTypesSupported?: Array<string> | undefined;
   /**
    * Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
    */
   revocationEndpoint?: string | undefined;
+  /**
+   * Operator-pinned scope request. Never proposed by discovery, so always null on a draft.
+   */
+  scopeOverride?: Array<string> | null | undefined;
   scopesSupported?: Array<string> | undefined;
   /**
    * RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
@@ -132,8 +140,10 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
     op_tos_uri: z.optional(z.string()),
     passthrough: z.boolean(),
     registration_endpoint: z.optional(z.string()),
+    resource_indicator_supported: z.optional(z.boolean()),
     response_types_supported: z.optional(z.array(z.string())),
     revocation_endpoint: z.optional(z.string()),
+    scope_override: z.optional(z.nullable(z.array(z.string()))),
     scopes_supported: z.optional(z.array(z.string())),
     service_documentation: z.optional(z.string()),
     token_endpoint: z.optional(z.string()),
@@ -161,8 +171,10 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
       "op_policy_uri": "opPolicyUri",
       "op_tos_uri": "opTosUri",
       "registration_endpoint": "registrationEndpoint",
+      "resource_indicator_supported": "resourceIndicatorSupported",
       "response_types_supported": "responseTypesSupported",
       "revocation_endpoint": "revocationEndpoint",
+      "scope_override": "scopeOverride",
       "scopes_supported": "scopesSupported",
       "service_documentation": "serviceDocumentation",
       "token_endpoint": "tokenEndpoint",
