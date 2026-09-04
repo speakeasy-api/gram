@@ -1,0 +1,32 @@
+server/cmd/gram/platform_mcp.go
+  h_2620cc60cfd1e9 95-98,314-316,642-644
+server/cmd/gram/start.go
+  h_2620cc60cfd1e9 1652
+server/internal/dataexports/destinations.go
+  h_2620cc60cfd1e9 18,147-150,154-156,158,173-205
+server/internal/platformmcp/adapters.go
+  h_2620cc60cfd1e9 295-296,308-309
+server/internal/platformmcp/descriptor_test.go
+  h_2620cc60cfd1e9 191,205
+server/internal/platformmcp/feedback.go
+  h_2620cc60cfd1e9 389-390
+server/internal/platformmcp/operational_reads_integration_test.go
+  h_2620cc60cfd1e9 1-161
+server/internal/platformmcp/tool_data_exports.go
+  h_2620cc60cfd1e9 1-227
+server/internal/platformmcp/tool_recent_tool_calls.go
+  h_2620cc60cfd1e9 1-219
+server/internal/platformmcp/tools.go
+  h_2620cc60cfd1e9 184-193,196-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "bdd7e93b23c50f1fddce2491cece35e699b3d45f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
