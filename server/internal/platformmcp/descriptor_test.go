@@ -188,6 +188,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_plugin",
 		"list_my_sessions",
 		"continue_session",
+		"list_data_exports",
 	} {
 		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
@@ -201,6 +202,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_recent_tool_calls",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",

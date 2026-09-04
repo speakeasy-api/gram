@@ -181,8 +181,20 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, riskMutations)
+		if postgresReader.dataExports == nil {
+			registerUnavailableDataExportTools(reg)
+		} else {
+			registerDataExportTools(reg, postgresReader)
+		}
+		if postgresReader.recentToolCalls == nil {
+			registerUnavailableRecentToolCallTools(reg)
+		} else {
+			registerRecentToolCallTools(reg, postgresReader)
+		}
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
+		registerUnavailableDataExportTools(reg)
+		registerUnavailableRecentToolCallTools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

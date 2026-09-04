@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -143,11 +144,18 @@ func (s *Service) encryptHeaders(headers map[string]string) (pgtype.Text, error)
 }
 
 func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) {
+	return decryptHeaders(s.encryption, stored)
+}
+
+func decryptHeaders(encryptionClient *encryption.Client, stored pgtype.Text) (map[string]string, error) {
 	if !stored.Valid || stored.String == "" {
 		return map[string]string{}, nil
 	}
+	if encryptionClient == nil {
+		return nil, fmt.Errorf("decrypt destination headers: encryption is unavailable")
+	}
 
-	plaintext, err := s.encryption.Decrypt(stored.String)
+	plaintext, err := encryptionClient.Decrypt(stored.String)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt destination headers: %w", err)
 	}
@@ -160,6 +168,39 @@ func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) 
 		return map[string]string{}, nil
 	}
 	return headers, nil
+}
+
+// DestinationHeaderMetadata is the safe, write-only projection of one
+// destination header. Values never leave the data exports package.
+type DestinationHeaderMetadata struct {
+	Name     string
+	HasValue bool
+}
+
+// DecodeDestinationHeaderMetadata decrypts stored headers and returns only
+// their names and whether a value is configured.
+func DecodeDestinationHeaderMetadata(encryptionClient *encryption.Client, stored pgtype.Text) ([]DestinationHeaderMetadata, error) {
+	headers, err := decryptHeaders(encryptionClient, stored)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	metadata := make([]DestinationHeaderMetadata, 0, len(names))
+	for _, name := range names {
+		metadata = append(metadata, DestinationHeaderMetadata{Name: name, HasValue: headers[name] != ""})
+	}
+	return metadata, nil
+}
+
+// DestinationSensitiveDataPolicy returns the effective persisted policy.
+func DestinationSensitiveDataPolicy(stored pgtype.Text) (string, error) {
+	policy, err := sensitiveDataFromRow(stored)
+	return string(policy), err
 }
 
 func destinationSnapshot(name, endpointURL string, headers map[string]string, policy sensitiveData) *audit.OtelDestinationSnapshot {

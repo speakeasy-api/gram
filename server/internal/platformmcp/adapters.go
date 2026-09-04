@@ -292,6 +292,8 @@ type PostgresReader struct {
 	inventoryCursor    *inventoryCursorCodec
 	metadataVersionKey []byte
 	riskReads          *RiskReadService
+	dataExports        *DataExportReadService
+	recentToolCalls    *RecentToolCallReadService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -303,6 +305,8 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		inventoryCursor:    nil,
 		metadataVersionKey: nil,
 		riskReads:          nil,
+		dataExports:        nil,
+		recentToolCalls:    nil,
 	}
 }
 

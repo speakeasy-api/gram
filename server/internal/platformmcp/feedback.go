@@ -386,6 +386,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"list_projects":                         {},
 	"find_mcp":                              {},
 	"get_mcp":                               {},
+	"list_data_exports":                     {},
+	"list_recent_tool_calls":                {},
 	"search_mcp_catalog":                    {},
 	"inspect_mcp_candidate":                 {},
 	"register_catalog_mcp":                  {},
