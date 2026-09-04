@@ -1161,6 +1161,27 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, s.logger)
+	case !toolset.ExternalOauthServerID.Valid:
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.Metadata, payload.AuthorizationServerIssuer)
+	if err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external OAuth server configuration").LogError(ctx, s.logger)
@@ -1181,11 +1202,6 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, lockedToolset.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
-	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.Metadata, payload.AuthorizationServerIssuer)
-	if err != nil {
 		return nil, err
 	}
 

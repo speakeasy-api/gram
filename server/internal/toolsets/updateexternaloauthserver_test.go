@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -191,6 +192,49 @@ func TestToolsetsService_AddExternalOAuthServer_FailedDiscoveryDoesNotPersist(t 
 	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
 	require.NoError(t, err)
 	require.Nil(t, unchanged.ExternalOauthServer)
+}
+
+func TestToolsetsService_UpdateExternalOAuthServer_DiscoversBeforeTakingToolsetLock(t *testing.T) {
+	t.Parallel()
+
+	requested := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseDiscovery := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseDiscovery)
+
+	var issuer string
+	var policy *guardian.Policy
+	var closeServer func()
+	issuer, policy, closeServer = externalOAuthDiscoveryPolicy(t, func(w http.ResponseWriter, _ *http.Request) {
+		close(requested)
+		<-release
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token",
+		})
+	})
+	defer closeServer()
+
+	ctx, ti := newTestToolsetsService(t, policy)
+	ctx = withAccountType(t, ctx, "pro")
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Discovery Before Lock Toolset")
+	attachMetadataOAuth(t, ctx, ti, toolset.Slug)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
+			Slug: toolset.Slug, AuthorizationServerIssuer: &issuer,
+		})
+		result <- err
+	}()
+	<-requested
+
+	probe := testenv.BeginTx(t, ctx, ti.conn)
+	_, lockErr := probe.Exec(ctx, `SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE NOWAIT`, toolset.ProjectID, toolset.Slug) //nolint:glint // notestingrawsql: NOWAIT proves discovery does not hold the toolset lock
+	_ = probe.Rollback(ctx)
+	releaseDiscovery()
+	require.NoError(t, <-result)
+	require.NoError(t, lockErr)
 }
 
 func TestToolsetsService_UpdateExternalOAuthServer_FailedDiscoveryIsAtomic(t *testing.T) {
