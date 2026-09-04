@@ -707,6 +707,78 @@ func TestVerifyCustomDomain_NXDOMAINOnTXTIsPending(t *testing.T) {
 	require.False(t, got.Verified)
 }
 
+func TestVerifyCustomDomain_CAAForbiddenIsPending(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-caa-forbidden"
+	const domain = "caa-forbidden.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
+	cfg.LookupCAAFunc = func(_ context.Context, name string) ([]dns.CAA, error) {
+		if name == domain {
+			return []dns.CAA{{Flag: 0, Tag: "issue", Value: "pki.goog"}}, nil
+		}
+		return nil, nil
+	}
+	ti.resolver = dns.NewMockResolver(cfg)
+
+	row := createDomainRow(t, ctx, ti, orgID, domain)
+	activity := newActivity(t, ti)
+
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusDNSPending, result.Status)
+	require.Contains(t, result.Reason, "letsencrypt.org")
+
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.False(t, got.Verified)
+}
+
+func TestVerifyCustomDomain_CAAAllowsLetsEncrypt(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-caa-allows"
+	const domain = "caa-allows.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
+	cfg.LookupCAAFunc = func(_ context.Context, name string) ([]dns.CAA, error) {
+		if name == domain {
+			return []dns.CAA{
+				{Flag: 0, Tag: "issue", Value: "pki.goog"},
+				{Flag: 0, Tag: "issue", Value: "letsencrypt.org"},
+			}, nil
+		}
+		return nil, nil
+	}
+	ti.resolver = dns.NewMockResolver(cfg)
+
+	row := createDomainRow(t, ctx, ti, orgID, domain)
+	activity := newActivity(t, ti)
+
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
+}
+
 // Verify ErrNoRows is what sqlc returns for missing rows (sanity check).
 func TestGetCustomDomainByDomain_ReturnsErrNoRows(t *testing.T) {
 	t.Parallel()
