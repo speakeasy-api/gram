@@ -225,6 +225,12 @@ type remoteSessionCard struct {
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
 	AutoRefreshChecked bool
+
+	// ConnectedAs is who the grant belongs to at the provider, when a
+	// verified enrichment interface has said. It is upstream-supplied text
+	// like the CIMD client branding, so it is rendered escaped and as a
+	// secondary line, never as the card's identity.
+	ConnectedAs string
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -1098,6 +1104,7 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
+			ConnectedAs:            state.ConnectedAs,
 		})
 	}
 	return cards, nil

@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -44,8 +45,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -521,11 +520,11 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
 // endpoint and persists the new token pair on success, returning the updated
-// remote_session row and the new plaintext access token.
+// remote_session row and the decoded token response, whose identity
+// statement the caller writes once the refresh lease is released.
 //
-// RefreshService is its only caller and supplies the session's client +
-// issuer row, read after the single-flight lock so the POST runs on current
-// configuration. The upstream token POST is an external call, so q must be a
+// The caller supplies the session's client + issuer row, read after the
+// single-flight lock so the POST runs on current configuration. The upstream token POST is an external call, so q must be a
 // pool-bound querier, never a transaction-bound one — the POST must not run
 // inside an open database transaction.
 //
@@ -533,37 +532,36 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 // endpoint, an upstream rejection, no access token returned) come back as a
 // *TokenRefreshError carrying a public-safe Reason, so callers can distinguish
 // them from internal infrastructure errors and surface the Reason.
-func refreshSessionTokens(
+func (s *RefreshService) refreshSessionTokens(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
-	enc *encryption.Client,
-	policy *guardian.Policy,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (remotesessions_repo.RemoteSession, string, error) {
+) (remotesessions_repo.RemoteSession, tokenResponse, error) {
 	var zero remotesessions_repo.RemoteSession
+	var noToken tokenResponse
 
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
-		return zero, "", newTokenRefreshError("the identity provider has no token endpoint configured", nil)
+		return zero, noToken, newTokenRefreshError("the identity provider has no token endpoint configured", nil)
 	}
 
-	refreshToken, err := enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
 	if err != nil {
-		return zero, "", newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
+		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
 	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid {
-		clientSecret, err = enc.Decrypt(client.ClientSecretEncrypted.String)
+		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
-			return zero, "", newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
+			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
 		}
 	}
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		return zero, "", newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
 	}
 
 	form := url.Values{}
@@ -583,39 +581,40 @@ func refreshSessionTokens(
 
 	req, err := newTokenEndpointRequest(postCtx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
-		return zero, "", fmt.Errorf("new refresh request: %w", err)
+		return zero, noToken, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := policy.PooledClient().Do(req)
+	resp, err := s.policy.PooledClient().Do(req)
 	if err != nil {
-		return zero, "", fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
+		return zero, noToken, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, "", fmt.Errorf("read refresh response: %w", err)
+		return zero, noToken, fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return zero, "", newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
+		return zero, noToken, newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, "", fmt.Errorf("decode refresh response: %w", err)
+		return zero, noToken, fmt.Errorf("decode refresh response: %w", err)
 	}
+	tok.raw = body
 	if tok.AccessToken == "" {
-		return zero, "", newTokenRefreshError("the identity provider returned no access token", nil)
+		return zero, noToken, newTokenRefreshError("the identity provider returned no access token", nil)
 	}
 
-	accessEnc, err := enc.Encrypt([]byte(tok.AccessToken))
+	accessEnc, err := s.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return zero, "", fmt.Errorf("encrypt new access token: %w", err)
+		return zero, noToken, fmt.Errorf("encrypt new access token: %w", err)
 	}
 	newRefreshEnc := sess.RefreshTokenEncrypted
 	if tok.RefreshToken != "" {
-		v, eerr := enc.Encrypt([]byte(tok.RefreshToken))
+		v, eerr := s.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return zero, "", fmt.Errorf("encrypt new refresh token: %w", eerr)
+			return zero, noToken, fmt.Errorf("encrypt new refresh token: %w", eerr)
 		}
 		newRefreshEnc = conv.PtrToPGText(&v)
 	}
@@ -658,10 +657,92 @@ func refreshSessionTokens(
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, "", newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
+			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
 		}
-		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
 	}
 
-	return updated, tok.AccessToken, nil
+	return updated, tok, nil
+}
+
+// restateIdentity writes what a refresh response said about the grant's
+// owner once the tokens are stored: the identity a verified ID token
+// restates, and the response's non-standard members. It runs after the
+// token write and outside the refresh lease on purpose, so waiting on the
+// issuer's key set never sits between consuming the refresh token upstream
+// and persisting the pair. An ID token for a different subject means the
+// refreshed tokens no longer belong to the stored identity, so that clears
+// it; any other rejection, a failed write, or a row rotated since the token
+// write leaves the stored identity as it is.
+func (s *RefreshService) restateIdentity(
+	ctx context.Context,
+	q *remotesessions_repo.Queries,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
+	sess remotesessions_repo.RemoteSession,
+	tok tokenResponse,
+) remotesessions_repo.RemoteSession {
+	attrs := []slog.Attr{
+		attr.SlogOAuthIssuer(client.IssuerUrl),
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+	}
+	var identity *UpstreamIdentity
+	replace := false
+	if s.idTokens != nil && tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
+		verified, err := s.idTokens.Verify(ctx, tok.IDToken, idTokenExpectation{
+			issuer:     client.IssuerUrl,
+			clientID:   client.ExternalClientID,
+			jwksURI:    client.JwksUri.String,
+			fetchScope: client.RemoteSessionIssuerID.String(),
+			nonce:      "",
+			subject:    sess.UpstreamSubject.String,
+		})
+		switch {
+		case errors.Is(err, errIDTokenSubjectMismatch):
+			logIdentityFailure(ctx, s.logger, err, attrs...)
+			replace = true
+		case err != nil:
+			logIdentityFailure(ctx, s.logger, err, attrs...)
+		default:
+			identity = &verified
+		}
+	}
+	enrichment := buildEnrichment(tok, identity)
+	if identity == nil && enrichment == nil && !replace {
+		return sess
+	}
+
+	cols := identity.columns()
+	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		ID:                    sess.ID,
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: sess.RemoteSessionClientID,
+		Replace:               replace,
+		UpstreamSubject:       cols.Subject,
+		UpstreamEmail:         cols.Email,
+		UpstreamEmailVerified: cols.EmailVerified,
+		UpstreamDisplayName:   cols.DisplayName,
+		UpstreamPictureUrl:    cols.PictureURL,
+		UpstreamSessionID:     cols.SessionID,
+		UpstreamAuthTime:      cols.AuthTime,
+		IdentitySource:        cols.Source,
+		IdentityVerifiedAt:    cols.VerifiedAt,
+		Enrichment:            enrichment,
+		ExpectedUpdatedAt:     sess.UpdatedAt,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The grant was re-established or revoked while the ID token was
+		// being verified; that write's identity stands.
+		return sess
+	}
+	if err != nil {
+		args := make([]any, 0, len(attrs)+1)
+		args = append(args, attr.SlogError(err))
+		for _, a := range attrs {
+			args = append(args, a)
+		}
+		s.logger.ErrorContext(ctx, "persist restated remote session identity", args...)
+		return sess
+	}
+	return restated
 }
