@@ -59,6 +59,10 @@ overrides:
   # history loading (AGE-2977). assistant-cloud is core's only unpinned
   # optional peer, so forcing one assistant-cloud version forces one core.
   assistant-cloud: 0.1.37
+  # The assistant-ui AI SDK adapter exposes ai package types in its public API.
+  # Keep its exact internal ai dependency aligned with the dashboard catalog to
+  # avoid structurally incompatible ChatTransport types from duplicate copies.
+  "@assistant-ui/react-ai-sdk>ai": ^7.0.83
 
 peerDependencyRules:
   allowedVersions:

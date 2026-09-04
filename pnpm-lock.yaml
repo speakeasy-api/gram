@@ -47,6 +47,7 @@ catalogs:
       version: 8.2.0
 
 overrides:
+  '@assistant-ui/react-ai-sdk>ai': ^7.0.83
   '@radix-ui/react-dismissable-layer': 1.1.13
   assistant-cloud: 0.1.37
   fast-uri@<3.1.5: 3.1.5
@@ -7682,7 +7683,7 @@ snapshots:
       '@ai-sdk/react': 4.0.69(react@19.2.8)
       '@assistant-ui/core': 0.3.12(@assistant-ui/store@0.3.8(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8))(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(assistant-cloud@0.1.37)(react@19.2.8)(zustand@5.0.14(@types/react@19.2.18)(immer@11.1.11)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8)))
       '@assistant-ui/store': 0.3.8(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8)
-      ai: 7.0.66(zod@4.4.3)
+      ai: 7.0.84(zod@4.4.3)
       assistant-cloud: 0.1.37
       assistant-stream: 0.3.37
       react: 19.2.8
