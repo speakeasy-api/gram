@@ -2573,6 +2573,41 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   -- brokered connection carried real traffic.
   last_used_at timestamptz,
 
+  -- Who the upstream token belongs to at the provider, as learned from a
+  -- session-enrichment interface (an ID token, userinfo, introspection, a
+  -- verified JWT access token, or the token response itself). All nullable:
+  -- NULL means no interface has told Gram yet. identity_source names the
+  -- interface the identity came from and identity_verified_at when. The
+  -- email, display name, and picture are end-user personal data: never
+  -- logged, and removed with the session.
+  upstream_subject TEXT,
+  upstream_email TEXT,
+  upstream_email_verified boolean,
+  upstream_display_name TEXT,
+  upstream_picture_url TEXT,
+  -- The provider's own session identifier (OpenID Connect sid), which
+  -- back-channel logout and security event tokens name when they revoke.
+  upstream_session_id TEXT,
+  -- When the user last authenticated at the provider (OpenID Connect
+  -- auth_time), as opposed to when this grant was minted.
+  upstream_auth_time timestamptz,
+  identity_source TEXT,
+  identity_verified_at timestamptz,
+  -- Everything an enrichment interface returned that the typed columns above
+  -- do not model. The enrichment writer in application code strips token and
+  -- secret members before storing; nothing serves the document whole to an
+  -- API response or the dashboard, only fields code has chosen to read.
+  enrichment JSONB,
+
+  -- Whether the stored access token still works, as last observed by
+  -- actually presenting it (an MCP initialize against the member, or
+  -- introspection at the provider), rather than inferred from the expiry
+  -- columns. NULL until a validation has run. validation_reason carries the
+  -- public-safe explanation of a non-valid status.
+  last_validated_at timestamptz,
+  validation_status TEXT,
+  validation_reason TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
