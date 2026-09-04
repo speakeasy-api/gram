@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -59,6 +60,7 @@ type Service struct {
 	serverURL       string
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
+	growth          *growthsignals.Emitter
 }
 
 var (
@@ -78,6 +80,7 @@ func NewService(
 	serverURL string,
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
+	growthEmitter *growthsignals.Emitter,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -92,6 +95,7 @@ func NewService(
 		serverURL:       serverURL,
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
+		growth:          growthEmitter,
 	}
 }
 
