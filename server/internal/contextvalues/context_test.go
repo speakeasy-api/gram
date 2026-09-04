@@ -1,9 +1,12 @@
 package contextvalues
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestIsSupportSessionRequiresValidatedContext(t *testing.T) {
@@ -37,6 +40,63 @@ func TestValidatedGramSessionProvenanceIsPrivateAndPropagatesLegacyImpersonation
 	impersonated := WithValidatedGramSession(t.Context(), base, true)
 	require.True(t, HasValidatedGramSession(impersonated))
 	require.True(t, IsLegacyImpersonatedSession(impersonated))
+}
+
+func TestAuthContextHasOneCanonicalTypedActor(t *testing.T) {
+	t.Parallel()
+
+	principalType := reflect.TypeFor[urn.Principal]()
+	authContextType := reflect.TypeFor[AuthContext]()
+	count := 0
+	for field := range authContextType.Fields() {
+		if field.Type == principalType {
+			count++
+		}
+	}
+	require.Equal(t, 1, count)
+}
+
+func TestAuthenticatedActorAndCredentialProvenanceAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	untrusted := SetAuthContext(t.Context(), &AuthContext{UserID: "user_untrusted", APIKeyID: "key_untrusted"})
+	_, ok := AuthenticatedActor(untrusted)
+	require.False(t, ok)
+	_, ok = APIKeyAuthorization(untrusted)
+	require.False(t, ok)
+
+	legacy := WithLegacyAPIKeyAuthorization(t.Context(), &AuthContext{
+		UserID: "user_authorizer", APIKeyID: "key_123", APIKeyScopes: []string{"agent", "agent_user"},
+	})
+	actor, ok := AuthenticatedActor(legacy)
+	require.True(t, ok)
+	require.Equal(t, "user:user_authorizer", actor.String())
+	mode, ok := APIKeyAuthorization(legacy)
+	require.True(t, ok)
+	require.Equal(t, APIKeyAuthorizationModeLegacy, mode)
+	legacyAuth, ok := GetAuthContext(legacy)
+	require.True(t, ok)
+	require.Equal(t, "key_123", legacyAuth.APIKeyID)
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	principalBacked := WithPrincipalAPIKeyAuthorization(t.Context(), &AuthContext{
+		UserID: "user_authorizer", APIKeyID: "key_agent",
+	}, agent)
+	actor, ok = AuthenticatedActor(principalBacked)
+	require.True(t, ok)
+	require.Equal(t, agent, actor)
+	mode, ok = APIKeyAuthorization(principalBacked)
+	require.True(t, ok)
+	require.Equal(t, APIKeyAuthorizationModePrincipal, mode)
+}
+
+func TestValidatedGramSessionSetsCanonicalUserActor(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithValidatedGramSession(t.Context(), &AuthContext{UserID: "user_123"}, false)
+	actor, ok := AuthenticatedActor(ctx)
+	require.True(t, ok)
+	require.Equal(t, "user:user_123", actor.String())
 }
 
 func TestRefreshSessionCookieIgnoresNilCallback(t *testing.T) {

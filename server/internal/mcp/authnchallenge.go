@@ -424,13 +424,18 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID),
+		), nil
 	case urn.SessionSubjectKindAPIKey:
 		authCtx.APIKeyID = subject.ID
+		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
 	case urn.SessionSubjectKindAnonymous:
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
+		return ctx, nil
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), nil
+	return ctx, oops.C(oops.CodeUnauthorized)
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
