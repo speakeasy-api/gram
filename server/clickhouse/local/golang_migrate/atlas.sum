@@ -1,4 +1,4 @@
-h1:MhpqfJ7zpqJFHj8tTSuf/LSR4G8nAb1BhTzjluF9PCM=
+h1:odvrRDUslNcG+KK1y8zNupeUqRiAsAnLXjS3SxMFHwg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -99,3 +99,4 @@ h1:MhpqfJ7zpqJFHj8tTSuf/LSR4G8nAb1BhTzjluF9PCM=
 20260902193942_openclaw-usage-rows.up.sql h1:FLrJnV85T8U/HUgIeHFhfyTFEKaRBMwxudBpFNu+RG8=
 20260904141331_tenant-reporting-dimensions.up.sql h1:M529LrMZ0R04erQuo/ftTFMQostnvNFJpN50HZToSFE=
 20260904165443_mcp-bandwidth-meter-readings.up.sql h1:ve0lzIwI6dz2YM9yXqEwdvHKGX0TLvfk2OyzY7VFR5A=
+20260904213332_preserve-trace-tool-name.up.sql h1:0wbUK0gxpnmQ96GZqby8Hsz6St89C/uI6eKMb73fD2w=
