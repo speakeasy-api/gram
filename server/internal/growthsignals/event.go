@@ -147,17 +147,44 @@ type CapturedEvent struct {
 // It falls back to the organization id, because role and system actors have no
 // person behind them and an organization is still a useful thing to group by.
 //
+// reservedProperties are the keys the event shape owns. Per-activity extras may
+// not write them, so an activity can never rename an organization or claim a
+// project it does not belong to.
+var reservedProperties = map[string]struct{}{
+	propertyActivity:         {},
+	propertyOrganizationID:   {},
+	propertyOrganizationSlug: {},
+	propertyOrganizationName: {},
+	propertyProjectID:        {},
+	propertyProjectSlug:      {},
+	propertyProjectName:      {},
+	propertyActorEmail:       {},
+	propertyActorName:        {},
+	propertySubjectName:      {},
+	propertyActingSurface:    {},
+	propertyDashboardURL:     {},
+	propertyAuditAction:      {},
+}
+
 // Empty properties are omitted rather than sent blank. A blank organization
 // name in Slack reads as an organization with no name; an absent one reads as
 // what it is.
 func BuildEvent(event ActivityEvent, enrichment Enrichment, siteURL *url.URL) CapturedEvent {
 	properties := make(map[string]any, len(event.Extra)+15)
 
-	// Extras go in first so that a base property always wins the key it owns.
+	// Extras go in first, but never on a key the event shape owns. Writing them
+	// first is not enough on its own: a base property whose value is empty is
+	// omitted rather than written, and the project keys are skipped entirely on
+	// an organization-scoped activity, so without this filter an extra could
+	// occupy a reserved key and change what the event appears to say.
 	for key, value := range event.Extra {
-		if key != "" && value != "" {
-			properties[key] = value
+		if key == "" || value == "" {
+			continue
 		}
+		if _, reserved := reservedProperties[key]; reserved {
+			continue
+		}
+		properties[key] = value
 	}
 
 	properties[propertyActivity] = string(event.Activity)
@@ -176,7 +203,7 @@ func BuildEvent(event ActivityEvent, enrichment Enrichment, siteURL *url.URL) Ca
 	setProperty(properties, propertyActorName, event.ActorName)
 	setProperty(properties, propertySubjectName, event.SubjectName)
 	setProperty(properties, propertyActingSurface, event.ActingSurface)
-	properties[propertyDashboardURL] = dashboardURL(event, enrichment, siteURL)
+	setProperty(properties, propertyDashboardURL, dashboardURL(event, enrichment, siteURL))
 	setProperty(properties, propertyAuditAction, string(event.AuditAction))
 
 	return CapturedEvent{
@@ -205,6 +232,10 @@ func dashboardURL(event ActivityEvent, enrichment Enrichment, siteURL *url.URL) 
 		return event.DashboardURL
 	}
 
+	// No site URL configured. Reporting an empty string would be worse than
+	// reporting nothing: a Slack destination that renders this as a button link
+	// fails the whole message on a blank url, while an absent property lets the
+	// template omit the button. The emitter warns about this at construction.
 	if siteURL == nil {
 		return ""
 	}

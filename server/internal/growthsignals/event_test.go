@@ -219,3 +219,41 @@ func TestBuildEventAlwaysSetsDashboardURL(t *testing.T) {
 	}, growthsignals.Enrichment{}, testSiteURL())
 	require.Equal(t, "https://app.example.test", root.Properties["dashboard_url"])
 }
+
+// An extra may never occupy a key the event shape owns. Writing extras first is
+// not enough on its own, because a base property whose value is empty is
+// omitted rather than written, and the project keys are skipped entirely on an
+// organization-scoped activity.
+func TestBuildEventExtrasCannotOccupyReservedKeys(t *testing.T) {
+	t.Parallel()
+
+	built := growthsignals.BuildEvent(growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityUserSignedUp,
+		OrganizationID: "org_placeholder",
+		Extra: map[string]string{
+			"organization_slug": "attacker-owned",
+			"project_slug":      "claimed",
+			"activity":          "something_else",
+			"signup_source":     growthsignals.SignupSourceOrganic,
+		},
+	}, growthsignals.Enrichment{}, testSiteURL())
+
+	require.Equal(t, "user_signed_up", built.Properties["activity"])
+	require.NotContains(t, built.Properties, "organization_slug")
+	require.NotContains(t, built.Properties, "project_slug")
+	require.Equal(t, growthsignals.SignupSourceOrganic, built.Properties["signup_source"])
+}
+
+// With no site URL configured there is no link to report. Reporting an empty
+// string would be worse than reporting nothing, because a Slack destination
+// that renders it as a button link fails the whole message on a blank url.
+func TestBuildEventOmitsDashboardURLWithoutSiteURL(t *testing.T) {
+	t.Parallel()
+
+	built := growthsignals.BuildEvent(growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityProjectCreated,
+		OrganizationID: "org_placeholder",
+	}, growthsignals.Enrichment{}, nil)
+
+	require.NotContains(t, built.Properties, "dashboard_url")
+}
