@@ -396,9 +396,9 @@ func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 // give platform admins (e.g. during org impersonation) unrestricted access without
 // exposing internal blocklist storage scopes as standalone permissions.
 func allScopeGrants() []Grant {
-	grants := make([]Grant, 0, len(scopeDefinitions))
-	for s, definition := range scopeDefinitions {
-		if definition.lifecycle != ScopeLifecycleActive || definition.visibility != scopeVisibilityUserVisible {
+	grants := make([]Grant, 0, len(scopeVisibilityByScope))
+	for s, visibility := range scopeVisibilityByScope {
+		if visibility != scopeVisibilityUserVisible {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))
