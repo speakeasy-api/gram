@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -313,7 +312,11 @@ function factDate(value: unknown): string {
 function recorded(value: unknown): string {
   return value === undefined || value === null || value === ""
     ? "Not recorded"
-    : String(value);
+    : typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ? String(value)
+      : "Not recorded";
 }
 
 function snapshotKeys(
@@ -575,15 +578,16 @@ export function ActivityRoute(): JSX.Element | null {
 }
 
 export function Activity({ org }: { org: AdminOrganization }): JSX.Element {
+  return <OrganizationActivity key={org.id} org={org} />;
+}
+
+function OrganizationActivity({
+  org,
+}: {
+  org: AdminOrganization;
+}): JSX.Element {
   const query = useInfiniteQuery(organizationActivityQuery(org.id));
   const fetchInFlight = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const fetchNextPage = query.fetchNextPage;
   const fetchMore = useCallback(async () => {
     if (fetchInFlight.current) return;
@@ -593,7 +597,7 @@ export function Activity({ org }: { org: AdminOrganization }): JSX.Element {
     } catch {
       // React Query exposes the incremental error below.
     } finally {
-      if (mounted.current) fetchInFlight.current = false;
+      fetchInFlight.current = false;
     }
   }, [fetchNextPage]);
   const logs = useMemo(() => {

@@ -82,7 +82,7 @@ describe("generated admin boundary", () => {
     const query = boundary.adminSessionQuery();
     await query.queryFn?.({ signal: new AbortController().signal } as never);
 
-    const request = fetch.mock.calls[0]?.[0] as Request;
+    const request = fetch.mock.calls[0]![0] as Request;
     expect(new URL(request.url).origin).toBe(window.location.origin);
     expect(request.credentials).toBe("same-origin");
     expect(request.mode).toBe("cors");
@@ -130,7 +130,7 @@ describe("generated admin boundary", () => {
       new Date("2026-03-12T15:30:00Z"),
     );
     expect(firstPage?.["~next"]).toEqual({ cursor: "opaque+/=" });
-    let url = new URL((fetch.mock.calls[0]?.[0] as Request).url);
+    let url = new URL((fetch.mock.calls[0]![0] as Request).url);
     expect(url.pathname).toBe("/admin/organization.activity");
     expect(url.searchParams.get("organization_id")).toBe("org explicit");
     expect(url.searchParams.has("cursor")).toBe(false);
@@ -139,7 +139,7 @@ describe("generated admin boundary", () => {
       pageParam: firstPage?.["~next"],
       signal: new AbortController().signal,
     } as never);
-    url = new URL((fetch.mock.calls[1]?.[0] as Request).url);
+    url = new URL((fetch.mock.calls[1]![0] as Request).url);
     expect(url.searchParams.get("cursor")).toBe("opaque+/=");
   });
 

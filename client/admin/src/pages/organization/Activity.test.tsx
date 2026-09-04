@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { infiniteQueryOptions, QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -681,6 +682,50 @@ describe("Activity", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("first-seen")).toBeTruthy();
     expect(screen.queryByText("duplicate")).toBeNull();
+  });
+
+  it("paginates a new organization while the previous page is still pending", async () => {
+    const page = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
+    const otherOrg = anOrganization({ id: "other-org" });
+    mocks.listOrganizationActivity
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ action: "old-event" })],
+        nextCursor: "old-next",
+      })
+      .mockReturnValueOnce(page.promise)
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ action: "new-event" })],
+        nextCursor: "new-next",
+      })
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ id: "next-event", action: "next-event" })],
+      });
+    function SwitchOrganization() {
+      const [org, setOrg] = useState(ORG);
+      return (
+        <>
+          <button onClick={() => setOrg(otherOrg)}>Switch organization</button>
+          <Activity org={org} />
+        </>
+      );
+    }
+    await renderWithApp(<SwitchOrganization />);
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch organization" }),
+    );
+    await screen.findByText("new-event");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    try {
+      await screen.findByText("next-event");
+      expect(mocks.listOrganizationActivity).toHaveBeenLastCalledWith(
+        otherOrg.id,
+        "new-next",
+      );
+      expect(screen.queryByText("old-event")).toBeNull();
+    } finally {
+      page.resolve({ logs: [] });
+    }
   });
 
   it("guards load-more synchronously, handles rejection, and safely settles after unmount", async () => {
