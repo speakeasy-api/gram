@@ -45,6 +45,32 @@ type ReassignRequestBody struct {
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
 }
 
+// CreatePolicyGrantRequestBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP request body.
+type CreatePolicyGrantRequestBody struct {
+	// First-class agent identifier
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// Agent-runtime-safe scope to grant
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   string               `form:"effect" json:"effect" xml:"effect"`
+	Selector *AgentPolicySelector `form:"selector" json:"selector" xml:"selector"`
+}
+
+// UpdatePolicyGrantRequestBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP request body.
+type UpdatePolicyGrantRequestBody struct {
+	// Direct policy grant identifier
+	GrantID string `form:"grant_id" json:"grant_id" xml:"grant_id"`
+	// First-class agent identifier
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// Agent-runtime-safe scope to grant
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   string               `form:"effect" json:"effect" xml:"effect"`
+	Selector *AgentPolicySelector `form:"selector" json:"selector" xml:"selector"`
+}
+
 // DeletePolicyGrantRequestBody is the type of the "agents" service
 // "deletePolicyGrant" endpoint HTTP request body.
 type DeletePolicyGrantRequestBody struct {
@@ -2626,6 +2652,24 @@ type AgentPolicySelectorResponse struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
+// AgentPolicySelector is used to define fields on request body types.
+type AgentPolicySelector struct {
+	// The kind of resource this selector targets.
+	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	// Specific tool name filter (MCP scopes only).
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
 // AgentPolicySelectorResponseBody is used to define fields on response body
 // types.
 type AgentPolicySelectorResponseBody struct {
@@ -2681,6 +2725,35 @@ func NewReassignRequestBody(p *agents.ReassignPayload) *ReassignRequestBody {
 	body := &ReassignRequestBody{
 		AgentID:     p.AgentID,
 		OwnerUserID: p.OwnerUserID,
+	}
+	return body
+}
+
+// NewCreatePolicyGrantRequestBody builds the HTTP request body from the
+// payload of the "createPolicyGrant" endpoint of the "agents" service.
+func NewCreatePolicyGrantRequestBody(p *agents.CreatePolicyGrantPayload) *CreatePolicyGrantRequestBody {
+	body := &CreatePolicyGrantRequestBody{
+		AgentID: p.AgentID,
+		Scope:   p.Scope,
+		Effect:  p.Effect,
+	}
+	if p.Selector != nil {
+		body.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelector(p.Selector)
+	}
+	return body
+}
+
+// NewUpdatePolicyGrantRequestBody builds the HTTP request body from the
+// payload of the "updatePolicyGrant" endpoint of the "agents" service.
+func NewUpdatePolicyGrantRequestBody(p *agents.UpdatePolicyGrantPayload) *UpdatePolicyGrantRequestBody {
+	body := &UpdatePolicyGrantRequestBody{
+		GrantID: p.GrantID,
+		AgentID: p.AgentID,
+		Scope:   p.Scope,
+		Effect:  p.Effect,
+	}
+	if p.Selector != nil {
+		body.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelector(p.Selector)
 	}
 	return body
 }
@@ -8496,6 +8569,23 @@ func ValidateAgentPolicySelectorResponse(body *AgentPolicySelectorResponse) (err
 		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
 		}
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateAgentPolicySelector runs the validations defined on
+// AgentPolicySelector
+func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {

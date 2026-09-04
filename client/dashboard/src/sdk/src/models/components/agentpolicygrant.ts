@@ -13,14 +13,14 @@ import {
   AgentPolicySelector$inboundSchema,
 } from "./agentpolicyselector.js";
 
-export const Effect = {
+export const AgentPolicyGrantEffect = {
   Allow: "allow",
 } as const;
-export type Effect = ClosedEnum<typeof Effect>;
+export type AgentPolicyGrantEffect = ClosedEnum<typeof AgentPolicyGrantEffect>;
 
 export type AgentPolicyGrant = {
   createdAt: Date;
-  effect: Effect;
+  effect: AgentPolicyGrantEffect;
   id: string;
   scope: string;
   /**
@@ -31,9 +31,9 @@ export type AgentPolicyGrant = {
 };
 
 /** @internal */
-export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
-  Effect,
-);
+export const AgentPolicyGrantEffect$inboundSchema: z.ZodMiniEnum<
+  typeof AgentPolicyGrantEffect
+> = z.enum(AgentPolicyGrantEffect);
 
 /** @internal */
 export const AgentPolicyGrant$inboundSchema: z.ZodMiniType<
@@ -45,7 +45,7 @@ export const AgentPolicyGrant$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    effect: Effect$inboundSchema,
+    effect: AgentPolicyGrantEffect$inboundSchema,
     id: z.string(),
     scope: z.string(),
     selector: AgentPolicySelector$inboundSchema,

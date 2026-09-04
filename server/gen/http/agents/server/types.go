@@ -47,6 +47,32 @@ type ReassignRequestBody struct {
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
 }
 
+// CreatePolicyGrantRequestBody is the type of the "agents" service
+// "createPolicyGrant" endpoint HTTP request body.
+type CreatePolicyGrantRequestBody struct {
+	// First-class agent identifier
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Agent-runtime-safe scope to grant
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   *string              `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector *AgentPolicySelector `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
+// UpdatePolicyGrantRequestBody is the type of the "agents" service
+// "updatePolicyGrant" endpoint HTTP request body.
+type UpdatePolicyGrantRequestBody struct {
+	// Direct policy grant identifier
+	GrantID *string `form:"grant_id,omitempty" json:"grant_id,omitempty" xml:"grant_id,omitempty"`
+	// First-class agent identifier
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Agent-runtime-safe scope to grant
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   *string              `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector *AgentPolicySelector `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
 // DeletePolicyGrantRequestBody is the type of the "agents" service
 // "deletePolicyGrant" endpoint HTTP request body.
 type DeletePolicyGrantRequestBody struct {
@@ -2651,6 +2677,24 @@ type AgentPolicySelectorResponseBody struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
+// AgentPolicySelector is used to define fields on request body types.
+type AgentPolicySelector struct {
+	// The kind of resource this selector targets.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	// Specific tool name filter (MCP scopes only).
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
 // NewCreateResponseBody builds the HTTP response body from the result of the
 // "create" endpoint of the "agents" service.
 func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
@@ -4742,13 +4786,13 @@ func NewListPolicyGrantsPayload(agentID string, sessionToken *string) *agents.Li
 
 // NewCreatePolicyGrantPayload builds a agents service createPolicyGrant
 // endpoint payload.
-func NewCreatePolicyGrantPayload(body struct {
-	AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	Scope    *string `form:"scope" json:"scope" xml:"scope"`
-	Effect   *string `form:"effect" json:"effect" xml:"effect"`
-	Selector *string `form:"selector" json:"selector" xml:"selector"`
-}, sessionToken *string) *agents.CreatePolicyGrantPayload {
-	v := &agents.CreatePolicyGrantPayload{}
+func NewCreatePolicyGrantPayload(body *CreatePolicyGrantRequestBody, sessionToken *string) *agents.CreatePolicyGrantPayload {
+	v := &agents.CreatePolicyGrantPayload{
+		AgentID: *body.AgentID,
+		Scope:   *body.Scope,
+		Effect:  *body.Effect,
+	}
+	v.Selector = unmarshalAgentPolicySelectorToAgentsAgentPolicySelector(body.Selector)
 	v.SessionToken = sessionToken
 
 	return v
@@ -4756,14 +4800,14 @@ func NewCreatePolicyGrantPayload(body struct {
 
 // NewUpdatePolicyGrantPayload builds a agents service updatePolicyGrant
 // endpoint payload.
-func NewUpdatePolicyGrantPayload(body struct {
-	AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	GrantID  *string `form:"grant_id" json:"grant_id" xml:"grant_id"`
-	Scope    *string `form:"scope" json:"scope" xml:"scope"`
-	Effect   *string `form:"effect" json:"effect" xml:"effect"`
-	Selector *string `form:"selector" json:"selector" xml:"selector"`
-}, sessionToken *string) *agents.UpdatePolicyGrantPayload {
-	v := &agents.UpdatePolicyGrantPayload{}
+func NewUpdatePolicyGrantPayload(body *UpdatePolicyGrantRequestBody, sessionToken *string) *agents.UpdatePolicyGrantPayload {
+	v := &agents.UpdatePolicyGrantPayload{
+		GrantID: *body.GrantID,
+		AgentID: *body.AgentID,
+		Scope:   *body.Scope,
+		Effect:  *body.Effect,
+	}
+	v.Selector = unmarshalAgentPolicySelectorToAgentsAgentPolicySelector(body.Selector)
 	v.SessionToken = sessionToken
 
 	return v
@@ -4893,6 +4937,84 @@ func ValidateReassignRequestBody(body *ReassignRequestBody) (err error) {
 	return
 }
 
+// ValidateCreatePolicyGrantRequestBody runs the validations defined on
+// CreatePolicyGrantRequestBody
+func ValidateCreatePolicyGrantRequestBody(body *CreatePolicyGrantRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 1, true))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelector(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateUpdatePolicyGrantRequestBody runs the validations defined on
+// UpdatePolicyGrantRequestBody
+func ValidateUpdatePolicyGrantRequestBody(body *UpdatePolicyGrantRequestBody) (err error) {
+	if body.GrantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_id", "body"))
+	}
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.GrantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", *body.GrantID, goa.FormatUUID))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 1, true))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelector(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateDeletePolicyGrantRequestBody runs the validations defined on
 // DeletePolicyGrantRequestBody
 func ValidateDeletePolicyGrantRequestBody(body *DeletePolicyGrantRequestBody) (err error) {
@@ -4951,6 +5073,31 @@ func ValidateDeleteRequestBody(body *DeleteRequestBody) (err error) {
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAgentPolicySelector runs the validations defined on
+// AgentPolicySelector
+func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
+	if body.ResourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_kind", "body"))
+	}
+	if body.ResourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
+	}
+	if body.ResourceKind != nil {
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+		}
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
 	}
 	return
 }

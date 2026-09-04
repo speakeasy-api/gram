@@ -772,6 +772,7 @@ trackedFiles:
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
   src/models/components/createagentform.ts: {}
+  src/models/components/createagentpolicygrantform.ts: {}
   src/models/components/createassistantform.ts: {}
   src/models/components/createawsiamcredentialform.ts: {}
   src/models/components/createawskmskeyform.ts: {}
@@ -1537,6 +1538,7 @@ trackedFiles:
   src/models/components/unproxiedmcpserverusagebucket.ts: {}
   src/models/components/unproxiedmcpserveruserusagerow.ts: {}
   src/models/components/unshareskillrequestbody.ts: {}
+  src/models/components/updateagentpolicygrantform.ts: {}
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
@@ -3714,10 +3716,10 @@ examples:
   createAgentPolicyGrant:
     speakeasy-default-create-agent-policy-grant:
       requestBody:
-        application/json: {}
+        application/json: {"agent_id": "e69ade49-a1fc-41b5-91c6-c687face3ff7", "effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "org"}}
       responses:
         "201":
-          application/json: {"created_at": "2026-10-17T20:59:03.089Z", "effect": "allow", "id": "69ade49a-1fc1-4b51-8c6c-687face3ff76", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "agent"}, "updated_at": "2026-06-27T04:16:17.387Z"}
+          application/json: {"created_at": "2026-10-17T20:59:03.089Z", "effect": "allow", "id": "69ade49a-1fc1-4b51-8c6c-687face3ff76", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "org"}, "updated_at": "2026-06-27T04:16:17.387Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10018,10 +10020,10 @@ examples:
   updateAgentPolicyGrant:
     speakeasy-default-update-agent-policy-grant:
       requestBody:
-        application/json: {}
+        application/json: {"agent_id": "828c5eb0-4096-4601-bb82-86b4acd42cf9", "effect": "allow", "grant_id": "2435c08a-fd3f-411d-96b2-ca55d17c47f9", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}
       responses:
         "200":
-          application/json: {"created_at": "2025-07-24T22:05:10.234Z", "effect": "allow", "id": "28c5eb04-0966-401b-8828-6b4acd42cf9d", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "org"}, "updated_at": "2024-08-31T22:29:41.541Z"}
+          application/json: {"created_at": "2025-07-24T22:05:10.234Z", "effect": "allow", "id": "28c5eb04-0966-401b-8828-6b4acd42cf9d", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}, "updated_at": "2024-08-31T22:29:41.541Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

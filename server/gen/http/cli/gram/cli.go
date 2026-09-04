@@ -10740,7 +10740,7 @@ func agentsCreatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsUpdatePolicyGrantUsage() {
@@ -10760,7 +10760,7 @@ func agentsUpdatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"abc123\",\n      \"effect\": \"abc123\",\n      \"grant_id\": \"abc123\",\n      \"scope\": \"abc123\",\n      \"selector\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsDeletePolicyGrantUsage() {

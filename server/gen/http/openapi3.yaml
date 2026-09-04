@@ -8186,16 +8186,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            properties:
-                                agent_id:
-                                    type: string
-                                effect:
-                                    type: string
-                                scope:
-                                    type: string
-                                selector:
-                                    type: string
-                            type: object
+                            $ref: '#/components/schemas/CreateAgentPolicyGrantForm'
                 required: true
             responses:
                 "201":
@@ -9125,18 +9116,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            properties:
-                                agent_id:
-                                    type: string
-                                effect:
-                                    type: string
-                                grant_id:
-                                    type: string
-                                scope:
-                                    type: string
-                                selector:
-                                    type: string
-                            type: object
+                            $ref: '#/components/schemas/UpdateAgentPolicyGrantForm'
                 required: true
             responses:
                 "200":
@@ -68959,6 +68939,29 @@ components:
                     description: Eligible same-organization human owner; defaults to the caller
             required:
                 - name
+        CreateAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                effect:
+                    type: string
+                    description: Grant effect; direct agent policy is allow-only
+                    enum:
+                        - allow
+                scope:
+                    type: string
+                    description: Agent-runtime-safe scope to grant
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - agent_id
+                - scope
+                - effect
+                - selector
         CreateAssistantForm:
             type: object
             properties:
@@ -89759,6 +89762,34 @@ components:
                     format: uuid
             required:
                 - skill_id
+        UpdateAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                effect:
+                    type: string
+                    description: Grant effect; direct agent policy is allow-only
+                    enum:
+                        - allow
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+                scope:
+                    type: string
+                    description: Agent-runtime-safe scope to grant
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - grant_id
+                - agent_id
+                - scope
+                - effect
+                - selector
         UpdateAssistantForm:
             type: object
             properties:

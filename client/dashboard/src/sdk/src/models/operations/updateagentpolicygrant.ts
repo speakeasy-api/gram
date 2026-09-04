@@ -4,17 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  UpdateAgentPolicyGrantForm,
+  UpdateAgentPolicyGrantForm$Outbound,
+  UpdateAgentPolicyGrantForm$outboundSchema,
+} from "../components/updateagentpolicygrantform.js";
 
 export type UpdateAgentPolicyGrantSecurity = {
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type UpdateAgentPolicyGrantRequestBody = {
-  agentId?: string | undefined;
-  effect?: string | undefined;
-  grantId?: string | undefined;
-  scope?: string | undefined;
-  selector?: string | undefined;
 };
 
 export type UpdateAgentPolicyGrantRequest = {
@@ -22,7 +19,7 @@ export type UpdateAgentPolicyGrantRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  requestBody: UpdateAgentPolicyGrantRequestBody;
+  updateAgentPolicyGrantForm: UpdateAgentPolicyGrantForm;
 };
 
 /** @internal */
@@ -56,48 +53,9 @@ export function updateAgentPolicyGrantSecurityToJSON(
 }
 
 /** @internal */
-export type UpdateAgentPolicyGrantRequestBody$Outbound = {
-  agent_id?: string | undefined;
-  effect?: string | undefined;
-  grant_id?: string | undefined;
-  scope?: string | undefined;
-  selector?: string | undefined;
-};
-
-/** @internal */
-export const UpdateAgentPolicyGrantRequestBody$outboundSchema: z.ZodMiniType<
-  UpdateAgentPolicyGrantRequestBody$Outbound,
-  UpdateAgentPolicyGrantRequestBody
-> = z.pipe(
-  z.object({
-    agentId: z.optional(z.string()),
-    effect: z.optional(z.string()),
-    grantId: z.optional(z.string()),
-    scope: z.optional(z.string()),
-    selector: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      agentId: "agent_id",
-      grantId: "grant_id",
-    });
-  }),
-);
-
-export function updateAgentPolicyGrantRequestBodyToJSON(
-  updateAgentPolicyGrantRequestBody: UpdateAgentPolicyGrantRequestBody,
-): string {
-  return JSON.stringify(
-    UpdateAgentPolicyGrantRequestBody$outboundSchema.parse(
-      updateAgentPolicyGrantRequestBody,
-    ),
-  );
-}
-
-/** @internal */
 export type UpdateAgentPolicyGrantRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  RequestBody: UpdateAgentPolicyGrantRequestBody$Outbound;
+  UpdateAgentPolicyGrantForm: UpdateAgentPolicyGrantForm$Outbound;
 };
 
 /** @internal */
@@ -107,12 +65,12 @@ export const UpdateAgentPolicyGrantRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    requestBody: z.lazy(() => UpdateAgentPolicyGrantRequestBody$outboundSchema),
+    updateAgentPolicyGrantForm: UpdateAgentPolicyGrantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      requestBody: "RequestBody",
+      updateAgentPolicyGrantForm: "UpdateAgentPolicyGrantForm",
     });
   }),
 );

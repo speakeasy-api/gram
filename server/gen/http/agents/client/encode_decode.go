@@ -1454,7 +1454,7 @@ func EncodeCreatePolicyGrantRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := p
+		body := NewCreatePolicyGrantRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("agents", "createPolicyGrant", err)
 		}
@@ -1688,7 +1688,7 @@ func EncodeUpdatePolicyGrantRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := p
+		body := NewUpdatePolicyGrantRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("agents", "updatePolicyGrant", err)
 		}
@@ -3075,6 +3075,38 @@ func unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v *AgentPol
 	res := &agents.AgentPolicySelector{
 		ResourceKind:   *v.ResourceKind,
 		ResourceID:     *v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentsAgentPolicySelectorToAgentPolicySelector builds a value of type
+// *AgentPolicySelector from a value of type *agents.AgentPolicySelector.
+func marshalAgentsAgentPolicySelectorToAgentPolicySelector(v *agents.AgentPolicySelector) *AgentPolicySelector {
+	res := &AgentPolicySelector{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentPolicySelectorToAgentsAgentPolicySelector builds a value of type
+// *agents.AgentPolicySelector from a value of type *AgentPolicySelector.
+func marshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelector) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
 		Disposition:    v.Disposition,
 		Tool:           v.Tool,
 		ProjectID:      v.ProjectID,
