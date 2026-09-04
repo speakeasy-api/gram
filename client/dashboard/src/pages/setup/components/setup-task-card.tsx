@@ -1,4 +1,3 @@
-// oxlint-disable react/only-export-components -- shared status labels keep columns and cards consistent
 import type {
   SetupTask,
   SetupTaskStatus,
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { cn } from "@/lib/utils";
 
-export const SETUP_TASK_STATUS_LABELS: Record<SetupTaskStatus, string> = {
+const SETUP_TASK_STATUS_LABELS: Record<SetupTaskStatus, string> = {
   todo: "To do",
   in_progress: "In progress",
   awaiting_support: "Awaiting support",
@@ -18,6 +17,7 @@ export const SETUP_TASK_STATUS_LABELS: Record<SetupTaskStatus, string> = {
 
 type SetupTaskCardProps = {
   task: SetupTask;
+  optional?: boolean;
   blockedTitles: string[];
   canChangeStatus: boolean;
   canOpen: boolean;
@@ -50,6 +50,7 @@ function taskActionLabel(status: SetupTaskStatus, blocked: boolean): string {
 
 export function SetupTaskCard({
   task,
+  optional = false,
   blockedTitles,
   canChangeStatus,
   canOpen,
@@ -112,30 +113,57 @@ export function SetupTaskCard({
   return (
     <article
       className={cn(
-        "flex shrink-0 flex-col border bg-card",
+        "flex flex-wrap items-start gap-3 border-b px-4 py-3 last:border-b-0",
         (blocked || task.hidden) && "text-muted-foreground",
       )}
       data-testid={`setup-task-${task.key}`}
     >
+      <span
+        className={cn(
+          "mt-1.5 size-2 shrink-0 rounded-full border",
+          task.status === "done" && "border-success-default bg-success-default",
+          task.status === "in_progress" &&
+            "border-information-default bg-information-default",
+          task.status === "awaiting_support" &&
+            "border-warning-default bg-warning-default",
+          task.status === "todo" && "border-muted-foreground",
+        )}
+        aria-hidden="true"
+      />
       <button
         type="button"
-        className="w-full space-y-2 p-4 text-left enabled:hover:bg-surface-secondary-default disabled:cursor-not-allowed"
+        className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
         onClick={onOpen}
         disabled={pending || task.hidden || !canOpen}
         aria-describedby={descriptionId}
       >
-        <h3 className="font-medium text-foreground">{task.title}</h3>
-        <p id={descriptionId} className="text-sm text-muted-foreground">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-foreground">{task.title}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {SETUP_TASK_STATUS_LABELS[task.status]}
+          </span>
+          {optional ? <Badge size="sm">Optional</Badge> : null}
+          {task.hidden ? <Badge size="sm">Hidden</Badge> : null}
+        </span>
+        <span
+          id={descriptionId}
+          className="mt-0.5 block text-sm text-muted-foreground"
+        >
           {task.description}
-        </p>
+        </span>
         {blocked ? (
-          <p className="border-l-2 border-warning-default pl-2 text-xs text-default-warning">
-            Blocked by {blockedTitles.join(", ")}
-          </p>
+          <span className="mt-1 block text-xs text-default-warning">
+            Available after {blockedTitles.join(", ")}
+          </span>
         ) : null}
-        {task.hidden ? <Badge size="sm">Hidden</Badge> : null}
+      </button>
+
+      <div className="ml-5 flex w-[calc(100%_-_1.25rem)] shrink-0 items-center justify-end gap-2 sm:ml-0 sm:w-auto">
         {ownerLabel ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div
+            className="hidden max-w-36 items-center gap-2 text-xs text-muted-foreground sm:flex"
+            title={ownerLabel}
+          >
             <Avatar className="size-6">
               {task.assignee?.photoUrl ? (
                 <AvatarImage src={task.assignee.photoUrl} alt="" />
@@ -144,23 +172,7 @@ export function SetupTaskCard({
             </Avatar>
             <span className="truncate">{ownerLabel}</span>
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">No owner assigned</p>
-        )}
-      </button>
-
-      <div className="flex min-w-0 items-center gap-2 border-t p-3">
-        <Button
-          size="xs"
-          variant="secondary"
-          className="min-w-0 flex-1"
-          onClick={onOpen}
-          disabled={pending || task.hidden || !canOpen}
-          aria-label={`${taskActionLabel(task.status, blocked)}: ${task.title}`}
-        >
-          {taskActionLabel(task.status, blocked)}
-        </Button>
-        {canAssign && !ownerLabel ? (
+        ) : canAssign ? (
           <Button
             size="xs"
             variant="tertiary"
@@ -170,6 +182,15 @@ export function SetupTaskCard({
             Assign
           </Button>
         ) : null}
+        <Button
+          size="xs"
+          variant="secondary"
+          onClick={onOpen}
+          disabled={pending || task.hidden || !canOpen}
+          aria-label={`${taskActionLabel(task.status, blocked)}: ${task.title}`}
+        >
+          {taskActionLabel(task.status, blocked)}
+        </Button>
         <MoreActions actions={actions} triggerDisabled={actions.length === 0} />
       </div>
     </article>
