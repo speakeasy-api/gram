@@ -104,16 +104,35 @@ func issuerOrigin(issuerURL string) string {
 // down or slow. That is a 502 — it is not caller error, and SDK retry policies
 // treat 4xx as terminal, which would make a thirty-second outage look permanent.
 func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unreachable oops.Code) error {
+	msg, _ := discoveryFailureMessage(err)
+	_, untrusted := errors.AsType[*untrustedDocumentError](err)
+	_, unread := errors.AsType[*discoveryError](err)
+	switch {
+	case untrusted:
+		return oops.E(oops.CodeInvalid, err, "%s", msg).LogError(ctx, logger)
+	case unread:
+		return oops.E(unreachable, err, "%s", msg).LogError(ctx, logger)
+	default:
+		// Unreachable today: discoverIssuerMetadata only ever returns the two
+		// types above. An unexpected error is Gram's to explain rather than
+		// the caller's to correct.
+		return oops.E(oops.CodeUnexpected, err, "%s", msg).LogError(ctx, logger)
+	}
+}
+
+// discoveryFailureMessage describes a discovery failure in text safe to store
+// on the issuer row and show to its operators: it names well-known URLs and
+// upstream statuses but never dial errors or the outbound policy's internals.
+// transient reports whether the failure says nothing about what the issuer
+// serves, so a retry later may succeed.
+func discoveryFailureMessage(err error) (msg string, transient bool) {
 	if ude, ok := errors.AsType[*untrustedDocumentError](err); ok {
-		return oops.E(oops.CodeInvalid, err, "%s", ude.reason).LogError(ctx, logger)
+		return ude.reason, false
 	}
-	if df, ok := errors.AsType[*discoveryError](err); ok {
-		return oops.E(unreachable, err, "%s", df.UserMessage()).LogError(ctx, logger)
+	if de, ok := errors.AsType[*discoveryError](err); ok {
+		return de.UserMessage(), de.transient()
 	}
-	// Unreachable today: discoverIssuerMetadata only ever returns the two types
-	// above. Anything new arrives here, and an unexpected error is Gram's to
-	// explain rather than the caller's to correct.
-	return oops.E(oops.CodeUnexpected, err, "fetch issuer metadata").LogError(ctx, logger)
+	return "issuer metadata could not be fetched", false
 }
 
 // refreshIssuerMetadata re-reads an existing issuer's upstream RFC 8414
@@ -172,7 +191,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		}
 	case !issuerURLsEqual(doc.Issuer, issuer.Issuer) && !issuerURLsEqual(doc.Issuer, issuerOrigin(issuer.Issuer)):
 		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's endpoints", doc.Issuer, issuer.Issuer),
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's endpoints", truncateForMessage(doc.Issuer), issuer.Issuer),
 		}
 	// An issuer advertising neither endpoint is unusable for OAuth. Discovery
 	// returns such a document as a last resort when no probe candidate yields a

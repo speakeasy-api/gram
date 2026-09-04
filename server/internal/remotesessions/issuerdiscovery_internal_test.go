@@ -1,6 +1,7 @@
 package remotesessions
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,6 +30,36 @@ func TestDiscoveryErrorTransient(t *testing.T) {
 	require.False(t, refused.transient(), "a refusal Gram made is not an outage")
 	require.ErrorIs(t, refused.cause, errDiscoveryRedirectRefused)
 	_ = http.StatusOK
+}
+
+func TestDiscoveryFailureMessageIsPublicSafe(t *testing.T) {
+	t.Parallel()
+
+	dial := &discoveryError{
+		WellKnownURL: "https://idp.example.com/.well-known/oauth-authorization-server",
+		Status:       0,
+		cause:        errors.New("fetch discovery document: dial tcp 10.0.0.1:443: connect: connection refused"),
+		definitive:   false,
+	}
+	msg, transient := discoveryFailureMessage(dial)
+	require.Equal(t, "Could not reach OAuth metadata at https://idp.example.com/.well-known/oauth-authorization-server", msg)
+	require.True(t, transient)
+
+	msg, transient = discoveryFailureMessage(&untrustedDocumentError{reason: "metadata document at https://idp.example.com advertises no issuer"})
+	require.Equal(t, "metadata document at https://idp.example.com advertises no issuer", msg)
+	require.False(t, transient)
+
+	msg, transient = discoveryFailureMessage(errors.New("guardian: policy rejected 10.0.0.1"))
+	require.Equal(t, "issuer metadata could not be fetched", msg)
+	require.False(t, transient)
+}
+
+func TestTruncateForMessage(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "short", truncateForMessage("short"))
+	require.Equal(t, strings.Repeat("a", maxMessageValueBytes)+"…", truncateForMessage(strings.Repeat("a", maxMessageValueBytes)+"tail"))
+	require.Equal(t, strings.Repeat("a", maxMessageValueBytes-1)+"…", truncateForMessage(strings.Repeat("a", maxMessageValueBytes-1)+"étail"), "the cut lands on a rune boundary")
 }
 
 func TestMergeIssuerMetadataIgnoresNullDocuments(t *testing.T) {

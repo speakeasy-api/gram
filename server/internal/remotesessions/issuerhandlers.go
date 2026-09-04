@@ -1487,7 +1487,7 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	if doc.Issuer == "" {
 		warnings = append(warnings, "issuer field missing from discovery document")
 	} else if !issuerURLsEqual(doc.Issuer, requestedIssuer) {
-		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", doc.Issuer, requestedIssuer))
+		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", truncateForMessage(doc.Issuer), requestedIssuer))
 	}
 	if doc.AuthorizationEndpoint == "" {
 		warnings = append(warnings, "authorization_endpoint missing from discovery document")
@@ -1515,6 +1515,23 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 // issuerURLsEqual compares two issuer URLs ignoring trailing slashes.
 func issuerURLsEqual(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+// maxMessageValueBytes caps an upstream-controlled string quoted in a warning
+// or error, so a hostile document cannot pad what is stored and shown.
+const maxMessageValueBytes = 200
+
+// truncateForMessage shortens s to maxMessageValueBytes on a rune boundary,
+// marking the cut with an ellipsis.
+func truncateForMessage(s string) string {
+	if len(s) <= maxMessageValueBytes {
+		return s
+	}
+	cut := maxMessageValueBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 // pageLimit clamps the user-supplied limit into the documented range and
