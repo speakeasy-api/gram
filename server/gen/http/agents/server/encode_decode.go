@@ -869,13 +869,8 @@ func DecodeCreatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	return func(r *http.Request) (*agents.CreatePolicyGrantPayload, error) {
 		var payload *agents.CreatePolicyGrantPayload
 		var (
-			body struct {
-				AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-				Scope    *string `form:"scope" json:"scope" xml:"scope"`
-				Effect   *string `form:"effect" json:"effect" xml:"effect"`
-				Selector *string `form:"selector" json:"selector" xml:"selector"`
-			}
-			err error
+			body CreatePolicyGrantRequestBody
+			err  error
 		)
 		err = decoder(r).Decode(&body)
 		if err != nil {
@@ -888,6 +883,10 @@ func DecodeCreatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
+		err = ValidateCreatePolicyGrantRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
 
 		var (
 			sessionToken *string
@@ -896,7 +895,7 @@ func DecodeCreatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewCreatePolicyGrantPayload(body, sessionToken)
+		payload = NewCreatePolicyGrantPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1083,14 +1082,8 @@ func DecodeUpdatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	return func(r *http.Request) (*agents.UpdatePolicyGrantPayload, error) {
 		var payload *agents.UpdatePolicyGrantPayload
 		var (
-			body struct {
-				AgentID  *string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-				GrantID  *string `form:"grant_id" json:"grant_id" xml:"grant_id"`
-				Scope    *string `form:"scope" json:"scope" xml:"scope"`
-				Effect   *string `form:"effect" json:"effect" xml:"effect"`
-				Selector *string `form:"selector" json:"selector" xml:"selector"`
-			}
-			err error
+			body UpdatePolicyGrantRequestBody
+			err  error
 		)
 		err = decoder(r).Decode(&body)
 		if err != nil {
@@ -1103,6 +1096,10 @@ func DecodeUpdatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
+		err = ValidateUpdatePolicyGrantRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
 
 		var (
 			sessionToken *string
@@ -1111,7 +1108,7 @@ func DecodeUpdatePolicyGrantRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpdatePolicyGrantPayload(body, sessionToken)
+		payload = NewUpdatePolicyGrantPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2803,6 +2800,22 @@ func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponse(v *agents.Age
 	res := &AgentPolicySelectorResponse{
 		ResourceKind:   v.ResourceKind,
 		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorToAgentsAgentPolicySelector builds a value of
+// type *agents.AgentPolicySelector from a value of type *AgentPolicySelector.
+func unmarshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelector) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   *v.ResourceKind,
+		ResourceID:     *v.ResourceID,
 		Disposition:    v.Disposition,
 		Tool:           v.Tool,
 		ProjectID:      v.ProjectID,
