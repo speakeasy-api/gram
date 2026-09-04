@@ -71422,6 +71422,11 @@ components:
         ExternalOAuthServer:
             type: object
             properties:
+                authorization_server_issuer:
+                    type: string
+                    description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present.
+                    format: uri
+                    maxLength: 500
                 created_at:
                     type: string
                     description: When the external OAuth server was created.
@@ -71430,7 +71435,7 @@ components:
                     type: string
                     description: The ID of the external OAuth server
                 metadata:
-                    description: The metadata for the external OAuth server
+                    description: The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
                 project_id:
                     type: string
                     description: The project ID this external OAuth server belongs to
@@ -71447,7 +71452,6 @@ components:
                 - id
                 - project_id
                 - slug
-                - metadata
                 - created_at
                 - updated_at
         ExternalOAuthServerForm:

@@ -298,6 +298,49 @@ func TestHandleGetProtectedResource_ToolsetBackendWithoutOAuth(t *testing.T) {
 	require.Empty(t, w.Body.String())
 }
 
+func TestHandleGetProtectedResource_ToolsetBackendWithExternalOAuth(t *testing.T) {
+	t.Parallel()
+
+	upstreamIssuer := "https://issuer.example.com/Tenant/CaseSensitive"
+	for _, tc := range []struct {
+		name           string
+		slug           string
+		upstreamIssuer *string
+	}{
+		{name: "upstream issuer", slug: "mcp-pr-external", upstreamIssuer: &upstreamIssuer},
+		{name: "Gram-hosted", slug: "mcp-pr-legacy-external"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+
+			external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+				Slug: tc.slug, IsPublic: true, AuthorizationServerIssuer: tc.upstreamIssuer,
+			})
+			slug := external.Toolset.McpSlug.String
+			createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+
+			w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code)
+
+			var metadata map[string]any
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+			resourceURL := "http://0.0.0.0/mcp/" + slug
+			expectedIssuer := resourceURL
+			if tc.upstreamIssuer != nil {
+				expectedIssuer = *tc.upstreamIssuer
+			}
+			require.Equal(t, resourceURL, metadata["resource"])
+			require.Equal(t, []any{expectedIssuer}, metadata["authorization_servers"])
+		})
+	}
+}
+
 // TestHandleGetProtectedResource_IssuerGatedRemoteBackend is the
 // protected-resource companion of the AGE-2624 regression: an issuer-gated
 // remote-backed mcp_server at /mcp/{slug} serves RFC 9728 metadata whose

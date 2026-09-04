@@ -3936,12 +3936,13 @@ func unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(v *Exter
 		return nil
 	}
 	res := &types.ExternalOAuthServer{
-		ID:        *v.ID,
-		ProjectID: *v.ProjectID,
-		Slug:      types.Slug(*v.Slug),
-		Metadata:  v.Metadata,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+		ID:                        *v.ID,
+		ProjectID:                 *v.ProjectID,
+		Slug:                      types.Slug(*v.Slug),
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+		CreatedAt:                 *v.CreatedAt,
+		UpdatedAt:                 *v.UpdatedAt,
 	}
 
 	return res

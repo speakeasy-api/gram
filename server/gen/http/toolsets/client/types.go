@@ -3801,8 +3801,12 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The slug of the external OAuth server
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The metadata for the external OAuth server
+	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
+	// one of metadata and authorization_server_issuer is present.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
+	// Exactly one of authorization_server_issuer and metadata is present.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// When the external OAuth server was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the external OAuth server was last updated.
@@ -12458,9 +12462,6 @@ func ValidateExternalOAuthServerResponseBody(body *ExternalOAuthServerResponseBo
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.Metadata == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -12473,6 +12474,14 @@ func ValidateExternalOAuthServerResponseBody(body *ExternalOAuthServerResponseBo
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.authorization_server_issuer", *body.AuthorizationServerIssuer, utf8.RuneCountInString(*body.AuthorizationServerIssuer), 500, false))
 		}
 	}
 	if body.CreatedAt != nil {
