@@ -65,7 +65,7 @@ export type ConfigureExportValues = {
   headers: EditableWriteOnlyHeader[];
 };
 
-function isValidEndpointURL(value: string): boolean {
+function isValidDataExportEndpointURL(value: string): boolean {
   try {
     const protocol = new URL(value).protocol;
     return protocol === "http:" || protocol === "https:";
@@ -100,7 +100,7 @@ function destinationSelectionIsValid(
   }
   return (
     values.destinationName.trim() !== "" &&
-    isValidEndpointURL(values.endpointUrl.trim()) &&
+    isValidDataExportEndpointURL(values.endpointUrl.trim()) &&
     hasValidWriteOnlyHeaders(values.headers)
   );
 }
@@ -471,7 +471,7 @@ export function ConfigureExportSheet({
                   <div className="space-y-1">
                     <Label>Start exporting</Label>
                     <Text muted className="text-sm">
-                      Turn off to save this export paused.
+                      When enabled, data starts exporting as soon as you save.
                     </Text>
                   </div>
                   <Switch
