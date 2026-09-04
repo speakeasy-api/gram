@@ -42,6 +42,12 @@ func RecordAuthorizationDecision(ctx context.Context, operation repo.Operation, 
 		if authCtx.APIKeyID != "" {
 			attrs = append(attrs, attribute.String("gram.authorization.api_key_id", authCtx.APIKeyID))
 		}
+		if authorizerUserID, ownerUserID, ok := contextvalues.PrincipalCredentialProvenance(ctx); ok {
+			attrs = append(attrs,
+				attribute.String("gram.authorization.authorizer_user_id", authorizerUserID),
+				attribute.String("gram.authorization.owner_user_id", ownerUserID),
+			)
+		}
 	}
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
 		attrs = append(attrs, attribute.String("gram.authorization.oauth_client_id", clientID))

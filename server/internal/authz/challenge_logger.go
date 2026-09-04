@@ -82,15 +82,7 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
-	principalType := authzrepo.PrincipalTypeUser
-	if authCtx.APIKeyID != "" {
-		principalURN = "api_key:" + authCtx.APIKeyID
-		principalType = authzrepo.PrincipalTypeAPIKey
-	}
-	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
-		principalType = authzrepo.PrincipalTypeAssistant
-	}
+	principalURN, principalType := authorizationChallengePrincipal(ctx, authCtx)
 
 	var focus Check
 	var focusSelector Selector
@@ -210,6 +202,23 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		)
 		return
 	}
+}
+
+func authorizationChallengePrincipal(ctx context.Context, authCtx *contextvalues.AuthContext) (string, authzrepo.PrincipalType) {
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	principalType := authzrepo.PrincipalTypeUser
+	if authCtx.APIKeyID != "" {
+		principalURN = "api_key:" + authCtx.APIKeyID
+		principalType = authzrepo.PrincipalTypeAPIKey
+	}
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		principalType = authzrepo.PrincipalTypeAssistant
+	}
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		principalURN = actor.String()
+		principalType = authzrepo.PrincipalTypeAgent
+	}
+	return principalURN, principalType
 }
 
 func marshalSelector(v Selector) string {
