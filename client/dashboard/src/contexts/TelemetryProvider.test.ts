@@ -59,4 +59,20 @@ describe("failOpenMissingFlags", () => {
   it("preserves an explicit on", () => {
     expect(wrap(true).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
   });
+
+  it("delegates PostHog methods without spreading the instance", () => {
+    const onFeatureFlags = vi.fn(() => () => {});
+    const identify = vi.fn(() => undefined);
+    const wrapped = failOpenMissingFlags({
+      ...nullTelemetry,
+      onFeatureFlags,
+      identify,
+    });
+
+    wrapped.onFeatureFlags(() => {});
+    wrapped.identify("user@example.com", {});
+
+    expect(onFeatureFlags).toHaveBeenCalledOnce();
+    expect(identify).toHaveBeenCalledOnce();
+  });
 });

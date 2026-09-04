@@ -35,11 +35,16 @@ export const shouldFailOpenMissingFlags = (serverURL: string): boolean =>
 
 export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
   return {
-    ...telemetry,
     isFeatureEnabled: ((flag, options) => {
       const result = telemetry.isFeatureEnabled(flag, options);
       return result === undefined ? true : result;
     }) as Telemetry["isFeatureEnabled"],
+    onFeatureFlags: telemetry.onFeatureFlags.bind(telemetry),
+    capture: telemetry.capture.bind(telemetry),
+    identify: telemetry.identify.bind(telemetry),
+    register: telemetry.register.bind(telemetry),
+    reset: telemetry.reset.bind(telemetry),
+    group: telemetry.group.bind(telemetry),
   };
 }
 
@@ -96,7 +101,8 @@ export const TelemetryProvider = (props: {
   }, []);
 
   let value: Telemetry = ph ?? nullTelemetry;
-  let flagsInitiallyAvailable = false;
+  // Share page uses nullTelemetry and never emits onFeatureFlags.
+  let flagsInitiallyAvailable = ph == null;
   if (!isPublicSharePath() && shouldUseDevTelemetry(serverURL)) {
     value = AM_TESTING_TELEMETRY ? testTelemetry : devTelemetry;
     flagsInitiallyAvailable = true;
