@@ -319,7 +319,7 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithoutOAut
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
+func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerOnlyToolsetBackendOnCustomDomain(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -355,6 +355,43 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 	authServers, ok := metadata["authorization_servers"].([]any)
 	require.True(t, ok)
 	require.Equal(t, []any{upstreamIssuer}, authServers)
+}
+
+func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-pr-cd-"+uuid.NewString()[:8]+".example.com")
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "xmcp-pr-cd",
+		IsPublic: true,
+		Metadata: nil,
+	})
+	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
+
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedResource := "https://" + domain.Domain + "/x/mcp/" + slug
+	require.Equal(t, expectedResource, metadata["resource"])
+
+	authServers, ok := metadata["authorization_servers"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{expectedResource}, authServers)
 }
 
 func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExternalOAuth(t *testing.T) {
