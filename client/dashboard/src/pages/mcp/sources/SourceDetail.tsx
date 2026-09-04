@@ -6,7 +6,7 @@ import {
 import {
   sourceAssetId,
   useProjectSources,
-} from "@/components/sources/source-grid";
+} from "@/components/sources/source-list";
 import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
 import { useParams } from "react-router";

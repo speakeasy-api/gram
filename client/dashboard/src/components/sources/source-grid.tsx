@@ -1,58 +1,10 @@
 import { useIconConfetti } from "@/components/icon-confetti";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { useLatestDeployment } from "@/hooks/toolTypes";
+
 import { cn } from "@/lib/utils";
 import { Check, Code, FileCode } from "lucide-react";
-import { useMemo } from "react";
-
-/**
- * The grid of sources a project has, shared by the page that browses them and
- * the flow that builds a server from one.
- *
- * A "source" is an OpenAPI document or a function in the latest deployment —
- * the two kinds that still produce tools. Sources have no pages of their own
- * any more, so this is the whole of how they are shown.
- */
-export type SourceOption = {
-  key: string;
-  name: string;
-  kind: "openapi" | "function";
-  /** Tools are matched to their source by these ids. */
-  documentId?: string;
-  functionId?: string;
-};
-
-/** The asset id a source is keyed by, which is what its panel refetches from. */
-export function sourceAssetId(source: SourceOption): string {
-  return source.documentId ?? source.functionId ?? "";
-}
-
-export function useProjectSources(): {
-  sources: SourceOption[];
-  isLoading: boolean;
-} {
-  const { data: deploymentResult, isLoading } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  const sources = useMemo(() => {
-    const openapi = (deployment?.openapiv3Assets ?? []).map((asset) => ({
-      key: `openapi:${asset.id}`,
-      name: asset.name,
-      kind: "openapi" as const,
-      documentId: asset.id,
-    }));
-    const functions = (deployment?.functionsAssets ?? []).map((asset) => ({
-      key: `function:${asset.id}`,
-      name: asset.name,
-      kind: "function" as const,
-      functionId: asset.id,
-    }));
-    return [...openapi, ...functions];
-  }, [deployment]);
-
-  return { sources, isLoading };
-}
+import type { SourceOption } from "./source-list";
 
 /**
  * One source in the grid.

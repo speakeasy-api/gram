@@ -2,11 +2,11 @@ import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SourceCard } from "@/components/sources/source-grid";
 import {
-  SourceCard,
   sourceAssetId,
   useProjectSources,
-} from "@/components/sources/source-grid";
+} from "@/components/sources/source-list";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useSidePanel } from "@/components/side-panel/side-panel-context";

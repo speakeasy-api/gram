@@ -1,9 +1,9 @@
 import { ResourceListPage } from "@/components/page-templates";
+import { SourceCard } from "@/components/sources/source-grid";
 import {
-  SourceCard,
   sourceAssetId,
   useProjectSources,
-} from "@/components/sources/source-grid";
+} from "@/components/sources/source-list";
 import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
 import { useMemo, useState } from "react";

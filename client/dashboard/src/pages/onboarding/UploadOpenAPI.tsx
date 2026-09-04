@@ -10,12 +10,15 @@ import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
+import { useProject } from "@/contexts/Auth";
 import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI(): JSX.Element {
+  const project = useProject();
   return (
     <FormPage
       scope="project:write"
+      resourceId={project.id}
       title="Import OpenAPI specification"
       description="Upload your OpenAPI spec to automatically generate tools for every endpoint. Supports JSON and YAML formats."
     >

@@ -42,8 +42,11 @@ function CreateRemoteMcpForm() {
   const verify = useVerifyRemoteMcpUrl(url);
 
   const isPending = createRemote.isPending || createUnproxied.isPending;
-  const createError = createRemote.error ?? createUnproxied.error;
-  const isCreateError = createRemote.isError || createUnproxied.isError;
+  // Read from the mutation the current mode would run, so switching Connection
+  // after a failure doesn't leave the other backend's error standing.
+  const activeCreate = mode === "unproxied" ? createUnproxied : createRemote;
+  const createError = activeCreate.error;
+  const isCreateError = activeCreate.isError;
 
   const validationError = touched ? validateMcpServerUrl(url) : null;
   const urlUsable = !!url.trim() && validateMcpServerUrl(url) === null;

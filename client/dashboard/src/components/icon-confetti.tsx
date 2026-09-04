@@ -57,10 +57,17 @@ export function useIconConfetti(): {
   const fireRef = useRef<confetti.CreateTypes | null>(null);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
+  // Built on first use rather than on mount: a grid of cards would otherwise
+  // stand up a confetti instance apiece for an effect most of them never play.
+  const getFire = useCallback((): confetti.CreateTypes | null => {
+    if (fireRef.current) return fireRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
     fireRef.current = confetti.create(canvas, { resize: true });
+    return fireRef.current;
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (fallTimerRef.current) clearInterval(fallTimerRef.current);
       fireRef.current?.reset();
@@ -76,8 +83,11 @@ export function useIconConfetti(): {
   }, []);
 
   const start = useCallback(() => {
+    const fire = getFire();
+    if (!fire) return;
+
     // The opening burst.
-    void fireRef.current?.({
+    void fire({
       particleCount: 110,
       spread: 360,
       // Tuned for a ~160px canvas: a slow launch with heavy drag keeps the
@@ -100,7 +110,7 @@ export function useIconConfetti(): {
     // A few particles per tick keeps it sparse; the burst is the moment.
     if (fallTimerRef.current) return;
     fallTimerRef.current = setInterval(() => {
-      void fireRef.current?.({
+      void fire({
         particleCount: 3,
         spread: 55,
         // Straight down, from a random point along the top edge.
@@ -115,7 +125,7 @@ export function useIconConfetti(): {
         disableForReducedMotion: true,
       });
     }, 160);
-  }, []);
+  }, [getFire]);
 
   return { canvasRef, start, stop };
 }

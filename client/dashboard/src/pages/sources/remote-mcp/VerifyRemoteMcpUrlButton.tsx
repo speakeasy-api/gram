@@ -13,6 +13,14 @@ export function VerifyRemoteMcpUrlAlert({
   // so the field reads consistently without inventing new wording.
   const text = message.charAt(0).toUpperCase() + message.slice(1);
 
+  // "Try /mcp" is the right nudge when something answered but wasn't an MCP
+  // endpoint. Offered against a DNS failure or a timeout it sends people to
+  // edit a path that was never the problem.
+  const looksLikeWrongEndpoint =
+    /\b(mcp|endpoint|404|not found|protocol|handshake|initialize)\b/i.test(
+      message,
+    );
+
   // A field-level status line rather than a full-width alert box: this reports
   // on the input directly above it, and a banner at that weight reads as a page
   // problem. Matches the URL validation message's size and icon so the two
@@ -32,7 +40,7 @@ export function VerifyRemoteMcpUrlAlert({
       )}
       <span className="flex flex-col gap-0.5">
         <span>{text}</span>
-        {!verified && (
+        {!verified && looksLikeWrongEndpoint && (
           <span className="text-muted-foreground">
             Check the URL points at the server&apos;s MCP endpoint — often it
             ends in /mcp.

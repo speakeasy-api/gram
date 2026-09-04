@@ -68,19 +68,29 @@ function toPublicRateDraft(
 // deployment-wide defaults, which the API reports as the effective values.
 export function PublicRateLimitsSection({
   tunneledMcpServerId,
+  projectId,
 }: {
   tunneledMcpServerId: string;
+  /** The server's own project, so the gate matches what saving will target. */
+  projectId?: string;
 }): JSX.Element | null {
   const { data: tunneledMcpServer } = useGetTunneledMcpServer(
     getTunneledMcpServerArgs(tunneledMcpServerId),
   );
   if (!tunneledMcpServer) return null;
-  return <PublicRateLimits tunneledMcpServer={tunneledMcpServer} />;
+  return (
+    <PublicRateLimits
+      tunneledMcpServer={tunneledMcpServer}
+      projectId={projectId}
+    />
+  );
 }
 
 function PublicRateLimits({
   tunneledMcpServer,
+  projectId,
 }: {
+  projectId?: string;
   tunneledMcpServer: TunneledMcpServer;
 }) {
   const update = useUpdateTunneledMcpServerMutation();
@@ -197,7 +207,7 @@ function PublicRateLimits({
         </dd>
       </dl>
 
-      <RequireScope scope="mcp:write" level="component">
+      <RequireScope scope="mcp:write" resourceId={projectId} level="component">
         <Stack gap={3}>
           <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
             {PUBLIC_RATE_LIMIT_FIELDS.map(({ key, label, hint }) => (

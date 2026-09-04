@@ -277,6 +277,10 @@ const CardEntity: FC<CardEntityProps> = ({
     className={cn(
       "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
       "hover:border-neutral-hover",
+      // A clickable card takes focus, so it has to show it: without a ring the
+      // keyboard user tabbing through a grid has no idea which card is theirs.
+      onClick &&
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
       className,
     )}
   >

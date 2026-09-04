@@ -71,6 +71,7 @@ export function SettingsTab({
       {mcpServer.tunneledMcpServerId ? (
         <PublicRateLimitsSection
           tunneledMcpServerId={mcpServer.tunneledMcpServerId}
+          projectId={mcpServer.projectId}
         />
       ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}

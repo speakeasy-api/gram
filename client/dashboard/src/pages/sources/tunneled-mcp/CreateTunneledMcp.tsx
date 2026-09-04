@@ -123,7 +123,6 @@ function CreateTunneledMcpForm() {
               variant="secondary"
               onClick={() =>
                 routes.mcp.x.overview.goTo(
-                  "tunneledmcp",
                   tunneledMcpRouteParam(created.tunneledMcpServer),
                 )
               }
