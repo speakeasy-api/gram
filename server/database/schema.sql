@@ -1064,6 +1064,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
+  -- NULL on legacy API keys. Agent keys persist their canonical subject and
+  -- immutable delegation policy; profile validation is application-owned.
+  subject_urn TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
+  expires_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1951,6 +1958,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   user_session_issuer_id uuid NOT NULL,
   user_session_client_id uuid,
   subject_urn TEXT NOT NULL,
+
+  -- NULL on existing human sessions. Agent sessions preserve the approving
+  -- human and immutable delegation policy unchanged across refresh.
+  authorizer_user_id TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
+
   jti TEXT NOT NULL,
   refresh_token_hash TEXT NOT NULL,
   refresh_expires_at timestamptz NOT NULL,
