@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -176,6 +177,13 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(admittedCtx)
 	require.True(t, ok)
 	require.Equal(t, fx.userID, credential.AuthorizerUserID)
+
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, true)
 
 	_, err = agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
 	require.NoError(t, err)

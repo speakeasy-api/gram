@@ -179,6 +179,11 @@ func TestParseSessionSubject(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "agent non-canonical uuid rejected",
+			input:   "agent:22222222222222222222222222222222",
+			wantErr: true,
+		},
+		{
 			name:    "empty string",
 			input:   "",
 			wantErr: true,

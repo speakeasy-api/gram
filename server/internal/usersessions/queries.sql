@@ -843,7 +843,12 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    (
+        SELECT COALESCE(issuer.organization_id, project.organization_id)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id = @user_session_issuer_id
+    ),
     @user_session_issuer_id,
     @user_session_client_id,
     @subject_urn,
