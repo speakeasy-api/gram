@@ -149,10 +149,10 @@ func (a *Authorizer) RequireAgentForUpdate(ctx context.Context, dbtx repo.DBTX, 
 	return a.requireAgent(ctx, dbtx, agentID, predicate, true)
 }
 
-// RequireTransfer locks and authorizes the selected agent, then pins the
-// replacement owner's active user and membership rows until commit.
+// RequireTransfer pins the replacement owner's active user and membership
+// rows, then locks and authorizes the selected agent until commit.
 func (a *Authorizer) RequireTransfer(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, repo.Agent, error) {
-	human, agent, err := a.RequireAgentForUpdate(ctx, dbtx, agentID, OwnedAgentTransfer)
+	human, err := a.RequireHuman(ctx, dbtx)
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}
@@ -167,7 +167,10 @@ func (a *Authorizer) RequireTransfer(ctx context.Context, dbtx repo.DBTX, agentI
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, fmt.Errorf("lock eligible replacement owner: %w", err)
 	}
-	return human, agent, nil
+
+	// Owner-loss paths lock the user relationship before latching agents. Keep
+	// transfers in the same order so concurrent lifecycle changes cannot deadlock.
+	return a.RequireAgentForUpdate(ctx, dbtx, agentID, OwnedAgentTransfer)
 }
 
 func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {

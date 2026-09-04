@@ -177,7 +177,7 @@ func TestProcessWorkOSUserEvents_LinksDirectoryUsersOnlyInActiveOrganizations(t 
 		WorkosLastEventID:  conv.ToPGText("event_membership_scope_directory_link_unrelated"),
 	})
 	require.NoError(t, err)
-	err = organizations.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	_, err = organizations.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     unrelatedOrganizationID,
 		UserID:             conv.ToPGText("unrelated_directory_link_user"),
 		WorkosUserID:       conv.ToPGText(workosUserID),
@@ -565,7 +565,7 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testin
 		WorkosLastEventID:  conv.ToPGText("event_relationship_tombstone_1"),
 	})
 	require.NoError(t, err)
-	err = orgrepo.New(conn).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	_, err = orgrepo.New(conn).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     organizationID,
 		UserID:             conv.ToPGText(gramUserID),
 		WorkosUserID:       conv.ToPGText(workosUserID),

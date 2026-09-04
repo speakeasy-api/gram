@@ -61,6 +61,13 @@ func seedOrganizationUser(t *testing.T, conn *pgxpool.Pool, organizationID, user
 	require.NoError(t, err)
 }
 
+func TestOwnerLossLatchRejectsUnknownReason(t *testing.T) {
+	t.Parallel()
+
+	err := agentownership.LatchOwnerLossByUser(t.Context(), nil, "owner", agentownership.OwnerReassignmentReason("unknown"), agentownership.SystemActor, nil)
+	require.ErrorContains(t, err, "invalid owner reassignment reason")
+}
+
 func TestOwnerLossLatchIsDurableScopedAndIdempotent(t *testing.T) {
 	t.Parallel()
 

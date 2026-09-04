@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -22,12 +23,12 @@ const (
 )
 
 // SystemActor attributes owner loss observed from an external identity event.
-var SystemActor = urn.Principal{Type: urn.PrincipalType("system"), ID: "system"}
+var SystemActor = urn.Principal{Type: urn.PrincipalTypeUser, ID: "system"}
 
 // LatchOwnerLossByUser blocks every current ownership of a deleted user.
 func LatchOwnerLossByUser(ctx context.Context, dbtx repo.DBTX, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
-	if reason == "" {
-		return fmt.Errorf("owner reassignment reason is required")
+	if !reason.valid() {
+		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
 	rows, err := repo.New(dbtx).LatchAgentsForOwnerLossByUser(ctx, repo.LatchAgentsForOwnerLossByUserParams{
 		OwnerUserID:             ownerUserID,
@@ -42,8 +43,8 @@ func LatchOwnerLossByUser(ctx context.Context, dbtx repo.DBTX, ownerUserID strin
 // LatchOwnerLossByMembership blocks current ownership in one organization when
 // that owner loses or deactivates their membership.
 func LatchOwnerLossByMembership(ctx context.Context, dbtx repo.DBTX, organizationID, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
-	if reason == "" {
-		return fmt.Errorf("owner reassignment reason is required")
+	if !reason.valid() {
+		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
 	if ownerUserID == "" {
 		return nil
@@ -93,7 +94,7 @@ func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {
 		OwnerReassignmentRequiredAt: nil,
 		OwnerReassignmentReason:     nil,
 		Name:                        agent.Name,
-		Lifecycle:                   deriveLifecycle(agent),
+		Lifecycle:                   string(agents.DeriveLifecycle(agent)),
 	}
 	if agent.OwnerReassignmentRequiredAt.Valid {
 		value := agent.OwnerReassignmentRequiredAt.Time.Format(time.RFC3339Nano)
@@ -106,15 +107,11 @@ func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {
 	return snapshot
 }
 
-func deriveLifecycle(agent repo.Agent) string {
-	if agent.DeletedAt.Valid {
-		return "deleted"
+func (r OwnerReassignmentReason) valid() bool {
+	switch r {
+	case OwnerReassignmentReasonOwnerDeleted, OwnerReassignmentReasonOwnerInactive, OwnerReassignmentReasonMembershipLost:
+		return true
+	default:
+		return false
 	}
-	if agent.RevokedAt.Valid {
-		return "revoked"
-	}
-	if agent.SuspendedAt.Valid {
-		return "suspended"
-	}
-	return "active"
 }
