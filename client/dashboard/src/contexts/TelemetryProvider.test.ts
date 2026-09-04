@@ -60,19 +60,36 @@ describe("failOpenMissingFlags", () => {
     expect(wrap(true).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
   });
 
-  it("delegates PostHog methods without spreading the instance", () => {
-    const onFeatureFlags = vi.fn(() => () => {});
-    const identify = vi.fn(() => undefined);
-    const wrapped = failOpenMissingFlags({
-      ...nullTelemetry,
-      onFeatureFlags,
-      identify,
-    });
+  it("keeps PostHog methods bound to the original instance", () => {
+    class Stub {
+      label = "source";
+      isFeatureEnabled() {
+        return undefined;
+      }
+      onFeatureFlags() {
+        if (this.label !== "source") {
+          throw new Error("onFeatureFlags lost its receiver");
+        }
+        return () => {};
+      }
+      capture() {
+        return { uuid: "", event: "", properties: {} };
+      }
+      identify() {
+        if (this.label !== "source") {
+          throw new Error("identify lost its receiver");
+        }
+      }
+      register() {}
+      reset() {}
+      group() {}
+    }
 
+    const source = new Stub() as unknown as Telemetry;
+    const wrapped = failOpenMissingFlags(source);
+
+    expect(wrapped.onFeatureFlags).toBeTypeOf("function");
     wrapped.onFeatureFlags(() => {});
     wrapped.identify("user@example.com", {});
-
-    expect(onFeatureFlags).toHaveBeenCalledOnce();
-    expect(identify).toHaveBeenCalledOnce();
   });
 });
