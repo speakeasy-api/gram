@@ -16,7 +16,7 @@ describe("PlatformMCPSetupStep", () => {
   it("places the shared support action immediately before Complete", () => {
     const onSupport = vi.fn();
     render(
-      <StepSupportProvider onSupport={onSupport}>
+      <StepSupportProvider onSupport={() => void onSupport()}>
         <PlatformMCPSetupStep
           onComplete={() => {}}
           onBack={() => {}}

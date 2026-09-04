@@ -31,7 +31,11 @@ func TestService_UpdateSetupTaskAssignmentEmailIsDetachedNonblockingAndBounded(t
 	release := func() { releaseOnce.Do(func() { close(releaseDelivery) }) }
 	t.Cleanup(release)
 	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		deliveryCtx := args.Get(0).(context.Context)
+		deliveryCtx, ok := args.Get(0).(context.Context)
+		if !ok {
+			t.Errorf("expected delivery context, got %T", args.Get(0))
+			return
+		}
 		deliveryStarted <- deliveryCtx
 		<-releaseDelivery
 	}).Return(nil).Once()

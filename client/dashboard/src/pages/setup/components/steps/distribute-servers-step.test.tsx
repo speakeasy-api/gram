@@ -170,7 +170,10 @@ describe("DistributeServersStep secondary action", () => {
     serverState.client.plugins.getPlugin.mockResolvedValue({ servers: [] });
     serverState.client.plugins.addPluginServer.mockResolvedValue(undefined);
     const onComplete = vi.fn();
-    renderStep(onComplete, vi.fn());
+    renderStep(
+      () => void onComplete(),
+      () => {},
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
     fireEvent.click(
