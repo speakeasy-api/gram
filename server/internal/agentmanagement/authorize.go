@@ -124,7 +124,7 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID 
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
 	if err := a.authz.Require(ctx, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
-		return HumanContext{}, err
+		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
 	}
 	return human, nil
 }
@@ -187,23 +187,31 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
 	}
 
-	read, err := a.authz.Evaluate(ctx, agentCheck(authz.ScopeAgentRead, agent.ID))
+	read, err := a.evaluate(ctx, authz.ScopeAgentRead, agent.ID)
 	if err != nil {
 		return AgentPermissions{}, err
 	}
-	write, err := a.authz.Evaluate(ctx, agentCheck(authz.ScopeAgentWrite, agent.ID))
+	write, err := a.evaluate(ctx, authz.ScopeAgentWrite, agent.ID)
 	if err != nil {
 		return AgentPermissions{}, err
 	}
-	authorize, err := a.authz.Evaluate(ctx, agentCheck(authz.ScopeAgentAuthorize, agent.ID))
+	authorize, err := a.evaluate(ctx, authz.ScopeAgentAuthorize, agent.ID)
 	if err != nil {
 		return AgentPermissions{}, err
 	}
-	transfer, err := a.authz.Evaluate(ctx, agentCheck(authz.ScopeAgentTransfer, agent.ID))
+	transfer, err := a.evaluate(ctx, authz.ScopeAgentTransfer, agent.ID)
 	if err != nil {
 		return AgentPermissions{}, err
 	}
 	return AgentPermissions{Read: read, Write: write, Authorize: authorize, Transfer: transfer}, nil
+}
+
+func (a *Authorizer) evaluate(ctx context.Context, scope authz.Scope, agentID uuid.UUID) (bool, error) {
+	allowed, err := a.authz.Evaluate(ctx, agentCheck(scope, agentID))
+	if err != nil {
+		return false, fmt.Errorf("evaluate %s for selected agent: %w", scope, err)
+	}
+	return allowed, nil
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {
@@ -230,5 +238,6 @@ func agentCheck(scope authz.Scope, agentID uuid.UUID) authz.Check {
 		Scope:        scope,
 		ResourceKind: authz.ResourceKindAgent,
 		ResourceID:   agentID.String(),
+		Dimensions:   nil,
 	}
 }

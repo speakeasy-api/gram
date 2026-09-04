@@ -69,6 +69,8 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 }
 
 func TestOwnerPredicatesAreIntrinsicAndIndependentScopesAreExact(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
@@ -96,12 +98,14 @@ func TestOwnerPredicatesAreIntrinsicAndIndependentScopesAreExact(t *testing.T) {
 }
 
 func TestFormerOwnerLosesIntrinsicPredicates(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "former-owner")
 	seedOrganizationUser(t, conn, "org-a", "current-owner")
 	agent := createAgent(t, conn, "org-a", "former-owner", "Transferred agent")
-	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_user_id = 'current-owner' WHERE id = $1`, agent.ID)
+	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_user_id = 'current-owner' WHERE id = $1`, agent.ID) //nolint:glint // notestingrawsql: simulates AIM-184 ownership transfer without introducing that excluded API
 	require.NoError(t, err)
 
 	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
@@ -110,11 +114,13 @@ func TestFormerOwnerLosesIntrinsicPredicates(t *testing.T) {
 }
 
 func TestOwnerPredicateRequiresUnblockedCurrentOwnership(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	agent := createAgent(t, conn, "org-a", "owner", "Latched agent")
-	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_reassignment_required_at = clock_timestamp(), owner_reassignment_reason = 'owner_inactive' WHERE id = $1`, agent.ID)
+	_, err := conn.Exec(t.Context(), `UPDATE agents SET owner_reassignment_required_at = clock_timestamp(), owner_reassignment_reason = 'owner_inactive' WHERE id = $1`, agent.ID) //nolint:glint // notestingrawsql: simulates the AIM-184 owner-loss latch without introducing that excluded API
 	require.NoError(t, err)
 
 	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
@@ -123,6 +129,8 @@ func TestOwnerPredicateRequiresUnblockedCurrentOwnership(t *testing.T) {
 }
 
 func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "human")
@@ -151,6 +159,8 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 
 	for name, ctx := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := authorizer.RequireHuman(ctx, conn)
 			require.Error(t, err)
 		})
@@ -166,6 +176,8 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 }
 
 func TestSelectedAgentDenialsDoNotDiscloseExistenceOrTenant(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganization(t, conn, "org-b")
@@ -182,6 +194,8 @@ func TestSelectedAgentDenialsDoNotDiscloseExistenceOrTenant(t *testing.T) {
 }
 
 func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
+	t.Parallel()
+
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "caller")

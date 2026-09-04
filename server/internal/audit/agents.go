@@ -31,7 +31,7 @@ type AgentSnapshot struct {
 
 type LogAgentEvent struct {
 	OrganizationID   string
-	AgentID          uuid.UUID
+	AgentURN         urn.Identity
 	Actor            urn.Principal
 	ActorDisplayName *string
 	Action           Action
@@ -52,15 +52,21 @@ func (l *Logger) LogAgent(ctx context.Context, dbtx repo.DBTX, event LogAgentEve
 
 	entry := repo.InsertAuditLogParams{
 		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
 		ActorType:          string(event.Actor.Type),
 		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.ToPGTextEmpty(""),
 		Action:             string(event.Action),
-		SubjectID:          event.AgentID.String(),
+		SubjectID:          event.AgentURN.ID,
 		SubjectType:        string(subjectTypeAgent),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.Name),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
 		BeforeSnapshot:     before,
 		AfterSnapshot:      after,
+		Metadata:           nil,
+		ActingSurface:      conv.ToPGTextEmpty(""),
+		ActingClientID:     conv.ToPGTextEmpty(""),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AgentV1})

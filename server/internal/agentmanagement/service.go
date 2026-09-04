@@ -108,7 +108,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err != nil {
 			return mapWriteError(err, "agent name is already in use")
 		}
-		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, repo.Agent{}, agent); err != nil {
+		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
 		result, err = s.view(ctx, human, agent)
@@ -192,7 +192,7 @@ func (s *Service) mutate(ctx context.Context, rawID string, action audit.Action,
 		if err != nil {
 			return mapWriteError(err, "agent name is already in use")
 		}
-		if err := s.logAgent(ctx, tx, human, action, before, after); err != nil {
+		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
 		result, err = s.view(ctx, human, after)
@@ -204,29 +204,25 @@ func (s *Service) mutate(ctx context.Context, rawID string, action audit.Action,
 	return result, nil
 }
 
-func (s *Service) logAgent(ctx context.Context, tx pgx.Tx, human HumanContext, action audit.Action, before, after repo.Agent) error {
+func (s *Service) logAgent(ctx context.Context, tx pgx.Tx, human HumanContext, action audit.Action, before, after *repo.Agent) error {
 	var beforeSnapshot *audit.AgentSnapshot
-	if before.ID != uuid.Nil {
-		beforeSnapshot = agentAuditSnapshot(before)
+	if before != nil {
+		beforeSnapshot = agentAuditSnapshot(*before)
 	}
-	var afterSnapshot *audit.AgentSnapshot
-	if after.ID != uuid.Nil {
-		afterSnapshot = agentAuditSnapshot(after)
-	}
-	name := after.Name
-	if name == "" {
-		name = before.Name
-	}
-	return s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
+	afterSnapshot := agentAuditSnapshot(*after)
+	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
 		OrganizationID:   human.Auth.ActiveOrganizationID,
-		AgentID:          after.ID,
+		AgentURN:         urn.NewAgentIdentity(after.ID.String()),
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID),
 		ActorDisplayName: human.Auth.Email,
 		Action:           action,
-		Name:             name,
+		Name:             after.Name,
 		Before:           beforeSnapshot,
 		After:            afterSnapshot,
-	})
+	}); err != nil {
+		return fmt.Errorf("log %s audit event: %w", action, err)
+	}
+	return nil
 }
 
 func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
