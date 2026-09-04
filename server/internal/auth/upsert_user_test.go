@@ -177,6 +177,12 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
+	_, err = instance.conn.Exec(ctx, `
+		UPDATE organization_user_relationships
+		SET workos_user_id = $1
+		WHERE organization_id = $2 AND user_id = $3 AND deleted_at IS NULL
+	`, oldWorkosID, organizationID, gramUserID)
+	require.NoError(t, err)
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
 	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
 		OrganizationID:     organizationID,
@@ -242,6 +248,14 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 	require.Equal(t, gramUserID, reassigned[0].UserID.String)
 	require.False(t, reassigned[0].DeletedAt.Valid)
 
+	membership, err := orgRepo.New(instance.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.True(t, membership.WorkosUserID.Valid)
+	require.Equal(t, newWorkosID, membership.WorkosUserID.String)
+
 	isMember, err = orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
 		UserID:         gramUserID,
 		OrganizationID: organizationID,
@@ -259,4 +273,168 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 	}
 	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, gramUserID).String())
 	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
+}
+
+func TestUpsertUserFromIDP_MergesRoleWhenNewWorkOSIdentityAlreadyHasAssignment(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-collision@example.com"
+		oldWorkosID    = "user_01COLLISION_OLD"
+		newWorkosID    = "user_01COLLISION_NEW"
+		organizationID = "org_reactivate_role_collision"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(oldWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Collision Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01COLLISION"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	assignments := accessrepo.New(instance.conn)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01COLLISION_OLD"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+	_, err = assignments.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       newWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01COLLISION_NEW"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	stale, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	require.True(t, stale[0].DeletedAt.Valid, "colliding leftover assignment must be retired")
+
+	current, err := assignments.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
+}
+
+func TestUpsertUserFromIDP_ReassignsLeftoverRolesAfterWorkOSIDAlreadyUpdated(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "reactivate-retry@example.com"
+		oldWorkosID    = "user_01RETRY_OLD"
+		newWorkosID    = "user_01RETRY_NEW"
+		organizationID = "org_reactivate_role_retry"
+	)
+	gramUserID := uuid.New().String()
+
+	userInfo := &MockUserInfo{
+		UserID: newWorkosID,
+		Email:  email,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	usersQueries := usersRepo.New(instance.conn)
+
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       email,
+		DisplayName: "Deleted User",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, usersQueries.OverwriteUserWorkosID(ctx, usersRepo.OverwriteUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: conv.ToPGText(newWorkosID),
+	}))
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Retry Org",
+		Slug:        organizationID,
+		WorkosID:    conv.ToPGText("org_01RETRY"),
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
+	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       oldWorkosID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText("om_01RETRY"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleMember,
+	})
+	require.NoError(t, err)
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
+	require.NoError(t, err)
+	_, err = instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	require.NoError(t, err)
+
+	stale, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   oldWorkosID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stale, "retry must still move leftover assignments off the old WorkOS id")
+
+	current, err := accessrepo.New(instance.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   newWorkosID,
+	})
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.False(t, current[0].DeletedAt.Valid)
 }
