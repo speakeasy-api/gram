@@ -181,8 +181,9 @@ const AppLayoutContent = ({
             </MembershipSyncGuard>
           </GlobalInsightsWrapper>
         </SidebarInset>
-        {/* Sibling of the content, not an overlay: the page reflows into the
-            remaining width so nothing sits behind the panel. */}
+        {/* Floats over the content rather than displacing it: opening a detail
+            sheet used to reflow the page and move whatever had just been
+            clicked. The page keeps its width; the panel covers its right edge. */}
         <SidePanelSurface />
       </ModeSurface>
       {/* Above the outlet so the suggestion → chat bubble morph survives the

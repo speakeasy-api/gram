@@ -61,7 +61,7 @@ const MODE_OPTIONS: {
     value: WritableMode.Disabled,
     title: "Disabled",
     description:
-      "Reject all CIMD clients. Gram stops advertising CIMD support for this issuer, so clients fall back to dynamic registration.",
+      "Reject all CIMD clients. Speakeasy stops advertising CIMD support for this issuer, so clients fall back to dynamic registration.",
   },
 ];
 
@@ -284,8 +284,8 @@ function KnownClientsPopover() {
           Clients verified by Speakeasy
         </Text>
         <Text muted small className="mt-1">
-          Gram maintains this list; newly verified vendors may be added over
-          time. Some entries match a family of URLs rather than one exact
+          Speakeasy maintains this list; newly verified vendors may be added
+          over time. Some entries match a family of URLs rather than one exact
           address.
         </Text>
         <KnownClientsList

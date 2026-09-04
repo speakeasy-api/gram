@@ -50,10 +50,6 @@ export function attachmentToURNPrefix(type: SourceType, slug: string): string {
   return `tools:${sourceTypeToUrnKind(type)}:${slug}:`;
 }
 
-export function formatRemoteMcpUrlForDisplay(url: string): string {
-  return url.replace(/^https?:\/\//, "");
-}
-
 // validateMcpServerUrl mirrors server-side url.Parse: must be absolute,
 // http(s), with a non-empty host. Shared by every "add an MCP server by URL"
 // form (remote, unproxied) so client-side feedback stays in sync; the
@@ -88,7 +84,7 @@ export function formatRemoteMcpDisplay(server: {
   if (trimmedName) {
     return trimmedName;
   }
-  return formatRemoteMcpUrlForDisplay(server.url);
+  return server.url.replace(/^https?:\/\//, "");
 }
 
 export function formatTunneledMcpDisplay(server: {

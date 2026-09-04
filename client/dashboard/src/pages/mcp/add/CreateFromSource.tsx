@@ -82,6 +82,9 @@ function SourceCard({
               e.stopPropagation();
               onInspect();
             }}
+            // Card.Entity turns Enter/Space into its own onClick, so a
+            // keyboard press here would select instead of opening the panel.
+            onKeyDown={(e) => e.stopPropagation()}
             className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
           >
             Show details
@@ -89,10 +92,10 @@ function SourceCard({
           <button
             type="button"
             onClick={(e) => {
-              // Sits inside a card whose own click opens the panel.
               e.stopPropagation();
               onSelect();
             }}
+            onKeyDown={(e) => e.stopPropagation()}
             aria-pressed={selected}
             className="hover:text-foreground flex items-center gap-2"
           >
