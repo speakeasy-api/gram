@@ -1,0 +1,26 @@
+.changeset/data-exports-dashboard.md
+  h_2620cc60cfd1e9 5
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 44-45,123-124,131,136-137,144,190,256-261,267-271,275,443-445
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 17,43-47,93-94,112-123,192-196,205,208,211,213-218,222-224,303,371-372,377,402-407,449,451,454-455,464-479,526,578,707
+client/dashboard/src/pages/data-exports/sources.ts
+  h_2620cc60cfd1e9 1-27
+seed/demo/PAGES.md
+  h_2620cc60cfd1e9 37
+seed/demo/verify.md
+  h_2620cc60cfd1e9 100-105
+server/internal/demoseed/postgres.sql
+  h_2620cc60cfd1e9 409-442,2001-2014
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fcf43bbb51be9537dced740bba72c70a8682fd55",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,184 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 85445
+client/dashboard/src/sdk/src/models/components/updateconfigurationrequestbody.ts
+  h_2620cc60cfd1e9 9
+docs/pubsub-topology.md
+  h_2620cc60cfd1e9 42-43,66,89-100,129-130,137-180,211-212,240
+docs/research/2026-08-18-request-reply-recipes.md
+  h_2620cc60cfd1e9 1-117
+docs/research/2026-08-20-enforcement-reply-load-test.md
+  h_2620cc60cfd1e9 1-198
+docs/research/2026-08-26-temporal-reply-spike.md
+  h_2620cc60cfd1e9 1-90
+infra/gen/gram/risk/v1/enforcement_reply.pb.go
+  h_2620cc60cfd1e9 1-995
+infra/gen/gram/risk/v1/gitleaks_enforcement.pb.go
+  h_2620cc60cfd1e9 1-417
+infra/gen/gram/risk/v1/gitleaks_enforcer.pb.go
+  h_2620cc60cfd1e9 1-111
+infra/gen/kcc.yaml
+  h_2620cc60cfd1e9 917-936,1332-1349,1615-1630
+infra/gen_py/gram/risk/v1/enforcement_reply_pb2.py
+  h_2620cc60cfd1e9 1-45
+infra/gen_py/gram/risk/v1/enforcement_reply_pb2.pyi
+  h_2620cc60cfd1e9 1-86
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.py
+  h_2620cc60cfd1e9 1-40
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.pyi
+  h_2620cc60cfd1e9 1-28
+infra/gen_py/gram/risk/v1/gitleaks_enforcer_pb2.py
+  h_2620cc60cfd1e9 1-40
+infra/gen_py/gram/risk/v1/gitleaks_enforcer_pb2.pyi
+  h_2620cc60cfd1e9 1-10
+infra/pkg/gcp/publisher.go
+  h_2620cc60cfd1e9 6,19,23-51,157-160,162-166,173,178,182
+infra/pkg/gcp/publisher_mock.go
+  h_2620cc60cfd1e9 45
+infra/pkg/gcp/publisher_noop.go
+  h_2620cc60cfd1e9 11
+infra/pkg/gcp/publisher_test.go
+  h_2620cc60cfd1e9 26,32-48,52,78
+infra/pkg/topics/topics_gen.go
+  h_2620cc60cfd1e9 52-53,81,117-118,164-165
+infra/proto/gram/risk/v1/enforcement_reply.proto
+  h_2620cc60cfd1e9 1-51
+infra/proto/gram/risk/v1/gitleaks_enforcement.proto
+  h_2620cc60cfd1e9 1-26
+infra/proto/gram/risk/v1/gitleaks_enforcer.proto
+  h_2620cc60cfd1e9 1-21
+server/clickhouse/local/golang_migrate/20260831143540_shadow-ai-detections.down.sql
+  h_2620cc60cfd1e9 1-4
+server/clickhouse/local/golang_migrate/20260831143540_shadow-ai-detections.up.sql
+  h_2620cc60cfd1e9 1-26
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_2620cc60cfd1e9 1,97
+server/clickhouse/migrations/20260831143534_shadow-ai-detections.sql
+  h_2620cc60cfd1e9 1-26
+server/clickhouse/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,102
+server/clickhouse/schema.sql
+  h_2620cc60cfd1e9 303-334
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 59,417-429,556
+server/cmd/tools/enforceload/main.go
+  h_2620cc60cfd1e9 1-1041
+server/cmd/tools/enforceproto/main.go
+  h_2620cc60cfd1e9 1-158
+server/design/agent/design.go
+  h_2620cc60cfd1e9 134
+server/gen/agent/service.go
+  h_2620cc60cfd1e9 300-303
+server/gen/http/agent/client/types.go
+  h_2620cc60cfd1e9 19-22
+server/gen/http/agent/server/types.go
+  h_2620cc60cfd1e9 21-24
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 86991
+server/internal/agent/aitargets/aitargets.go
+  h_2620cc60cfd1e9 1-76
+server/internal/agent/aitargets/aitargets_test.go
+  h_2620cc60cfd1e9 1-60
+server/internal/agent/configuration.go
+  h_2620cc60cfd1e9 40-46,135-147
+server/internal/agent/configuration_test.go
+  h_2620cc60cfd1e9 145-178
+server/internal/attr/conventions.go
+  h_2620cc60cfd1e9 410-412,740-741,1629-1648,1797-1800
+server/internal/background/activities/generate_toolset_embeddings.go
+  h_2620cc60cfd1e9 9,19,22-23,75-76,81-92
+server/internal/background/activities/generate_toolset_embeddings_test.go
+  h_2620cc60cfd1e9 1-39
+server/internal/chat/impl.go
+  h_2620cc60cfd1e9 1835-1839
+server/internal/chat/message_capture_strategy.go
+  h_2620cc60cfd1e9 442-445
+server/internal/chat/message_capture_strategy_test.go
+  h_2620cc60cfd1e9 5,12,19,120-185
+server/internal/chat/turnstream_tee.go
+  h_2620cc60cfd1e9 29,80,117-119,233
+server/internal/chat/turnstream_tee_test.go
+  h_2620cc60cfd1e9 17,31
+server/internal/metering/handler_stripe.go
+  h_2620cc60cfd1e9 26-27,30,33-35,65,77-78,87-95,104,117,136,150,165,203-210
+server/internal/metering/handler_stripe_test.go
+  h_2620cc60cfd1e9 13-14,18,42-83,88-89,93-108,116-117,125,133-134,143,150,153,165,173,176,189,197-198,203,211-227,239-240,252,289-290,296
+server/internal/metering/pipeline_test.go
+  h_2620cc60cfd1e9 93,123,174
+server/internal/rag/search_tools.go
+  h_2620cc60cfd1e9 8,23,34-38,121-124,135,150,296-301,337-339,345,349-353,426-551,556-563,608,644-647,656,686-692,694-699,701-743,745,747-748,750-759,762-768,771-933
+server/internal/rag/search_tools_test.go
+  h_2620cc60cfd1e9 1-185
+server/internal/redisinbox/inbox.go
+  h_2620cc60cfd1e9 1-585
+server/internal/redisinbox/inbox_test.go
+  h_2620cc60cfd1e9 1-197
+server/internal/redisinbox/requester.go
+  h_2620cc60cfd1e9 1-62
+server/internal/redisinbox/writer.go
+  h_2620cc60cfd1e9 1-95
+server/internal/requestreply/contracts.go
+  h_2620cc60cfd1e9 1-25
+server/internal/risk/enforcereply/dispatch.go
+  h_2620cc60cfd1e9 1-172
+server/internal/risk/enforcereply/dispatch_test.go
+  h_2620cc60cfd1e9 1-156
+server/internal/risk/enforcereply/inbox.go
+  h_2620cc60cfd1e9 1-175
+server/internal/risk/enforcereply/inbox_test.go
+  h_2620cc60cfd1e9 1-225
+server/internal/risk/enforcereply/setup_test.go
+  h_2620cc60cfd1e9 1-56
+server/internal/risk/enforcereply/writer_test.go
+  h_2620cc60cfd1e9 1-23
+server/internal/scanners/gitleaks/enforce_handler.go
+  h_2620cc60cfd1e9 1-181
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  h_2620cc60cfd1e9 1-168
+server/internal/scanners/gitleaks/enforce_metrics.go
+  h_2620cc60cfd1e9 1-33
+server/internal/scanners/gitleaks/setup_test.go
+  h_2620cc60cfd1e9 1-60
+server/internal/scanners/publish_test.go
+  h_2620cc60cfd1e9 24
+server/internal/thirdparty/openrouter/completion_client.go
+  h_2620cc60cfd1e9 190-196
+server/internal/thirdparty/openrouter/embedding_errors_test.go
+  h_2620cc60cfd1e9 1-101
+server/internal/thirdparty/openrouter/embeddings_test.go
+  h_2620cc60cfd1e9 1-190
+server/internal/thirdparty/openrouter/errors.go
+  h_2620cc60cfd1e9 10,188-251
+server/internal/thirdparty/openrouter/response_choice_test.go
+  h_2620cc60cfd1e9 25
+server/internal/thirdparty/openrouter/types.go
+  h_2620cc60cfd1e9 291-297,338-344
+server/internal/thirdparty/openrouter/unified_client.go
+  h_2620cc60cfd1e9 16,41-44,463,530,621,660,734-736,878-1037,1061-1072,1086
+server/internal/thirdparty/openrouter/unified_client_test.go
+  h_2620cc60cfd1e9 209,284,322,367,475
+tunnel/cmd/tunnel-gateway/main.go
+  h_2620cc60cfd1e9 13,82-100,103,114,116-117,121-125
+tunnel/e2e/tunnel_test.go
+  h_2620cc60cfd1e9 52,167,231,285,312-372,422-433,530
+tunnel/gateway/gateway.go
+  h_2620cc60cfd1e9 13,51-52,57-62,76-79,81-86,94,100,105-112,119-151,154-158,221-230,246,257-260,262,271,376-377,380,407-408,413-415
+tunnel/gateway/gateway_test.go
+  h_2620cc60cfd1e9 39-46,98-99,132-133,149-150,167-168,191,210,249-253,285-286,302,314,337,354-370
+tunnel/gateway/reconciler.go
+  h_2620cc60cfd1e9 1-430
+tunnel/gateway/reconciler_test.go
+  h_2620cc60cfd1e9 1-1012
+tunnel/gateway/registry.go
+  h_2620cc60cfd1e9 25,30,41-45,50,54,57,65-69,93,96-159,304-318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "caa7b17b112b800edf3ae89f9f70025ce8e5981f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+server/internal/otel/dialect/sensitivity.go
+  h_2620cc60cfd1e9 6
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 154-157,219-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "561090fbc75ec0527e1dafe022572a914b636a19",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

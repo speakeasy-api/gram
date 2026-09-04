@@ -1,0 +1,38 @@
+.changeset/data-exports-dashboard.md
+  h_2620cc60cfd1e9 1-5
+client/dashboard/src/components/app-sidebar.tsx
+  h_2620cc60cfd1e9 206
+client/dashboard/src/components/ui/MoreActions/index.tsx
+  h_2620cc60cfd1e9 135-142
+client/dashboard/src/hooks/useProjectNavRoutes.ts
+  h_2620cc60cfd1e9 92
+client/dashboard/src/lib/write-only-headers.test.ts
+  h_2620cc60cfd1e9 1-51
+client/dashboard/src/lib/write-only-headers.ts
+  h_2620cc60cfd1e9 1-67
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 1-786
+client/dashboard/src/pages/data-exports/DestinationEditorSheet.tsx
+  h_2620cc60cfd1e9 1-372
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  h_2620cc60cfd1e9 21-28,33,42,77,129,202-204,240
+client/dashboard/src/routes.tsx
+  h_2620cc60cfd1e9 33,674-679
+seed/demo/PAGES.md
+  h_2620cc60cfd1e9 37
+seed/demo/verify.md
+  h_2620cc60cfd1e9 101-103
+server/internal/demoseed/postgres.sql
+  h_2620cc60cfd1e9 409-441,2000-2013
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1bf3b1d88292ff9fd0b07227e8b2c6144d072819",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

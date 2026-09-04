@@ -1,0 +1,43 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_e6230f47bfe42b::t_bd5879254cb61a 4,12-18,24,33-34,36,38,49,79-82,126-130,136-170,198-211,255-271
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_e6230f47bfe42b::t_bd5879254cb61a 85-103
+pystreams/tests/test_risk_enforce.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 2-299
+  s_e6230f47bfe42b::t_4d696d6548c498 1
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-44
+server/internal/risk/fingerprint.go
+  s_e6230f47bfe42b::t_bd5879254cb61a 21-24,239-242
+  s_e6230f47bfe42b::t_ec9aca55480a57 243-244
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_e6230f47bfe42b::t_bd5879254cb61a 91-93
+pystreams/src/pystreams/risk/fingerprint.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-128
+pystreams/tests/test_multi.py
+  s_e6230f47bfe42b::t_bd5879254cb61a 67-69
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-33
+server/internal/risk/fingerprint_test.go
+  s_e6230f47bfe42b::t_bd5879254cb61a 107-111,128,234
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-272
+docs/pubsub-topology.md
+  s_e6230f47bfe42b::t_5b7b97baf7b2fd 180-189,253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "af019772c0f0198cd9f661301ddad6253e98cefe",
+  "prompts": {},
+  "sessions": {
+    "s_e6230f47bfe42b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06262-6646-7ab1-b37f-a88218754fe5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

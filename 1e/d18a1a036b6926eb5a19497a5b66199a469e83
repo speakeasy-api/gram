@@ -1,0 +1,99 @@
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_32d1dc7266d21a 1-44
+server/internal/risk/fingerprint_test.go
+  s_b390d6ce53b276::t_2e600332a2d282 107-111,128,234
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_196cb92f998769 41-44,46
+  s_b390d6ce53b276::t_b9e4c2bf199c4f 45,47-48
+  s_b390d6ce53b276::t_cee6ce5dc6ed50 70-72
+  s_b390d6ce53b276::t_f9abc38a3d3cad 128-130
+  s_b390d6ce53b276::t_18e6fadce36c54 73,125-127
+  s_b390d6ce53b276::t_0b0bef773a76b6 1-38,49-69,77-120,131-134,136
+  s_b390d6ce53b276::t_89a849f19ada9e 124
+  s_b390d6ce53b276::t_30e721417be6fd 74-76,121-123
+  s_b390d6ce53b276::t_b7030592d0ab71 39-40
+  s_b390d6ce53b276::t_9648d0a0498527 135
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_c90d15147759d5 1-33
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_45133581847735 105-106
+  s_b390d6ce53b276::t_f54e1dfab98cff 156
+  s_b390d6ce53b276::t_f164a800446a78 55
+  s_b390d6ce53b276::t_4400b93cb1fc51 19
+  s_b390d6ce53b276::t_cc3d90c33b1b70 190-193
+  s_b390d6ce53b276::t_76a890f5207467 199-200
+  s_b390d6ce53b276::t_dcaed07ae46601 20-22,132-134
+  s_b390d6ce53b276::t_aee86c1f6cc6d7 149
+  s_b390d6ce53b276::t_813a6bdf9aeabf 56-57
+  s_b390d6ce53b276::t_15a0b65417468f 135
+  s_b390d6ce53b276::t_70bb884d7ab4dc 137-139,186-188
+  s_b390d6ce53b276::t_d51ef0828d1615 189
+  s_b390d6ce53b276::t_187434d406fe96 1-15,23-54,58-104,107-131,140-148,151-155,157-178,182-185,197-198,201-286
+  s_b390d6ce53b276::t_9f568d0edd787e 136
+  s_b390d6ce53b276::t_a66681ab4a2ff9 179-181
+  s_b390d6ce53b276::t_b6a9d40eb664f5 16-18
+  s_b390d6ce53b276::t_07dc77f6640cca 194-196
+  s_b390d6ce53b276::t_110dd19f26018b 150
+server/internal/scanners/gitleaks/enforce_metrics.go
+  s_b390d6ce53b276::t_38fe1e842a5c69 18
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_231ae6710641c6 139-141
+  s_b390d6ce53b276::t_40ba706d99c36f 327-329,336-338
+  s_b390d6ce53b276::t_529317ba6b67c5 53-62
+  s_b390d6ce53b276::t_0c915668251076 342
+  s_b390d6ce53b276::t_900686a709ed4a 349-361
+  s_b390d6ce53b276::t_4c06ae8fc5a794 365-367
+  s_b390d6ce53b276::t_9da9b9442fc1df 308-310,314-316
+  s_b390d6ce53b276::t_9171dac18d3b77 281
+  s_b390d6ce53b276::t_88f639689701b5 284-286,292-294
+  s_b390d6ce53b276::t_c7d9516a96a904 300-302
+  s_b390d6ce53b276::t_c60c5311e5b039 318-320,322-324
+  s_b390d6ce53b276::t_ecf7dd1fa10e63 304-306
+  s_b390d6ce53b276::t_cbd4ec2d82edfd 274-275
+  s_b390d6ce53b276::t_fb3c70cbdd510e 194-195
+  s_b390d6ce53b276::t_a71decd3eb7d6b 63-65,123-125
+  s_b390d6ce53b276::t_7a62c0bfa0ec5d 1-49,66-122,130-138,142-150,158-184,188,190-193,197-198,200-203,213-216,224-241,287-291,311-313,321,330-335,368-369
+  s_b390d6ce53b276::t_ee197703400f7f 127-129,151-153
+  s_b390d6ce53b276::t_acb0a08a824dee 126,154,220,245-273,276-280,282-283,295,299,303,307,317,325-326,339-341,343,363-364
+  s_b390d6ce53b276::t_4c17f1d1bdf34d 221-223,242-244
+  s_b390d6ce53b276::t_3302f985f3f605 155-157,217-219
+  s_b390d6ce53b276::t_9b55204bc72865 344-348,362
+  s_b390d6ce53b276::t_d04dd5c828e46e 50-52
+  s_b390d6ce53b276::t_bac9f018eda5bf 196,199,204-212
+  s_b390d6ce53b276::t_726dc130363f7f 296-298
+  s_b390d6ce53b276::t_92bc8030cd8ed1 185-187,189
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_93d8f2f726f97c 91-93
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_b390d6ce53b276::t_8347a9e261e77d 85-103
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_29295d5ba81a49 250-252
+  s_b390d6ce53b276::t_47d3ce76cc42fd 135-137
+  s_b390d6ce53b276::t_607d9465b83ed0 144-145
+  s_b390d6ce53b276::t_7b0c74b58dd940 4,12-18,24,33-34,36,38,49,79-82,128-129,138-143,146-153,156-165,193-204,249,253-262
+  s_b390d6ce53b276::t_678d81864f514e 126-127
+  s_b390d6ce53b276::t_47167cc25d6eb3 154-155
+  s_b390d6ce53b276::t_dd9da0e6e8e66c 205
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_635da645c3e5d2 180-189,253
+server/internal/risk/fingerprint.go
+  s_b390d6ce53b276::t_a8359336cda4a8 21-24,239-244
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_aa553d2f7bb513 67-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1ed18a1a036b6926eb5a19497a5b66199a469e83",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}

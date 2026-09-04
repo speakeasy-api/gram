@@ -1,0 +1,74 @@
+.changeset/risk-finding-data-exports.md
+  h_2620cc60cfd1e9 1-5
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 65113,66874,85491,86385
+client/dashboard/src/sdk/src/models/components/createdataexportrouteform.ts
+  h_2620cc60cfd1e9 14
+client/dashboard/src/sdk/src/models/components/dataexportroute.ts
+  h_2620cc60cfd1e9 17
+client/dashboard/src/sdk/src/models/components/updaterouterequestbody.ts
+  h_2620cc60cfd1e9 14
+docs/pubsub-topology.md
+  h_2620cc60cfd1e9 41,64,125-126,164-177,207,235
+infra/gen/gram/risk/v1/finding_otel_relay.pb.go
+  h_2620cc60cfd1e9 1-111
+infra/gen/kcc.yaml
+  h_2620cc60cfd1e9 1298-1315,1585-1590
+infra/gen_py/gram/risk/v1/finding_otel_relay_pb2.py
+  h_2620cc60cfd1e9 1-40
+infra/gen_py/gram/risk/v1/finding_otel_relay_pb2.pyi
+  h_2620cc60cfd1e9 1-10
+infra/proto/gram/risk/v1/finding_otel_relay.proto
+  h_2620cc60cfd1e9 1-21
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 537-544,584
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 273,284,293
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12529,12555
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 265,267-268,321,323-324
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 3274-3275,3318-3319,5390-5391
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 3177-3178,3197-3198
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 66579,68340,87037,87931
+server/internal/attr/conventions.go
+  h_2620cc60cfd1e9 487-495,1982-2012
+server/internal/dataexports/routes_test.go
+  h_2620cc60cfd1e9 72,105-136
+server/internal/dataexports/sources.go
+  h_2620cc60cfd1e9 5-9,13-14
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 22,93
+server/internal/otel/handler_log_relay_test.go
+  h_2620cc60cfd1e9 23,115-116
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 21-22,93
+server/internal/otel/handler_risk_finding_relay.go
+  h_2620cc60cfd1e9 1-419
+server/internal/otel/handler_risk_finding_relay_test.go
+  h_2620cc60cfd1e9 1-541
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 21-22,98
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 43-45,54,104,112,171
+server/internal/otel/signal_relay_test.go
+  h_2620cc60cfd1e9 19,47,72,91,122,167-168,199,211,224,243,256,259,261-280,282-283,285-292,302,326,352,380,390,403,433,459,482,507,567
+server/internal/risk/finding_ch.go
+  h_2620cc60cfd1e9 55,57-58,65-70,203-208
+server/internal/risk/finding_exclusions.go
+  h_2620cc60cfd1e9 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d5d23dcbd62f8feb95ea769fd3b1828c3bfc41e2",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

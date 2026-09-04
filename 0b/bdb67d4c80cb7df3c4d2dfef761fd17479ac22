@@ -1,0 +1,143 @@
+server/internal/otel/signal_relay_test.go
+  h_2620cc60cfd1e9 19,47,72,91,122,167-168,199,211,224,243,256,259,261-280,282-283,285-292,302,326,352,380,390,403,433,459,482,507,567
+server/internal/otel/handler_risk_finding_relay.go
+  h_2620cc60cfd1e9 1-419
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 66708,68469,87190,88084
+  h_2620cc60cfd1e9 14558-14638,73944-73959
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 22,93
+server/internal/otel/handler_log_relay_test.go
+  h_2620cc60cfd1e9 23,115-116
+server/internal/attr/conventions.go
+  h_2620cc60cfd1e9 490-498,2011-2041
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 551-558,599
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12576,12602
+  h_2620cc60cfd1e9 122,906-908,3963,5235-5237,7510-7512,12405,12439-12456
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 3548-3549,3568-3569
+  h_2620cc60cfd1e9 72-80,359-540,1952-1982,2212-2351,3361-3369
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 21-22,93
+client/dashboard/src/sdk/src/models/components/createdataexportrouteform.ts
+  h_2620cc60cfd1e9 14
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 21-22,98
+infra/proto/gram/risk/v1/finding_otel_relay.proto
+  h_2620cc60cfd1e9 1-21
+.changeset/risk-finding-data-exports.md
+  h_2620cc60cfd1e9 1-2,4-6
+  h_2620cc60cfd1e9 3
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 280,282-283,336,338-339
+  h_2620cc60cfd1e9 47-61
+infra/gen/gram/risk/v1/finding_otel_relay.pb.go
+  h_2620cc60cfd1e9 1-111
+server/internal/dataexports/routes_test.go
+  h_2620cc60cfd1e9 72,105-136
+server/internal/risk/finding_exclusions.go
+  h_2620cc60cfd1e9 1-103
+infra/gen/kcc.yaml
+  h_2620cc60cfd1e9 1318-1335,1623-1628
+client/dashboard/src/sdk/src/models/components/dataexportroute.ts
+  h_2620cc60cfd1e9 17
+infra/gen_py/gram/risk/v1/finding_otel_relay_pb2.py
+  h_2620cc60cfd1e9 1-40
+server/internal/dataexports/sources.go
+  h_2620cc60cfd1e9 5-9,13-14
+server/internal/otel/handler_risk_finding_relay_test.go
+  h_2620cc60cfd1e9 1-541
+docs/pubsub-topology.md
+  h_2620cc60cfd1e9 41,66,130-131
+  h_2620cc60cfd1e9 171-186,216,246
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 3665-3666,3709-3710,6001-6002
+  h_2620cc60cfd1e9 72-80,359-540,1877-1895,2161-2334,3477-3503,3505,3965-4204,6016-6035
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 294,305,314
+  h_2620cc60cfd1e9 36-56,325-330
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 43-45,54,104,112,171
+client/dashboard/src/sdk/src/models/components/updaterouterequestbody.ts
+  h_2620cc60cfd1e9 14
+server/internal/risk/finding_ch.go
+  h_2620cc60cfd1e9 55,57-58,65-70,203-208
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 65243,67004,85645,86539
+  h_2620cc60cfd1e9 12629-12710,72397-72412
+infra/gen_py/gram/risk/v1/finding_otel_relay_pb2.pyi
+  h_2620cc60cfd1e9 1-10
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  s_72a53408950da9::t_dec7d2c16c723b 16-20,22,26,29,31-34,48-65,107,126-136,151,153-178,192-193,209-211,214-215,221-224,227,230,232-241,258,325,337,340-353,372-376,390,404-406,431-436,480,483,492-493,540,592
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 121,132-136,185-186,190,251-280
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 158,1024,1895,2572-2573,7028-7036
+client/dashboard/src/sdk/src/funcs/dataExportsListForOrg.ts
+  h_2620cc60cfd1e9 1-197
+client/dashboard/src/sdk/src/models/components/listdataexportsfororgresult.ts
+  h_2620cc60cfd1e9 1-43
+client/dashboard/src/sdk/src/models/operations/listdataexportsfororg.ts
+  h_2620cc60cfd1e9 1-77
+client/dashboard/src/sdk/src/react-query/listDataExportsForOrg.core.ts
+  h_2620cc60cfd1e9 1-82
+client/dashboard/src/sdk/src/react-query/listDataExportsForOrg.ts
+  h_2620cc60cfd1e9 1-147
+client/dashboard/src/sdk/src/sdk/dataexports.ts
+  h_2620cc60cfd1e9 10,18,44-47,154-172
+server/gen/data_exports/client.go
+  h_2620cc60cfd1e9 19,30,33,67-88
+server/gen/data_exports/endpoints.go
+  h_2620cc60cfd1e9 20,36,50,119-141
+server/gen/data_exports/service.go
+  h_2620cc60cfd1e9 21-22,59,177-185,201-206
+server/gen/http/data_exports/client/client.go
+  h_2620cc60cfd1e9 24-27,77,117-140
+server/gen/http/data_exports/client/encode_decode.go
+  h_2620cc60cfd1e9 259-488,2211-2227
+server/gen/http/data_exports/client/paths.go
+  h_2620cc60cfd1e9 15-19
+server/gen/http/data_exports/server/encode_decode.go
+  h_2620cc60cfd1e9 239-431,2129-2145
+server/gen/http/data_exports/server/paths.go
+  h_2620cc60cfd1e9 15-19
+server/gen/http/data_exports/server/server.go
+  h_2620cc60cfd1e9 23,61,71,88,104,172-224
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 27-28,35-36,43-44
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 108-142,153-156,161
+server/internal/dataexports/list_for_org_test.go
+  h_2620cc60cfd1e9 1-63
+server/internal/dataexports/queries.sql
+  h_2620cc60cfd1e9 32-43,133-144
+server/internal/dataexports/repo/queries.sql.go
+  h_2620cc60cfd1e9 320-363,411-455
+server/internal/risk/exclusion.go
+  h_2620cc60cfd1e9 43
+server/internal/risk/exclusion_admin.go
+  h_2620cc60cfd1e9 104,107,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0bbdb67d4c80cb7df3c4d2dfef761fd17479ac22",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_72a53408950da9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06672-c935-7cb0-a74b-5c301821d193",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

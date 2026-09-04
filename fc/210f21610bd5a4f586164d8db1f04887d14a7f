@@ -1,0 +1,20 @@
+client/dashboard/src/pages/plugins/InstallInstructionsDialog.tsx
+  h_2620cc60cfd1e9 558-559
+server/internal/plugins/generate.go
+  h_2620cc60cfd1e9 2134,2149,2151,2154,2157,2316,2325-2341
+server/internal/plugins/generate_test.go
+  h_2620cc60cfd1e9 2012-2018,2035-2037,2043-2057,2077-2079,2086-2087,2308-2317
+server/internal/plugins/impl_test.go
+  h_2620cc60cfd1e9 958,988
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fc210f21610bd5a4f586164d8db1f04887d14a7f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

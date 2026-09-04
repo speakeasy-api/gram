@@ -1,0 +1,52 @@
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_8a69c4f767e303 130,132,134-136
+  s_b390d6ce53b276::t_469b100303320a 127-129
+  s_b390d6ce53b276::t_419dc4d9899a71 131
+  s_b390d6ce53b276::t_38e266889dcfa8 133
+  s_b390d6ce53b276::t_c19cfb5270a9c6 137-139
+  s_b390d6ce53b276::t_3743c747f1d02e 1-126,140-302
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_4349c9c42675ce 142-151,235,253,265
+  s_b390d6ce53b276::t_7221fdf0422cea 139-141
+  s_b390d6ce53b276::t_81e7c7145a8090 152-154,232-234
+  s_b390d6ce53b276::t_99bb558e8ce0e5 236-238,250-252
+  s_b390d6ce53b276::t_4360cd5039f7b1 254-256,262-264
+  s_b390d6ce53b276::t_429c32adcec63c 266-268
+  s_b390d6ce53b276::t_1a6972eaf4c7ee 1-138,155-231,239-249,257-261,269-278
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_ae58a1e0f81411 180-189,253
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_6b05adf2821b09 1-33
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_3dcea089fb569a 4,12-18,24,33-34,36,38,49,79-82,126-130,136-170,198-211,255-271
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_fa6cfff76b1899 1-128
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_1653290d7f348f 1-44
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_25d20ce3ec4fc1 67-69
+server/internal/risk/fingerprint.go
+  s_b390d6ce53b276::t_aa67c025279cad 21-24,239-244
+server/internal/risk/fingerprint_test.go
+  s_b390d6ce53b276::t_fecc8b5d7ed67b 107-111,128,234
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_175876de2f6516 91-93
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_b390d6ce53b276::t_2531e3409b50dc 85-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f7cf70cc26f514795b7d04ffa6593ad6fac1dee8",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
