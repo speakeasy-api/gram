@@ -53,7 +53,13 @@ export function preservesStoredHeaderValue(
 }
 
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const INVALID_HTTP_HEADER_VALUE_PATTERN = /[\u0000-\u0008\u000a-\u001f\u007f]/;
+function hasInvalidHTTPHeaderValue(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f) return true;
+  }
+  return false;
+}
 
 export function hasValidWriteOnlyHeaders(
   headers: EditableWriteOnlyHeader[],
@@ -68,10 +74,7 @@ export function hasValidWriteOnlyHeaders(
     names.add(foldedName);
 
     if (preservesStoredHeaderValue(header)) return true;
-    return (
-      header.value !== "" &&
-      !INVALID_HTTP_HEADER_VALUE_PATTERN.test(header.value)
-    );
+    return header.value !== "" && !hasInvalidHTTPHeaderValue(header.value);
   });
 }
 

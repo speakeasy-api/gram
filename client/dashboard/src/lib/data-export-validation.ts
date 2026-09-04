@@ -1,11 +1,17 @@
-const INVALID_URL_CONTROL_PATTERN = /[\u0000-\u001f\u007f]/;
+function hasInvalidURLControl(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
 
 export function isValidDataExportEndpointURL(raw: string): boolean {
   const value = raw.trim();
   if (
     value.includes("?") ||
     value.includes("#") ||
-    INVALID_URL_CONTROL_PATTERN.test(value)
+    hasInvalidURLControl(value)
   ) {
     return false;
   }
