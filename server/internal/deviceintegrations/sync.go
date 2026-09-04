@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -108,6 +109,7 @@ type Syncer struct {
 	guardian *guardian.Policy
 	features feature.Provider
 	metrics  *syncMetrics
+	growth   *growthsignals.Emitter
 }
 
 func NewSyncer(
@@ -117,6 +119,7 @@ func NewSyncer(
 	enc *encryption.Client,
 	guardianPolicy *guardian.Policy,
 	features feature.Provider,
+	growthEmitter *growthsignals.Emitter,
 ) *Syncer {
 	componentLogger := logger.With(attr.SlogComponent("deviceintegrations.syncer"))
 	return &Syncer{
@@ -127,6 +130,7 @@ func NewSyncer(
 		guardian: guardianPolicy,
 		features: features,
 		metrics:  newSyncMetrics(componentLogger, meterProvider),
+		growth:   growthEmitter,
 	}
 }
 
@@ -278,6 +282,13 @@ var errStaleSync = errors.New("sync outcome superseded by a config save")
 func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTargetRow, source providers.InventorySource, creds providers.Credentials, settings providers.Settings, started time.Time) error {
 	cursor := ""
 	memberCache := map[string]pgtype.Text{}
+
+	// A config that has never completed a sync is being backfilled, not
+	// observed: its first snapshot inserts the whole existing fleet at once,
+	// and reporting each row would announce hundreds of devices that were
+	// already there. Only later syncs describe devices genuinely appearing.
+	backfill := !target.LastPollSuccessAt.Valid
+	var firstSeen []deviceSighting
 	for page := 0; ; page++ {
 		if page >= syncMaxPages {
 			return fmt.Errorf("inventory listing exceeded %d pages without completing", syncMaxPages)
@@ -307,7 +318,7 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 			if !device.LastCheckInAt.IsZero() {
 				checkIn = conv.ToPGTimestamptz(device.LastCheckInAt)
 			}
-			rows, err := s.repo.UpsertMdmDevice(ctx, repo.UpsertMdmDeviceParams{
+			inserted, err := s.repo.UpsertMdmDevice(ctx, repo.UpsertMdmDeviceParams{
 				DeviceIntegrationConfigID: target.ConfigID,
 				OrganizationID:            target.OrganizationID,
 				ExternalID:                device.ExternalID,
@@ -322,17 +333,24 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 				ConfigUpdatedAt:           target.ConfigUpdatedAt,
 			})
 			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					// The config was saved mid-pull: this run's inventory came
+					// from the pre-save credentials/settings and must not merge
+					// into the new config. Abort; the reset schedule re-runs
+					// promptly with the new configuration.
+					return errStaleSync
+				}
 				if isVendorDataError(err) {
 					return fmt.Errorf("upsert mdm device %s: %w", device.ExternalID, err)
 				}
 				return asInfra(oops.E(oops.CodeUnexpected, err, "upsert mdm device"))
 			}
-			if rows == 0 {
-				// The config was saved mid-pull: this run's inventory came
-				// from the pre-save credentials/settings and must not merge
-				// into the new config. Abort; the reset schedule re-runs
-				// promptly with the new configuration.
-				return errStaleSync
+			if inserted && !backfill && len(firstSeen) < maxDeviceActivitiesPerSync {
+				firstSeen = append(firstSeen, deviceSighting{
+					externalID: device.ExternalID,
+					hostname:   device.Hostname,
+					userEmail:  device.UserEmail,
+				})
 			}
 		}
 		cursor = devicePage.NextCursor
@@ -375,7 +393,54 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 		}
 		return asInfra(oops.E(oops.CodeUnexpected, err, "finalize inventory snapshot"))
 	}
+
+	// Reported only once the snapshot is durable. Emitting inside the loop
+	// would announce devices for a run that later aborts as stale, and the
+	// abort paths above all return before this point.
+	s.reportFirstSeen(ctx, target.OrganizationID, firstSeen)
+
 	return nil
+}
+
+// maxDeviceActivitiesPerSync bounds how many first sightings one snapshot
+// reports. A fleet that doubles overnight is worth one glance at the
+// dashboard, not hundreds of notifications, and the devices themselves are
+// all in the inventory either way.
+const maxDeviceActivitiesPerSync = 10
+
+// deviceSighting is a device this sync inserted for the first time. It holds
+// only what the activity reports, so the vendor payload does not travel.
+type deviceSighting struct {
+	externalID string
+	hostname   string
+	userEmail  string
+}
+
+// reportFirstSeen announces devices that appeared in this snapshot. Devices
+// are organization-scoped: no MDM table carries a project, so these activities
+// never claim one.
+func (s *Syncer) reportFirstSeen(ctx context.Context, organizationID string, sightings []deviceSighting) {
+	for _, sighting := range sightings {
+		name := sighting.hostname
+		if name == "" {
+			name = sighting.externalID
+		}
+
+		s.growth.Emit(ctx, growthsignals.ActivityEvent{
+			Activity:       growthsignals.ActivityDeviceFirstSeen,
+			OrganizationID: organizationID,
+			ProjectID:      uuid.Nil,
+			ActorID:        "",
+			ActorType:      "",
+			ActorEmail:     sighting.userEmail,
+			ActorName:      "",
+			SubjectName:    name,
+			ActingSurface:  "",
+			AuditAction:    "",
+			DashboardURL:   "",
+			Extra:          map[string]string{},
+		})
+	}
 }
 
 // runEvidencePush builds the org's coverage snapshot and delivers it to the

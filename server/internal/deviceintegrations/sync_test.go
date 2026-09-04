@@ -26,7 +26,7 @@ import (
 func newSyncTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store, *Syncer, string) {
 	t.Helper()
 	ctx, conn, store, orgID := newStoreTestDB(t)
-	syncer := NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	syncer := NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, nil)
 	return ctx, conn, store, syncer, orgID
 }
 
@@ -37,7 +37,7 @@ func newSyncMetricTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store,
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	syncer := NewSyncer(testenv.NewLogger(t), meterProvider, conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	syncer := NewSyncer(testenv.NewLogger(t), meterProvider, conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, nil)
 	return ctx, conn, store, syncer, orgID, reader
 }
 
