@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -24,6 +25,32 @@ import (
 // this method before minting credentials, resolving upstream authority, or
 // executing an operation. Successful results must not be cached across requests.
 func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context, error) {
+	tx, err := e.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
+	})
+	if err != nil {
+		return ctx, fmt.Errorf("begin credential admission snapshot: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	prepared, err := e.admitPrincipalCredential(ctx, tx)
+	if err != nil {
+		return ctx, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ctx, fmt.Errorf("commit credential admission snapshot: %w", err)
+	}
+	return prepared, nil
+}
+
+// AdmitPrincipalCredentialWithDBTX performs the same live admission reads on
+// a caller-owned transaction. The caller controls the snapshot and commit so
+// admission can be tied atomically to another credential operation.
+func (e *Engine) AdmitPrincipalCredentialWithDBTX(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
+	return e.admitPrincipalCredential(ctx, db)
+}
+
+func (e *Engine) admitPrincipalCredential(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
@@ -40,20 +67,12 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 		return ctx, fmt.Errorf("decode delegated credential policy: %w", err)
 	}
 
-	tx, err := e.db.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
-	})
-	if err != nil {
-		return ctx, fmt.Errorf("begin credential admission snapshot: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		apiKeyID, parseErr := uuid.Parse(authCtx.APIKeyID)
 		if parseErr != nil {
 			return ctx, oops.C(oops.CodeUnauthorized)
 		}
-		_, err = keysrepo.New(tx).GetActivePrincipalAPIKeyForAdmission(ctx, keysrepo.GetActivePrincipalAPIKeyForAdmissionParams{
+		_, err = keysrepo.New(db).GetActivePrincipalAPIKeyForAdmission(ctx, keysrepo.GetActivePrincipalAPIKeyForAdmissionParams{
 			ID:                     apiKeyID,
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			SubjectUrn:             pgtype.Text{String: actor.String(), Valid: true},
@@ -69,7 +88,7 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 		}
 	}
 
-	agent, err := agents.ResolvePrincipal(ctx, tx, authCtx.ActiveOrganizationID, actor)
+	agent, err := agents.ResolvePrincipal(ctx, db, authCtx.ActiveOrganizationID, actor)
 	if err != nil {
 		if errors.Is(err, agents.ErrPrincipalInvalid) || errors.Is(err, agents.ErrPrincipalNotFound) {
 			return ctx, oops.C(oops.CodeUnauthorized)
@@ -81,7 +100,7 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 	}
 
 	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)
-	ownerPrincipals, err := ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
+	ownerPrincipals, err := ResolveUserPrincipals(ctx, db, authCtx.ActiveOrganizationID, agent.OwnerUserID)
 	if err != nil {
 		if errors.Is(err, ErrPrincipalInvalid) || errors.Is(err, ErrPrincipalNotFound) {
 			return ctx, oops.C(oops.CodeUnauthorized)
@@ -99,17 +118,13 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	agentPolicy, err := loadResolvedAgentPolicy(ctx, tx, authCtx.ActiveOrganizationID, actor)
+	agentPolicy, err := loadResolvedAgentPolicy(ctx, db, authCtx.ActiveOrganizationID, actor)
 	if err != nil {
 		return ctx, fmt.Errorf("load live agent policy: %w", err)
 	}
-	ownerPolicy, err := LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, ownerPrincipals)
+	ownerPolicy, err := LoadGrants(ctx, db, authCtx.ActiveOrganizationID, ownerPrincipals)
 	if err != nil {
 		return ctx, fmt.Errorf("load live owner policy: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return ctx, fmt.Errorf("commit credential admission snapshot: %w", err)
 	}
 
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, agent.OwnerUserID)

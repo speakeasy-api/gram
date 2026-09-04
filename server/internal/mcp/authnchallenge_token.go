@@ -566,9 +566,9 @@ func (s *Service) rotateRefreshToken(
 	canPublishFailure bool,
 	logger *slog.Logger,
 ) (releaseLease bool, err error) {
-	// Agent admission performs live organization, rollout, and policy reads. Do
-	// those reads before claiming a transaction connection so concurrent
-	// rotations cannot exhaust the pool while waiting for nested pool work.
+	// Resolve rollout and request context before claiming a transaction
+	// connection. Live parent and policy admission runs later on the rotation
+	// transaction itself, immediately before minting the successor.
 	var admittedAgentSessionID uuid.UUID
 	admittedAgentContext := ctx
 	refreshSession, lookupErr := usersessions_repo.New(s.db).GetUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetUserSessionByRefreshTokenHashParams{
@@ -592,7 +592,7 @@ func (s *Service) rotateRefreshToken(
 				admittedAgentContext, admissionErr = s.contextForSessionSubject(ctx, endpoint, refreshSession.SubjectUrn, "", clientRow.ClientID)
 			}
 			if admissionErr == nil {
-				admittedAgentContext, admissionErr = s.admitAgentSession(admittedAgentContext, endpoint, refreshSession.SubjectUrn, credential)
+				admittedAgentContext, admissionErr = s.prepareAgentSessionContext(admittedAgentContext, endpoint, refreshSession.SubjectUrn, credential)
 			}
 			if admissionErr != nil {
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
@@ -602,7 +602,9 @@ func (s *Service) rotateRefreshToken(
 		}
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
+	})
 	if err != nil {
 		return true, oops.E(oops.CodeUnexpected, err, "begin refresh token rotation").LogError(ctx, logger)
 	}
@@ -708,7 +710,16 @@ func (s *Service) rotateRefreshToken(
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
+		var admissionErr error
 		if admittedAgentSessionID == uuid.Nil || admittedAgentSessionID != oldSession.ID {
+			admissionErr = oops.C(oops.CodeUnauthorized)
+		} else {
+			admittedAgentContext, admissionErr = s.authz.AdmitPrincipalCredentialWithDBTX(admittedAgentContext, dbtx)
+			if admissionErr == nil {
+				admittedAgentContext, admissionErr = s.requireAgentSessionAuthorization(admittedAgentContext, endpoint)
+			}
+		}
+		if admissionErr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}

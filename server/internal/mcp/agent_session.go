@@ -25,7 +25,8 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version authz.Del
 		return nil, fmt.Errorf("agent session target has unsupported scope %q", target.Scope)
 	}
 	policy, err := authz.NewDelegatedPolicy(version, []authz.Grant{{
-		Scope: target.Scope,
+		PrincipalUrn: "",
+		Scope:        target.Scope,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 			authz.SelectorKeyResourceID:   target.MCPResourceID.String(),
@@ -101,7 +102,7 @@ func loadAgentSessionCredential(
 	}, nil
 }
 
-func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential agentSessionCredential) (context.Context, error) {
+func (s *Service) prepareAgentSessionContext(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential agentSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindAgent {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -115,10 +116,22 @@ func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEn
 		DelegatedGrants:        credential.DelegatedGrants,
 		DelegatedGrantsVersion: credential.DelegatedGrantsVersion,
 	})
-	ctx, err := s.authz.PrepareContext(ctx)
+	return ctx, nil
+}
+
+func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, credential agentSessionCredential) (context.Context, error) {
+	ctx, err := s.prepareAgentSessionContext(ctx, endpoint, subject, credential)
+	if err != nil {
+		return ctx, err
+	}
+	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, fmt.Errorf("prepare agent session authorization: %w", err)
 	}
+	return s.requireAgentSessionAuthorization(ctx, endpoint)
+}
+
+func (s *Service) requireAgentSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)
