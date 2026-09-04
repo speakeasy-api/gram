@@ -12,6 +12,13 @@ import (
 // requested organization's namespace before evaluating an organization scope.
 // It intentionally does not use grants prepared for the active organization.
 func (e *Engine) RequireUserOrganizationScope(ctx context.Context, organizationID, userID string, scope Scope) error {
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return oops.C(oops.CodeForbidden)
+	}
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return oops.C(oops.CodeForbidden)
+	}
+
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err

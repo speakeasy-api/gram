@@ -29,7 +29,8 @@ func TestRecordAuthorizationDecisionEmitsBoundedAttribution(t *testing.T) {
 		APIKeyID:             "key_123",
 		APIKeyName:           "must-not-appear",
 		Email:                &email,
-	}, agent)
+	}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_authorizer"})
+	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "user_owner")
 	ctx, span := provider.Tracer("test").Start(ctx, "request")
 	RecordAuthorizationDecision(ctx, repo.OperationRequire, repo.OutcomeDeny, repo.ReasonScopeUnsatisfied)
 	span.End()
@@ -47,6 +48,8 @@ func TestRecordAuthorizationDecisionEmitsBoundedAttribution(t *testing.T) {
 	require.Equal(t, "agent", attrs["gram.authorization.actor.type"])
 	require.Equal(t, agent.ID, attrs["gram.authorization.actor.id"])
 	require.Equal(t, "key_123", attrs["gram.authorization.api_key_id"])
+	require.Equal(t, "user_authorizer", attrs["gram.authorization.authorizer_user_id"])
+	require.Equal(t, "user_owner", attrs["gram.authorization.owner_user_id"])
 	require.NotContains(t, attrs, "gram.authorization.session_id")
 	require.NotContains(t, attrs, "gram.authorization.oauth_client_id")
 	require.NotContains(t, attrs, "gram.authorization.actor.name")
