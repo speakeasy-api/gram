@@ -1,0 +1,61 @@
+.changeset/flatten-judge-config.md
+  s_8f4e70214ed288::t_2033b9214c7dbe 1-5
+.speakeasy/out.openapi.yaml
+  s_8f4e70214ed288::t_8376831db61388 67483-67489,69214-69220,80101-80107,87888-87894
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_8f4e70214ed288::t_03571e0103787c 738-739,763-764,839-840,860-861,2013-2014
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_8f4e70214ed288::t_deb7818c9b9839 103-110,202-203,239-240,266-267
+client/dashboard/src/sdk/src/models/components/evaluatepromptguardrailrequestbody.ts
+  s_8f4e70214ed288::t_b8d032383c46cf 13-20,42-43,57-58,67-68
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_8f4e70214ed288::t_89b8276568b692 113-120,236-237,272-273
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_8f4e70214ed288::t_2a30416c3b2d67 99-106,199-200,236-237,265-266
+server/design/risk/design.go
+  s_8f4e70214ed288::t_9ca92ac0a3a7dc 66-67,220-221,1585-1586
+server/design/shared/risk.go
+  s_8f4e70214ed288::t_cee05ec60bc5ab 166-167
+server/gen/http/cli/gram/cli.go
+  s_8f4e70214ed288::t_f4456a9af76c28 20532,20624,21646
+server/gen/http/openapi3.yaml
+  s_8f4e70214ed288::t_43c34493d85c81 68937-68943,70667-70673,81635-81641,89422-89428
+server/gen/http/risk/client/cli.go
+  s_8f4e70214ed288::t_cabc712ad905e4 29,63-64,273,347-348,2505,2537-2542
+server/gen/http/risk/client/encode_decode.go
+  s_8f4e70214ed288::t_fb5732807ac18e 11916-11917
+server/gen/http/risk/client/types.go
+  s_8f4e70214ed288::t_e5d98f8ac9d1de 87-93,172-179,421-426,526-532,643-649,744-750,10663-10669,11224-11225,11342-11343,11730-11735,11775-11776,12344-12345,12579-12580
+server/gen/http/risk/server/encode_decode.go
+  s_8f4e70214ed288::t_0e97dbc9861f0b 11566-11567
+server/gen/http/risk/server/types.go
+  s_8f4e70214ed288::t_7610740e3cf967 89-95,174-181,423-428,528-534,645-651,746-752,10653-10659,11228-11229,11360-11361,11452-11453,19475-19476,19629-19630,20323-20328
+server/gen/risk/service.go
+  s_8f4e70214ed288::t_c21abb5021412d 393-399,482-487,1597-1604
+server/gen/types/risk_policy.go
+  s_8f4e70214ed288::t_eef4cffffcf604 84-90
+server/internal/risk/eval_guardrail_test.go
+  s_8f4e70214ed288::t_d459f62ed14846 192-195
+server/internal/risk/impl.go
+  s_8f4e70214ed288::t_472bdeaf6478d1 351,759-760,958-960,962-970,3063,3862-3865,3873,3882,3888-3892,3895,3897,3902-3915
+server/internal/risk/policy_goa.go
+  s_8f4e70214ed288::t_8cd7a865efbcc2 23-24,26-27,54-55
+server/internal/risk/prompt_policy_create_test.go
+  s_8f4e70214ed288::t_251d52a0043c95 106-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a3834567e4931c1e6ae8510fb00ccdb96f0a2814",
+  "prompts": {},
+  "sessions": {
+    "s_8f4e70214ed288": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a8cb08b-c1fc-47a9-af02-d27d4bf30932",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
