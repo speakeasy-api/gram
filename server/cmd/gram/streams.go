@@ -500,10 +500,6 @@ func newStreamsCommand() *cli.Command {
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 
-			// Growth activities enrich against the primary rather than the read
-			// replica: an audit event arrives within milliseconds of the write it
-			// describes, so replica lag would leave a just-created project or
-			// organization unresolvable exactly when it is most interesting.
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
 				siteURL, err = url.Parse(raw)
@@ -518,7 +514,7 @@ func newStreamsCommand() *cli.Command {
 					return fmt.Errorf("site url must be an absolute http(s) URL, got %q", raw)
 				}
 			}
-			growthSignalHandler := growthsignals.NewEventHandler(logger, growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL))
+			growthSignalHandler := growthsignals.NewEventHandler(logger, newGrowthSignalsEmitter(logger, posthogClient, replicaDB, siteURL))
 
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
