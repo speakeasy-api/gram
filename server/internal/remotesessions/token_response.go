@@ -1,6 +1,8 @@
 package remotesessions
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -20,6 +22,89 @@ type tokenResponse struct {
 	RefreshExpiresIn       int64  `json:"refresh_expires_in"`
 	RefreshTokenExpiresIn  int64  `json:"refresh_token_expires_in"`
 	Scope                  string `json:"scope"`
+
+	// IDToken is verified and reduced to claims at the exchange; never persisted or logged.
+	IDToken string `json:"id_token"`
+
+	// raw is the response body the fields above were decoded from, kept so
+	// the non-standard members a provider adds can be retained.
+	raw []byte
+}
+
+// tokenResponseStandardMembers are the RFC 6749 §5.1 and refresh-lifetime members plus id_token.
+var tokenResponseStandardMembers = map[string]struct{}{
+	"access_token": {}, "refresh_token": {}, "token_type": {}, "expires_in": {},
+	"refresh_token_timeout": {}, "authorization_expires_in": {}, "refresh_expires_in": {},
+	"refresh_token_expires_in": {}, "scope": {}, "id_token": {},
+}
+
+// extras returns the non-standard, non-credential members at every nesting
+// level (Slack nests tokens under authed_user and incoming_webhook). Nil when empty.
+func (t tokenResponse) extras() map[string]json.RawMessage {
+	// UseNumber keeps large integers as the provider wrote them.
+	dec := json.NewDecoder(bytes.NewReader(t.raw))
+	dec.UseNumber()
+	var members map[string]any
+	if err := dec.Decode(&members); err != nil {
+		return nil
+	}
+	for name := range members {
+		if _, standard := tokenResponseStandardMembers[strings.ToLower(name)]; standard {
+			delete(members, name)
+		}
+	}
+	stripCredentialMembers(members)
+	if len(members) == 0 {
+		return nil
+	}
+	kept := make(map[string]json.RawMessage, len(members))
+	for name, value := range members {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return nil
+		}
+		kept[name] = raw
+	}
+	return kept
+}
+
+// stripCredentialMembers removes credential-shaped members from doc and from
+// every object nested under it.
+func stripCredentialMembers(doc map[string]any) {
+	for name, value := range doc {
+		if credentialMemberName(name) {
+			delete(doc, name)
+			continue
+		}
+		stripNestedCredentialMembers(value)
+	}
+}
+
+func stripNestedCredentialMembers(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		stripCredentialMembers(v)
+	case []any:
+		for _, item := range v {
+			stripNestedCredentialMembers(item)
+		}
+	}
+}
+
+// credentialMemberWords mark a member as credential material anywhere in its
+// name; benign matches (country_code) are dropped too.
+var credentialMemberWords = []string{"token", "secret", "assertion", "code", "password", "passwd", "credential", "key", "jwt", "webhook", "authorization", "session", "cookie", "signature"}
+
+// credentialMemberName reports whether a member name looks like it names a
+// credential, regardless of case.
+func credentialMemberName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, word := range credentialMemberWords {
+		if strings.Contains(lower, word) {
+			return true
+		}
+	}
+	return false
 }
 
 // Scopes splits the space-delimited scope value per RFC 6749 §3.3, tolerating
