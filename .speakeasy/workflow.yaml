@@ -10,6 +10,15 @@ sources:
         transformations:
             - removeUnused: true
         output: .speakeasy/out.openapi.yaml
+    Gram-Admin:
+        inputs:
+            - location: server/gen/http/openapi3.yaml
+        overlays:
+            - location: overlays/goa-common.yaml
+            - location: overlays/admin-sdk.yaml
+        transformations:
+            - removeUnused: true
+        output: .speakeasy/out.admin.openapi.yaml
     Gram-Public:
         inputs:
             - location: server/gen/http/openapi3.yaml
@@ -38,6 +47,10 @@ targets:
         target: typescript
         source: Gram-Internal
         output: client/dashboard/src/sdk
+    gram-admin:
+        target: typescript
+        source: Gram-Admin
+        output: client/admin/src/sdk
     hooks-go:
         target: go
         source: Hooks-Ingest

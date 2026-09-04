@@ -117,7 +117,7 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	rec := httptest.NewRecorder()
 	SessionMiddleware(mux).ServeHTTP(rec, req)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Equal(t, 1, userinfoCalls, "successful pre-decode verification must be reused by Goa auth")
+	require.Equal(t, 1, userinfoCalls, "session must be verified before decoding the request body")
 }
 
 func TestGeneratedAdminRoutes_RejectOversizedJSONBody(t *testing.T) {
