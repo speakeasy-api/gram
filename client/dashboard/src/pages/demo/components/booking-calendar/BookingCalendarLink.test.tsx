@@ -55,7 +55,10 @@ it("opens a prefilled upgrade calendar without navigating", () => {
 
   const trigger = screen.getByRole("button", { name: "Talk to us" });
   expect(trigger.getAttribute("type")).toBe("button");
+  expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
   fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
   expect(screen.getByRole("dialog")).toBeTruthy();
   expect(screen.getByText("Upgrade Trial — 30 min")).toBeTruthy();

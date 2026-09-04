@@ -380,6 +380,24 @@ describe("RadioCard", () => {
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
+  it("keeps leading content separate from the label and description", () => {
+    render(
+      <RadioCardGroup aria-label="Actions">
+        <RadioCard
+          value="action"
+          title="Action choice"
+          leading={<span data-testid="leading">Icon</span>}
+        >
+          Action description
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    const radio = screen.getByRole("radio", { name: "Action choice" });
+    expect(screen.getByTestId("leading")).toBeTruthy();
+    expect(radio.getAttribute("aria-describedby")).not.toBeNull();
+  });
+
   it("forwards the orientation prop to the radio group", () => {
     const { rerender } = render(<ControlledGroup />);
     const group = screen.getByRole("radiogroup", { name: "View mode" });

@@ -53,6 +53,8 @@ export function BookingCalendarLink({
       <button
         {...props}
         type="button"
+        aria-haspopup="dialog"
+        aria-expanded={modalProps.open}
         onClick={handleClick}
         className={cn(
           "cursor-pointer text-left underline-offset-2 hover:underline",

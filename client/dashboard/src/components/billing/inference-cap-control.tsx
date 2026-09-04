@@ -333,6 +333,7 @@ function CapForm({
                 notes: `Request inference cap above ${MAX_LABEL}`,
               }}
               telemetrySource="inference_cap"
+              className="underline"
             >
               Talk to us
             </BookingCalendarLink>

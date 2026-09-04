@@ -25,6 +25,7 @@ export type RadioCardProps = RadioCardContent & {
   value: string;
   disabled?: boolean;
   onSelect?: () => void;
+  leading?: React.ReactNode;
   className?: string;
 };
 
@@ -77,6 +78,7 @@ export function RadioCard({
   children,
   disabled = false,
   onSelect,
+  leading,
   className,
 }: RadioCardProps): React.JSX.Element {
   const id = React.useId();
@@ -146,6 +148,11 @@ export function RadioCard({
           if (!event.repeat) onSelect?.();
         }}
       />
+      {leading ? (
+        <div data-slot="radio-card-leading" className="shrink-0">
+          {leading}
+        </div>
+      ) : null}
       <div className="min-w-0 flex-1">
         {hasTitle ? (
           <div id={titleId} className="text-base font-medium">

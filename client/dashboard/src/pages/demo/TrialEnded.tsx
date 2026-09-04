@@ -141,44 +141,34 @@ function ExpiredTrialEnded(): JSX.Element {
             >
               <RadioCard
                 value="payg"
-                title={
-                  <div className="flex gap-3">
-                    <Icon
-                      name="credit-card"
-                      className="mt-0.5 ml-0.5 size-5 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <div>Set up billing</div>
-                      <p className="mt-1 text-sm font-normal text-muted-foreground">
-                        Add a card to unlock your workspace and continue on pay
-                        as you go.
-                      </p>
-                    </div>
-                  </div>
+                title="Set up billing"
+                leading={
+                  <Icon
+                    name="credit-card"
+                    className="mt-0.5 ml-0.5 size-5"
+                    aria-hidden="true"
+                  />
                 }
                 disabled={paygCheckout.isPending}
                 onSelect={paygCheckout.startCheckout}
-              />
+              >
+                Add a card to unlock your workspace and continue on pay as you
+                go.
+              </RadioCard>
               <RadioCard
                 value="sales"
-                title={
-                  <div className="flex gap-3">
-                    <Icon
-                      name="calendar"
-                      className="mt-0.5 ml-0.5 size-5 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <div>Contact sales</div>
-                      <p className="mt-1 text-sm font-normal text-muted-foreground">
-                        Talk with our team about plans, pricing, and next steps.
-                      </p>
-                    </div>
-                  </div>
+                title="Contact sales"
+                leading={
+                  <Icon
+                    name="calendar"
+                    className="mt-0.5 ml-0.5 size-5"
+                    aria-hidden="true"
+                  />
                 }
                 onSelect={openSalesCalendar}
-              />
+              >
+                Talk with our team about plans, pricing, and next steps.
+              </RadioCard>
             </RadioCardGroup>
             {paygCheckout.error ? (
               <ErrorAlert

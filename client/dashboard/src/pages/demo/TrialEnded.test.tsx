@@ -81,7 +81,9 @@ it("opens sales with expired-trial context", () => {
     </MemoryRouter>,
   );
 
-  fireEvent.click(screen.getByRole("radio", { name: /Contact sales/ }));
+  const salesOption = screen.getByRole("radio", { name: "Contact sales" });
+  expect(salesOption.getAttribute("aria-describedby")).not.toBeNull();
+  fireEvent.click(salesOption);
 
   expect(mocks.openBookingCalendar).toHaveBeenCalledWith(
     expect.objectContaining({
