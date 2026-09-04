@@ -594,6 +594,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	return 1, nil
 }
 
+// jsonNULEscape is the JSON spelling of U+0000, which jsonb rejects.
+var jsonNULEscape = []byte(`\u` + "0000")
+
 // WriteExternal inserts imported provider messages idempotently and notifies
 // observers when at least one new row is stored.
 func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite) (int64, error) {
@@ -624,16 +627,12 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
-		// Provider transcripts occasionally carry NUL, which Postgres text
-		// columns reject; drop it before metering so the reading reflects
-		// what is actually stored.
-		param.Content = StripNUL(param.Content)
-		param.ExternalUserID.String = StripNUL(param.ExternalUserID.String)
-		param.ExternalMessageID.String = StripNUL(param.ExternalMessageID.String)
-		param.UserAgent.String = StripNUL(param.UserAgent.String)
-		// content_raw is an optional inline copy and jsonb rejects U+0000;
-		// readers fall back to content when it is empty, so drop it rather
-		// than rewrite the JSON.
+		// Postgres rejects NUL in text and jsonb. Strip it from the text columns;
+		// the raw copy is optional and readers fall back to content, so drop it.
+		param.Content = conv.StripNUL(param.Content)
+		param.ExternalUserID.String = conv.StripNUL(param.ExternalUserID.String)
+		param.ExternalMessageID.String = conv.StripNUL(param.ExternalMessageID.String)
+		param.UserAgent.String = conv.StripNUL(param.UserAgent.String)
 		if bytes.Contains(param.ContentRaw, jsonNULEscape) || bytes.IndexByte(param.ContentRaw, 0) >= 0 {
 			param.ContentRaw = nil
 		}
