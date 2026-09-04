@@ -25,16 +25,21 @@ import {
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 
-type ProductFeatureEntry =
+type EnabledProductFeatureKey = Extract<
+  keyof ProductFeatures,
+  `${string}Enabled`
+>;
+
+type ProductFeatureDecision =
   | {
       kind: "toggle";
-      enabledKey: keyof ProductFeatures;
+      enabledKey: EnabledProductFeatureKey;
       label: string;
       description: string;
     }
   | { kind: "managed-elsewhere"; where: string };
 
-const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
+const PRODUCT_FEATURES = {
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -96,43 +101,52 @@ const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
     label: "SCIM",
     description: "Enables WorkOS portal link creation for managing SCIM.",
   },
+  // reason: managed in dashboard log settings
   logs: {
     kind: "managed-elsewhere",
     where: "Dashboard log settings",
   },
+  // reason: managed in dashboard log settings
   tool_io_logs: {
     kind: "managed-elsewhere",
     where: "Dashboard log settings",
   },
+  // reason: managed in dashboard session capture settings
   session_capture: {
     kind: "managed-elsewhere",
     where: "Dashboard session capture settings",
   },
+  // reason: managed in dashboard hook settings
   hooks_browser_login: {
     kind: "managed-elsewhere",
     where: "Dashboard hook settings",
   },
+  // reason: managed in dashboard hook settings
   hooks_fail_open: {
     kind: "managed-elsewhere",
     where: "Dashboard hook settings",
   },
+  // reason: managed in dashboard Skills settings
   skills: {
     kind: "managed-elsewhere",
     where: "Dashboard Skills settings",
   },
+  // reason: managed in dashboard Skills settings
   skill_capture_metadata_only: {
     kind: "managed-elsewhere",
     where: "Dashboard Skills settings",
   },
+  // reason: managed in dashboard remote session settings
   remote_session_auto_refresh_enforced: {
     kind: "managed-elsewhere",
     where: "Dashboard remote session settings",
   },
+  // reason: managed in dashboard consent settings
   consent_tool_filtering: {
     kind: "managed-elsewhere",
     where: "Dashboard consent settings",
   },
-};
+} satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
