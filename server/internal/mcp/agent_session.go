@@ -117,7 +117,7 @@ func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEn
 	})
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("prepare agent session authorization: %w", err)
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
