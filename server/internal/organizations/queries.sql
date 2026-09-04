@@ -613,21 +613,41 @@ LIMIT 1;
 
 -- name: ReassignOrganizationUserWorkOSID :exec
 -- Login reuses a Gram user after WorkOS delete-and-signup, so membership
--- rows must follow the new WorkOS user id.
+-- rows still pointing at a previous WorkOS user id must follow the new one.
+-- Matches any leftover id so a retry after overwrite still converges.
 UPDATE organization_user_relationships
 SET workos_user_id = @new_workos_user_id,
     updated_at = clock_timestamp()
 WHERE user_id = @user_id
-  AND workos_user_id = @old_workos_user_id;
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM @new_workos_user_id;
+
+-- name: RetireCollidingOrganizationRoleAssignments :exec
+-- Soft-delete leftover assignments that would unique-violate if remapped
+-- onto a WorkOS id that already holds the same org+role.
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = @user_id
+  AND old.workos_user_id <> @new_workos_user_id
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = @new_workos_user_id
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  );
 
 -- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
--- Role assignments are keyed by workos_user_id. Move them when a recreated
--- WorkOS user reuses the Gram identity so roster and sync joins still match.
+-- Move leftover assignments onto the new WorkOS id after colliding rows
+-- have been retired.
 UPDATE organization_role_assignments
 SET workos_user_id = @new_workos_user_id,
     updated_at = clock_timestamp()
 WHERE user_id = @user_id
-  AND workos_user_id = @old_workos_user_id
+  AND workos_user_id <> @new_workos_user_id
   AND deleted_at IS NULL;
 
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
