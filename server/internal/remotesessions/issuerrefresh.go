@@ -191,12 +191,13 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	// A refresh restates the issuer's whole discovered surface, so a member
 	// only an unreadable candidate advertises would read as withdrawn. The
 	// stored document fills those gaps until the next complete refresh, but
-	// only when it describes this issuer: a row repointed to another issuer
-	// must not inherit the old one's endpoints. The fill runs after the gate
-	// above so a stored member never satisfies a check the upstream failed.
+	// only when it names the same issuer the fetched document names: a row
+	// repointed to another issuer, including a sibling path on the same
+	// host, must not inherit the previous issuer's endpoints. The fill runs
+	// after the gate above so a stored member never satisfies a check the
+	// upstream failed.
 	if doc.partial != "" {
-		storedIssuer := rawDocumentIssuer(issuer.Metadata)
-		if storedIssuer != "" && (issuerURLsEqual(storedIssuer, issuer.Issuer) || issuerURLsEqual(storedIssuer, issuerOrigin(issuer.Issuer))) {
+		if storedIssuer := rawDocumentIssuer(issuer.Metadata); storedIssuer != "" && issuerURLsEqual(storedIssuer, doc.Issuer) {
 			doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
 		}
 	}

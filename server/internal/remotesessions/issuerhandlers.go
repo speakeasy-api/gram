@@ -1061,12 +1061,11 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	var firstErr *discoveryError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
-	merged := false
 	// unreadable records, per family, the first candidate that could not be
 	// read at all rather than one that definitively has no document. Such a
 	// candidate may be hiding fields the merge would have captured, whichever
-	// order the probes ran in, and a refresh must not mistake their absence
-	// for withdrawal.
+	// order the probes ran in and even when a later candidate of its family
+	// merged, and a refresh must not mistake their absence for withdrawal.
 	var unreadable [2]string
 	for _, candidate := range candidates {
 		if primary != nil && candidate.family == primaryFamily {
@@ -1105,13 +1104,12 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		if doc.Issuer != "" && issuerURLsEqual(doc.Issuer, primary.Issuer) {
 			union := mergeIssuerMetadata(*primary, doc)
 			primary = &union
-			merged = true
 			break
 		}
 	}
 
-	if primary != nil && !merged {
-		primary.partial = unreadable[1-primaryFamily]
+	if primary != nil {
+		primary.partial = conv.Default(unreadable[1-primaryFamily], unreadable[primaryFamily])
 	}
 
 	if primary != nil {
