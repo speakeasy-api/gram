@@ -910,8 +910,8 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// A chat-session token minted via an API key restores that key's APIKeyID
 	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
 	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Only direct
-	// Direct legacy Gram-Key auth carries scopes, while direct principal auth is
+	// an end user's chat-session token read every project chat. Direct legacy
+	// Gram-Key auth carries scopes, while direct principal auth is
 	// identified by its private mode. API-key-minted chat tokens may retain legacy
 	// mode but have no scopes, so they still go through owner matching.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
