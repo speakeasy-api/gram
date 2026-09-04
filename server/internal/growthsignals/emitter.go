@@ -52,6 +52,14 @@ func NewEmitter(logger *slog.Logger, client PostHogClient, enricher Enricher, si
 // analytics event must never be able to fail that work. Everything that goes
 // wrong is logged here instead.
 func (e *Emitter) Emit(ctx context.Context, event ActivityEvent) {
+	// A nil emitter reports nothing and says so quietly. Callers that have no
+	// PostHog wiring — tests, and commands that construct a service without the
+	// analytics stack — should not each have to guard the call, and analytics
+	// must never be the reason a request path panics.
+	if e == nil {
+		return
+	}
+
 	if event.Activity == "" || event.Activity == ActivitySkip {
 		return
 	}

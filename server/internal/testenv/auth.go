@@ -64,6 +64,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
+		nil,
 		suffix,
 	)
 
