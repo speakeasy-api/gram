@@ -22,7 +22,7 @@ import {
 } from "@/contexts/Auth";
 import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { useRBAC } from "@/hooks/useRBAC";
-import { SetupBoardColumns } from "./components/setup-board-columns";
+import { SetupWorkstreams } from "./components/setup-workstreams";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupTaskDialog } from "./components/setup-task-dialog";
 import { SetupShell } from "./components/setup-shell";
@@ -38,7 +38,8 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
           <Page.Section>
             <Page.Section.Title area="">Organization setup</Page.Section.Title>
             <Page.Section.Description>
-              Assign and track the work required to prepare your organization.
+              Track identity, agent visibility, MCP distribution, and policy
+              setup.
             </Page.Section.Description>
             <Page.Section.Body>
               <div className="flex min-h-0 flex-1 flex-col">{children}</div>
@@ -54,9 +55,9 @@ function BoardLoading(): JSX.Element {
   return (
     <BoardPage>
       <Skeleton>
-        <div className="grid min-w-[1120px] grid-cols-4 gap-4 overflow-hidden">
-          {[0, 1, 2, 3].map((column) => (
-            <div key={column} className="h-80 border" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {[0, 1, 2, 3].map((workstream) => (
+            <div key={workstream} className="h-64 border" />
           ))}
         </div>
       </Skeleton>
@@ -232,14 +233,17 @@ function SetupBoardInner(): JSX.Element {
             session.user.email.toLowerCase(),
       )
     : tasks;
-  const completedCount = tasks.filter((task) => task.status === "done").length;
+  const requiredTasks = tasks.filter((task) => task.key !== "platform-mcp");
+  const completedCount = requiredTasks.filter(
+    (task) => task.status === "done",
+  ).length;
   return (
     <BoardPage>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <Page.Toolbar>
           <Page.Toolbar.Leading>
             <Text small className="whitespace-nowrap">
-              {completedCount} of {tasks.length} tasks complete
+              {completedCount} of {requiredTasks.length} required tasks complete
             </Text>
           </Page.Toolbar.Leading>
           <Page.Toolbar.Actions>
@@ -273,7 +277,7 @@ function SetupBoardInner(): JSX.Element {
             </Page.Toolbar.Actions>
           ) : null}
         </Page.Toolbar>
-        <SetupBoardColumns
+        <SetupWorkstreams
           tasks={visibleTasks}
           allTasks={tasks}
           currentUserId={session.user.id}
