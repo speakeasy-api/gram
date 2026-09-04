@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useStartPaygCheckout } from "@/components/billing/use-start-payg-checkout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -105,7 +106,7 @@ function ExpiredTrialEnded(): JSX.Element {
       page="Trial ended"
       singleColumn
       showTerms={false}
-      sectionClassName="justify-start pt-[15vh]"
+      sectionClassName="justify-start pt-[10vh] bg-background"
       headerAction={
         <button
           type="button"
@@ -117,21 +118,19 @@ function ExpiredTrialEnded(): JSX.Element {
       }
     >
       <Card>
-        <Card.Header>
-          <div>
-            <span className="text-eyebrow">{copy.status}</span>
-            <h1 className="text-display-md">Choose how to continue.</h1>
-          </div>
+        <Card.Header className="border-b pb-3">
+          <span className="text-eyebrow">{copy.status}</span>
+          <h1 className="text-display-md">Choose how to continue.</h1>
         </Card.Header>
-        <Card.Content>
-          <div className="flex flex-col gap-1 max-w-lg my-3">
+        <Card.Content className="pt-2">
+          <div className="flex flex-col gap-1 max-w-lg">
             <p className="text-body-md">
               Your trial has ended, but your workspace is still here. Choose an
               option that works best for your organization.
             </p>
             <p className="text-body-sm text-muted">{copy.detail}</p>
           </div>
-          <div className="mt-3 mb-6">
+          <div className="pt-3">
             <RadioCardGroup
               aria-label="Choose how to continue"
               orientation="horizontal"
@@ -141,20 +140,44 @@ function ExpiredTrialEnded(): JSX.Element {
             >
               <RadioCard
                 value="payg"
-                title="Set up billing"
+                title={
+                  <div className="flex gap-3">
+                    <Icon
+                      name="credit-card"
+                      className="mt-0.5 ml-0.5 size-5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <div>Set up billing</div>
+                      <p className="mt-1 text-sm font-normal text-muted-foreground">
+                        Add a card to unlock your workspace and continue on pay
+                        as you go.
+                      </p>
+                    </div>
+                  </div>
+                }
                 disabled={paygCheckout.isPending}
                 onSelect={paygCheckout.startCheckout}
-              >
-                Add a card to unlock your workspace and continue on pay as you
-                go.
-              </RadioCard>
+              />
               <RadioCard
                 value="sales"
-                title="Contact sales"
+                title={
+                  <div className="flex gap-3">
+                    <Icon
+                      name="calendar"
+                      className="mt-0.5 ml-0.5 size-5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <div>Contact sales</div>
+                      <p className="mt-1 text-sm font-normal text-muted-foreground">
+                        Talk with our team about plans, pricing, and next steps.
+                      </p>
+                    </div>
+                  </div>
+                }
                 onSelect={openSalesCalendar}
-              >
-                Talk with our team about plans, pricing, and next steps.
-              </RadioCard>
+              />
             </RadioCardGroup>
             {paygCheckout.error ? (
               <ErrorAlert
