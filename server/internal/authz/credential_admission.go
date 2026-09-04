@@ -25,6 +25,10 @@ import (
 // this method before minting credentials, resolving upstream authority, or
 // executing an operation. Successful results must not be cached across requests.
 func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context, error) {
+	if !hasPrincipalCredentialAdmissionContext(ctx) {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
 	tx, err := e.db.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
 	})
@@ -50,12 +54,19 @@ func (e *Engine) AdmitPrincipalCredentialWithDBTX(ctx context.Context, db access
 	return e.admitPrincipalCredential(ctx, db)
 }
 
-func (e *Engine) admitPrincipalCredential(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
+func hasPrincipalCredentialAdmissionContext(ctx context.Context) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
-	if !ok || authCtx == nil || !hasCredential || !hasActor ||
-		authCtx.ActiveOrganizationID == "" || credential.AuthorizerUserID == "" || actor.Type != urn.PrincipalTypeAgent {
+	return ok && authCtx != nil && hasCredential && hasActor &&
+		authCtx.ActiveOrganizationID != "" && credential.AuthorizerUserID != "" && actor.Type == urn.PrincipalTypeAgent
+}
+
+func (e *Engine) admitPrincipalCredential(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	credential, _ := contextvalues.PrincipalCredentialAuthorization(ctx)
+	actor, _ := contextvalues.AuthenticatedActor(ctx)
+	if !hasPrincipalCredentialAdmissionContext(ctx) {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
