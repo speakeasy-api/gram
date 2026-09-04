@@ -12,6 +12,7 @@ import type { ReactElement } from "react";
 
 import { WizardContext } from "./machine";
 import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
+import { VerifiedOAuthMetadata } from "./VerifiedOAuthMetadata";
 
 const EXTERNAL_METADATA_PLACEHOLDER = `{
   "issuer": "https://your-oauth-server.com",
@@ -83,6 +84,9 @@ export function ExternalOAuthForm({
               <Input
                 id="external-oauth-issuer"
                 placeholder="https://login.example.com"
+                required
+                aria-invalid={!!validateProviderIssuerUrl(external.issuerUrl)}
+                aria-describedby="external-oauth-issuer-help"
                 value={external.issuerUrl}
                 onChange={(value) =>
                   actorRef.send({
@@ -94,7 +98,7 @@ export function ExternalOAuthForm({
                 validate={(value) => validateProviderIssuerUrl(value) ?? true}
                 autoFocus
               />
-              <Text muted small>
+              <Text id="external-oauth-issuer-help" muted small>
                 Enter the exact HTTPS issuer advertised by your provider.
               </Text>
             </Stack>
@@ -114,40 +118,7 @@ export function ExternalOAuthForm({
             <Text muted small>
               Review the metadata discovered from your provider.
             </Text>
-            {!!external.verifiedMetadata.discoveryWarnings?.length && (
-              <Alert variant="warning">
-                <AlertTitle>Metadata warnings</AlertTitle>
-                <AlertDescription>
-                  {external.verifiedMetadata.discoveryWarnings.join(" ")}
-                </AlertDescription>
-              </Alert>
-            )}
-            <ReviewRow
-              label="Issuer"
-              value={external.verifiedMetadata.issuer}
-            />
-            <ReviewRow
-              label="Authorization endpoint"
-              value={
-                external.verifiedMetadata.authorizationEndpoint ??
-                "Not advertised"
-              }
-            />
-            <ReviewRow
-              label="Token endpoint"
-              value={
-                external.verifiedMetadata.tokenEndpoint ?? "Not advertised"
-              }
-            />
-            <ReviewRow
-              label="RFC 9207 support"
-              value={
-                external.verifiedMetadata
-                  .authorizationResponseIssParameterSupported
-                  ? "Supported"
-                  : "Not advertised"
-              }
-            />
+            <VerifiedOAuthMetadata metadata={external.verifiedMetadata} />
             {error && (
               <Alert variant="error">
                 <AlertDescription>{error}</AlertDescription>
@@ -247,18 +218,5 @@ function SourceCard({
         {description}
       </Text>
     </button>
-  );
-}
-
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <Text small className="font-medium">
-        {label}
-      </Text>
-      <Text muted small>
-        {value}
-      </Text>
-    </div>
   );
 }

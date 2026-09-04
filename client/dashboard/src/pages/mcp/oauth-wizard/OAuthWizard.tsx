@@ -5,6 +5,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
+import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
@@ -27,6 +28,7 @@ import { AutoConfigureLoader } from "./AutoConfigureLoader";
 import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
+import { VerifiedOAuthMetadata } from "./VerifiedOAuthMetadata";
 import { FatalErrorStep } from "./FatalErrorStep";
 import {
   oauthWizardMachine,
@@ -78,7 +80,7 @@ function OAuthWizard({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
+      <Dialog.Content className="flex max-h-[85vh] flex-col sm:max-w-xl">
         {existingConfig ? (
           <ExistingConfigReview
             key={resetKey}
@@ -118,6 +120,9 @@ function ExistingConfigReview({
     "intro",
   );
   const [issuer, setIssuer] = useState(config.issuer);
+  const [metadataJson, setMetadataJson] = useState(
+    config.metadata ? JSON.stringify(config.metadata, null, 2) : "",
+  );
   const [verified, setVerified] = useState<RemoteSessionIssuerDraft | null>(
     null,
   );
@@ -184,16 +189,18 @@ function ExistingConfigReview({
   };
 
   const update = async (providerHosted: boolean) => {
-    if (!providerHosted && !config.metadata) return;
     setPending(true);
     setError(null);
     try {
+      const metadata = providerHosted
+        ? undefined
+        : (JSON.parse(metadataJson) as Record<string, unknown>);
       await buildUpdateExternalOAuthServerMutation(client).mutationFn({
         request: {
           slug: toolsetSlug,
           updateExternalOAuthServerRequestBody: providerHosted
             ? { authorizationServerIssuer: verified?.issuer }
-            : { metadata: config.metadata },
+            : { metadata },
         },
       });
       await Promise.all([
@@ -214,16 +221,14 @@ function ExistingConfigReview({
     <>
       <Dialog.Header>
         <Dialog.Title>Review OAuth metadata</Dialog.Title>
+        <Dialog.Description>
+          Gram always hosts protected-resource metadata for this MCP server.
+          Switching authorization-server metadata keeps existing tokens and
+          registrations. Some clients may ask users to authenticate again.
+        </Dialog.Description>
       </Dialog.Header>
-      <div className="px-6 py-4">
+      <div className="min-h-0 overflow-y-auto">
         <Stack gap={4}>
-          <Text>
-            Gram always hosts protected-resource metadata for this MCP server.
-          </Text>
-          <Text muted small>
-            Switching authorization-server metadata keeps existing tokens and
-            registrations. Some clients may ask users to authenticate again.
-          </Text>
           {stage === "intro" && (
             <Stack gap={2}>
               <Label htmlFor="existing-oauth-issuer">Issuer URL</Label>
@@ -240,35 +245,24 @@ function ExistingConfigReview({
             </Stack>
           )}
           {stage === "review" && verified && (
-            <Stack gap={2}>
-              <Text small>Issuer: {verified.issuer}</Text>
-              <Text small>
-                Authorization endpoint:{" "}
-                {verified.authorizationEndpoint ?? "Not advertised"}
-              </Text>
-              <Text small>
-                Token endpoint: {verified.tokenEndpoint ?? "Not advertised"}
-              </Text>
-              <Text small>
-                RFC 9207 support:{" "}
-                {verified.authorizationResponseIssParameterSupported
-                  ? "Supported"
-                  : "Not advertised"}
-              </Text>
-              {!!verified.discoveryWarnings?.length && (
-                <Alert variant="warning">
-                  <AlertDescription>
-                    {verified.discoveryWarnings.join(" ")}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </Stack>
+            <VerifiedOAuthMetadata metadata={verified} />
           )}
           {stage === "clear" && (
-            <Text>
-              Confirm that Gram should continue hosting authorization-server
-              metadata.
-            </Text>
+            <Stack gap={2}>
+              <Text>
+                Confirm the authorization-server metadata Gram should host.
+              </Text>
+              <Label htmlFor="existing-oauth-metadata">
+                OAuth Metadata JSON
+              </Label>
+              <TextArea
+                id="existing-oauth-metadata"
+                value={metadataJson}
+                onChange={setMetadataJson}
+                rows={12}
+                className="font-mono text-sm"
+              />
+            </Stack>
           )}
           {stage === "success" && <Text>OAuth metadata updated.</Text>}
           {error && (
@@ -278,7 +272,7 @@ function ExistingConfigReview({
           )}
         </Stack>
       </div>
-      <Dialog.Footer className="flex justify-between">
+      <Dialog.Footer className="sm:justify-between sm:space-x-0">
         {stage === "success" ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
@@ -289,16 +283,11 @@ function ExistingConfigReview({
             <div className="flex gap-2">
               {stage === "intro" && (
                 <>
-                  {config.metadata && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setStage("clear")}
-                    >
-                      {config.providerHosted
-                        ? "Use Gram-hosted metadata"
-                        : "Keep Gram-hosted metadata"}
-                    </Button>
-                  )}
+                  <Button variant="secondary" onClick={() => setStage("clear")}>
+                    {config.providerHosted
+                      ? "Use Gram-hosted metadata"
+                      : "Keep Gram-hosted metadata"}
+                  </Button>
                   <Button onClick={() => void review()} disabled={pending}>
                     {pending ? "Reviewing..." : "Review update"}
                   </Button>
@@ -506,7 +495,7 @@ export function ConnectOAuthModal({
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
 
-  if (isAccountUpgrade) {
+  if (isAccountUpgrade && !existingConfig) {
     return (
       <FeatureRequestModal
         isOpen={isOpen}

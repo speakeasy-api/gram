@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
+    productTier: ["pro"] as string[],
   };
 });
 
@@ -119,7 +120,7 @@ vi.mock("@/contexts/Telemetry", () => ({
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
-  useProductTier: () => ["pro"],
+  useProductTier: () => mocks.productTier,
 }));
 
 vi.mock("@/routes", () => ({
@@ -218,6 +219,7 @@ beforeEach(() => {
     if (typeof fn === "function" && "mockClear" in fn) fn.mockClear();
   }
   mocks.isFeatureEnabled.mockReturnValue(false);
+  mocks.productTier = ["pro"];
 });
 
 afterEach(() => {
@@ -291,7 +293,6 @@ describe("OAuthWizard - external OAuth sources", () => {
     });
     expect(screen.getByText("https://auth.example.com/authorize")).toBeTruthy();
     expect(screen.getByText("https://auth.example.com/token")).toBeTruthy();
-    expect(screen.getByText("RFC 9207 support")).toBeTruthy();
     expect(screen.getByText("Supported")).toBeTruthy();
     expect(
       screen.getByText(/discovery issuer .* does not match requested/),
@@ -320,6 +321,16 @@ describe("OAuthWizard — existing external OAuth config", () => {
     metadata: { issuer: "https://auth.example.com" },
   };
 
+  it("allows existing configurations to be managed on the base tier", () => {
+    mocks.productTier = ["base"];
+    renderWizard({ existingConfig });
+
+    expect(screen.getByText("Review OAuth metadata")).toBeTruthy();
+    expect(
+      screen.queryByText("A Managed OAuth integration requires upgrading"),
+    ).toBeNull();
+  });
+
   it("does not discover until review and only updates after confirmation", async () => {
     mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
       issuer: existingConfig.issuer,
@@ -338,7 +349,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
     await screen.findByText(/auth\.example\.com\/authorize/);
     expect(mocks.fetchRemoteSessionIssuerMetadata).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/RFC 9207 support: Supported/)).toBeTruthy();
+    expect(screen.getByText("Supported")).toBeTruthy();
     expect(
       screen.getByText(/discovery issuer .* does not match requested/),
     ).toBeTruthy();
@@ -369,7 +380,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
     await screen.findByText(/replacement\.example\.com\/authorize/);
-    expect(screen.getByText(/RFC 9207 support: Not advertised/)).toBeTruthy();
+    expect(screen.getByText("Unsupported")).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Use provider-hosted metadata" }),
@@ -477,11 +488,17 @@ describe("OAuthWizard — existing external OAuth config", () => {
 
   it("clears a provider-hosted issuer without discovery", async () => {
     renderWizard({
-      existingConfig: { ...existingConfig, providerHosted: true },
+      existingConfig: {
+        issuer: existingConfig.issuer,
+        providerHosted: true,
+      },
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Use Gram-hosted metadata" }),
     );
+    fireEvent.change(screen.getByLabelText("OAuth Metadata JSON"), {
+      target: { value: JSON.stringify(existingConfig.metadata) },
+    });
     fireEvent.click(
       screen.getByRole("button", { name: "Confirm Gram-hosted metadata" }),
     );

@@ -1031,7 +1031,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
           {!hideConfigureButton && (
             <Tooltip>
               <TooltipTrigger asChild>
-                {!isOAuthEligible ? (
+                {!isOAuthConnected && !isOAuthEligible ? (
                   <span className="inline-block">
                     <Button disabled>
                       <Button.Text>Configure</Button.Text>
@@ -1045,7 +1045,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
                   </Button>
                 )}
               </TooltipTrigger>
-              {!isOAuthEligible && (
+              {!isOAuthConnected && !isOAuthEligible && (
                 <TooltipContent>{disabledTooltipText}</TooltipContent>
               )}
             </Tooltip>

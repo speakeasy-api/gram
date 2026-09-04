@@ -137,6 +137,30 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
     );
   });
 
+  it("keeps management available for an existing config that is no longer eligible", () => {
+    const queryClient = new QueryClient();
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+      externalOauthServer: {
+        authorizationServerIssuer: "https://current.example.com",
+      },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Manage" })).toBeTruthy();
+  });
+
   it("opens metadata management for an existing provider-hosted config", () => {
     const queryClient = new QueryClient();
     const toolset = {
