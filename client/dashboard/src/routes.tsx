@@ -51,6 +51,8 @@ import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
 import CreateFromSource from "./pages/mcp/add/CreateFromSource";
+import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
+import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -467,6 +469,21 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
             component: FunctionsOnboarding,
+          },
+        },
+      },
+      // Sources have no section of their own any more, but the CLI links here
+      // after a push and functions still arrive this way, so they keep a page.
+      sources: {
+        title: "Sources",
+        url: "sources",
+        component: SourcesRoot,
+        indexComponent: Sources,
+        subPages: {
+          detail: {
+            title: "Source",
+            url: ":sourceId",
+            component: SourceDetailRoute,
           },
         },
       },

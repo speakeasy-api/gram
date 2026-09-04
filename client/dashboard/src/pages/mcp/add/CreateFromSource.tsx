@@ -2,119 +2,24 @@ import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Card } from "@/components/ui/Card";
-import { useIconConfetti } from "@/components/icon-confetti";
+import {
+  SourceCard,
+  sourceAssetId,
+  useProjectSources,
+} from "@/components/sources/source-grid";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 import { useSidePanel } from "@/components/side-panel/side-panel-context";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
+import { useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
-import { Check, Code, FileCode, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 const VISIBLE_SOURCE_LIMIT = 10;
-
-type SourceOption = {
-  key: string;
-  name: string;
-  kind: "openapi" | "function";
-  /** Tools are matched to their source by these ids. */
-  documentId?: string;
-  functionId?: string;
-};
-
-function SourceCard({
-  source,
-  selected,
-  onSelect,
-  onInspect,
-}: {
-  source: SourceOption;
-  selected: boolean;
-  onSelect: () => void;
-  onInspect: () => void;
-}): JSX.Element {
-  const { canvasRef, start, stop } = useIconConfetti();
-  const Icon = source.kind === "openapi" ? FileCode : Code;
-  return (
-    <div onMouseEnter={start} onMouseLeave={stop} className="h-full">
-      <Card.Entity
-        onClick={onSelect}
-        iconRailClassName="isolate"
-        iconTileClassName="icon-hover-pulse"
-        // Selection is the whole point of these cards, so it reads as a state
-        // on the card rather than a control tucked inside it.
-        className={cn(
-          "cursor-pointer text-left",
-          selected && "border-foreground ring-foreground ring-1",
-        )}
-        overlay={
-          <canvas
-            ref={canvasRef}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 -z-10 size-full"
-          />
-        }
-        icon={<Icon className="text-foreground size-10" strokeWidth={1.25} />}
-      >
-        <Text
-          variant="subheading"
-          as="div"
-          className="text-md group-hover:text-primary transition-colors"
-        >
-          {source.name}
-        </Text>
-        <Text small muted className="mt-1">
-          {source.kind === "openapi" ? "OpenAPI document" : "Function"}
-        </Text>
-        {/* An explicit target for the choice: the ring alone reads as hover on
-            a card that is already clickable everywhere. */}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-          {/* Named, not implicit: reading about a source is a different act
-              from choosing it, and a bare card click hides that. */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onInspect();
-            }}
-            // Card.Entity turns Enter/Space into its own onClick, so a
-            // keyboard press here would select instead of opening the panel.
-            onKeyDown={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
-          >
-            Show details
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            aria-pressed={selected}
-            className="hover:text-foreground flex items-center gap-2"
-          >
-            <Text small muted={!selected}>
-              {selected ? "Selected" : "Select"}
-            </Text>
-            {selected ? (
-              <div className="bg-foreground flex size-5 items-center justify-center">
-                <Check className="text-background size-3.5" strokeWidth={3} />
-              </div>
-            ) : (
-              <div className="border-border size-5 border" />
-            )}
-          </button>
-        </div>
-      </Card.Entity>
-    </div>
-  );
-}
 
 /**
  * Builds an MCP server from a source this project already has.
@@ -127,11 +32,11 @@ export default function CreateFromSource(): JSX.Element {
   const routes = useRoutes();
   const client = useSdkClient();
   const { openPanel } = useSidePanel();
-  const { data: deploymentResult, isLoading: isLoadingDeployment } =
-    useLatestDeployment();
+  const { sources, isLoading: isLoadingDeployment } = useProjectSources();
   const { data: toolsResult, isLoading: isLoadingTools } = useListTools();
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState("");
@@ -140,24 +45,6 @@ export default function CreateFromSource(): JSX.Element {
   const [isNameOwned, setIsNameOwned] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const deployment = deploymentResult?.deployment;
-
-  const sources: SourceOption[] = useMemo(() => {
-    const openapi = (deployment?.openapiv3Assets ?? []).map((asset) => ({
-      key: `openapi:${asset.id}`,
-      name: asset.name,
-      kind: "openapi" as const,
-      documentId: asset.id,
-    }));
-    const functions = (deployment?.functionsAssets ?? []).map((asset) => ({
-      key: `function:${asset.id}`,
-      name: asset.name,
-      kind: "function" as const,
-      functionId: asset.id,
-    }));
-    return [...openapi, ...functions];
-  }, [deployment]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -171,6 +58,18 @@ export default function CreateFromSource(): JSX.Element {
   // asked for, rather than a wall of cards above the name field.
   const visible = showAll ? filtered : filtered.slice(0, VISIBLE_SOURCE_LIMIT);
   const hiddenCount = filtered.length - visible.length;
+
+  // Arriving from a source's own page, that source is already the choice: the
+  // flow opens on it rather than asking again. Runs once the sources land, and
+  // only while nothing is picked, so it never fights a later click.
+  const requestedKey = searchParams.get("source");
+  useEffect(() => {
+    if (selectedKey != null || !requestedKey) return;
+    const requested = sources.find((source) => source.key === requestedKey);
+    if (!requested) return;
+    setSelectedKey(requested.key);
+    setName((current) => (current.trim() === "" ? requested.name : current));
+  }, [requestedKey, selectedKey, sources]);
 
   const selected = sources.find((source) => source.key === selectedKey);
 
@@ -281,7 +180,7 @@ export default function CreateFromSource(): JSX.Element {
                         subtitle: "Source",
                         props: {
                           sourceKind: source.kind,
-                          assetId: source.documentId ?? source.functionId ?? "",
+                          assetId: sourceAssetId(source),
                         },
                       })
                     }

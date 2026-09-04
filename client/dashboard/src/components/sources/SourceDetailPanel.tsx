@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -6,6 +8,7 @@ import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import type { Tool } from "@/lib/toolTypes";
+import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -86,6 +89,31 @@ function downloadFilename(
   return `${base}.${contentType?.includes("json") ? "json" : "yaml"}`;
 }
 
+/** One labelled fact: label left, value right, in both surfaces. */
+function SourceFact({
+  label,
+  isPage,
+  children,
+}: {
+  label: string;
+  isPage: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-4",
+        // Banded on the page, where the rows run the full width and the eye
+        // needs help carrying a label across to its value.
+        isPage && "odd:bg-muted/20 px-6 py-3",
+      )}
+    >
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="min-w-0 truncate font-mono text-xs">{children}</dd>
+    </div>
+  );
+}
+
 /**
  * What one source is and what it produced, for the panel beside the
  * create-from-source flow.
@@ -100,6 +128,33 @@ export function SourceDetailPanel({
 }: {
   sourceKind: "openapi" | "function";
   assetId: string;
+}): React.JSX.Element {
+  return (
+    <div className="px-6 pt-5 pb-8">
+      <SourceDetail sourceKind={sourceKind} assetId={assetId} />
+    </div>
+  );
+}
+
+/**
+ * The body of the panel, which the source's own page renders too.
+ *
+ * Split out so a source reads the same whether it is met in the sheet beside
+ * the create flow or at its own URL, and so only the padding differs.
+ */
+export function SourceDetail({
+  sourceKind,
+  assetId,
+  variant = "panel",
+}: {
+  sourceKind: "openapi" | "function";
+  assetId: string;
+  /**
+   * "panel" is the narrow column in the sheet: facts stacked label-left,
+   * value-right, and a tool list that scrolls in place. "page" has room to
+   * lay the same facts across and let the tools run down the page.
+   */
+  variant?: "panel" | "page";
 }): React.JSX.Element {
   const { data: deploymentResult } = useLatestDeployment();
   const {
@@ -118,14 +173,95 @@ export function SourceDetailPanel({
 
   const file = assetsResult?.assets?.find((a) => a.id === asset?.assetId);
 
+  const isPage = variant === "page";
+
   const tools = (toolsResult?.tools ?? []).filter((tool: Tool) =>
     sourceKind === "openapi"
       ? tool.type === "http" && tool.openapiv3DocumentId === assetId
       : tool.type === "function" && tool.functionId === assetId,
   );
 
+  const toolsSummary = isToolsError
+    ? "Couldn't load this source's tools. A server built from it still starts with everything the source produced."
+    : isLoading
+      ? "Loading tools\u2026"
+      : `${tools.length} tool${tools.length === 1 ? "" : "s"} generated from this source. A server built from it starts with all of them.`;
+
+  const facts = (
+    <>
+      {file && (
+        <>
+          <SourceFact label="File" isPage={isPage}>
+            {asset?.name ?? file.id}
+          </SourceFact>
+          <SourceFact label="Size" isPage={isPage}>
+            {formatBytes(file.contentLength)}
+          </SourceFact>
+          <SourceFact label="Type" isPage={isPage}>
+            {file.contentType}
+          </SourceFact>
+        </>
+      )}
+      {deployment?.id && (
+        <SourceFact label="Active deployment" isPage={isPage}>
+          {deployment.id}
+        </SourceFact>
+      )}
+    </>
+  );
+
+  // The page gets the app's dashboard cards: a titled, bordered panel with
+  // its rows divided inside it, rather than facts floating on white.
+  if (isPage) {
+    return (
+      <div className="flex flex-col gap-6">
+        {(file || deployment?.id) && (
+          <Card.Dashboard title="Details" bodyClassName="p-0">
+            <dl className="divide-border divide-y">{facts}</dl>
+          </Card.Dashboard>
+        )}
+
+        <Card.Dashboard
+          title="Tools"
+          bodyClassName={tools.length === 0 ? undefined : "p-0"}
+          action={
+            <Text muted className="text-xs">
+              {toolsSummary}
+            </Text>
+          }
+        >
+          {tools.length === 0 ? (
+            <Text muted small>
+              {isLoading
+                ? "Loading tools\u2026"
+                : "No tools yet. A server built from this source starts empty, and picks them up on the next deployment."}
+            </Text>
+          ) : (
+            <ol className="divide-border divide-y">
+              {tools.map((tool: Tool) => (
+                <li
+                  key={tool.toolUrn}
+                  className="flex flex-col gap-1 px-6 py-3"
+                >
+                  <Text small className="font-mono">
+                    {tool.name}
+                  </Text>
+                  {tool.description && (
+                    <Text small muted>
+                      {tool.description}
+                    </Text>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </Card.Dashboard>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6 px-6 pt-5 pb-8">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="neutral">
@@ -141,46 +277,11 @@ export function SourceDetailPanel({
         </div>
         {(file || deployment?.id) && (
           <dl className="border-foreground/10 mt-1 flex flex-col gap-2 border-t pt-3">
-            {file && (
-              <>
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-muted-foreground text-xs">File</dt>
-                  <dd className="min-w-0 truncate font-mono text-xs">
-                    {asset?.name ?? file.id}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-muted-foreground text-xs">Size</dt>
-                  <dd className="font-mono text-xs">
-                    {formatBytes(file.contentLength)}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-muted-foreground text-xs">Type</dt>
-                  <dd className="min-w-0 truncate font-mono text-xs">
-                    {file.contentType}
-                  </dd>
-                </div>
-              </>
-            )}
-            {deployment?.id && (
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground text-xs">
-                  Active deployment
-                </dt>
-                <dd className="min-w-0 truncate font-mono text-xs">
-                  {deployment.id}
-                </dd>
-              </div>
-            )}
+            {facts}
           </dl>
         )}
         <Text small muted>
-          {isToolsError
-            ? "Couldn't load this source's tools. The server is still created with everything the source produced."
-            : isLoading
-              ? "Loading tools…"
-              : `${tools.length} tool${tools.length === 1 ? "" : "s"} generated from this source. Creating a server from it starts with all of them.`}
+          {toolsSummary}
         </Text>
       </div>
 
@@ -189,8 +290,8 @@ export function SourceDetailPanel({
           <Text className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
             Tools
           </Text>
-          {/* A source can produce dozens of tools; the list scrolls in place
-              so the file details above it stay on screen. */}
+          {/* A source's dozens of tools would push the file details off screen
+              in the sheet, so the list scrolls in place here. */}
           <div className="max-h-96 overflow-y-auto">
             {tools.map((tool: Tool) => (
               <div
@@ -233,9 +334,16 @@ export function SourceDetailPanel({
 export function SourceDownloadButton({
   sourceKind,
   assetId,
+  variant = "chip",
 }: {
   sourceKind: "openapi" | "function";
   assetId: string;
+  /**
+   * "chip" is the small bordered control the panel header wears beside Docs
+   * and Close; "button" is the app's ordinary secondary button, for the
+   * page's action row.
+   */
+  variant?: "chip" | "button";
 }): React.JSX.Element | null {
   const project = useProject();
   const { projectSlug } = useSlugs();
@@ -273,6 +381,30 @@ export function SourceDownloadButton({
     }
   };
 
+  const label = isDownloading ? "Downloading" : "Download";
+
+  if (variant === "button") {
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={isDownloading}
+        onClick={() => {
+          void handleDownload();
+        }}
+      >
+        <Button.Text>{label}</Button.Text>
+        <Button.RightIcon>
+          {isDownloading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+        </Button.RightIcon>
+      </Button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -282,7 +414,7 @@ export function SourceDownloadButton({
       }}
       className="text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted flex items-center gap-1.5 border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-60"
     >
-      {isDownloading ? "Downloading" : "Download"}
+      {label}
       {isDownloading ? (
         <Loader2 className="size-3 animate-spin" />
       ) : (

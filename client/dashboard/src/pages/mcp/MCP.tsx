@@ -383,6 +383,28 @@ function MCPOverview() {
     </Page.Section>
   );
 
+  // The material servers are built from, one step back from the inventory
+  // itself: sources lost their own section when MCP became the inventory, and
+  // this is the way in from the app rather than from a CLI link.
+  const advancedSection = (
+    <Page.Section>
+      <Page.Section.Title area="" className="text-display-xs">
+        Advanced
+      </Page.Section.Title>
+      <Page.Section.Description>
+        The OpenAPI documents and functions this project deploys, and the tools
+        they produce.
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <routes.mcp.sources.Link>
+          <Button variant="secondary">
+            <Button.Text>View sources</Button.Text>
+          </Button>
+        </routes.mcp.sources.Link>
+      </Page.Section.Body>
+    </Page.Section>
+  );
+
   if (
     !isLoading &&
     !hasRefreshError &&
@@ -394,6 +416,7 @@ function MCPOverview() {
       <>
         <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
+        {advancedSection}
       </>
     );
   }
@@ -556,6 +579,7 @@ function MCPOverview() {
         </Page.Section.Body>
       </Page.Section>
       {builtInSection}
+      {advancedSection}
     </>
   );
 }
