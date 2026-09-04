@@ -23,9 +23,8 @@ const (
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
-	// FlagAgentManagement gates the first-class agent management API while
-	// administrator grants are backfilled. It is evaluated per organization
-	// and fails closed unless explicitly on.
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
