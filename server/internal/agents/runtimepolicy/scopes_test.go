@@ -1,4 +1,4 @@
-package agents
+package runtimepolicy
 
 import (
 	"testing"
