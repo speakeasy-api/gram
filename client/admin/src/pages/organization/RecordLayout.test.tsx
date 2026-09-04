@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
-  listOrganizationActivity: vi.fn(),
+  activityFetch: vi.fn(),
   enableOrganization: vi.fn(),
 }));
 
@@ -27,7 +27,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
-    listOrganizationActivity: mocks.listOrganizationActivity,
     enableOrganization: mocks.enableOrganization,
   };
 });
@@ -52,12 +51,23 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
-  mocks.listOrganizationActivity.mockReset();
-  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
+  mocks.activityFetch.mockReset();
+  mocks.activityFetch.mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+  vi.stubGlobal("fetch", mocks.activityFetch);
   mocks.enableOrganization.mockReset();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // The one region a screen reader hears a write through. Read as a node rather
 // than by its text, because what this is about is the text changing.
@@ -84,15 +94,6 @@ describe("RecordLayout", () => {
   });
 
   it("keeps record context around the activity view and requests by explicit ID", async () => {
-    mocks.listOrganizationActivity.mockImplementation(
-      (organizationID: string) =>
-        organizationID === ORG.id
-          ? Promise.resolve({ logs: [] })
-          : Promise.reject(
-              new Error(`unexpected organization ${organizationID}`),
-            ),
-    );
-
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/activity`,
     });
@@ -102,10 +103,10 @@ describe("RecordLayout", () => {
     expect(
       screen.getByRole("button", { name: /Open in Dashboard/ }),
     ).toBeTruthy();
-    expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(1);
-    expect(mocks.listOrganizationActivity).toHaveBeenCalledWith(
+    expect(mocks.activityFetch).toHaveBeenCalledTimes(1);
+    const request = mocks.activityFetch.mock.calls[0]?.[0] as Request;
+    expect(new URL(request.url).searchParams.get("organization_id")).toBe(
       ORG.id,
-      undefined,
     );
   });
 
@@ -129,7 +130,7 @@ describe("RecordLayout", () => {
       expect(
         await screen.findByRole("button", { name: /Open in Dashboard/ }),
       ).toBeTruthy();
-      expect(screen.queryByRole("status")).toBeNull();
+      await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     },
   );
 
