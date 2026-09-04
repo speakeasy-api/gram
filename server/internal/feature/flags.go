@@ -23,10 +23,9 @@ const (
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
-	// FlagAgentManagementM1 gates the first-class agent management API while
-	// administrator grants are backfilled and the M1 safety suite is promoted.
-	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentManagementM1 Flag = "gram-agent-management-m1"
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagement Flag = "agent-management"
 
 	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
 	// authorization challenge. It remains independently default-off until the M2

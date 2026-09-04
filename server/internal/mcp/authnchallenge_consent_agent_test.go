@@ -49,7 +49,7 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.features.SetFlag(feature.FlagAgentManagementM1, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlag(feature.FlagAgentManagement, authCtx.ActiveOrganizationID, true)
 	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, authCtx.ActiveOrganizationID, true)
 
 	stateID := uuid.NewString()

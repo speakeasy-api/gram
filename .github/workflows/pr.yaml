@@ -1564,66 +1564,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Standalone, non-retrying M1 gate. These packages jointly prove the agent
-  # identity, management, rollout, audit/event, and tenant-isolation contract.
-  m1-agent-gate:
-    permissions:
-      contents: read
-      id-token: none
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.server == 'true'
-    env:
-      GOMAXPROCS: 8
-      TESTCONTAINERS_RYUK_DISABLED: true
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-
-      - name: Install Go deps
-        run: mise run install:go
-
-      - name: Test
-        run: >-
-          mise run test:server -count=1
-          ./internal/urn
-          ./internal/agents
-          ./internal/agentmanagement
-          ./internal/agentownership
-          ./internal/authz
-          ./internal/audit
-          ./internal/contextvalues
-          ./internal/feature
-          ./internal/thirdparty/posthog
-          ./internal/auth/chatsessions
-          ./internal/chat
-          ./internal/organizations
-          ./internal/background/activities
-          ./cmd/tools/migrations
-          ./cmd/tools/migrations/agentmanagementgrants
-
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
   # idempotent across runs. The test is build-tagged (demoseed_safety) so the
@@ -2411,7 +2351,6 @@ jobs:
       - format-check
       - server-build-lint
       - server-test
-      - m1-agent-gate
       - demo-seed-safety
       - docker-build-server
       - docker-build-client

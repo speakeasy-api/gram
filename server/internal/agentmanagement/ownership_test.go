@@ -64,7 +64,7 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	require.Equal(t, "owner", actorID)
 	require.Equal(t, "owner", beforeOwner)
 	require.Equal(t, "replacement", afterOwner)
-	require.Equal(t, []string{"agent:create", "agent:transfer"}, m1OutboxActions(t, conn, "org-a"))
+	require.Equal(t, []string{"agent:create", "agent:transfer"}, agentWebhookOutboxActions(t, conn, "org-a"))
 }
 
 func TestExplicitReassignmentIsTheOnlyOwnershipOperationThatClearsLatch(t *testing.T) {
@@ -109,7 +109,7 @@ func TestExplicitReassignmentIsTheOnlyOwnershipOperationThatClearsLatch(t *testi
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, []string{"agent:owner_loss", "agent:reassign"}, actions)
-	require.Equal(t, actions, m1OutboxActions(t, conn, "org-a"))
+	require.Equal(t, actions, agentWebhookOutboxActions(t, conn, "org-a"))
 }
 
 func TestOwnerChangeRejectsIneligibleAndCrossTenantTargets(t *testing.T) {

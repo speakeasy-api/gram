@@ -92,7 +92,7 @@ func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Lo
 		return false, ""
 	}
 	groups := feature.OrgProjectGroups(organization.Slug, "")
-	for _, flag := range []feature.Flag{feature.FlagAgentManagementM1, feature.FlagAgentMCPAuthorizationM2} {
+	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentMCPAuthorizationM2} {
 		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
 		if err != nil || evaluation != feature.EvaluationEnabled {
 			if err != nil {

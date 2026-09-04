@@ -77,7 +77,7 @@ func createAgent(t *testing.T, conn *pgxpool.Pool, organizationID, ownerUserID, 
 	return agent
 }
 
-func m1OutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID string) []string {
+func agentWebhookOutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID string) []string {
 	t.Helper()
 
 	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
