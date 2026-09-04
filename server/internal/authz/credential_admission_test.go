@@ -114,6 +114,7 @@ func TestPrincipalCredentialAdmissionReloadsLivePolicies(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			fixture := newCredentialAdmissionFixture(t)
+			check := Check{Scope: ScopeProjectRead, ResourceID: fixture.projectID}
 			principal := principalURN(fixture)
 			//nolint:glint // notestingrawsql: simulate an authoritative live-policy removal and restoration
 			_, err := fixture.db.Exec(t.Context(), `DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3`, fixture.organizationID, principal, string(ScopeProjectRead))
