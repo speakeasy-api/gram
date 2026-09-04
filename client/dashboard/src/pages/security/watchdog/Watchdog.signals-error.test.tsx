@@ -68,7 +68,11 @@ vi.mock("@gram/client/react-query/riskCreateExclusion.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({ isPending: false, isError: false, data: { logsEnabled: true } }),
+  useProductFeatures: () => ({
+    isPending: false,
+    isError: false,
+    data: { logsEnabled: true },
+  }),
 }));
 
 // Only the client accessor needs standing in for — the rest of the module
