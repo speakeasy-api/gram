@@ -94,14 +94,16 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := service.CreatePolicyGrant(ctx, &tt.payload)
 			requireOopsCode(t, err, oops.CodeBadRequest)
+
+			var count int
+			require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1`, "org-validation").Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
+			require.Zero(t, count)
 		})
 	}
-
-	var count int
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1`, "org-validation").Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
-	require.Zero(t, count)
 }
 
 func TestAgentPolicyDoesNotNormalizeOrDeleteExistingDenyRows(t *testing.T) {
