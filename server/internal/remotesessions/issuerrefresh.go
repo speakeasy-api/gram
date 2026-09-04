@@ -139,10 +139,11 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	discovered, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}
+	doc, warnings := discovered.doc, discovered.warnings
 
 	// Gram distrusts the whole document rather than salvaging parts of it. A
 	// refresh overwrites metadata that currently works, so a document that
@@ -196,7 +197,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	// host, must not inherit the previous issuer's endpoints. The fill runs
 	// after the gate above so a stored member never satisfies a check the
 	// upstream failed.
-	if doc.partial != "" {
+	if discovered.unreadable != "" {
 		if storedIssuer := rawDocumentIssuer(issuer.Metadata); storedIssuer != "" && issuerURLsEqual(storedIssuer, doc.Issuer) {
 			doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
 		}

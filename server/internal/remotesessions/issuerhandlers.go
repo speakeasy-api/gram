@@ -105,12 +105,17 @@ type rfc8414Document struct {
 	// above are always derived from it, and it is persisted so fields they
 	// omit are not lost.
 	raw json.RawMessage
+}
 
-	// partial names the well-known URL of a same-origin candidate that failed
-	// transiently after a usable document was already found, so the merged
-	// result may be missing fields that candidate would have supplied. Empty
-	// when every candidate answered definitively.
-	partial string
+// discoveryResult is what one discovery run produced: the merged document,
+// the advisory warnings about it, and which candidate the run could not read.
+type discoveryResult struct {
+	doc      rfc8414Document
+	warnings []string
+	// unreadable is the well-known URL of a candidate that failed transiently,
+	// so a refresh keeps the stored document's members for it instead of
+	// withdrawing them; "" when every candidate answered definitively.
+	unreadable string
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -120,6 +125,19 @@ const (
 	familyOAuthAuthorizationServer metadataFamily = iota
 	familyOpenIDConfiguration
 )
+
+// other returns the family that is not f. Discovery probes exactly two, so
+// after a primary is found the other one is the only one left to merge.
+func (f metadataFamily) other() metadataFamily {
+	switch f {
+	case familyOAuthAuthorizationServer:
+		return familyOpenIDConfiguration
+	case familyOpenIDConfiguration:
+		return familyOAuthAuthorizationServer
+	default:
+		return f
+	}
+}
 
 // issuerProbeCandidate is one well-known URL to probe and the family it
 // follows, so the discovery loop never has to infer the family from the URL.
@@ -154,12 +172,12 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshRemoteSessionIssuerMetadata re-reads a project-owned issuer's RFC 8414
@@ -987,6 +1005,11 @@ type DiscoveredIssuerMetadata struct {
 	// column: the primary document's members plus any a same-issuer document
 	// added.
 	Metadata []byte
+
+	// UnreadableURL is the well-known URL of a candidate discovery could not
+	// read, for the issuer's metadata_unreadable_url column; "" when every
+	// candidate answered definitively.
+	UnreadableURL string
 }
 
 // DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
@@ -994,10 +1017,11 @@ type DiscoveredIssuerMetadata struct {
 // Platform MCP provider attachment; browser and MCP callers must never supply
 // an issuer URL to it.
 func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
-	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, policy, issuerURL)
 	if err != nil {
 		return DiscoveredIssuerMetadata{}, err
 	}
+	doc := discovered.doc
 	return DiscoveredIssuerMetadata{
 		Issuer:                            doc.Issuer,
 		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
@@ -1023,14 +1047,15 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		ClaimsSupported:                            orEmptySlice(slices.Clone(doc.ClaimsSupported)),
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
-		Metadata: retainableDocument(doc.raw),
+		Metadata:      retainableDocument(doc.raw),
+		UnreadableURL: discovered.unreadable,
 	}, nil
 }
 
-func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
+func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (discoveryResult, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return discoveryResult{}, &discoveryError{
 			WellKnownURL: "",
 			Status:       0,
 			cause:        fmt.Errorf("compute well-known url: %w", err),
@@ -1066,7 +1091,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// candidate may be hiding fields the merge would have captured, whichever
 	// order the probes ran in and even when a later candidate of its family
 	// merged, and a refresh must not mistake their absence for withdrawal.
-	var unreadable [2]string
+	unreadable := make(map[metadataFamily]string, 2)
 	for _, candidate := range candidates {
 		if primary != nil && candidate.family == primaryFamily {
 			continue
@@ -1076,7 +1101,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			if firstErr == nil {
 				firstErr = attemptErr
 			}
-			if attemptErr.transient() && unreadable[candidate.family] == "" {
+			if _, seen := unreadable[candidate.family]; attemptErr.transient() && !seen {
 				unreadable[candidate.family] = candidate.url
 			}
 			continue
@@ -1109,22 +1134,22 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 
 	if primary != nil {
-		primary.partial = conv.Default(unreadable[1-primaryFamily], unreadable[primaryFamily])
-	}
-
-	if primary != nil {
-		warnings := collectDiscoveryWarnings(issuerURL, *primary)
-		if primary.partial != "" {
-			warnings = append(warnings, fmt.Sprintf("metadata document at %s could not be fetched; fields it advertises were not merged", primary.partial))
+		result := discoveryResult{
+			doc:        *primary,
+			warnings:   collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
 		}
-		return *primary, warnings, nil
+		if result.unreadable != "" {
+			result.warnings = append(result.warnings, fmt.Sprintf("metadata document at %s could not be fetched; fields it advertises were not merged", result.unreadable))
+		}
+		return result, nil
 	}
 
 	if fallback != nil {
-		return *fallback, collectDiscoveryWarnings(issuerURL, *fallback), nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
 	}
 
-	return rfc8414Document{}, nil, firstErr
+	return discoveryResult{}, firstErr
 }
 
 // mergeIssuerMetadata returns base with every top-level member of extra's
