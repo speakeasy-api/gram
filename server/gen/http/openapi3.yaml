@@ -8171,6 +8171,99 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateAgent
+    /rpc/agents.createPolicyGrant:
+        post:
+            operationId: createAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            properties:
+                                agent_id:
+                                    type: string
+                                effect:
+                                    type: string
+                                scope:
+                                    type: string
+                                selector:
+                                    type: string
+                            type: object
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentPolicyGrant'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createPolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: createPolicyGrant
     /rpc/agents.delete:
         post:
             operationId: deleteAgent
@@ -8251,6 +8344,86 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: delete
+    /rpc/agents.deletePolicyGrant:
+        post:
+            operationId: deleteAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deletePolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: deletePolicyGrant
     /rpc/agents.get:
         get:
             operationId: getAgent
@@ -8338,6 +8511,95 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Agent
+    /rpc/agents.listPolicyGrants:
+        get:
+            operationId: listAgentPolicyGrants
+            parameters:
+                - allowEmptyValue: true
+                  description: First-class agent identifier
+                  in: query
+                  name: agent_id
+                  required: true
+                  schema:
+                    description: First-class agent identifier
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/AgentPolicyGrant'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listPolicyGrants agents
+            tags:
+                - agents
+            x-speakeasy-name-override: listPolicyGrants
     /rpc/agents.rename:
         post:
             operationId: renameAgent
@@ -8676,6 +8938,101 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: suspend
+    /rpc/agents.updatePolicyGrant:
+        post:
+            operationId: updateAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            properties:
+                                agent_id:
+                                    type: string
+                                effect:
+                                    type: string
+                                grant_id:
+                                    type: string
+                                scope:
+                                    type: string
+                                selector:
+                                    type: string
+                            type: object
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentPolicyGrant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updatePolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: updatePolicyGrant
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -65963,6 +66320,110 @@ components:
             required:
                 - slug
                 - marketplace_name
+        AgentPolicyGrant:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                effect:
+                    type: string
+                    enum:
+                        - allow
+                id:
+                    type: string
+                    format: uuid
+                scope:
+                    type: string
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - scope
+                - effect
+                - selector
+                - created_at
+                - updated_at
+        AgentPolicyGrantForm:
+            type: object
+            properties:
+                effect:
+                    type: string
+                    description: Grant effect; direct agent policy is allow-only
+                    enum:
+                        - allow
+                        - deny
+                scope:
+                    type: string
+                    description: Agent-runtime-safe scope to grant
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - effect
+                - selector
+        AgentPolicyGrantIDForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
+        AgentPolicySelector:
+            type: object
+            properties:
+                disposition:
+                    type: string
+                    description: Tool disposition filter (MCP scopes only).
+                    enum:
+                        - read_only
+                        - destructive
+                        - idempotent
+                        - open_world
+                project_id:
+                    type: string
+                    description: Project filter (MCP scopes only).
+                resource_id:
+                    type: string
+                    description: The resource identifier, or '*' for all resources of this kind.
+                resource_kind:
+                    type: string
+                    description: The kind of resource this selector targets.
+                    enum:
+                        - project
+                        - mcp
+                        - org
+                        - environment
+                        - skill
+                        - risk_policy
+                        - chat
+                        - agent
+                        - '*'
+                server_identity:
+                    type: string
+                    description: Server identity filter (risk policy scopes only).
+                server_url:
+                    type: string
+                    description: Server URL filter (risk policy scopes only).
+                    format: uri
+                tool:
+                    type: string
+                    description: Specific tool name filter (MCP scopes only).
+            description: A constraint that narrows which resources an agent grant applies to.
+            required:
+                - resource_kind
+                - resource_id
         AgentSessionMeta:
             type: object
             properties:

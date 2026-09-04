@@ -15,6 +15,9 @@ export const AUDIT_ACTIONS = [
   "access_role:update",
   "agent:create",
   "agent:delete",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
   "agent:rename",
   "agent:resume",
   "agent:revoke",
@@ -268,6 +271,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created agent";
     case "agent:delete":
       return "deleted agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
     case "agent:rename":
       return "renamed agent";
     case "agent:resume":

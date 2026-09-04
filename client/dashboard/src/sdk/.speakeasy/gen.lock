@@ -94,12 +94,16 @@ trackedFiles:
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentsCreate.ts: {}
+  src/funcs/agentsCreatePolicyGrant.ts: {}
   src/funcs/agentsDelete.ts: {}
+  src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
+  src/funcs/agentsListPolicyGrants.ts: {}
   src/funcs/agentsRename.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
   src/funcs/agentsSuspend.ts: {}
+  src/funcs/agentsUpdatePolicyGrant.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
@@ -697,6 +701,9 @@ trackedFiles:
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
+  src/models/components/agentpolicygrant.ts: {}
+  src/models/components/agentpolicygrantidform.ts: {}
+  src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentsessionmeta.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
@@ -1642,6 +1649,7 @@ trackedFiles:
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/compileexpr.ts: {}
   src/models/operations/createagent.ts: {}
+  src/models/operations/createagentpolicygrant.ts: {}
   src/models/operations/createagentsessionhandoff.ts: {}
   src/models/operations/createapikey.ts: {}
   src/models/operations/createassistant.ts: {}
@@ -1700,6 +1708,7 @@ trackedFiles:
   src/models/operations/creditusage.ts: {}
   src/models/operations/declineriskpolicychallenge.ts: {}
   src/models/operations/deleteagent.ts: {}
+  src/models/operations/deleteagentpolicygrant.ts: {}
   src/models/operations/deleteaiintegrationconfig.ts: {}
   src/models/operations/deleteassistant.ts: {}
   src/models/operations/deleteassistantmemory.ts: {}
@@ -1907,6 +1916,7 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
+  src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listaidetections.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2171,6 +2181,7 @@ trackedFiles:
   src/models/operations/unmarkriskresultsfalsepositive.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
+  src/models/operations/updateagentpolicygrant.ts: {}
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
@@ -2259,10 +2270,15 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
+  src/react-query/agentsCreatePolicyGrant.ts: {}
   src/react-query/agentsDelete.ts: {}
+  src/react-query/agentsDeletePolicyGrant.ts: {}
+  src/react-query/agentsListPolicyGrants.core.ts: {}
+  src/react-query/agentsListPolicyGrants.ts: {}
   src/react-query/agentsResume.ts: {}
   src/react-query/agentsRevoke.ts: {}
   src/react-query/agentsSuspend.ts: {}
+  src/react-query/agentsUpdatePolicyGrant.ts: {}
   src/react-query/aiDetections.core.ts: {}
   src/react-query/aiDetections.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
@@ -3681,6 +3697,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createAgentPolicyGrant:
+    speakeasy-default-create-agent-policy-grant:
+      requestBody:
+        application/json: {}
+      responses:
+        "201":
+          application/json: {"created_at": "2026-10-17T20:59:03.089Z", "effect": "allow", "id": "69ade49a-1fc1-4b51-8c6c-687face3ff76", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "*"}, "updated_at": "2026-07-07T12:12:58.446Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createAgentSessionHandoff:
     speakeasy-default-create-agent-session-handoff:
       requestBody:
@@ -4368,6 +4395,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteAgentPolicyGrant:
+    speakeasy-default-delete-agent-policy-grant:
+      requestBody:
+        application/json: {"agent_id": "71a4e796-ea63-43d8-9ba0-4e8f4a90af7e", "grant_id": "69f604d3-f839-4a2c-84f4-66615f61669e"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   deleteAssistant:
     speakeasy-default-delete-assistant:
       parameters:
@@ -6949,6 +6985,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentPolicyGrants:
+    speakeasy-default-list-agent-policy-grants:
+      parameters:
+        query:
+          agent_id: "59adbb52-20f3-4da0-a7c0-7adb90160177"
+      responses:
+        "200":
+          application/json: [{"created_at": "2025-01-24T20:23:08.409Z", "effect": "allow", "id": "e34f7c25-b0c7-4367-a41f-4ad0638d5115", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "updated_at": "2025-04-26T10:48:17.675Z"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAllowedOrigins:
     speakeasy-default-list-allowed-origins:
       responses:
@@ -9920,6 +9968,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateAgentPolicyGrant:
+    speakeasy-default-update-agent-policy-grant:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-07-24T22:05:10.234Z", "effect": "allow", "id": "28c5eb04-0966-401b-8828-6b4acd42cf9d", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "skill"}, "updated_at": "2024-10-07T04:02:24.149Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateAssistant:
     speakeasy-default-update-assistant:
       requestBody:
