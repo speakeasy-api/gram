@@ -26,7 +26,7 @@ const (
 	// FlagAgentManagement gates the first-class agent management API while
 	// administrator grants are backfilled. It is evaluated per organization
 	// and fails closed unless explicitly on.
-	FlagAgentManagement Flag = "gram-agent-management"
+	FlagAgentManagement Flag = "agent-management"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
