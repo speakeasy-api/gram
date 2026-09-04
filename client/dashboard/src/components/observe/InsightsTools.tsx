@@ -11,6 +11,8 @@ import {
   ObserveFilterBar,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
+import { InsightsToolCallConsumption } from "@/components/observe/InsightsToolCallConsumption";
+import { useToolCallConsumptionTotals } from "@/components/observe/useToolCallConsumption";
 import {
   SERVER_FILTER_PATH,
   TOOL_USAGE_DEFAULT_TYPES,
@@ -31,6 +33,7 @@ import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useOrgRoutes } from "@/routes";
 import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
@@ -583,8 +586,10 @@ export function InsightsToolsContent(): JSX.Element {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore MCP Servers & Tools"
-        subtitle="Ask me about your MCP servers and tools! Powered by Elements + platform MCP"
+        subtitle="Ask me about your MCP servers, tools, agent harnesses, and token consumption."
         hideTrigger={isLogsDisabled}
+        suggestions={INSIGHTS_SUGGESTIONS.insights}
+        contextInfo="MCP & Tools insights: tool-call event counts by target and user, plus agent-turn token consumption grouped by harness, MCP server, and MCP tool."
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
@@ -594,8 +599,8 @@ export function InsightsToolsContent(): JSX.Element {
               MCP Servers & Tool Insights
             </h1>
             <p className="text-muted-foreground text-sm">
-              Monitor MCP servers and tool events across all users and agents in
-              your project
+              Monitor MCP servers, tool events, and token consumption across
+              agents in your project
             </p>
           </div>
           <div className="relative flex-1">
@@ -736,6 +741,19 @@ function HooksInnerContent({
     [onCustomRangeChange],
   );
   const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
+  const hookSources = useMemo(
+    () => selectedHookSources(activeFilters),
+    [activeFilters],
+  );
+  const consumption = useToolCallConsumptionTotals({
+    from,
+    to,
+    hookSources,
+    accountType,
+  });
+  const hasConsumptionData = consumption.hasActivity;
+  const hasAnyData =
+    hasSummaryData || hasConsumptionData || consumption.pending;
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -747,8 +765,8 @@ function HooksInnerContent({
               MCP Servers & Tool Insights
             </h1>
             <p className="text-muted-foreground text-sm">
-              Monitor MCP servers and tool events across all users and agents in
-              your project
+              Monitor MCP servers, tool events, and token consumption across
+              agents in your project
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -804,14 +822,14 @@ function HooksInnerContent({
                 <Spinner className="mr-0 size-5" />
                 <span>Loading tool usage...</span>
               </div>
-            ) : !hasSummaryData &&
+            ) : !hasAnyData &&
               activeFilters.length === 0 &&
               selectedRoleIds.length === 0 ? (
               <HooksEmptyState
                 title="No Insights Generated"
                 subtitle="Install Observability plugin in your AI agent to start generating tool insights"
               />
-            ) : !hasSummaryData ? (
+            ) : !hasAnyData ? (
               <div className="py-12 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="bg-muted flex size-12 items-center justify-center rounded-full">
@@ -829,23 +847,35 @@ function HooksInnerContent({
                 </div>
               </div>
             ) : (
-              <HooksAnalytics
-                serverNameMappings={serverNameMappings}
-                from={from}
-                to={to}
-                compact={false}
-                addFilter={addFilter}
-                onHookTypesChange={onHookTypesChange}
-                summaryData={summaryData}
-                summaryPending={summaryPending}
-                summaryIsError={summaryIsError}
-                sectionStatus={sectionStatus}
-                expandedChart={expandedChart}
-                onExpandedChartChange={setExpandedChart}
-                onRangeSelect={handleChartRangeSelect}
-                isZoomed={customRange !== null}
-                onResetZoom={onClearCustomRange}
-              />
+              <div className="space-y-8">
+                <InsightsToolCallConsumption
+                  from={from}
+                  to={to}
+                  hookSources={hookSources}
+                  accountType={accountType}
+                  addFilter={addFilter}
+                  onRangeSelect={handleChartRangeSelect}
+                />
+                {hasSummaryData ? (
+                  <HooksAnalytics
+                    serverNameMappings={serverNameMappings}
+                    from={from}
+                    to={to}
+                    compact={false}
+                    addFilter={addFilter}
+                    onHookTypesChange={onHookTypesChange}
+                    summaryData={summaryData}
+                    summaryPending={summaryPending}
+                    summaryIsError={summaryIsError}
+                    sectionStatus={sectionStatus}
+                    expandedChart={expandedChart}
+                    onExpandedChartChange={setExpandedChart}
+                    onRangeSelect={handleChartRangeSelect}
+                    isZoomed={customRange !== null}
+                    onResetZoom={onClearCustomRange}
+                  />
+                ) : null}
+              </div>
             )}
           </div>
         </div>
