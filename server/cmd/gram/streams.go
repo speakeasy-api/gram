@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -229,6 +231,11 @@ func newStreamsCommand() *cli.Command {
 			Usage:    "List of CIDR blocks to block for SSRF protection",
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
+			EnvVars: []string{"GRAM_SITE_URL"},
 		},
 		&cli.PathFlag{
 			Name:     "config-file",
@@ -492,6 +499,20 @@ func newStreamsCommand() *cli.Command {
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+
+			// Growth activities enrich against the primary rather than the read
+			// replica: an audit event arrives within milliseconds of the write it
+			// describes, so replica lag would leave a just-created project or
+			// organization unresolvable exactly when it is most interesting.
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse site url: %w", err)
+				}
+			}
+			growthSignalHandler := growthsignals.NewEventHandler(logger, growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL))
+
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
 				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
@@ -505,6 +526,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})
