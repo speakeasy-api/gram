@@ -8,17 +8,9 @@ import (
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/legacypolicyscope"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 )
 
 const assistantExempt = `kind == "assistant_message"`
-
-func testCatalog(t *testing.T) policycatalog.Catalog {
-	t.Helper()
-	catalog, err := policycatalog.Build()
-	require.NoError(t, err)
-	return catalog
-}
 
 func scopeFor(t *testing.T, scopes []ra.DetectionScopeConfig, category string) ra.DetectionScopeConfig {
 	t.Helper()
@@ -39,7 +31,7 @@ func TestFoldNoLegacyScopeIsNoop(t *testing.T) {
 		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
 		CustomRuleIDs: nil, MessageTypes: nil, ScopeInclude: "", ScopeExempt: "",
 		DetectionScopes: existing,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, legacypolicyscope.DispositionNoop, got.Disposition)
@@ -54,7 +46,7 @@ func TestFoldFlagPolicyClearsLegacyScope(t *testing.T) {
 		Action: "flag", PolicyType: "standard", Sources: []string{"gitleaks"},
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_request", "tool_response"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: existing,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, legacypolicyscope.DispositionCleared, got.Disposition)
@@ -69,7 +61,7 @@ func TestFoldEnforcingPolicyComposesLegacyWithRecommendation(t *testing.T) {
 		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_response", "tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, legacypolicyscope.DispositionPreserved, got.Disposition)
@@ -88,7 +80,7 @@ func TestFoldWarnCountsAsEnforcing(t *testing.T) {
 		Action: "warn", PolicyType: "standard", Sources: []string{"gitleaks"},
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, legacypolicyscope.DispositionPreserved, got.Disposition)
@@ -104,7 +96,7 @@ func TestFoldPrefersSpecifiedScopeOverRecommendation(t *testing.T) {
 		DetectionScopes: []ra.DetectionScopeConfig{
 			{Category: "secrets", ScopeInclude: `tool_calls.exists(t, t.name.matchRegex("Bash"))`, ScopeExempt: ""},
 		},
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	secrets := scopeFor(t, got.DetectionScopes, "secrets")
@@ -123,7 +115,7 @@ func TestFoldComposesLegacyIncludeAndExempt(t *testing.T) {
 		ScopeInclude:    `tool_calls.exists(t, t.name.matchRegex("Bash"))`,
 		ScopeExempt:     `kind == "user_message"`,
 		DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	secrets := scopeFor(t, got.DetectionScopes, "secrets")
@@ -139,7 +131,7 @@ func TestFoldSkipsSessionScopedCategory(t *testing.T) {
 		Sources:       []string{"gitleaks", "account_identity"},
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 
 	require.NoError(t, err)
 	for _, scope := range got.DetectionScopes {
@@ -155,7 +147,7 @@ func TestFoldCoversCustomRulesAndPromptPolicies(t *testing.T) {
 		Action: "block", PolicyType: "standard", Sources: nil,
 		CustomRuleIDs: []string{"rule-1"}, MessageTypes: []string{"tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 	require.NoError(t, err)
 	require.Equal(t, `kind in ["tool_request"]`, scopeFor(t, custom.DetectionScopes, "custom").ScopeInclude)
 
@@ -163,7 +155,7 @@ func TestFoldCoversCustomRulesAndPromptPolicies(t *testing.T) {
 		Action: "block", PolicyType: "prompt_based", Sources: nil,
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 	require.NoError(t, err)
 	require.Equal(t, `kind in ["tool_request"]`, scopeFor(t, prompt.DetectionScopes, "prompt_policy").ScopeInclude)
 }
@@ -175,7 +167,7 @@ func TestFoldRefusesEnforcingPolicyWithNoCategories(t *testing.T) {
 		Action: "block", PolicyType: "standard", Sources: []string{"not_a_source"},
 		CustomRuleIDs: nil, MessageTypes: []string{"tool_request"},
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
-	}, testCatalog(t))
+	})
 
 	require.ErrorIs(t, err, legacypolicyscope.ErrNoCategories)
 }
@@ -190,9 +182,9 @@ func TestFoldIsIdempotentAndDeterministic(t *testing.T) {
 		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
 	}
 
-	first, err := legacypolicyscope.Fold(policy, testCatalog(t))
+	first, err := legacypolicyscope.Fold(policy)
 	require.NoError(t, err)
-	again, err := legacypolicyscope.Fold(policy, testCatalog(t))
+	again, err := legacypolicyscope.Fold(policy)
 	require.NoError(t, err)
 	require.Equal(t, first.DetectionScopes, again.DetectionScopes)
 
@@ -201,7 +193,7 @@ func TestFoldIsIdempotentAndDeterministic(t *testing.T) {
 	folded := policy
 	folded.MessageTypes = nil
 	folded.DetectionScopes = first.DetectionScopes
-	third, err := legacypolicyscope.Fold(folded, testCatalog(t))
+	third, err := legacypolicyscope.Fold(folded)
 	require.NoError(t, err)
 	require.Equal(t, legacypolicyscope.DispositionNoop, third.Disposition)
 	require.Equal(t, first.DetectionScopes, third.DetectionScopes)
@@ -222,7 +214,7 @@ func TestFoldEmitsCompilableCEL(t *testing.T) {
 			ScopeInclude:    `tool_calls.exists(t, t.name.matchRegex("Bash"))`,
 			ScopeExempt:     `kind == "user_message"`,
 			DetectionScopes: nil,
-		}, testCatalog(t))
+		})
 		require.NoError(t, err, source)
 
 		for _, scope := range got.DetectionScopes {
@@ -230,4 +222,38 @@ func TestFoldEmitsCompilableCEL(t *testing.T) {
 			require.NoError(t, err, "%s/%s", source, scope.Category)
 		}
 	}
+}
+
+// message_types could legitimately hold prompt_attachment: UpdateRiskPolicy
+// validated against message.IsTypeValid, while the authoring catalog omits it.
+// Folding must carry it through rather than abort the run.
+func TestFoldCarriesNonAuthorableMessageType(t *testing.T) {
+	t.Parallel()
+
+	got, err := legacypolicyscope.Fold(legacypolicyscope.Policy{
+		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
+		CustomRuleIDs: nil, MessageTypes: []string{"prompt_attachment", "user_message"},
+		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
+	})
+
+	require.NoError(t, err)
+	secrets := scopeFor(t, got.DetectionScopes, "secrets")
+	require.Equal(t, `kind in ["prompt_attachment","user_message"]`, secrets.ScopeInclude)
+
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	_, err = ra.CompileScope(eng, secrets.ScopeInclude, secrets.ScopeExempt)
+	require.NoError(t, err)
+}
+
+func TestFoldRejectsUnknownMessageType(t *testing.T) {
+	t.Parallel()
+
+	_, err := legacypolicyscope.Fold(legacypolicyscope.Policy{
+		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
+		CustomRuleIDs: nil, MessageTypes: []string{"not_a_kind"},
+		ScopeInclude: "", ScopeExempt: "", DetectionScopes: nil,
+	})
+
+	require.ErrorContains(t, err, "unsupported message type")
 }

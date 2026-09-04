@@ -17,12 +17,13 @@
 package legacypolicyscope
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
-	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
@@ -73,7 +74,7 @@ func (p Policy) hasLegacyScope() bool {
 }
 
 // Fold computes the detection scopes that replace p's legacy policy scope.
-func Fold(p Policy, catalog policycatalog.Catalog) (Result, error) {
+func Fold(p Policy) (Result, error) {
 	if !p.hasLegacyScope() {
 		return Result{Disposition: DispositionNoop, DetectionScopes: p.DetectionScopes}, nil
 	}
@@ -81,7 +82,7 @@ func Fold(p Policy, catalog policycatalog.Catalog) (Result, error) {
 		return Result{Disposition: DispositionCleared, DetectionScopes: p.DetectionScopes}, nil
 	}
 
-	legacyInclude, err := legacyIncludeExpr(p, catalog)
+	legacyInclude, err := legacyIncludeExpr(p)
 	if err != nil {
 		return Result{Disposition: "", DetectionScopes: nil}, err
 	}
@@ -136,18 +137,43 @@ func Fold(p Policy, catalog policycatalog.Catalog) (Result, error) {
 }
 
 // legacyIncludeExpr renders message_types and scope_include as one include
-// predicate. message_types is a kind allowlist, which is exactly what
-// policycatalog encodes, so the emitted CEL matches what the editor round-trips.
-func legacyIncludeExpr(p Policy, catalog policycatalog.Catalog) (string, error) {
+// predicate, in the same canonical form policycatalog.EncodeDetectionScope
+// emits so the editor round-trips it.
+//
+// Validation is against message.IsTypeValid, not the authoring catalog:
+// policycatalog.PolicyMessageTypes deliberately omits prompt_attachment
+// ("excluded from D3 authoring v1. Existing policies remain readable"), but
+// UpdateRiskPolicy accepted it, so stored rows can legitimately carry it. The
+// legacy column is a runtime kind allowlist, and refusing a kind the scanner
+// honours would abort the run on valid data.
+func legacyIncludeExpr(p Policy) (string, error) {
 	kinds := ""
 	if len(p.MessageTypes) > 0 {
-		encoded, err := policycatalog.EncodeDetectionScope(p.MessageTypes, catalog)
+		encoded, err := encodeKindScope(p.MessageTypes)
 		if err != nil {
 			return "", fmt.Errorf("encode legacy message types: %w", err)
 		}
 		kinds = encoded
 	}
 	return intersectExprs(kinds, p.ScopeInclude), nil
+}
+
+// encodeKindScope mirrors policycatalog.EncodeDetectionScope's output format:
+// sorted, deduplicated, JSON-encoded.
+func encodeKindScope(messageTypes []string) (string, error) {
+	values := slices.Clone(messageTypes)
+	slices.Sort(values)
+	values = slices.Compact(values)
+	for _, value := range values {
+		if !message.IsTypeValid(value) {
+			return "", fmt.Errorf("unsupported message type %q", value)
+		}
+	}
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return "", fmt.Errorf("encode message types: %w", err)
+	}
+	return "kind in " + string(encoded), nil
 }
 
 // policyCategories resolves every category the policy can produce findings for.
