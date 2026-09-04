@@ -709,7 +709,10 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 // overstating self-serve growth.
 func (r *Resolver) emitSignup(ctx context.Context, email, displayName string) {
 	extra := map[string]string{}
-	invited, err := r.orgRepo.HasPendingInvitationForEmail(ctx, email)
+	// Invitations are stored normalized, and the address arriving from the IDP
+	// is not. Comparing them raw classified an invited user with a mixed-case
+	// address as organic, which is the exact distinction this event exists for.
+	invited, err := r.orgRepo.HasPendingInvitationForEmail(ctx, conv.NormalizeEmail(email))
 	switch {
 	case err != nil:
 		r.logger.ErrorContext(ctx, "failed to classify signup source", attr.SlogError(err))
