@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -110,14 +111,17 @@ func TestToolsetsService_AddExternalOAuthServer_IssuerMode(t *testing.T) {
 func TestToolsetsService_UpdateExternalOAuthServer_SetAndClear(t *testing.T) {
 	t.Parallel()
 
-	var issuer string
-	requests := 0
+	var currentIssuer atomic.Pointer[string]
+	var requests atomic.Int32
 	issuer, policy, closeServer := externalOAuthDiscoveryPolicy(t, func(w http.ResponseWriter, _ *http.Request) {
-		requests++
+		requests.Add(1)
+		discoveredIssuer := currentIssuer.Load()
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token",
+			"issuer": *discoveredIssuer, "authorization_endpoint": *discoveredIssuer + "/authorize", "token_endpoint": *discoveredIssuer + "/token",
 		})
 	})
+	storeIssuer := func(value string) { currentIssuer.Store(&value) }
+	storeIssuer(issuer)
 
 	ctx, ti := newTestToolsetsService(t, policy)
 	ctx = withAccountType(t, ctx, "pro")
@@ -132,7 +136,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_SetAndClear(t *testing.T) {
 	require.Equal(t, externalOAuthID, set.ExternalOauthServer.ID)
 	require.Nil(t, set.ExternalOauthServer.Metadata)
 	require.Equal(t, issuer, *set.ExternalOauthServer.AuthorizationServerIssuer)
-	require.Equal(t, 1, requests)
+	require.Equal(t, int32(1), requests.Load())
 	setAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetUpdateExternalOAuthIssuer)
 	require.NoError(t, err)
 	setAuditMetadata, err := audittest.DecodeAuditData(setAudit.Metadata)
@@ -140,13 +144,14 @@ func TestToolsetsService_UpdateExternalOAuthServer_SetAndClear(t *testing.T) {
 	require.Equal(t, true, setAuditMetadata["authorization_server_issuer_set"])
 
 	issuer += "/v2"
+	storeIssuer(issuer)
 	changed, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
 		Slug: toolset.Slug, AuthorizationServerIssuer: &issuer,
 	})
 	require.NoError(t, err)
 	require.Equal(t, externalOAuthID, changed.ExternalOauthServer.ID)
 	require.Equal(t, issuer, *changed.ExternalOauthServer.AuthorizationServerIssuer)
-	require.Equal(t, 2, requests)
+	require.Equal(t, int32(2), requests.Load())
 
 	closeServer()
 	cleared, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
@@ -156,7 +161,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_SetAndClear(t *testing.T) {
 	require.Equal(t, externalOAuthID, cleared.ExternalOauthServer.ID)
 	require.Equal(t, gramHostedMetadata(), cleared.ExternalOauthServer.Metadata)
 	require.Nil(t, cleared.ExternalOauthServer.AuthorizationServerIssuer)
-	require.Equal(t, 2, requests, "clearing must not perform discovery")
+	require.Equal(t, int32(2), requests.Load(), "clearing must not perform discovery")
 	clearAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetUpdateExternalOAuthIssuer)
 	require.NoError(t, err)
 	clearAuditMetadata, err := audittest.DecodeAuditData(clearAudit.Metadata)
@@ -259,7 +264,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_RequiresAttachedServer(t *tes
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
-func TestToolsetsService_UpdateExternalOAuthServer_IsProjectScoped(t *testing.T) {
+func TestToolsetsService_UpdateExternalOAuthServer_CannotAccessAnotherProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -275,7 +280,9 @@ func TestToolsetsService_UpdateExternalOAuthServer_IsProjectScoped(t *testing.T)
 	_, err := ti.service.UpdateExternalOAuthServer(otherProjectCtx, &gen.UpdateExternalOAuthServerPayload{
 		Slug: toolset.Slug, Metadata: gramHostedMetadata(),
 	})
-	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestToolsetsService_UpdateExternalOAuthServer_HonorsProjectScopedAuthorization(t *testing.T) {
@@ -347,7 +354,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_AuditIsSecretFree(t *testing.
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Issuer Audit Toolset")
 	created := attachMetadataOAuth(t, ctx, ti, toolset.Slug)
 
-	_, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
+	updated, err := ti.service.UpdateExternalOAuthServer(ctx, &gen.UpdateExternalOAuthServerPayload{
 		Slug: toolset.Slug, Metadata: map[string]any{"issuer": "https://auth.example.com", "token_endpoint": "secret-token-value"},
 	})
 	require.NoError(t, err)
@@ -359,5 +366,6 @@ func TestToolsetsService_UpdateExternalOAuthServer_AuditIsSecretFree(t *testing.
 	require.Equal(t, created.ExternalOauthServer.ID, metadata["external_oauth_server_id"])
 	require.Equal(t, string(created.ExternalOauthServer.Slug), metadata["external_oauth_server_slug"])
 	require.Equal(t, false, metadata["authorization_server_issuer_set"])
+	require.InDelta(t, updated.ToolsetVersion, metadata["toolset_version_after"], 0)
 	require.NotContains(t, string(record.Metadata), "secret-token-value")
 }

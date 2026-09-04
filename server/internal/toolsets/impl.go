@@ -416,7 +416,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	clearedOAuth := false
 
 	// First get the existing toolset
-	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	existingToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -1072,6 +1072,20 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 
 	tr := s.repo.WithTx(dbtx)
 
+	lockedToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	}
+	if !lockedToolset.McpIsPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
+	}
+	if lockedToolset.ExternalOauthServerID.Valid {
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").LogError(ctx, s.logger)
+	}
+
 	// Create the external OAuth server metadata entry. Generated slugs use a
 	// conflict-safe insert so a collision does not abort the transaction.
 	oauthQueries := s.oauthRepo.WithTx(dbtx)
@@ -1107,7 +1121,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeConflict, err, "external OAuth server already exists").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate external OAuth server with toolset").LogError(ctx, s.logger)
 	}
@@ -1203,6 +1217,7 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 		ToolsetURN:                   urn.NewToolset(toolsetID),
 		ToolsetName:                  existingToolset.Name,
 		ToolsetSlug:                  string(existingToolset.Slug),
+		ToolsetVersionAfter:          updatedToolset.ToolsetVersion,
 		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
 		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
 		AuthorizationServerIssuerSet: authorizationServerIssuer.Valid,

@@ -272,8 +272,8 @@ type UpdateExternalOAuthServerPayload struct {
 	ApikeyToken  *string
 	// The slug of the toolset whose attached external OAuth server is updated
 	Slug types.Slug
-	// Validated RFC 8414 metadata to restore Gram-hosted compatibility mode.
-	// Supply exactly one of metadata and authorization_server_issuer.
+	// JSON object metadata to restore Gram-hosted compatibility mode. Supply
+	// exactly one of metadata and authorization_server_issuer.
 	Metadata any
 	// Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly
 	// discovers and verifies it before the atomic update. Supply exactly one of

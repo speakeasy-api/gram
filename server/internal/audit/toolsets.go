@@ -239,9 +239,10 @@ type LogToolsetUpdateExternalOAuthIssuerEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	ToolsetURN  urn.Toolset
-	ToolsetName string
-	ToolsetSlug string
+	ToolsetURN          urn.Toolset
+	ToolsetName         string
+	ToolsetSlug         string
+	ToolsetVersionAfter int64
 
 	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug      string
@@ -251,6 +252,7 @@ type LogToolsetUpdateExternalOAuthIssuerEvent struct {
 func (l *Logger) LogToolsetUpdateExternalOAuthIssuer(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateExternalOAuthIssuerEvent) error {
 	action := ActionToolsetUpdateExternalOAuthIssuer
 	metadata, err := marshalAuditPayload(map[string]any{
+		"toolset_version_after":           event.ToolsetVersionAfter,
 		"external_oauth_server_id":        event.ExternalOAuthServerID,
 		"external_oauth_server_slug":      event.ExternalOAuthServerSlug,
 		"authorization_server_issuer_set": event.AuthorizationServerIssuerSet,

@@ -568,6 +568,9 @@ func BuildUpdateExternalOAuthServerPayload(toolsetsUpdateExternalOAuthServerBody
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
 		}
 		if body.AuthorizationServerIssuer != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.authorization_server_issuer", *body.AuthorizationServerIssuer, "^https://"))
+		}
+		if body.AuthorizationServerIssuer != nil {
 			if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.authorization_server_issuer", *body.AuthorizationServerIssuer, utf8.RuneCountInString(*body.AuthorizationServerIssuer), 500, false))
 			}

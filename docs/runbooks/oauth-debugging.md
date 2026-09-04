@@ -95,7 +95,7 @@ List all advertised endpoints:
 
 ```bash
 metadata=$(curl -fsS https://auth.example.com/.well-known/oauth-authorization-server/tenant/example)
-printf '%s' "$metadata" | jq -r '.authorization_endpoint, .token_endpoint, .registration_endpoint // empty'
+printf '%s' "$metadata" | jq -r '.authorization_endpoint // empty, .token_endpoint // empty, .registration_endpoint // empty'
 ```
 
 - Check DNS, TLS, routing, and allowlists for each endpoint.

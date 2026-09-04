@@ -71549,7 +71549,7 @@ components:
                     type: string
                     description: The ID of the external OAuth server
                 metadata:
-                    description: The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
+                    description: The JSON object metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
                 project_id:
                     type: string
                     description: The project ID this external OAuth server belongs to
@@ -71575,9 +71575,10 @@ components:
                     type: string
                     description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
                     format: uri
+                    pattern: ^https://
                     maxLength: 500
                 metadata:
-                    description: Validated RFC 8414 metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+                    description: JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -88891,9 +88892,10 @@ components:
                     type: string
                     description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
                     format: uri
+                    pattern: ^https://
                     maxLength: 500
                 metadata:
-                    description: Validated RFC 8414 metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
                 project_slug_input:
                     type: string
                 slug:
@@ -88910,9 +88912,10 @@ components:
                     type: string
                     description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
                     format: uri
+                    pattern: ^https://
                     maxLength: 500
                 metadata:
-                    description: Validated RFC 8414 metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
         UpdateGcpIamCredentialRequestBody:
             type: object
             properties:

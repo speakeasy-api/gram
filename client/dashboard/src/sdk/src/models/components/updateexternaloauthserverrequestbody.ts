@@ -11,7 +11,7 @@ export type UpdateExternalOAuthServerRequestBody = {
    */
   authorizationServerIssuer?: string | undefined;
   /**
-   * Validated RFC 8414 metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+   * JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
    */
   metadata?: any | undefined;
 };

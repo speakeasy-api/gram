@@ -11,7 +11,7 @@ export type ExternalOAuthServerForm = {
    */
   authorizationServerIssuer?: string | undefined;
   /**
-   * Validated RFC 8414 metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+   * JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
    */
   metadata?: any | undefined;
   /**

@@ -70,8 +70,8 @@ type AddExternalOAuthServerRequestBody struct {
 // UpdateExternalOAuthServerRequestBody is the type of the "toolsets" service
 // "updateExternalOAuthServer" endpoint HTTP request body.
 type UpdateExternalOAuthServerRequestBody struct {
-	// Validated RFC 8414 metadata to restore Gram-hosted compatibility mode.
-	// Supply exactly one of metadata and authorization_server_issuer.
+	// JSON object metadata to restore Gram-hosted compatibility mode. Supply
+	// exactly one of metadata and authorization_server_issuer.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly
 	// discovers and verifies it before the atomic update. Supply exactly one of
@@ -4076,8 +4076,8 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The slug of the external OAuth server
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
-	// one of metadata and authorization_server_issuer is present.
+	// The JSON object metadata Gram hosts in compatibility mode. Exactly one of
+	// metadata and authorization_server_issuer is present.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
 	// Exactly one of authorization_server_issuer and metadata is present; changing
@@ -4258,8 +4258,8 @@ type ExternalOAuthServerFormRequestBody struct {
 	// Optional external OAuth server slug retained for compatibility. Gram
 	// generates one from the toolset slug when omitted.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Validated RFC 8414 metadata for Gram-hosted compatibility mode. Supply
-	// exactly one of metadata and authorization_server_issuer.
+	// JSON object metadata for Gram-hosted compatibility mode. Supply exactly one
+	// of metadata and authorization_server_issuer.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and
 	// strictly verifies this issuer before persistence. Supply exactly one of
@@ -13802,6 +13802,9 @@ func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormReq
 	}
 	if body.AuthorizationServerIssuer != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorization_server_issuer", *body.AuthorizationServerIssuer, "^https://"))
 	}
 	if body.AuthorizationServerIssuer != nil {
 		if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
