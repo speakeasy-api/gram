@@ -24,17 +24,20 @@ describe("logoutToLogin", () => {
 
   it("still replaces the page with /login when logout rejects", async () => {
     const replace = stubLocationReplace();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const logout = vi.fn().mockRejectedValue(new Error("network"));
 
     await logoutToLogin({ auth: { logout } });
 
     expect(logout).toHaveBeenCalledOnce();
     expect(replace).toHaveBeenCalledWith("/login");
+    expect(logged).toHaveBeenCalledOnce();
   });
 
   it("still replaces the page with /login when logout never settles", async () => {
     vi.useFakeTimers();
     const replace = stubLocationReplace();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const logout = vi.fn().mockReturnValue(new Promise(() => {}));
 
     const done = logoutToLogin({ auth: { logout } });
@@ -43,5 +46,6 @@ describe("logoutToLogin", () => {
 
     expect(logout).toHaveBeenCalledOnce();
     expect(replace).toHaveBeenCalledWith("/login");
+    expect(logged).toHaveBeenCalledOnce();
   });
 });

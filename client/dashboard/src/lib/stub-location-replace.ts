@@ -1,8 +1,8 @@
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
 
 let originalLocation: Location | undefined;
 
-export function stubLocationReplace() {
+export function stubLocationReplace(): Mock {
   originalLocation = window.location;
   const replace = vi.fn();
   // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
@@ -18,7 +18,7 @@ export function stubLocationReplace() {
   return replace;
 }
 
-export function restoreLocation() {
+export function restoreLocation(): void {
   if (!originalLocation) {
     return;
   }
