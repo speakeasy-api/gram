@@ -24,8 +24,8 @@ func TestUpsertAIDetectionsRejectsZeroSeenAtDeterministically(t *testing.T) {
 		SeenAt:         time.Time{},
 	}
 
-	firstErr := logger.UpsertAIDetections(t.Context(), []AIDetection{detection})
-	secondErr := logger.UpsertAIDetections(t.Context(), []AIDetection{detection})
+	_, firstErr := logger.UpsertAIDetections(t.Context(), []AIDetection{detection})
+	_, secondErr := logger.UpsertAIDetections(t.Context(), []AIDetection{detection})
 	require.Error(t, firstErr)
 	require.Error(t, secondErr)
 	require.EqualError(t, firstErr, secondErr.Error())
@@ -51,9 +51,11 @@ func TestUpsertAIDetectionsRejectsInvalidSignalAndCategory(t *testing.T) {
 
 	invalidSignal := valid
 	invalidSignal.Signal = "stopped"
-	require.Error(t, logger.UpsertAIDetections(t.Context(), []AIDetection{invalidSignal}))
+	_, signalErr := logger.UpsertAIDetections(t.Context(), []AIDetection{invalidSignal})
+	require.Error(t, signalErr)
 
 	invalidCategory := valid
 	invalidCategory.Category = "other"
-	require.Error(t, logger.UpsertAIDetections(t.Context(), []AIDetection{invalidCategory}))
+	_, categoryErr := logger.UpsertAIDetections(t.Context(), []AIDetection{invalidCategory})
+	require.Error(t, categoryErr)
 }
