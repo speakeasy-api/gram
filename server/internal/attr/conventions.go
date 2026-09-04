@@ -472,6 +472,9 @@ const (
 	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
 	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
 	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
+	RiskPolicyActionKey            = attribute.Key("gram.risk.policy_action")
+	RiskPolicyScopeFoldKey         = attribute.Key("gram.risk.policy_scope_fold")
+	RiskPolicyDetectionScopesKey   = attribute.Key("gram.risk.policy_detection_scopes")
 	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
 	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
@@ -1939,6 +1942,23 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 
 func RiskPolicyType(v string) attribute.KeyValue { return RiskPolicyTypeKey.String(v) }
 func SlogRiskPolicyType(v string) slog.Attr      { return slog.String(string(RiskPolicyTypeKey), v) }
+
+func RiskPolicyAction(v string) attribute.KeyValue { return RiskPolicyActionKey.String(v) }
+func SlogRiskPolicyAction(v string) slog.Attr      { return slog.String(string(RiskPolicyActionKey), v) }
+
+// RiskPolicyScopeFold names what the legacy-policy-scope migration did to one
+// policy: preserved, cleared, or noop.
+func RiskPolicyScopeFold(v string) attribute.KeyValue { return RiskPolicyScopeFoldKey.String(v) }
+func SlogRiskPolicyScopeFold(v string) slog.Attr {
+	return slog.String(string(RiskPolicyScopeFoldKey), v)
+}
+
+func RiskPolicyDetectionScopes(v string) attribute.KeyValue {
+	return RiskPolicyDetectionScopesKey.String(v)
+}
+func SlogRiskPolicyDetectionScopes(v string) slog.Attr {
+	return slog.String(string(RiskPolicyDetectionScopesKey), v)
+}
 
 func RiskMessageType(v string) attribute.KeyValue { return RiskMessageTypeKey.String(v) }
 func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(RiskMessageTypeKey), v) }

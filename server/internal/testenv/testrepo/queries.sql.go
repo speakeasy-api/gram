@@ -1715,6 +1715,35 @@ func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
+const readRiskPolicyScopeFixture = `-- name: ReadRiskPolicyScopeFixture :one
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = $1
+`
+
+type ReadRiskPolicyScopeFixtureRow struct {
+	AnalyzerConfig []byte
+	MessageTypes   []string
+	ScopeInclude   pgtype.Text
+	ScopeExempt    pgtype.Text
+	Version        int64
+}
+
+// Test-only fixture: reads back the columns the legacy-policy-scope fold
+// rewrites, so a test can assert on the folded row.
+func (q *Queries) ReadRiskPolicyScopeFixture(ctx context.Context, id uuid.UUID) (ReadRiskPolicyScopeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, readRiskPolicyScopeFixture, id)
+	var i ReadRiskPolicyScopeFixtureRow
+	err := row.Scan(
+		&i.AnalyzerConfig,
+		&i.MessageTypes,
+		&i.ScopeInclude,
+		&i.ScopeExempt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
 WITH deleted AS (
     DELETE FROM trials AS doomed
@@ -1872,6 +1901,60 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 		arg.ContentAssetUrl,
 		arg.RiskAnalyzedAt,
 		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedLegacyScopeRiskPolicyFixture = `-- name: SeedLegacyScopeRiskPolicyFixture :one
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6::text[],
+    $7::text,
+    $8::text,
+    1
+)
+RETURNING id
+`
+
+type SeedLegacyScopeRiskPolicyFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+	Sources        []string
+	Action         string
+	MessageTypes   []string
+	ScopeInclude   pgtype.Text
+	ScopeExempt    pgtype.Text
+}
+
+// Test-only fixture: inserts a risk policy still carrying the legacy
+// policy-level scope, for exercising the legacy-policy-scope fold.
+func (q *Queries) SeedLegacyScopeRiskPolicyFixture(ctx context.Context, arg SeedLegacyScopeRiskPolicyFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedLegacyScopeRiskPolicyFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Sources,
+		arg.Action,
+		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

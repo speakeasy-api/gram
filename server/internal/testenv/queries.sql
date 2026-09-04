@@ -796,6 +796,39 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
 VALUES (@project_id, @organization_id, @name, @sources, 1)
 RETURNING id;
 
+-- name: SeedLegacyScopeRiskPolicyFixture :one
+-- Test-only fixture: inserts a risk policy still carrying the legacy
+-- policy-level scope, for exercising the legacy-policy-scope fold.
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    @project_id,
+    @organization_id,
+    @name,
+    @sources,
+    @action,
+    sqlc.narg('message_types')::text[],
+    sqlc.narg('scope_include')::text,
+    sqlc.narg('scope_exempt')::text,
+    1
+)
+RETURNING id;
+
+-- name: ReadRiskPolicyScopeFixture :one
+-- Test-only fixture: reads back the columns the legacy-policy-scope fold
+-- rewrites, so a test can assert on the folded row.
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = @id;
+
 -- name: SeedRiskResultFixture :one
 -- Test-only fixture: records one open finding against a chat message, with the
 -- primary span mirrored into the spans JSONB set.
