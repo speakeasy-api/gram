@@ -382,7 +382,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
-  it("labels an omitted RFC 9207 capability as not advertised", async () => {
+  it("treats a missing RFC 9207 capability as unsupported", async () => {
     mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
       issuer: existingConfig.issuer,
       authorizationEndpoint: "https://auth.example.com/authorize",
@@ -392,8 +392,8 @@ describe("OAuthWizard — existing external OAuth config", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
 
     const rfcStatus = (await screen.findByText("RFC 9207")).parentElement;
-    expect(rfcStatus?.textContent).toContain("Not advertised");
-    expect(screen.queryByText("Unsupported")).toBeNull();
+    expect(rfcStatus?.textContent).toContain("Unsupported");
+    expect(rfcStatus?.textContent).not.toContain("Not advertised");
   });
 
   it("wraps long discovered endpoint values", async () => {

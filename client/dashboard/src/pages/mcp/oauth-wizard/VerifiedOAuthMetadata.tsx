@@ -30,11 +30,9 @@ export function VerifiedOAuthMetadata({
       />
       <Alert
         variant={
-          metadata.authorizationResponseIssParameterSupported === undefined
-            ? "warning"
-            : metadata.authorizationResponseIssParameterSupported
-              ? "success"
-              : "error"
+          metadata.authorizationResponseIssParameterSupported
+            ? "success"
+            : "error"
         }
       >
         <a
@@ -45,11 +43,9 @@ export function VerifiedOAuthMetadata({
         >
           RFC 9207
         </a>{" "}
-        {metadata.authorizationResponseIssParameterSupported === undefined
-          ? "Not advertised"
-          : metadata.authorizationResponseIssParameterSupported
-            ? "Supported"
-            : "Unsupported"}
+        {metadata.authorizationResponseIssParameterSupported
+          ? "Supported"
+          : "Unsupported"}
       </Alert>
     </Stack>
   );

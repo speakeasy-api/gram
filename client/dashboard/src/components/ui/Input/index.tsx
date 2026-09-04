@@ -73,7 +73,12 @@ export function Input({
   );
   const validationErrorId = React.useId();
   const describedBy =
-    [props["aria-describedby"], validationError ? validationErrorId : undefined]
+    [
+      props["aria-describedby"],
+      validationError && validationError !== DEFAULT_ERROR
+        ? validationErrorId
+        : undefined,
+    ]
       .filter(Boolean)
       .join(" ") || undefined;
   const [isFocused, setIsFocused] = useState(false);
