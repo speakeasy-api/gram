@@ -355,9 +355,13 @@ RETURNING *;
 --
 -- Every parameter is required rather than a three-state narg. A refresh always
 -- restates the issuer's full discovered surface, so there is no "leave this
--- one alone" case: an endpoint the issuer has stopped advertising arrives as
--- an empty string and is cleared to NULL, and a *_supported array it has
--- stopped advertising arrives as an empty array. For the capability arrays
+-- one alone" case here: an endpoint the issuer has stopped advertising arrives
+-- as an empty string and is cleared to NULL, and a *_supported array it has
+-- stopped advertising arrives as an empty array. The one exception lives in
+-- Go, not SQL: when discovery could not read every candidate document,
+-- refreshIssuerMetadata fills the gaps from the previously stored metadata
+-- before calling this, so the parameters it passes are still the full
+-- surface as best known. For the capability arrays
 -- that are NOT NULL with an empty-array default, NULL is not a value they can
 -- hold anyway; for the nullable capability arrays
 -- (code_challenge_methods_supported, introspection_endpoint_auth_methods_supported,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -98,8 +99,9 @@ type rfc8414Document struct {
 	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
 
 	// raw is the document as the issuer served it, or, when discovery merged
-	// several, the union of their members re-serialized. It is persisted so
-	// fields the typed columns omit are not lost.
+	// several, the union of their members re-serialized. The typed fields
+	// above are always derived from it, and it is persisted so fields they
+	// omit are not lost.
 	raw json.RawMessage
 
 	// partial names the well-known URL of a same-origin candidate that failed
@@ -107,18 +109,21 @@ type rfc8414Document struct {
 	// result may be missing fields that candidate would have supplied. Empty
 	// when every candidate answered definitively.
 	partial string
-
-	// wellKnown is the URL this document was fetched from.
-	wellKnown string
 }
 
-// wellKnownFamily reports which discovery family a well-known URL belongs
-// to: "openid-configuration" or "oauth-authorization-server".
-func wellKnownFamily(wellKnown string) string {
-	if strings.Contains(wellKnown, "/.well-known/openid-configuration") {
-		return "openid-configuration"
-	}
-	return "oauth-authorization-server"
+// metadataFamily is the discovery specification a well-known URL follows.
+type metadataFamily int
+
+const (
+	familyOAuthAuthorizationServer metadataFamily = iota
+	familyOpenIDConfiguration
+)
+
+// issuerProbeCandidate is one well-known URL to probe and the family it
+// follows, so the discovery loop never has to infer the family from the URL.
+type issuerProbeCandidate struct {
+	url    string
+	family metadataFamily
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -994,21 +999,17 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 		// An empty advertised list must survive as empty here, because nil and
 		// empty persist differently for this field (NULL "never captured" vs
-		// {} "captured, advertises nothing"). The plain append copy used by
-		// the sibling fields collapses an empty slice to nil, so it gets an
-		// orEmptySlice on top.
-		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+		// {} "captured, advertises nothing"); slices.Clone preserves that and
+		// orEmptySlice turns omission into the captured-empty state.
+		CodeChallengeMethodsSupported: orEmptySlice(slices.Clone(doc.CodeChallengeMethodsSupported)),
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
-		// Neither endpoint is dialed by discovery, so a plaintext value is
-		// dropped like a plaintext revocation endpoint rather than failing
-		// the document: a token would cross the wire to it later.
-		UserinfoEndpoint:                           conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, ""),
-		IntrospectionEndpoint:                      conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, ""),
-		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(append([]string(nil), doc.IntrospectionEndpointAuthMethodsSupported...)),
-		IDTokenSigningAlgValuesSupported:           orEmptySlice(append([]string(nil), doc.IDTokenSigningAlgValuesSupported...)),
-		ClaimsSupported:                            orEmptySlice(append([]string(nil), doc.ClaimsSupported...)),
+		UserinfoEndpoint:                           doc.UserinfoEndpoint,
+		IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(slices.Clone(doc.IntrospectionEndpointAuthMethodsSupported)),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(slices.Clone(doc.IDTokenSigningAlgValuesSupported)),
+		ClaimsSupported:                            orEmptySlice(slices.Clone(doc.ClaimsSupported)),
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 		Metadata: []byte(doc.raw),
@@ -1016,7 +1017,7 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 }
 
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
+	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
 		return rfc8414Document{}, nil, &discoveryError{
 			WellKnownURL: "",
@@ -1038,25 +1039,21 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		return nil
 	}
 
-	// Every candidate is probed. The first usable document is the primary and
-	// wins every field it sets; later usable documents that name the same
-	// issuer fill in what it left out. RFC 8414 and OpenID Connect Discovery
-	// serve overlapping documents, and several providers publish jwks_uri,
-	// claims_supported, and the ID token signing algorithms only in the OpenID
-	// one, so stopping at the first hit would never capture them.
+	// The first usable document is the primary and wins every member it
+	// states. RFC 8414 and OpenID Connect Discovery serve overlapping
+	// documents, and several providers publish jwks_uri, claims_supported, and
+	// the ID token signing algorithms only in the OpenID one, so after the
+	// primary the other family is probed and one same-issuer document fills
+	// in what the primary left out. There are only two families, so the loop
+	// ends as soon as the second has contributed.
 	var firstErr *discoveryError
-	var primary rfc8414Document
-	havePrimary := false
-	var fallbackDoc rfc8414Document
-	haveFallback := false
-	for _, wellKnown := range candidates {
-		// Once a primary exists, only the other document family can add
-		// anything: a second RFC 8414 document is the same document at a
-		// speculative path, not a source of OIDC-only fields.
-		if havePrimary && wellKnownFamily(wellKnown) == wellKnownFamily(primary.wellKnown) {
+	var primary, fallback *rfc8414Document
+	var primaryFamily metadataFamily
+	for _, candidate := range candidates {
+		if primary != nil && candidate.family == primaryFamily {
 			continue
 		}
-		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
+		doc, attemptErr := attemptIssuerProbe(reqCtx, client, candidate.url)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
@@ -1065,8 +1062,8 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			// definitively has no document, may be hiding fields the merge
 			// would have captured. Record it so a refresh does not mistake
 			// their absence for withdrawal.
-			if havePrimary && primary.partial == "" && attemptErr.transient() {
-				primary.partial = wellKnown
+			if primary != nil && primary.partial == "" && attemptErr.transient() {
+				primary.partial = candidate.url
 			}
 			continue
 		}
@@ -1076,116 +1073,79 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		// metadata. Remember the first such document but keep probing — a later
 		// candidate (e.g. the origin-style fallback) may carry the real one.
 		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
-			if !haveFallback {
-				fallbackDoc = doc
-				haveFallback = true
+			if primary == nil && fallback == nil {
+				fallback = &doc
 			}
 			continue
 		}
 
-		if !havePrimary {
-			primary = doc
-			havePrimary = true
+		if primary == nil {
+			primary = &doc
+			primaryFamily = candidate.family
 			continue
 		}
 		// Only a document for the same issuer may contribute: an origin-root
 		// fallback on a multi-tenant host can describe a sibling tenant.
 		if issuerURLsEqual(doc.Issuer, primary.Issuer) {
-			primary = mergeIssuerMetadata(primary, doc)
+			merged := mergeIssuerMetadata(*primary, doc)
+			primary = &merged
+			break
 		}
 	}
 
-	if havePrimary {
-		warnings := collectDiscoveryWarnings(issuerURL, primary)
+	if primary != nil {
+		warnings := collectDiscoveryWarnings(issuerURL, *primary)
 		if primary.partial != "" {
 			warnings = append(warnings, fmt.Sprintf("metadata document at %s could not be fetched; fields it advertises were not merged", primary.partial))
 		}
-		return primary, warnings, nil
+		return *primary, warnings, nil
 	}
 
-	if haveFallback {
-		return fallbackDoc, collectDiscoveryWarnings(issuerURL, fallbackDoc), nil
+	if fallback != nil {
+		return *fallback, collectDiscoveryWarnings(issuerURL, *fallback), nil
 	}
 
 	return rfc8414Document{}, nil, firstErr
 }
 
-// mergeIssuerMetadata fills the fields base leaves unset from extra: empty
-// strings, nil slices, and booleans whose member the base document does not
-// state. base keeps every value it already carries, including an explicit
-// false, so the RFC 8414 document stays authoritative for flags such as CIMD
-// support that Gram acts on. The raw documents merge the same way, key by
-// key, so the persisted document is the union with base's values winning.
+// mergeIssuerMetadata returns base with every top-level member of extra's
+// document that base's document does not state, then re-derives the typed
+// fields from the union so the two never disagree. A member base states,
+// even as false or empty, is kept: the primary document is authoritative for
+// flags such as CIMD support that Gram acts on. Either side without a JSON
+// object leaves base unchanged.
 func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
-	fillString := func(dst *string, src string) {
-		if *dst == "" {
-			*dst = src
-		}
-	}
-	fillSlice := func(dst *[]string, src []string) {
-		if *dst == nil {
-			*dst = src
-		}
-	}
-	var baseMembers map[string]json.RawMessage
-	_ = json.Unmarshal(base.raw, &baseMembers)
-	fillBool := func(dst *bool, src bool, member string) {
-		if _, stated := baseMembers[member]; !stated {
-			*dst = src
-		}
-	}
-	fillString(&base.Issuer, extra.Issuer)
-	fillString(&base.AuthorizationEndpoint, extra.AuthorizationEndpoint)
-	fillString(&base.TokenEndpoint, extra.TokenEndpoint)
-	fillString(&base.RevocationEndpoint, extra.RevocationEndpoint)
-	fillString(&base.RegistrationEndpoint, extra.RegistrationEndpoint)
-	fillString(&base.JwksURI, extra.JwksURI)
-	fillString(&base.ServiceDocumentation, extra.ServiceDocumentation)
-	fillString(&base.OpPolicyURI, extra.OpPolicyURI)
-	fillString(&base.OpTosURI, extra.OpTosURI)
-	fillString(&base.UserinfoEndpoint, extra.UserinfoEndpoint)
-	fillString(&base.IntrospectionEndpoint, extra.IntrospectionEndpoint)
-	fillSlice(&base.ScopesSupported, extra.ScopesSupported)
-	fillSlice(&base.GrantTypesSupported, extra.GrantTypesSupported)
-	fillSlice(&base.ResponseTypesSupported, extra.ResponseTypesSupported)
-	fillSlice(&base.TokenEndpointAuthMethodsSupported, extra.TokenEndpointAuthMethodsSupported)
-	fillSlice(&base.CodeChallengeMethodsSupported, extra.CodeChallengeMethodsSupported)
-	fillSlice(&base.IntrospectionEndpointAuthMethodsSupported, extra.IntrospectionEndpointAuthMethodsSupported)
-	fillSlice(&base.IDTokenSigningAlgValuesSupported, extra.IDTokenSigningAlgValuesSupported)
-	fillSlice(&base.ClaimsSupported, extra.ClaimsSupported)
-	fillBool(&base.ClientIDMetadataDocumentSupported, extra.ClientIDMetadataDocumentSupported, "client_id_metadata_document_supported")
-	fillBool(&base.BackchannelLogoutSupported, extra.BackchannelLogoutSupported, "backchannel_logout_supported")
-	fillBool(&base.AuthorizationResponseIssParameterSupported, extra.AuthorizationResponseIssParameterSupported, "authorization_response_iss_parameter_supported")
-	base.raw = mergeRawDocuments(base.raw, extra.raw)
-	return base
-}
-
-// mergeRawDocuments returns base with every top-level member of extra that
-// base lacks. Either side that is not a JSON object leaves base unchanged.
-func mergeRawDocuments(base, extra json.RawMessage) json.RawMessage {
 	var baseMembers, extraMembers map[string]json.RawMessage
-	if err := json.Unmarshal(base, &baseMembers); err != nil || baseMembers == nil {
+	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
 		return base
 	}
-	if err := json.Unmarshal(extra, &extraMembers); err != nil {
+	if err := json.Unmarshal(extra.raw, &extraMembers); err != nil {
 		return base
 	}
-	added := false
-	for key, value := range extraMembers {
-		if _, ok := baseMembers[key]; ok {
-			continue
-		}
-		baseMembers[key] = value
-		added = true
-	}
-	if !added {
+	merged := maps.Clone(extraMembers)
+	maps.Copy(merged, baseMembers)
+	if len(merged) == len(baseMembers) {
 		return base
 	}
-	merged, err := json.Marshal(baseMembers)
+	raw, err := json.Marshal(merged)
 	if err != nil {
 		return base
 	}
-	return merged
+	out := base
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return base
+	}
+	out.raw = raw
+	sanitizeIssuerDocument(&out)
+	return out
+}
+
+// documentFromRaw wraps a stored discovery document so it can be merged; the
+// typed fields stay unset because a merge derives them from raw.
+func documentFromRaw(raw []byte) rfc8414Document {
+	var doc rfc8414Document
+	doc.raw = raw
+	return doc
 }
 
 // transient reports whether the probe failed in a way that says nothing about
@@ -1261,7 +1221,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 		}
 	}
 	doc.raw = body
-	doc.wellKnown = wellKnown
+	sanitizeIssuerDocument(&doc)
 
 	return doc, nil
 }
@@ -1279,6 +1239,20 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // some gateways and SPA catch-alls serve metadata at the root regardless of the
 // issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
 func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
+	candidates, err := issuerProbeCandidates(issuerURL)
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		urls = append(urls, candidate.url)
+	}
+	return urls, nil
+}
+
+// issuerProbeCandidates is IssuerMetadataProbeCandidates with each URL tagged
+// by the discovery family it follows.
+func issuerProbeCandidates(issuerURL string) ([]issuerProbeCandidate, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
@@ -1291,26 +1265,26 @@ func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	path := strings.TrimSuffix(u.Path, "/")
 
 	seen := make(map[string]struct{})
-	candidates := make([]string, 0, 5)
-	add := func(raw string) {
+	candidates := make([]issuerProbeCandidate, 0, 5)
+	add := func(raw string, family metadataFamily) {
 		if _, ok := seen[raw]; ok {
 			return
 		}
 		seen[raw] = struct{}{}
-		candidates = append(candidates, raw)
+		candidates = append(candidates, issuerProbeCandidate{url: raw, family: family})
 	}
 
 	// RFC 8414 §3: well-known inserted between host and issuer path.
-	add(origin + "/.well-known/oauth-authorization-server" + path)
+	add(origin+"/.well-known/oauth-authorization-server"+path, familyOAuthAuthorizationServer)
 	// RFC 8414 §3.1 OIDC-compatible form: openid-configuration inserted between
 	// host and issuer path.
-	add(origin + "/.well-known/openid-configuration" + path)
+	add(origin+"/.well-known/openid-configuration"+path, familyOpenIDConfiguration)
 	if path != "" {
 		// OpenID Connect Discovery: well-known appended after the issuer path.
-		add(origin + path + "/.well-known/openid-configuration")
+		add(origin+path+"/.well-known/openid-configuration", familyOpenIDConfiguration)
 		// Origin-style fallback: strip the issuer path entirely.
-		add(origin + "/.well-known/oauth-authorization-server")
-		add(origin + "/.well-known/openid-configuration")
+		add(origin+"/.well-known/oauth-authorization-server", familyOAuthAuthorizationServer)
+		add(origin+"/.well-known/openid-configuration", familyOpenIDConfiguration)
 	}
 
 	return candidates, nil
@@ -1366,6 +1340,21 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 		}
 	}
 	return nil
+}
+
+// sanitizeIssuerDocument blanks the advertised URLs that Gram never dials
+// during discovery but would render or send a token to later, when they are
+// not acceptable: the revocation, userinfo, and introspection endpoints must
+// be HTTPS or local loopback, and the documentation, policy, and terms links
+// must be absolute http(s) URLs. Dropping rather than rejecting keeps an
+// otherwise usable document usable. raw keeps the original members.
+func sanitizeIssuerDocument(doc *rfc8414Document) {
+	doc.RevocationEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.RevocationEndpoint)
+	doc.UserinfoEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.UserinfoEndpoint)
+	doc.IntrospectionEndpoint = urls.HTTPSOrLoopbackOrEmpty(doc.IntrospectionEndpoint)
+	doc.ServiceDocumentation = urls.HTTPOrEmpty(doc.ServiceDocumentation)
+	doc.OpPolicyURI = urls.HTTPOrEmpty(doc.OpPolicyURI)
+	doc.OpTosURI = urls.HTTPOrEmpty(doc.OpTosURI)
 }
 
 func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {

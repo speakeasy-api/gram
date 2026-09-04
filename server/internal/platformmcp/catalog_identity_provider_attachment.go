@@ -276,9 +276,9 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		// rather than left NULL for a later refresh.
 		UserinfoEndpoint:                           conv.ToPGTextEmpty(metadata.UserinfoEndpoint),
 		IntrospectionEndpoint:                      conv.ToPGTextEmpty(metadata.IntrospectionEndpoint),
-		IntrospectionEndpointAuthMethodsSupported:  slices.Clone(metadata.IntrospectionEndpointAuthMethodsSupported),
-		IDTokenSigningAlgValuesSupported:           slices.Clone(metadata.IDTokenSigningAlgValuesSupported),
-		ClaimsSupported:                            slices.Clone(metadata.ClaimsSupported),
+		IntrospectionEndpointAuthMethodsSupported:  metadata.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           metadata.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            metadata.ClaimsSupported,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
 		Metadata: metadata.Metadata,

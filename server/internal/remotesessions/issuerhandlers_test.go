@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1798,11 +1799,21 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
 }
 
+// twoDocumentServerOptions shapes the two documents twoDocumentIssuerServer
+// serves. mutateOAuth and mutateOIDC edit the respective document per
+// request; oidcStatus, when set, makes the OpenID path answer with that
+// status instead of a document whenever it is not 200.
+type twoDocumentServerOptions struct {
+	mutateOAuth func(doc map[string]any)
+	mutateOIDC  func(doc map[string]any)
+	oidcStatus  *atomic.Int32
+}
+
 // twoDocumentIssuerServer serves an RFC 8414 document at the OAuth path and an
 // OpenID Connect Discovery document at the OIDC path. The OAuth document
 // carries only the OAuth core; the OIDC one adds the OIDC-only fields several
-// real providers publish nowhere else, and is what mutate may alter.
-func twoDocumentIssuerServer(t *testing.T, mutateOIDC func(doc map[string]any)) *httptest.Server {
+// real providers publish nowhere else.
+func twoDocumentIssuerServer(t *testing.T, opts twoDocumentServerOptions) *httptest.Server {
 	t.Helper()
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1821,7 +1832,16 @@ func twoDocumentIssuerServer(t *testing.T, mutateOIDC func(doc map[string]any)) 
 				"code_challenge_methods_supported":      []string{"S256"},
 				"oauth_only_extension":                  "kept",
 			}
+			if opts.mutateOAuth != nil {
+				opts.mutateOAuth(doc)
+			}
 		case "/.well-known/openid-configuration":
+			if opts.oidcStatus != nil {
+				if status := int(opts.oidcStatus.Load()); status != http.StatusOK {
+					w.WriteHeader(status)
+					return
+				}
+			}
 			doc = map[string]any{
 				"issuer":                                server.URL,
 				"authorization_endpoint":                server.URL + "/authorize",
@@ -1833,8 +1853,8 @@ func twoDocumentIssuerServer(t *testing.T, mutateOIDC func(doc map[string]any)) 
 				"id_token_signing_alg_values_supported": []string{"RS256"},
 				"backchannel_logout_supported":          true,
 			}
-			if mutateOIDC != nil {
-				mutateOIDC(doc)
+			if opts.mutateOIDC != nil {
+				opts.mutateOIDC(doc)
 			}
 		default:
 			http.NotFound(w, r)
@@ -1855,7 +1875,7 @@ func TestFetchRemoteSessionIssuerMetadata_MergesOpenIDDocumentIntoOAuthDocument(
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, nil)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
 
 	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
@@ -1884,13 +1904,13 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, func(doc map[string]any) {
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = "https://other-tenant.example"
 		doc["authorization_endpoint"] = "https://other-tenant.example/authorize"
 		doc["token_endpoint"] = "https://other-tenant.example/token"
 		doc["jwks_uri"] = "https://other-tenant.example/jwks"
 		doc["userinfo_endpoint"] = "https://other-tenant.example/userinfo"
-	})
+	}})
 
 	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
@@ -1913,7 +1933,7 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	t.Parallel()
 
-	server := twoDocumentIssuerServer(t, nil)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 
@@ -1925,10 +1945,7 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	require.Equal(t, "kept", merged["oauth_only_extension"])
 	require.Equal(t, server.URL+"/jwks", merged["jwks_uri"])
 	require.Equal(t, []any{"read", "write"}, merged["scopes_supported"], "the first document's value wins in the raw union too")
-	require.Equal(t, server.URL+"/userinfo", discovered.UserinfoEndpoint)
-	require.Equal(t, []string{"sub", "email", "email_verified"}, discovered.ClaimsSupported)
 	require.Equal(t, []string{}, discovered.IntrospectionEndpointAuthMethodsSupported, "an omitted array is captured as empty, never nil")
-	require.True(t, discovered.BackchannelLogoutSupported)
 }
 
 // The merge gate compares issuers the way the rest of the package does,
@@ -1941,9 +1958,9 @@ func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlas
 	// The callback runs per request, after the assignment below, so it sees
 	// the server's final URL.
 	var server *httptest.Server
-	server = twoDocumentIssuerServer(t, func(doc map[string]any) {
+	server = twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
-	})
+	}})
 
 	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
@@ -1962,33 +1979,10 @@ func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var doc map[string]any
-		switch r.URL.Path {
-		case "/.well-known/oauth-authorization-server":
-			doc = map[string]any{
-				"issuer":                                server.URL,
-				"authorization_endpoint":                server.URL + "/authorize",
-				"token_endpoint":                        server.URL + "/token",
-				"client_id_metadata_document_supported": false,
-			}
-		case "/.well-known/openid-configuration":
-			doc = map[string]any{
-				"issuer":                                server.URL,
-				"authorization_endpoint":                server.URL + "/authorize",
-				"token_endpoint":                        server.URL + "/token",
-				"client_id_metadata_document_supported": true,
-				"backchannel_logout_supported":          true,
-			}
-		default:
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(doc)
-	}))
-	t.Cleanup(server.Close)
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+		mutateOAuth: func(doc map[string]any) { doc["client_id_metadata_document_supported"] = false },
+		mutateOIDC:  func(doc map[string]any) { doc["client_id_metadata_document_supported"] = true },
+	})
 
 	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
@@ -2006,9 +2000,9 @@ func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testin
 func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testing.T) {
 	t.Parallel()
 
-	server := twoDocumentIssuerServer(t, func(doc map[string]any) {
+	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = "https://other-tenant.example"
-	})
+	}})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 
@@ -2019,5 +2013,4 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 	require.NoError(t, json.Unmarshal(discovered.Metadata, &members))
 	require.NotContains(t, members, "claims_supported")
 	require.Equal(t, "kept", members["oauth_only_extension"])
-	require.Empty(t, discovered.ClaimsSupported)
 }

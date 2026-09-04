@@ -79,11 +79,11 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	upstream := twoDocumentIssuerServer(t, func(doc map[string]any) {
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["introspection_endpoint"] = "https://introspect.example/introspect"
 		doc["introspection_endpoint_auth_methods_supported"] = []string{"client_secret_post"}
 		doc["authorization_response_iss_parameter_supported"] = true
-	})
+	}})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-enrich", upstream.URL))
 	require.NoError(t, err)
@@ -127,36 +127,7 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(
 	ctx, ti := newTestService(t)
 	var oidcStatus atomic.Int32
 	oidcStatus.Store(http.StatusOK)
-	var upstream *httptest.Server
-	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/.well-known/oauth-authorization-server":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issuer":                 upstream.URL,
-				"authorization_endpoint": upstream.URL + "/authorize",
-				"token_endpoint":         upstream.URL + "/token",
-			})
-		case "/.well-known/openid-configuration":
-			status := int(oidcStatus.Load())
-			if status != http.StatusOK {
-				w.WriteHeader(status)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issuer":                 upstream.URL,
-				"authorization_endpoint": upstream.URL + "/authorize",
-				"token_endpoint":         upstream.URL + "/token",
-				"jwks_uri":               upstream.URL + "/jwks",
-				"userinfo_endpoint":      upstream.URL + "/userinfo",
-				"claims_supported":       []string{"sub", "email"},
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(upstream.Close)
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oidcStatus: &oidcStatus})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-partial", upstream.URL))
 	require.NoError(t, err)
@@ -174,13 +145,13 @@ func TestRefreshRemoteSessionIssuerMetadata_PartialDiscoveryKeepsCapturedFields(
 
 	complete := refresh()
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
-	require.Equal(t, []string{"sub", "email"}, complete.Issuer.ClaimsSupported)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, complete.Issuer.ClaimsSupported)
 
 	oidcStatus.Store(http.StatusServiceUnavailable)
 	partial := refresh()
 	require.Equal(t, upstream.URL+"/jwks", *partial.Issuer.JwksURI, "a transient miss does not withdraw the field")
 	require.Equal(t, upstream.URL+"/userinfo", *partial.Issuer.UserinfoEndpoint)
-	require.Equal(t, []string{"sub", "email"}, partial.Issuer.ClaimsSupported)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, partial.Issuer.ClaimsSupported)
 	require.True(t, slices.ContainsFunc(partial.DiscoveryWarnings, func(w string) bool {
 		return strings.Contains(w, "could not be fetched")
 	}), "the caller is told which candidate was skipped: %v", partial.DiscoveryWarnings)

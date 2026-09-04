@@ -70,3 +70,21 @@ func IsAbsoluteHTTPSOrLoopback(raw string) bool {
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }
+
+// HTTPSOrLoopbackOrEmpty returns raw when IsAbsoluteHTTPSOrLoopback accepts
+// it and "" otherwise, for fields that are dropped rather than rejected.
+func HTTPSOrLoopbackOrEmpty(raw string) string {
+	if IsAbsoluteHTTPSOrLoopback(raw) {
+		return raw
+	}
+	return ""
+}
+
+// HTTPOrEmpty returns raw when IsAbsoluteHTTP accepts it and "" otherwise,
+// for fields that are dropped rather than rejected.
+func HTTPOrEmpty(raw string) string {
+	if IsAbsoluteHTTP(raw) {
+		return raw
+	}
+	return ""
+}

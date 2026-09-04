@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 // untrustedDocumentError marks a discovery document that parsed but that Gram
@@ -39,18 +38,14 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		Issuer:                conv.Default(doc.Issuer, issuerURL),
 		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
 		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		// Revocation endpoints that are not HTTPS are filtered out: tokens are
-		// sensitive credentials that must not be transmitted in plaintext. Only
-		// https:// revocation endpoints are accepted.
-		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
-		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:              conv.PtrEmpty(doc.JwksURI),
-		// The issuer controls these and downstream surfaces render them as
-		// links, so a value that is not an absolute http(s) URL is discarded
-		// rather than carried into the draft the create form submits back.
-		ServiceDocumentation:              conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, "")),
-		OpPolicyURI:                       conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, "")),
-		OpTosURI:                          conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, "")),
+		// The document arrives with unacceptable revocation, documentation,
+		// policy, and terms URLs already blanked by sanitizeIssuerDocument.
+		RevocationEndpoint:                conv.PtrEmpty(doc.RevocationEndpoint),
+		RegistrationEndpoint:              conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:                           conv.PtrEmpty(doc.JwksURI),
+		ServiceDocumentation:              conv.PtrEmpty(doc.ServiceDocumentation),
+		OpPolicyURI:                       conv.PtrEmpty(doc.OpPolicyURI),
+		OpTosURI:                          conv.PtrEmpty(doc.OpTosURI),
 		ScopesSupported:                   doc.ScopesSupported,
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
@@ -66,10 +61,8 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
-		// Never dialed by discovery, so a plaintext value is dropped rather
-		// than failing the document, as for the revocation endpoint.
-		UserinfoEndpoint:                           conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, "")),
-		IntrospectionEndpoint:                      conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, "")),
+		UserinfoEndpoint:                           conv.PtrEmpty(doc.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.PtrEmpty(doc.IntrospectionEndpoint),
 		IntrospectionEndpointAuthMethodsSupported:  doc.IntrospectionEndpointAuthMethodsSupported,
 		IDTokenSigningAlgValuesSupported:           doc.IDTokenSigningAlgValuesSupported,
 		ClaimsSupported:                            doc.ClaimsSupported,
@@ -154,12 +147,13 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	// A refresh restates the issuer's whole discovered surface, clearing what
 	// the upstream no longer advertises. That is only sound when every
 	// candidate answered definitively. When a same-origin candidate failed
-	// transiently, a field it alone advertises would read as withdrawn, so the
-	// stored row fills whatever the partial result left empty and the caller
-	// sees the warning discovery attached. Withdrawal is applied on the next
-	// complete refresh.
+	// transiently, a member it alone advertises would read as withdrawn, so
+	// the previously stored document fills whatever the partial result left
+	// out and the caller sees the warning discovery attached. Withdrawal is
+	// applied on the next complete refresh. A row with no stored document has
+	// nothing to fall back to and is refreshed as if complete.
 	if doc.partial != "" {
-		doc = mergeIssuerMetadata(doc, issuerDocumentFromRow(issuer))
+		doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
 	}
 
 	// Gram distrusts the whole document rather than salvaging parts of it. A
@@ -218,19 +212,16 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// advertises no revocation endpoint is the common case, not a signal
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session
-		// against such an issuer stays a local soft-delete.
-		//
-		// Revocation endpoints that are not HTTPS are filtered out: tokens are
-		// sensitive credentials that must not be transmitted in plaintext.
-		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
+		// against such an issuer stays a local soft-delete. A plaintext one
+		// arrives already blanked by sanitizeIssuerDocument.
+		RevocationEndpoint:   doc.RevocationEndpoint,
 		RegistrationEndpoint: doc.RegistrationEndpoint,
 		JwksUri:              doc.JwksURI,
-		// Downstream surfaces render these as links, so a value that is not an
-		// absolute http(s) URL is dropped rather than stored — matching how the
-		// create-time draft filters them.
-		ServiceDocumentation:              conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, ""),
-		OpPolicyUri:                       conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, ""),
-		OpTosUri:                          conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, ""),
+		// Rendered as links downstream; a value that is not an absolute
+		// http(s) URL arrives already blanked by sanitizeIssuerDocument.
+		ServiceDocumentation:              doc.ServiceDocumentation,
+		OpPolicyUri:                       doc.OpPolicyURI,
+		OpTosUri:                          doc.OpTosURI,
 		ScopesSupported:                   orEmptySlice(doc.ScopesSupported),
 		GrantTypesSupported:               orEmptySlice(doc.GrantTypesSupported),
 		ResponseTypesSupported:            orEmptySlice(doc.ResponseTypesSupported),
@@ -247,11 +238,9 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 
 		// Session-enrichment capabilities. A refresh is the capture event for
 		// these nullable columns too: an omitted endpoint clears to NULL, an
-		// omitted array persists as empty, an omitted flag as false. Neither
-		// endpoint is dialed by discovery, so a plaintext value is dropped
-		// rather than failing the document, as for the revocation endpoint.
-		UserinfoEndpoint:                           conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.UserinfoEndpoint), doc.UserinfoEndpoint, ""),
-		IntrospectionEndpoint:                      conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.IntrospectionEndpoint), doc.IntrospectionEndpoint, ""),
+		// omitted array persists as empty, an omitted flag as false.
+		UserinfoEndpoint:                           doc.UserinfoEndpoint,
+		IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
 		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
 		IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
 		ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
@@ -274,37 +263,3 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 // allowed to write it, and only a concurrent move, rename, or delete explains
 // the miss.
 const refreshConflictMessage = "identity provider changed while its metadata was being fetched; retry the refresh"
-
-// issuerDocumentFromRow projects a stored issuer back into the discovery
-// document shape, so a partial discovery can fall back to what an earlier
-// complete one captured. Nullable columns that were never captured stay nil
-// and false, which the merge treats as unset.
-func issuerDocumentFromRow(issuer repo.RemoteSessionIssuer) rfc8414Document {
-	return rfc8414Document{
-		Issuer:                            issuer.Issuer,
-		AuthorizationEndpoint:             conv.FromPGTextOrEmpty[string](issuer.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.FromPGTextOrEmpty[string](issuer.TokenEndpoint),
-		RevocationEndpoint:                conv.FromPGTextOrEmpty[string](issuer.RevocationEndpoint),
-		RegistrationEndpoint:              conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint),
-		JwksURI:                           conv.FromPGTextOrEmpty[string](issuer.JwksUri),
-		ServiceDocumentation:              conv.FromPGTextOrEmpty[string](issuer.ServiceDocumentation),
-		OpPolicyURI:                       conv.FromPGTextOrEmpty[string](issuer.OpPolicyUri),
-		OpTosURI:                          conv.FromPGTextOrEmpty[string](issuer.OpTosUri),
-		ScopesSupported:                   issuer.ScopesSupported,
-		GrantTypesSupported:               issuer.GrantTypesSupported,
-		ResponseTypesSupported:            issuer.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: issuer.ClientIDMetadataDocumentSupported,
-		UserinfoEndpoint:                  conv.FromPGTextOrEmpty[string](issuer.UserinfoEndpoint),
-		IntrospectionEndpoint:             conv.FromPGTextOrEmpty[string](issuer.IntrospectionEndpoint),
-		IntrospectionEndpointAuthMethodsSupported:  issuer.IntrospectionEndpointAuthMethodsSupported,
-		IDTokenSigningAlgValuesSupported:           issuer.IDTokenSigningAlgValuesSupported,
-		ClaimsSupported:                            issuer.ClaimsSupported,
-		BackchannelLogoutSupported:                 issuer.BackchannelLogoutSupported.Valid && issuer.BackchannelLogoutSupported.Bool,
-		AuthorizationResponseIssParameterSupported: issuer.AuthorizationResponseIssParameterSupported.Valid && issuer.AuthorizationResponseIssParameterSupported.Bool,
-		raw:       issuer.Metadata,
-		partial:   "",
-		wellKnown: "",
-	}
-}
