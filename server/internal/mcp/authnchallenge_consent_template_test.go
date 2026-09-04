@@ -395,7 +395,7 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, "window.close();")
 	require.Contains(t, script, "}, 3000);")
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
-	require.Contains(t, script, `form.elements.namedItem("agent_id")`)
+	require.Contains(t, script, `document.querySelectorAll("input[data-agent-select]")`)
 	require.Contains(t, script, `data-consent-self-ready`)
 	require.Contains(t, script, `button.value = authorizingAgent ? "approve_agent" : "approve"`)
 }
@@ -504,15 +504,46 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 
 	html := page.String()
 	require.Contains(t, html, "Authorize as")
-	require.Contains(t, html, "Myself — user@example.com")
-	require.Contains(t, html, "Agent — Build agent")
-	require.Contains(t, html, "endpoint-scoped")
+	require.Contains(t, html, "Myself")
+	require.Contains(t, html, "user@example.com")
+	require.Contains(t, html, "Build agent")
+	require.Contains(t, html, `name="agent_id"`)
+	// The self option is the checked default and carries the empty value the
+	// approve action maps to a human grant.
+	require.Contains(t, html, `value=""`)
 	require.Contains(t, html, "mcp:connect")
 	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
 	require.Contains(t, html, `data-agent-label="Authorize agent"`)
 	require.Contains(t, html, `data-consent-self-ready="true"`)
 	require.NotContains(t, html, "Create agent here")
 	require.NotContains(t, html, `name="scope"`)
+}
+
+// TestConsentTemplateAgentSelectionWithoutEligibleAgents pins the degenerate
+// rollout state: the picker is omitted (no agent_id control at all) and only
+// the pointer to Agent management renders.
+func TestConsentTemplateAgentSelectionWithoutEligibleAgents(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:            "Demo",
+		MCPSlug:               "example",
+		MCPRouteBase:          "mcp",
+		State:                 "state",
+		CSRFToken:             "csrf",
+		SubjectDisplay:        "user@example.com",
+		ScriptURL:             "/mcp/consent-page-test.js",
+		ConsentEnabled:        true,
+		AgentSelectionEnabled: true,
+		AgentSetupURL:         "https://app.example.com/example/agent-management",
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.NotContains(t, html, `name="agent_id"`)
+	require.NotContains(t, html, "Authorize as")
+	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
 }
 
 func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {

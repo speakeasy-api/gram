@@ -65,6 +65,108 @@
         </p>
         {{end}}
 
+        {{if .AgentSelectionEnabled}}
+        {{if .AgentOptions}}
+        {{/* The actor choice leads the page: it decides whether every
+        self-only section below (service connections, tool access) applies at
+        all, so it must sit above them — collapsing content that is above the
+        control you just clicked makes the page jump under the cursor. */}}
+        <div class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+          <h2 class="text-eyebrow" id="consent-agent-choice-label">
+            Authorize as
+          </h2>
+          <div
+            role="radiogroup"
+            aria-labelledby="consent-agent-choice-label"
+            class="flex flex-col border"
+          >
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="agent_id"
+                value=""
+                form="consent-approve-form"
+                checked
+                data-agent-select
+                data-subject-display="{{.SubjectDisplay}}"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="flex min-w-0 flex-col gap-0.5">
+                <span class="text-sm font-medium">Myself</span>
+                <span class="text-muted-foreground truncate font-mono text-xs"
+                  >{{.SubjectDisplay}}</span
+                >
+              </span>
+            </label>
+            {{range .AgentOptions}}
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 border-t px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="agent_id"
+                value="{{.ID}}"
+                form="consent-approve-form"
+                data-agent-select
+                data-subject-display="{{.Name}}"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="flex min-w-0 flex-col gap-0.5">
+                <span class="truncate text-sm font-medium">{{.Name}}</span>
+                <span class="text-muted-foreground text-xs">Agent</span>
+              </span>
+            </label>
+            {{end}}
+          </div>
+          <div
+            data-agent-policy
+            hidden
+            aria-live="polite"
+            class="bg-accent flex flex-col gap-1 border px-4 py-3"
+          >
+            <p class="text-sm">
+              <span class="font-medium" data-agent-policy-name></span> connects
+              to <span class="font-mono">{{.MCPSlug}}</span> with its own
+              identity — you approve as the authorizer.
+            </p>
+            <p class="text-muted-foreground text-xs">
+              Access stays fixed to connecting to this server
+              (<span class="font-mono">mcp:connect</span>). The agent's and its
+              owner's permissions are checked again when you authorize. Service
+              connections and tool access apply only when you connect as
+              yourself.
+            </p>
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Missing an agent?
+            <a
+              href="{{.AgentSetupURL}}"
+              target="_blank"
+              rel="noopener"
+              class="underline"
+              >Create or configure it in Agent management</a
+            >, then restart this authorization.
+          </p>
+        </div>
+        {{else}}
+        {{/* Rollout is on but no agent is eligible: a one-option picker is
+        noise, so render only the pointer to where agents come from. */}}
+        <p class="text-muted-foreground border-b px-6 py-4 text-xs sm:px-8">
+          To authorize an agent instead of yourself,
+          <a
+            href="{{.AgentSetupURL}}"
+            target="_blank"
+            rel="noopener"
+            class="underline"
+            >create one in Agent management</a
+          >
+          and restart this authorization.
+        </p>
+        {{end}}
+        {{end}}
+
         {{if .RemoteSessionCards}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
           <div class="flex items-baseline justify-between gap-3">
@@ -199,44 +301,6 @@
         </div>
         {{end}}
 
-        {{if .AgentSelectionEnabled}}
-        <div class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
-          <h2 class="text-eyebrow">Authorize as</h2>
-          <select
-            name="agent_id"
-            form="consent-approve-form"
-            aria-label="Authorize as"
-            data-agent-select
-            class="bg-card border px-2 py-2 text-sm"
-          >
-            <option value="" data-subject-display="{{.SubjectDisplay}}">
-              Myself — {{.SubjectDisplay}}
-            </option>
-            {{range .AgentOptions}}
-            <option value="{{.ID}}" data-subject-display="{{.Name}}">
-              Agent — {{.Name}}
-            </option>
-            {{end}}
-          </select>
-          <div data-agent-policy hidden>
-            <p class="text-sm text-foreground">
-              This authorizes the selected agent to connect to {{.MCPSlug}} only.
-            </p>
-            <p class="text-xs text-muted-foreground">
-              Requested access is fixed to endpoint-scoped
-              <span class="font-mono">mcp:connect</span>. Agent and owner
-              policy are checked again when you authorize.
-            </p>
-          </div>
-          <p class="text-xs text-muted-foreground">
-            Need another agent?
-            <a href="{{.AgentSetupURL}}" target="_blank" rel="noopener" class="underline">
-              Create or configure it in Agent management
-            </a>, then restart authorization.
-          </p>
-        </div>
-        {{end}}
-
         {{if .ShowToolsIsland}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
           <h2 class="text-eyebrow">Tool access</h2>
@@ -267,7 +331,7 @@
             class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
           >
             <span class="text-xs text-muted-foreground truncate">
-              Signing in as
+              <span data-consent-subject-mode>Signing in as</span>
               <span class="text-foreground font-mono" data-consent-subject-display>{{.SubjectDisplay}}</span
               >{{if .SelectedSessionDuration}} for
               <span class="text-foreground" data-session-duration-label

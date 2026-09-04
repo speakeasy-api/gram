@@ -45,25 +45,42 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
-    var agentSelect = form.elements.namedItem("agent_id");
+    var agentInputs = document.querySelectorAll("input[data-agent-select]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
+    var agentPolicyName = document.querySelector("[data-agent-policy-name]");
     var subjectDisplay = document.querySelector(
       "[data-consent-subject-display]",
     );
+    var subjectMode = document.querySelector("[data-consent-subject-mode]");
     var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
-    if (agentSelect) {
+    if (agentInputs.length > 0) {
       var syncAgentSelection = function () {
-        var selected = agentSelect.options[agentSelect.selectedIndex];
-        var authorizingAgent = agentSelect.value !== "";
+        var selected = null;
+        Array.prototype.forEach.call(agentInputs, function (input) {
+          if (input.checked) {
+            selected = input;
+          }
+        });
+        var authorizingAgent = Boolean(selected && selected.value !== "");
+        var selectedDisplay = selected
+          ? selected.getAttribute("data-subject-display") || ""
+          : "";
         if (agentPolicy) {
           agentPolicy.hidden = !authorizingAgent;
+        }
+        if (agentPolicyName) {
+          agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
         }
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
         if (subjectDisplay && selected) {
-          subjectDisplay.textContent =
-            selected.getAttribute("data-subject-display") || "";
+          subjectDisplay.textContent = selectedDisplay;
+        }
+        if (subjectMode) {
+          subjectMode.textContent = authorizingAgent
+            ? "Authorizing"
+            : "Signing in as";
         }
         if (button) {
           button.textContent = authorizingAgent
@@ -79,7 +96,9 @@
             : button.getAttribute("data-consent-self-ready") !== "true";
         }
       };
-      agentSelect.addEventListener("change", syncAgentSelection);
+      Array.prototype.forEach.call(agentInputs, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
       syncAgentSelection();
     }
 
