@@ -1,0 +1,23 @@
+infra/internal/gcp/pubsub_discover.go
+  s_b390d6ce53b276::t_b93937efe6d9b0 411-413,416
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_8afb3d3cf50904 203,205,207,209,211-212,214,216,218-219,221-222,228,231,236
+infra/gen/kcc.yaml
+  s_b390d6ce53b276::t_701e09cf4d91e3 1499-1500,1516-1517,1532-1533,1549-1550,1565-1566,1572-1573,1589-1590,1606-1607,1623-1624,1630-1631,1647-1648,1654-1655,1707-1708,1734-1735,1781-1782
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f74ae49d46ff39e00cc2f64547ddf43d706c3656",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
