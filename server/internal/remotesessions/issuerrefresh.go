@@ -162,50 +162,10 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	if err != nil {
 		return zero, nil, err
 	}
-	doc, warnings := discovered.doc, discovered.warnings
+	doc := discovered.doc
 
-	// Gram distrusts the whole document rather than salvaging parts of it. A
-	// refresh overwrites metadata that currently works, so a document that
-	// deviates on anything load-bearing is more likely to be a captive portal,
-	// an error page rendered as JSON, or a misconfigured gateway than a genuine
-	// change the operator wants persisted.
-	//
-	// The issuer claim is checked first. This query cannot write the issuer
-	// column, so the stored URL is never repointed; what the check prevents is
-	// adopting some *other* authorization server's endpoints, which would send
-	// users somewhere else at the next sign-in.
-	//
-	// An advertised issuer equal to the stored URL's origin is accepted, because
-	// that is the shape issuerProbeCandidates itself manufactures: when the
-	// path-aware candidates 404, it falls back to the origin-root well-known
-	// URL, and gateways that serve metadata only there advertise the origin.
-	// Rejecting it would make every issuer created through that fallback
-	// permanently unrefreshable. The relaxation is deliberately no wider than
-	// the fallback: a sibling path on the same host (a different tenant on a
-	// multi-tenant IdP) still aborts. collectDiscoveryWarnings has already
-	// recorded the divergence, so the operator still sees it.
-	switch {
-	case doc.Issuer == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
-		}
-	case !issuerURLsEqual(doc.Issuer, issuer.Issuer) && !issuerURLsEqual(doc.Issuer, issuerOrigin(issuer.Issuer)):
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's endpoints", truncateForMessage(doc.Issuer), issuer.Issuer),
-		}
-	// An issuer advertising neither endpoint is unusable for OAuth. Discovery
-	// returns such a document as a last resort when no probe candidate yields a
-	// better one, which on create leaves the operator to fill the endpoints in
-	// by hand. Persisting it over an issuer that currently has working
-	// endpoints would break every session it mints.
-	case doc.AuthorizationEndpoint == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuer.Issuer),
-		}
-	case doc.TokenEndpoint == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
-		}
+	if err := vetRefreshedDocument(doc, issuer); err != nil {
+		return zero, nil, err
 	}
 
 	// A refresh restates the issuer's whole discovered surface, so a member
@@ -214,14 +174,72 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 	// only when it names the same issuer the fetched document names: a row
 	// repointed to another issuer, including a sibling path on the same
 	// host, must not inherit the previous issuer's endpoints. The fill runs
-	// after the gate above so a stored member never satisfies a check the
-	// upstream failed.
+	// after vetRefreshedDocument so a stored member never satisfies a check
+	// the upstream failed.
 	if discovered.unreadable != "" {
 		if storedIssuer := rawDocumentIssuer(issuer.Metadata); storedIssuer != "" && issuerURLsEqual(storedIssuer, doc.Issuer) {
 			doc = mergeIssuerMetadata(doc, documentFromRaw(issuer.Metadata))
 		}
 	}
 
+	return discoveredMetadataParams(doc, discovered.unreadable, issuer), discovered.warnings, nil
+}
+
+// vetRefreshedDocument is the distrust gate a fetched document must pass
+// before it may overwrite an issuer's stored metadata. Gram distrusts the
+// whole document rather than salvaging parts of it: a refresh overwrites
+// metadata that currently works, so a document that deviates on anything
+// load-bearing is more likely to be a captive portal, an error page rendered
+// as JSON, or a misconfigured gateway than a genuine change the operator wants
+// persisted.
+//
+// The issuer claim is checked first. The update query cannot write the issuer
+// column, so the stored URL is never repointed; what the check prevents is
+// adopting some *other* authorization server's endpoints, which would send
+// users somewhere else at the next sign-in.
+//
+// An advertised issuer equal to the stored URL's origin is accepted, because
+// that is the shape issuerProbeCandidates itself manufactures: when the
+// path-aware candidates 404, it falls back to the origin-root well-known URL,
+// and gateways that serve metadata only there advertise the origin. Rejecting
+// it would make every issuer created through that fallback permanently
+// unrefreshable. The relaxation is deliberately no wider than the fallback: a
+// sibling path on the same host (a different tenant on a multi-tenant IdP)
+// still aborts. collectDiscoveryWarnings has already recorded the divergence,
+// so the operator still sees it.
+//
+// An issuer advertising neither endpoint is unusable for OAuth. Discovery
+// returns such a document as a last resort when no probe candidate yields a
+// better one, which on create leaves the operator to fill the endpoints in by
+// hand. Persisting it over an issuer that currently has working endpoints
+// would break every session it mints.
+func vetRefreshedDocument(doc rfc8414Document, issuer repo.RemoteSessionIssuer) error {
+	switch {
+	case doc.Issuer == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
+		}
+	case !issuerURLsEqual(doc.Issuer, issuer.Issuer) && !issuerURLsEqual(doc.Issuer, issuerOrigin(issuer.Issuer)):
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's endpoints", truncateForMessage(doc.Issuer), issuer.Issuer),
+		}
+	case doc.AuthorizationEndpoint == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuer.Issuer),
+		}
+	case doc.TokenEndpoint == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
+		}
+	default:
+		return nil
+	}
+}
+
+// discoveredMetadataParams maps a vetted document onto the parameters that
+// persist it over issuer's row. unreadable is the well-known URL discovery
+// could not read this run, or "" when every candidate answered.
+func discoveredMetadataParams(doc rfc8414Document, unreadable string, issuer repo.RemoteSessionIssuer) repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams {
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
 		// An endpoint the issuer has stopped advertising arrives here as an
 		// empty string, which the query clears to NULL. Manual endpoint
@@ -230,17 +248,14 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		// Deliberately absent from the distrust gate above: an issuer that
+		// Deliberately absent from vetRefreshedDocument: an issuer that
 		// advertises no revocation endpoint is the common case, not a signal
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session
-		// against such an issuer stays a local soft-delete. A plaintext one
-		// arrives already blanked by sanitizeIssuerDocument.
-		RevocationEndpoint:   doc.RevocationEndpoint,
-		RegistrationEndpoint: doc.RegistrationEndpoint,
-		JwksUri:              doc.JwksURI,
-		// Rendered as links downstream; a value that is not an absolute
-		// http(s) URL arrives already blanked by sanitizeIssuerDocument.
+		// against such an issuer stays a local soft-delete.
+		RevocationEndpoint:                doc.RevocationEndpoint,
+		RegistrationEndpoint:              doc.RegistrationEndpoint,
+		JwksUri:                           doc.JwksURI,
 		ServiceDocumentation:              doc.ServiceDocumentation,
 		OpPolicyUri:                       doc.OpPolicyURI,
 		OpTosUri:                          doc.OpTosURI,
@@ -272,7 +287,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 
 		// Recorded so the next refresh, and anyone reading the row, can tell
 		// which members were kept from the stored document rather than read.
-		MetadataUnreadableUrl: discovered.unreadable,
+		MetadataUnreadableUrl: unreadable,
 
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no
@@ -281,7 +296,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		Issuer:         issuer.Issuer,
 		ProjectID:      issuer.ProjectID,
 		OrganizationID: issuer.OrganizationID,
-	}, warnings, nil
+	}
 }
 
 // refreshConflictMessage is what a caller reports when the shared update

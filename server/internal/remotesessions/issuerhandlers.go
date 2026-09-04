@@ -1312,16 +1312,8 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 		}
 	}
 
-	var doc rfc8414Document
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, &discoveryError{
-			WellKnownURL: wellKnown,
-			Status:       resp.StatusCode,
-			cause:        fmt.Errorf("decode discovery document: %w", err),
-			definitive:   false,
-		}
-	}
-	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
+	doc, err := decodeIssuerDocument(body, requestURL)
+	if err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
@@ -1329,9 +1321,26 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			definitive:   false,
 		}
 	}
+
+	return doc, nil
+}
+
+// decodeIssuerDocument projects a discovery document body onto its typed
+// fields: it rejects endpoints that would weaken the transport guarantee,
+// keeps the body verbatim as raw, and blanks the members Gram would not act
+// on. requested is the well-known URL the body came from, which is what the
+// loopback exception for endpoints is measured against. A stored document is
+// re-projected the same way, without a fetch.
+func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	var doc rfc8414Document
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return rfc8414Document{}, fmt.Errorf("decode discovery document: %w", err)
+	}
+	if err := validateIssuerMetadataEndpoints(doc, requested); err != nil {
+		return rfc8414Document{}, err
+	}
 	doc.raw = body
 	sanitizeIssuerDocument(&doc)
-
 	return doc, nil
 }
 
