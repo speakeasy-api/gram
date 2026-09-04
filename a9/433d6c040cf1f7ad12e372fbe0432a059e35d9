@@ -1,0 +1,35 @@
+server/cmd/gram/start.go
+  s_b390d6ce53b276::t_ea0de69862944c 128,849-850,872-877,898-916,1346
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_46df516e58a275 640-645
+server/cmd/tools/enforceproto/main.go
+  s_b390d6ce53b276::t_3e5fdee2d0ba0c 132-137
+server/internal/feature/flags.go
+  s_b390d6ce53b276::t_e51849fc0188e8 25-26
+server/internal/risk/enforcereply/dispatch.go
+  s_b390d6ce53b276::t_abf74a6cf423bd 66-71,148,169,188-189,203-207,218
+server/internal/risk/enforcereply/dispatch_test.go
+  s_b390d6ce53b276::t_f3d1394bc27bec 142,144-149,160-162,179-207
+server/internal/risk/enforcereply/inbox.go
+  s_b390d6ce53b276::t_d2a842b3f85eae 58-60
+server/internal/risk/scanner.go
+  s_b390d6ce53b276::t_00ba7eafc95252 11,17,23,33,156-158,184-192,194-196,202-206,221,245-277,303,409-413,432,589,688-693,713-732,734-735,880-1034
+server/internal/risk/scanner_test.go
+  s_b390d6ce53b276::t_e6cb04d1cacba0 19,26,58-67,135-139,151,229-254,268-410
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a9433d6c040cf1f7ad12e372fbe0432a059e35d9",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
