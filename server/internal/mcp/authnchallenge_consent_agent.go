@@ -113,7 +113,10 @@ func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeStat
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.Subject.ID == "" || state.AuthorizerUserID == "" || state.AuthorizerUserID != state.Subject.ID {
 		return consentHumanAuthorization{}, errors.New("agent authorization requires an authenticated human")
 	}
-	if state.AuthorizerImpersonated {
+	if state.AuthorizerImpersonated == nil {
+		return consentHumanAuthorization{}, errors.New("agent authorizer provenance is unavailable")
+	}
+	if *state.AuthorizerImpersonated {
 		return consentHumanAuthorization{}, errors.New("impersonated support sessions cannot authorize agents")
 	}
 

@@ -200,7 +200,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
-	challengeState.AuthorizerImpersonated = idpUser.ImpersonatorEmail() != ""
+	impersonated := idpUser.ImpersonatorEmail() != ""
+	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)

@@ -116,9 +116,11 @@ type AuthnChallengeState struct {
 	// never makes the agent appear to have consented for itself.
 	AuthorizerUserID string `json:"authorizer_user_id,omitempty"`
 	// AuthorizerImpersonated preserves WorkOS support-session provenance across
-	// the redirect to consent. Impersonated humans may authorize themselves but
-	// must never authorize an agent.
-	AuthorizerImpersonated bool `json:"authorizer_impersonated,omitempty"`
+	// the redirect to consent. A nil value marks legacy or unresolved state and
+	// fails agent authorization closed; false is serialized after an ordinary
+	// IDP callback. Impersonated humans may authorize themselves but must never
+	// authorize an agent.
+	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`

@@ -67,19 +67,9 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 
 	grants := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		scope := Scope(row.Scope)
-		if ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope) != nil {
-			continue
+		if grant, ok := normalizeAgentPolicyGrant(row); ok {
+			grants = append(grants, grant)
 		}
-		selector, err := SelectorFromRow(row.Selectors)
-		if err != nil || ValidateSelector(scope, selector) != nil {
-			continue
-		}
-		grants = append(grants, Grant{
-			PrincipalUrn: canonical.String(),
-			Scope:        scope,
-			Selector:     selector,
-		})
 	}
 
 	return grants, nil
@@ -118,25 +108,29 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 	}
 
 	for _, row := range rows {
-		principal := row.PrincipalUrn.String()
-		agentID, ok := agentIDByPrincipal[principal]
-		if !ok {
-			continue
+		agentID, known := agentIDByPrincipal[row.PrincipalUrn.String()]
+		grant, valid := normalizeAgentPolicyGrant(row)
+		if known && valid {
+			policies[agentID] = append(policies[agentID], grant)
 		}
-		scope := Scope(row.Scope)
-		if ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope) != nil {
-			continue
-		}
-		selector, err := SelectorFromRow(row.Selectors)
-		if err != nil || ValidateSelector(scope, selector) != nil {
-			continue
-		}
-		policies[agentID] = append(policies[agentID], Grant{
-			PrincipalUrn: principal,
-			Scope:        scope,
-			Selector:     selector,
-		})
 	}
 
 	return policies, nil
+}
+
+func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (Grant, bool) {
+	var invalid Grant
+	scope := Scope(row.Scope)
+	if ValidateAgentRuntimeScope(CurrentAgentRuntimeScopeRegistryVersion, scope) != nil {
+		return invalid, false
+	}
+	selector, err := SelectorFromRow(row.Selectors)
+	if err != nil || ValidateSelector(scope, selector) != nil {
+		return invalid, false
+	}
+	return Grant{
+		PrincipalUrn: row.PrincipalUrn.String(),
+		Scope:        scope,
+		Selector:     selector,
+	}, true
 }

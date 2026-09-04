@@ -773,6 +773,12 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.Contains(t, loc, "state=", "consent redirect should carry new challenge state")
 	// The state in the redirect should NOT be the original challengeID (it gets rotated)
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
+	consentURL, err := url.Parse(loc)
+	require.NoError(t, err)
+	rotatedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+consentURL.Query().Get("state"))
+	require.NoError(t, err)
+	require.NotNil(t, rotatedState.AuthorizerImpersonated)
+	require.False(t, *rotatedState.AuthorizerImpersonated)
 }
 
 func TestHandleIDPCallback_RejectsResolvedSubjectReplacement(t *testing.T) {
