@@ -215,7 +215,12 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	}
 
 	if payload.Assignee != nil && !sameSetupTaskAssignee(before.Assignee, after.Assignee) {
-		s.sendSetupTaskAssignmentEmail(ctx, ac, organization.Name, organization.Slug, after, updated.UpdatedAt.Time)
+		detached := context.WithoutCancel(ctx)
+		go func() {
+			emailCtx, cancel := context.WithTimeout(detached, 10*time.Second)
+			defer cancel()
+			s.sendSetupTaskAssignmentEmail(emailCtx, ac, organization.Name, organization.Slug, after, updated.UpdatedAt.Time)
+		}()
 	}
 
 	return after, nil

@@ -996,18 +996,8 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
-	}
-	adminErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if adminErr != nil {
-		tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
-		if err != nil {
-			return nil, err
-		}
-		if !setupTaskAssignedTo(setupTaskByKey(tasks, "confirm-traffic"), ac) {
-			return nil, adminErr
-		}
 	}
 
 	if s.hooks == nil {

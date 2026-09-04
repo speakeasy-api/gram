@@ -1,9 +1,12 @@
 package organizations_test
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -14,6 +17,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestService_UpdateSetupTaskAssignmentEmailIsDetachedNonblockingAndBounded(t *testing.T) {
+	t.Parallel()
+
+	parentCtx, ti := newTestOrganizationsServiceWithEmail(t)
+	authCtx, ok := contextvalues.GetAuthContext(parentCtx)
+	require.True(t, ok)
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	deliveryStarted := make(chan context.Context, 1)
+	releaseDelivery := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseDelivery) }) }
+	t.Cleanup(release)
+	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		deliveryCtx := args.Get(0).(context.Context)
+		deliveryStarted <- deliveryCtx
+		<-releaseDelivery
+	}).Return(nil).Once()
+
+	type updateResult struct {
+		task *gen.SetupTask
+		err  error
+	}
+	updateDone := make(chan updateResult, 1)
+	go func() {
+		result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
+			TaskKey:  "configure-policies",
+			Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID},
+		})
+		updateDone <- updateResult{task: result, err: err}
+	}()
+
+	select {
+	case result := <-updateDone:
+		require.NoError(t, result.err)
+		require.NotNil(t, result.task)
+	case <-time.After(time.Second):
+		t.Fatal("setup task update waited for assignment email delivery")
+	}
+	cancel()
+
+	var deliveryCtx context.Context
+	select {
+	case deliveryCtx = <-deliveryStarted:
+	case <-time.After(time.Second):
+		t.Fatal("assignment email did not start")
+	}
+	require.NoError(t, deliveryCtx.Err(), "delivery context must survive request cancellation")
+	deadline, ok := deliveryCtx.Deadline()
+	require.True(t, ok, "delivery context must be bounded")
+	require.WithinDuration(t, time.Now().Add(10*time.Second), deadline, time.Second)
+	release()
+}
+
 func TestService_UpdateSetupTaskSendsAssignmentEmailAfterCommit(t *testing.T) {
 	t.Parallel()
 
@@ -22,6 +79,7 @@ func TestService_UpdateSetupTaskSendsAssignmentEmailAfterCommit(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.Email)
 
+	sent := make(chan struct{})
 	ti.loops.On("SendTransactional", mock.Anything, mock.MatchedBy(func(input loops.SendTransactionalInput) bool {
 		return input.TransactionalID == "setup-task-assignment-test-id" &&
 			input.Email == *authCtx.Email &&
@@ -33,7 +91,7 @@ func TestService_UpdateSetupTaskSendsAssignmentEmailAfterCommit(t *testing.T) {
 			strings.HasPrefix(input.IdempotencyKey, "setup-task-assignment:") &&
 			len(input.IdempotencyKey) <= 100 &&
 			!input.AddToAudience
-	})).Return(nil).Once()
+	})).Run(func(mock.Arguments) { close(sent) }).Return(nil).Once()
 
 	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
 		TaskKey:  "configure-policies",
@@ -41,6 +99,7 @@ func TestService_UpdateSetupTaskSendsAssignmentEmailAfterCommit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, authCtx.UserID, *result.Assignee.UserID)
+	waitForAssignmentEmail(t, sent)
 }
 
 func TestService_UpdateSetupTaskSkipsNonAssignmentNotifications(t *testing.T) {
@@ -49,11 +108,13 @@ func TestService_UpdateSetupTaskSkipsNonAssignmentNotifications(t *testing.T) {
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(nil).Once()
+	sent := make(chan struct{})
+	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Run(func(mock.Arguments) { close(sent) }).Return(nil).Once()
 
 	assignment := &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID}}
 	_, err := ti.service.UpdateSetupTask(ctx, assignment)
 	require.NoError(t, err)
+	waitForAssignmentEmail(t, sent)
 	_, err = ti.service.UpdateSetupTask(ctx, assignment)
 	require.NoError(t, err)
 	done := "done"
@@ -70,7 +131,8 @@ func TestService_UpdateSetupTaskAssignmentEmailIsBestEffort(t *testing.T) {
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(errors.New("delivery unavailable")).Once()
+	sent := make(chan struct{})
+	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Run(func(mock.Arguments) { close(sent) }).Return(errors.New("delivery unavailable")).Once()
 
 	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
 		TaskKey:  "configure-policies",
@@ -78,6 +140,7 @@ func TestService_UpdateSetupTaskAssignmentEmailIsBestEffort(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	waitForAssignmentEmail(t, sent)
 }
 
 func TestService_UpdateSetupTaskSkipsAssignmentEmailWhenDisabledOrTransactionFails(t *testing.T) {
@@ -108,4 +171,13 @@ func TestService_UpdateSetupTaskSkipsAssignmentEmailWhenDisabledOrTransactionFai
 		require.Error(t, err)
 		require.Nil(t, result)
 	})
+}
+
+func waitForAssignmentEmail(t *testing.T, sent <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-sent:
+	case <-time.After(time.Second):
+		t.Fatal("assignment email was not sent")
+	}
 }

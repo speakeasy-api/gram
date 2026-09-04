@@ -4,6 +4,16 @@ import { Button } from "@/components/ui/Button";
 
 const StepSupportContext = createContext<(() => void) | undefined>(undefined);
 
+export function StepSupportButton(): JSX.Element | null {
+  const onSupport = useContext(StepSupportContext);
+
+  return onSupport ? (
+    <Button variant="secondary" onClick={onSupport}>
+      Get support
+    </Button>
+  ) : null;
+}
+
 export function StepSupportProvider({
   onSupport,
   children,
@@ -47,8 +57,6 @@ export function StepContainer({
   isLoading = false,
   canContinue = true,
 }: StepContainerProps): JSX.Element {
-  const onSupport = useContext(StepSupportContext);
-
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -88,11 +96,7 @@ export function StepContainer({
               {skipLabel}
             </Button>
           )}
-          {onSupport ? (
-            <Button variant="secondary" onClick={onSupport}>
-              Get support
-            </Button>
-          ) : null}
+          <StepSupportButton />
           <Button
             onClick={onContinue}
             disabled={!canContinue || isLoading}

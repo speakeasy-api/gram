@@ -116,6 +116,33 @@ describe("setup interaction fixes", () => {
     finishCompletion();
   });
 
+  it("prevents duplicate support requests while the handler is in flight", () => {
+    let finishSupport = () => {};
+    const onSupport = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSupport = resolve;
+        }),
+    );
+    render(
+      <SetupTaskDialog
+        task={task}
+        pending={false}
+        onClose={() => {}}
+        onComplete={() => {}}
+        onSupport={onSupport}
+        onSkip={() => {}}
+      />,
+    );
+
+    const support = screen.getByRole("button", { name: "Get support" });
+    fireEvent.click(support);
+    fireEvent.click(support);
+
+    expect(onSupport).toHaveBeenCalledOnce();
+    finishSupport();
+  });
+
   it("does not dismiss or repeat task actions while pending", () => {
     const onClose = vi.fn();
     const onComplete = vi.fn();

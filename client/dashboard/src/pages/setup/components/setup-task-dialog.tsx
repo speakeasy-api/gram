@@ -20,15 +20,15 @@ export function SetupTaskDialog({
   onSupport,
   onSkip,
 }: SetupTaskDialogProps): JSX.Element {
-  const completionInFlight = useRef(false);
+  const actionInFlight = useRef(false);
 
-  const handleComplete = async () => {
-    if (pending || completionInFlight.current) return;
-    completionInFlight.current = true;
+  const handleAction = async (action: () => void | Promise<void>) => {
+    if (pending || actionInFlight.current) return;
+    actionInFlight.current = true;
     try {
-      await onComplete();
+      await action();
     } finally {
-      completionInFlight.current = false;
+      actionInFlight.current = false;
     }
   };
 
@@ -57,10 +57,8 @@ export function SetupTaskDialog({
           <SetupTaskContent
             taskKey={task.key}
             projectSlug="default"
-            onComplete={() => void handleComplete()}
-            onSupport={() => {
-              if (!pending) void onSupport();
-            }}
+            onComplete={() => void handleAction(onComplete)}
+            onSupport={() => void handleAction(onSupport)}
             onSkip={() => {
               if (!pending) onSkip();
             }}

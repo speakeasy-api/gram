@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { PlatformMCPOnboardingContent } from "@/pages/org/PlatformMCP";
 import { RequireScope } from "@/components/require-scope";
+import { StepSupportButton } from "../step-container";
 
 interface PlatformMCPSetupStepProps {
   onComplete: () => void;
@@ -34,6 +35,7 @@ export function PlatformMCPSetupStep({
           <Button variant="tertiary" onClick={onSkip}>
             Skip for now
           </Button>
+          <StepSupportButton />
           <Button variant="secondary" onClick={onComplete}>
             {continueLabel}
           </Button>

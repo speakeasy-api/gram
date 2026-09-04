@@ -312,7 +312,6 @@ export function DistributeServersStep({
       setSelected(new Set());
 
       setDrawerStep("done");
-      onComplete();
     } catch (error) {
       setDrawerError(
         error instanceof Error
@@ -715,7 +714,14 @@ export function DistributeServersStep({
                   <Button.Text>Close</Button.Text>
                 </Button>
               ) : (
-                <Button variant="primary" size="sm" onClick={resetDrawer}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    resetDrawer();
+                    onComplete();
+                  }}
+                >
                   <Button.Text>Finish</Button.Text>
                 </Button>
               )}
