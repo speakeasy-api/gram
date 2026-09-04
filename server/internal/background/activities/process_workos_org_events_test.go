@@ -15,6 +15,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -1329,6 +1330,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Membership loss agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -1365,6 +1374,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	require.Len(t, assignments, 1)
 	require.True(t, assignments[0].DeletedAt.Valid)
 	require.Equal(t, "event_01HZDEL2", assignments[0].WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *testing.T) {
@@ -1383,6 +1396,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Rejoined owner agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -1405,6 +1426,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 	require.False(t, relationship.Deleted)
 	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
 	require.Equal(t, "event_01HZREJOIN3", relationship.WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {

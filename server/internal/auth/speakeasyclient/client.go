@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -294,7 +295,6 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 	}
 
 	repos := userRepo.New(c.db)
-	orgs := orgRepo.New(c.db)
 
 	var workosUserID string
 
@@ -333,12 +333,37 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 		membershipIDs[i] = m.ID
 	}
 
-	if err := orgs.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+	tx, err := c.db.Begin(ctx)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "failed to begin workos membership sync", attr.SlogError(err))
+		return nil
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := orgRepo.New(tx)
+	lost, err := qtx.LockWorkOSMembershipsMissingFromSet(ctx, orgRepo.LockWorkOSMembershipsMissingFromSetParams{
+		UserID:       conv.ToPGText(user.ID),
+		WorkosOrgIds: workosOrgIDs,
+	})
+	if err != nil {
+		c.logger.ErrorContext(ctx, "failed to lock removed workos memberships", attr.SlogError(err))
+		return nil
+	}
+	if err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              conv.ToPGText(user.ID),
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
 	}); err != nil {
 		c.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
+		return nil
+	}
+	for _, membership := range lost {
+		if err := agentownership.LatchOwnerLossByMembership(ctx, tx, membership.OrganizationID, user.ID, agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil); err != nil {
+			c.logger.ErrorContext(ctx, "failed to latch agent owner membership loss", attr.SlogError(err))
+			return nil
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		c.logger.ErrorContext(ctx, "failed to commit workos membership sync", attr.SlogError(err))
 	}
 
 	return nil

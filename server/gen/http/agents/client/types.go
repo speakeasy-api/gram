@@ -27,6 +27,24 @@ type RenameRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
+// TransferRequestBody is the type of the "agents" service "transfer" endpoint
+// HTTP request body.
+type TransferRequestBody struct {
+	// First-class agent identifier
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// Eligible same-organization human replacement owner
+	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+}
+
+// ReassignRequestBody is the type of the "agents" service "reassign" endpoint
+// HTTP request body.
+type ReassignRequestBody struct {
+	// First-class agent identifier
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// Eligible same-organization human replacement owner
+	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+}
+
 // SuspendRequestBody is the type of the "agents" service "suspend" endpoint
 // HTTP request body.
 type SuspendRequestBody struct {
@@ -58,73 +76,129 @@ type DeleteRequestBody struct {
 // CreateResponseBody is the type of the "agents" service "create" endpoint
 // HTTP response body.
 type CreateResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetResponseBody is the type of the "agents" service "get" endpoint HTTP
 // response body.
 type GetResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
 // HTTP response body.
 type RenameResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// TransferResponseBody is the type of the "agents" service "transfer" endpoint
+// HTTP response body.
+type TransferResponseBody struct {
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ReassignResponseBody is the type of the "agents" service "reassign" endpoint
+// HTTP response body.
+type ReassignResponseBody struct {
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
 // HTTP response body.
 type SuspendResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ResumeResponseBody is the type of the "agents" service "resume" endpoint
 // HTTP response body.
 type ResumeResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RevokeResponseBody is the type of the "agents" service "revoke" endpoint
 // HTTP response body.
 type RevokeResponseBody struct {
-	ID          *string                       `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OwnerUserID *string                       `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
-	Name        *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    *string                       `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Lifecycle               *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions             *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt               *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateUnauthorizedResponseBody is the type of the "agents" service "create"
@@ -652,6 +726,366 @@ type RenameUnexpectedResponseBody struct {
 // RenameGatewayErrorResponseBody is the type of the "agents" service "rename"
 // endpoint HTTP response body for the "gateway_error" error.
 type RenameGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferUnauthorizedResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "unauthorized" error.
+type TransferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferForbiddenResponseBody is the type of the "agents" service "transfer"
+// endpoint HTTP response body for the "forbidden" error.
+type TransferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferBadRequestResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "bad_request" error.
+type TransferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferNotFoundResponseBody is the type of the "agents" service "transfer"
+// endpoint HTTP response body for the "not_found" error.
+type TransferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferConflictResponseBody is the type of the "agents" service "transfer"
+// endpoint HTTP response body for the "conflict" error.
+type TransferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferUnsupportedMediaResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "unsupported_media" error.
+type TransferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferInvalidResponseBody is the type of the "agents" service "transfer"
+// endpoint HTTP response body for the "invalid" error.
+type TransferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferInvariantViolationResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "invariant_violation" error.
+type TransferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferUnexpectedResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "unexpected" error.
+type TransferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TransferGatewayErrorResponseBody is the type of the "agents" service
+// "transfer" endpoint HTTP response body for the "gateway_error" error.
+type TransferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignUnauthorizedResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "unauthorized" error.
+type ReassignUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignForbiddenResponseBody is the type of the "agents" service "reassign"
+// endpoint HTTP response body for the "forbidden" error.
+type ReassignForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignBadRequestResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "bad_request" error.
+type ReassignBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignNotFoundResponseBody is the type of the "agents" service "reassign"
+// endpoint HTTP response body for the "not_found" error.
+type ReassignNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignConflictResponseBody is the type of the "agents" service "reassign"
+// endpoint HTTP response body for the "conflict" error.
+type ReassignConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignUnsupportedMediaResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "unsupported_media" error.
+type ReassignUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignInvalidResponseBody is the type of the "agents" service "reassign"
+// endpoint HTTP response body for the "invalid" error.
+type ReassignInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignInvariantViolationResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "invariant_violation" error.
+type ReassignInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignUnexpectedResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "unexpected" error.
+type ReassignUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReassignGatewayErrorResponseBody is the type of the "agents" service
+// "reassign" endpoint HTTP response body for the "gateway_error" error.
+type ReassignGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1419,6 +1853,26 @@ func NewRenameRequestBody(p *agents.RenamePayload) *RenameRequestBody {
 	return body
 }
 
+// NewTransferRequestBody builds the HTTP request body from the payload of the
+// "transfer" endpoint of the "agents" service.
+func NewTransferRequestBody(p *agents.TransferPayload) *TransferRequestBody {
+	body := &TransferRequestBody{
+		AgentID:     p.AgentID,
+		OwnerUserID: p.OwnerUserID,
+	}
+	return body
+}
+
+// NewReassignRequestBody builds the HTTP request body from the payload of the
+// "reassign" endpoint of the "agents" service.
+func NewReassignRequestBody(p *agents.ReassignPayload) *ReassignRequestBody {
+	body := &ReassignRequestBody{
+		AgentID:     p.AgentID,
+		OwnerUserID: p.OwnerUserID,
+	}
+	return body
+}
+
 // NewSuspendRequestBody builds the HTTP request body from the payload of the
 // "suspend" endpoint of the "agents" service.
 func NewSuspendRequestBody(p *agents.SuspendPayload) *SuspendRequestBody {
@@ -1459,12 +1913,14 @@ func NewDeleteRequestBody(p *agents.DeletePayload) *DeleteRequestBody {
 // result from a HTTP "Created" response.
 func NewCreateManagedAgentCreated(body *CreateResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -1620,12 +2076,14 @@ func NewCreateGatewayError(body *CreateGatewayErrorResponseBody) *goa.ServiceErr
 // HTTP "OK" response.
 func NewGetManagedAgentOK(body *GetResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -1778,12 +2236,14 @@ func NewGetGatewayError(body *GetGatewayErrorResponseBody) *goa.ServiceError {
 // from a HTTP "OK" response.
 func NewRenameManagedAgentOK(body *RenameResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -1935,16 +2395,350 @@ func NewRenameGatewayError(body *RenameGatewayErrorResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewTransferManagedAgentOK builds a "agents" service "transfer" endpoint
+// result from a HTTP "OK" response.
+func NewTransferManagedAgentOK(body *TransferResponseBody) *agents.ManagedAgent {
+	v := &agents.ManagedAgent{
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
+	}
+	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
+
+	return v
+}
+
+// NewTransferUnauthorized builds a agents service transfer endpoint
+// unauthorized error.
+func NewTransferUnauthorized(body *TransferUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferForbidden builds a agents service transfer endpoint forbidden
+// error.
+func NewTransferForbidden(body *TransferForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferBadRequest builds a agents service transfer endpoint bad_request
+// error.
+func NewTransferBadRequest(body *TransferBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferNotFound builds a agents service transfer endpoint not_found
+// error.
+func NewTransferNotFound(body *TransferNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferConflict builds a agents service transfer endpoint conflict error.
+func NewTransferConflict(body *TransferConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferUnsupportedMedia builds a agents service transfer endpoint
+// unsupported_media error.
+func NewTransferUnsupportedMedia(body *TransferUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferInvalid builds a agents service transfer endpoint invalid error.
+func NewTransferInvalid(body *TransferInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferInvariantViolation builds a agents service transfer endpoint
+// invariant_violation error.
+func NewTransferInvariantViolation(body *TransferInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferUnexpected builds a agents service transfer endpoint unexpected
+// error.
+func NewTransferUnexpected(body *TransferUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTransferGatewayError builds a agents service transfer endpoint
+// gateway_error error.
+func NewTransferGatewayError(body *TransferGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignManagedAgentOK builds a "agents" service "reassign" endpoint
+// result from a HTTP "OK" response.
+func NewReassignManagedAgentOK(body *ReassignResponseBody) *agents.ManagedAgent {
+	v := &agents.ManagedAgent{
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
+	}
+	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
+
+	return v
+}
+
+// NewReassignUnauthorized builds a agents service reassign endpoint
+// unauthorized error.
+func NewReassignUnauthorized(body *ReassignUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignForbidden builds a agents service reassign endpoint forbidden
+// error.
+func NewReassignForbidden(body *ReassignForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignBadRequest builds a agents service reassign endpoint bad_request
+// error.
+func NewReassignBadRequest(body *ReassignBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignNotFound builds a agents service reassign endpoint not_found
+// error.
+func NewReassignNotFound(body *ReassignNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignConflict builds a agents service reassign endpoint conflict error.
+func NewReassignConflict(body *ReassignConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignUnsupportedMedia builds a agents service reassign endpoint
+// unsupported_media error.
+func NewReassignUnsupportedMedia(body *ReassignUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignInvalid builds a agents service reassign endpoint invalid error.
+func NewReassignInvalid(body *ReassignInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignInvariantViolation builds a agents service reassign endpoint
+// invariant_violation error.
+func NewReassignInvariantViolation(body *ReassignInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignUnexpected builds a agents service reassign endpoint unexpected
+// error.
+func NewReassignUnexpected(body *ReassignUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReassignGatewayError builds a agents service reassign endpoint
+// gateway_error error.
+func NewReassignGatewayError(body *ReassignGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSuspendManagedAgentOK builds a "agents" service "suspend" endpoint result
 // from a HTTP "OK" response.
 func NewSuspendManagedAgentOK(body *SuspendResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -2101,12 +2895,14 @@ func NewSuspendGatewayError(body *SuspendGatewayErrorResponseBody) *goa.ServiceE
 // from a HTTP "OK" response.
 func NewResumeManagedAgentOK(body *ResumeResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -2262,12 +3058,14 @@ func NewResumeGatewayError(body *ResumeGatewayErrorResponseBody) *goa.ServiceErr
 // from a HTTP "OK" response.
 func NewRevokeManagedAgentOK(body *RevokeResponseBody) *agents.ManagedAgent {
 	v := &agents.ManagedAgent{
-		ID:          *body.ID,
-		OwnerUserID: *body.OwnerUserID,
-		Name:        *body.Name,
-		Lifecycle:   agents.AgentLifecycle(*body.Lifecycle),
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:                          *body.ID,
+		OwnerUserID:                 *body.OwnerUserID,
+		OwnerReassignmentRequiredAt: body.OwnerReassignmentRequiredAt,
+		OwnerReassignmentReason:     body.OwnerReassignmentReason,
+		Name:                        *body.Name,
+		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		CreatedAt:                   *body.CreatedAt,
+		UpdatedAt:                   *body.UpdatedAt,
 	}
 	v.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(body.Permissions)
 
@@ -2590,6 +3388,9 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
@@ -2635,6 +3436,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
@@ -2679,6 +3483,107 @@ func ValidateRenameResponseBody(body *RenameResponseBody) (err error) {
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
+	if body.Lifecycle != nil {
+		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
+		}
+	}
+	if body.Permissions != nil {
+		if err2 := ValidateAgentPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTransferResponseBody runs the validations defined on
+// TransferResponseBody
+func ValidateTransferResponseBody(body *TransferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OwnerUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("owner_user_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Lifecycle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lifecycle", "body"))
+	}
+	if body.Permissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
+	if body.Lifecycle != nil {
+		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
+		}
+	}
+	if body.Permissions != nil {
+		if err2 := ValidateAgentPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateReassignResponseBody runs the validations defined on
+// ReassignResponseBody
+func ValidateReassignResponseBody(body *ReassignResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OwnerUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("owner_user_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Lifecycle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lifecycle", "body"))
+	}
+	if body.Permissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
 	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
@@ -2726,6 +3631,9 @@ func ValidateSuspendResponseBody(body *SuspendResponseBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
@@ -2771,6 +3679,9 @@ func ValidateResumeResponseBody(body *ResumeResponseBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
+	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.lifecycle", *body.Lifecycle, []any{"active", "suspended", "revoked"}))
@@ -2815,6 +3726,9 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.OwnerReassignmentRequiredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.owner_reassignment_required_at", *body.OwnerReassignmentRequiredAt, goa.FormatDateTime))
 	}
 	if body.Lifecycle != nil {
 		if !(*body.Lifecycle == "active" || *body.Lifecycle == "suspended" || *body.Lifecycle == "revoked") {
@@ -3534,6 +4448,486 @@ func ValidateRenameUnexpectedResponseBody(body *RenameUnexpectedResponseBody) (e
 // ValidateRenameGatewayErrorResponseBody runs the validations defined on
 // rename_gateway_error_response_body
 func ValidateRenameGatewayErrorResponseBody(body *RenameGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferUnauthorizedResponseBody runs the validations defined on
+// transfer_unauthorized_response_body
+func ValidateTransferUnauthorizedResponseBody(body *TransferUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferForbiddenResponseBody runs the validations defined on
+// transfer_forbidden_response_body
+func ValidateTransferForbiddenResponseBody(body *TransferForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferBadRequestResponseBody runs the validations defined on
+// transfer_bad_request_response_body
+func ValidateTransferBadRequestResponseBody(body *TransferBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferNotFoundResponseBody runs the validations defined on
+// transfer_not_found_response_body
+func ValidateTransferNotFoundResponseBody(body *TransferNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferConflictResponseBody runs the validations defined on
+// transfer_conflict_response_body
+func ValidateTransferConflictResponseBody(body *TransferConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferUnsupportedMediaResponseBody runs the validations defined on
+// transfer_unsupported_media_response_body
+func ValidateTransferUnsupportedMediaResponseBody(body *TransferUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferInvalidResponseBody runs the validations defined on
+// transfer_invalid_response_body
+func ValidateTransferInvalidResponseBody(body *TransferInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferInvariantViolationResponseBody runs the validations defined
+// on transfer_invariant_violation_response_body
+func ValidateTransferInvariantViolationResponseBody(body *TransferInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferUnexpectedResponseBody runs the validations defined on
+// transfer_unexpected_response_body
+func ValidateTransferUnexpectedResponseBody(body *TransferUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTransferGatewayErrorResponseBody runs the validations defined on
+// transfer_gateway_error_response_body
+func ValidateTransferGatewayErrorResponseBody(body *TransferGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignUnauthorizedResponseBody runs the validations defined on
+// reassign_unauthorized_response_body
+func ValidateReassignUnauthorizedResponseBody(body *ReassignUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignForbiddenResponseBody runs the validations defined on
+// reassign_forbidden_response_body
+func ValidateReassignForbiddenResponseBody(body *ReassignForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignBadRequestResponseBody runs the validations defined on
+// reassign_bad_request_response_body
+func ValidateReassignBadRequestResponseBody(body *ReassignBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignNotFoundResponseBody runs the validations defined on
+// reassign_not_found_response_body
+func ValidateReassignNotFoundResponseBody(body *ReassignNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignConflictResponseBody runs the validations defined on
+// reassign_conflict_response_body
+func ValidateReassignConflictResponseBody(body *ReassignConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignUnsupportedMediaResponseBody runs the validations defined on
+// reassign_unsupported_media_response_body
+func ValidateReassignUnsupportedMediaResponseBody(body *ReassignUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignInvalidResponseBody runs the validations defined on
+// reassign_invalid_response_body
+func ValidateReassignInvalidResponseBody(body *ReassignInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignInvariantViolationResponseBody runs the validations defined
+// on reassign_invariant_violation_response_body
+func ValidateReassignInvariantViolationResponseBody(body *ReassignInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignUnexpectedResponseBody runs the validations defined on
+// reassign_unexpected_response_body
+func ValidateReassignUnexpectedResponseBody(body *ReassignUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReassignGatewayErrorResponseBody runs the validations defined on
+// reassign_gateway_error_response_body
+func ValidateReassignGatewayErrorResponseBody(body *ReassignGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

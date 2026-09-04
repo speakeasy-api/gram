@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const disableUser = `-- name: DisableUser :exec
+const disableUser = `-- name: DisableUser :execrows
 UPDATE users
 SET workos_updated_at = $1,
   workos_deleted_at = $2,
@@ -27,9 +27,12 @@ type DisableUserParams struct {
 	WorkosID        pgtype.Text
 }
 
-func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error {
-	_, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
-	return err
+func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one

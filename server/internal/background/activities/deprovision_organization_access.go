@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -30,6 +31,7 @@ type deprovisionOrganizationAccessParams struct {
 	workosMembershipID string
 	eventID            string
 	eventUpdatedAt     time.Time
+	ownerLossReason    agentownership.OwnerReassignmentReason
 }
 
 // deprovisionOrganizationAccess is the single teardown routine for every
@@ -53,6 +55,11 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p de
 		WorkosLastEventID:  conv.ToPGText(p.eventID),
 	}); err != nil {
 		return effects, fmt.Errorf("mark organization membership deleted for workos user %q: %w", p.workosUserID, err)
+	}
+	if err := agentownership.LatchOwnerLossByMembership(
+		ctx, dbtx, p.organizationID, p.gramUserID, p.ownerLossReason, agentownership.SystemActor, nil,
+	); err != nil {
+		return effects, fmt.Errorf("latch agent owner membership loss: %w", err)
 	}
 
 	workosUserID := p.workosUserID

@@ -184,6 +184,16 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
 
+-- name: LockWorkOSMembershipsMissingFromSet :many
+SELECT our.organization_id, our.user_id
+FROM organization_user_relationships AS our
+JOIN organization_metadata AS om ON om.id = our.organization_id
+WHERE our.user_id = @user_id
+  AND our.deleted_at IS NULL
+  AND om.workos_id IS NOT NULL
+  AND NOT (om.workos_id = ANY(@workos_org_ids::text[]))
+FOR UPDATE OF our;
+
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 -- (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts

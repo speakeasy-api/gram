@@ -1158,6 +1158,47 @@ func (q *Queries) LockOrganizationSlug(ctx context.Context, slug string) error {
 	return err
 }
 
+const lockWorkOSMembershipsMissingFromSet = `-- name: LockWorkOSMembershipsMissingFromSet :many
+SELECT our.organization_id, our.user_id
+FROM organization_user_relationships AS our
+JOIN organization_metadata AS om ON om.id = our.organization_id
+WHERE our.user_id = $1
+  AND our.deleted_at IS NULL
+  AND om.workos_id IS NOT NULL
+  AND NOT (om.workos_id = ANY($2::text[]))
+FOR UPDATE OF our
+`
+
+type LockWorkOSMembershipsMissingFromSetParams struct {
+	UserID       pgtype.Text
+	WorkosOrgIds []string
+}
+
+type LockWorkOSMembershipsMissingFromSetRow struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) LockWorkOSMembershipsMissingFromSet(ctx context.Context, arg LockWorkOSMembershipsMissingFromSetParams) ([]LockWorkOSMembershipsMissingFromSetRow, error) {
+	rows, err := q.db.Query(ctx, lockWorkOSMembershipsMissingFromSet, arg.UserID, arg.WorkosOrgIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockWorkOSMembershipsMissingFromSetRow
+	for rows.Next() {
+		var i LockWorkOSMembershipsMissingFromSetRow
+		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markRoleAssignmentsDeleted = `-- name: MarkRoleAssignmentsDeleted :exec
 UPDATE organization_role_assignments
 SET workos_updated_at = $1,

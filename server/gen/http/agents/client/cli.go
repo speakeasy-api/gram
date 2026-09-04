@@ -112,6 +112,66 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 	return v, nil
 }
 
+// BuildTransferPayload builds the payload for the agents transfer endpoint
+// from CLI flags.
+func BuildTransferPayload(agentsTransferBody string, agentsTransferSessionToken string) (*agents.TransferPayload, error) {
+	var err error
+	var body TransferRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsTransferBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsTransferSessionToken != "" {
+			sessionToken = &agentsTransferSessionToken
+		}
+	}
+	v := &agents.TransferPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildReassignPayload builds the payload for the agents reassign endpoint
+// from CLI flags.
+func BuildReassignPayload(agentsReassignBody string, agentsReassignSessionToken string) (*agents.ReassignPayload, error) {
+	var err error
+	var body ReassignRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsReassignBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsReassignSessionToken != "" {
+			sessionToken = &agentsReassignSessionToken
+		}
+	}
+	v := &agents.ReassignPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSuspendPayload builds the payload for the agents suspend endpoint from
 // CLI flags.
 func BuildSuspendPayload(agentsSuspendBody string, agentsSuspendSessionToken string) (*agents.SuspendPayload, error) {

@@ -22,6 +22,10 @@ type Service interface {
 	Get(context.Context, *GetPayload) (res *ManagedAgent, err error)
 	// Rename implements rename.
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
+	// Transfer implements transfer.
+	Transfer(context.Context, *TransferPayload) (res *ManagedAgent, err error)
+	// Reassign implements reassign.
+	Reassign(context.Context, *ReassignPayload) (res *ManagedAgent, err error)
 	// Suspend implements suspend.
 	Suspend(context.Context, *SuspendPayload) (res *ManagedAgent, err error)
 	// Resume implements resume.
@@ -52,7 +56,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"create", "get", "rename", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [9]string{"create", "get", "rename", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 type AgentLifecycle string
 
@@ -92,11 +96,24 @@ type GetPayload struct {
 type ManagedAgent struct {
 	ID          string
 	OwnerUserID string
-	Name        string
-	Lifecycle   AgentLifecycle
-	Permissions *AgentPermissions
-	CreatedAt   string
-	UpdatedAt   string
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string
+	Name                    string
+	Lifecycle               AgentLifecycle
+	Permissions             *AgentPermissions
+	CreatedAt               string
+	UpdatedAt               string
+}
+
+// ReassignPayload is the payload type of the agents service reassign method.
+type ReassignPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+	// Eligible same-organization human replacement owner
+	OwnerUserID string
 }
 
 // RenamePayload is the payload type of the agents service rename method.
@@ -125,6 +142,15 @@ type SuspendPayload struct {
 	SessionToken *string
 	// First-class agent identifier
 	AgentID string
+}
+
+// TransferPayload is the payload type of the agents service transfer method.
+type TransferPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+	// Eligible same-organization human replacement owner
+	OwnerUserID string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
