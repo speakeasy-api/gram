@@ -95,7 +95,10 @@ describe("ExploreDemo", () => {
 
   it("rejects path-traversal redirect params and falls back to the demo landing path", async () => {
     mocks.info.mockResolvedValue({
-      result: { activeOrganizationId: "org-1", organizations: [{ id: "org-1", slug: "my-org" }] },
+      result: {
+        activeOrganizationId: "org-1",
+        organizations: [{ id: "org-1", slug: "my-org" }],
+      },
     });
     mocks.enterDemo.mockResolvedValue({});
     const replace = vi.fn();
