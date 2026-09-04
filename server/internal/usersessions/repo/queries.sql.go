@@ -119,7 +119,12 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
-    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
+    (
+        SELECT COALESCE(issuer.organization_id, project.organization_id)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id = $1
+    ),
     $1,
     $2,
     $3,

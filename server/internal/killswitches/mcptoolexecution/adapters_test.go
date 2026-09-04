@@ -115,13 +115,15 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 		"anonymous":    testIdentity(t, mcpidentity.KindAnonymous, ""),
 		"api key":      testIdentity(t, mcpidentity.KindAPIKey, ""),
 		"assistant":    testIdentity(t, mcpidentity.KindAssistant, ""),
-		"agent":        testIdentity(t, mcpidentity.KindAgent, ""),
 		"chat session": testIdentity(t, mcpidentity.KindChatSession, ""),
 	} {
 		result, err := adapter.DeriveCandidates(t.Context(), organization, identity)
 		require.NoError(t, err, name)
 		require.Equal(t, killswitches.PrincipalCandidateResultUnsupported, result.Kind(), name)
 	}
+
+	_, err = adapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindAgent, ""))
+	require.Error(t, err, "agent sessions must fail closed until kill-switch agent principals are supported")
 
 	// Values that merely name a user — caller strings, hollow or padded
 	// authoritative claims, unknown provenance — are never quietly promoted.
