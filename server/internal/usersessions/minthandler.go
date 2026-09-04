@@ -154,9 +154,12 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No DCR-registered client — this mint bypasses the OAuth dance.
-		UserSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		SubjectUrn:          subject,
-		Jti:                 jti,
+		UserSessionClientID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SubjectUrn:             subject,
+		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
+		Jti:                    jti,
 		// No refresh token issued: the dashboard re-mints by calling this method
 		// again. Store a sentinel that satisfies the NOT NULL + unique constraint
 		// without colliding with any real sha256 hash; the column will be migrated
