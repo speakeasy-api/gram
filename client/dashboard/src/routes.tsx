@@ -69,7 +69,6 @@ import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
-import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
@@ -438,11 +437,6 @@ const ROUTE_STRUCTURE = {
             title: "Add Tunneled MCP Server",
             url: "tunneled",
             component: CreateTunneledMcp,
-          },
-          unproxied: {
-            title: "Add Unproxied MCP Server",
-            url: "unproxied",
-            component: CreateUnproxiedMcp,
           },
           // The single catalog entry point. It previously rendered from both
           // `/catalog` and `/sources/add-from-catalog`; both now redirect here.

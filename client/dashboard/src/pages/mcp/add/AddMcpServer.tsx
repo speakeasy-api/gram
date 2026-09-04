@@ -4,7 +4,6 @@ import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
 import { Grid } from "@/components/ui/Grid";
 import { Text } from "@/components/ui/Text";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -23,7 +22,6 @@ import {
   Code,
   FileCode,
   Layers,
-  Server,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -216,7 +214,6 @@ export default function AddMcpServer(): JSX.Element {
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
-  const isSpeakeasyStaff = useIsSpeakeasyStaff();
   const [gatewayDialogOpen, setGatewayDialogOpen] = useState(false);
   const [gatewayName, setGatewayName] = useState("");
   // Gateways are behind a rollout flag: opt-in, so an unresolved flag keeps the
@@ -267,7 +264,7 @@ export default function AddMcpServer(): JSX.Element {
       icon: <Cloud className="text-foreground size-10" strokeWidth={1.25} />,
       title: "Hosted remotely",
       description:
-        "Add an existing remote server by URL. We proxy requests to it.",
+        "Add a server that already runs elsewhere by its URL, proxied or not.",
     },
     ...(isTunneledMcpEnabled
       ? [
@@ -279,19 +276,6 @@ export default function AddMcpServer(): JSX.Element {
             title: "Reachable through a tunnel",
             description:
               "Connect a server running inside your own network through a tunnel.",
-          },
-        ]
-      : []),
-    ...(isSpeakeasyStaff
-      ? [
-          {
-            href: routes.mcp.add.unproxied.href(),
-            icon: (
-              <Server className="text-foreground size-10" strokeWidth={1.25} />
-            ),
-            title: "Already reachable by clients",
-            description:
-              "Track a server your people connect to directly, without proxying it.",
           },
         ]
       : []),

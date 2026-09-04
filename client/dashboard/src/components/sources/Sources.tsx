@@ -4,7 +4,6 @@ import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
@@ -112,7 +111,6 @@ export default function Sources(): JSX.Element {
     telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isTunneledMcpEnabled =
     telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
-  const isSpeakeasyStaff = useIsSpeakeasyStaff();
 
   const {
     data: deploymentResult,
@@ -484,25 +482,6 @@ export default function Sources(): JSX.Element {
                           </span>
                           <span className="text-muted-foreground text-xs">
                             Connect private MCP servers through a tunnel
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
-                    {isSpeakeasyStaff && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.mcp.add.unproxied.goTo()}
-                        className="flex cursor-pointer items-start gap-3 p-2"
-                      >
-                        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
-                          <Server className="text-foreground h-5 w-5" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Unproxied MCP Server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            List a vendor server without proxying it (Speakeasy
-                            staff only)
                           </span>
                         </div>
                       </DropdownMenuItem>

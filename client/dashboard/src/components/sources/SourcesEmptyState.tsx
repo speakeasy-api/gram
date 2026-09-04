@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useTelemetry } from "@/contexts/Telemetry";
 
@@ -65,7 +64,6 @@ export function SourcesEmptyState({
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
-  const isSpeakeasyStaff = useIsSpeakeasyStaff();
 
   return (
     <Page.Section>
@@ -174,25 +172,6 @@ export function SourcesEmptyState({
                           </span>
                           <span className="text-muted-foreground text-xs">
                             Connect private MCP servers through a tunnel
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
-                    {isSpeakeasyStaff && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.mcp.add.unproxied.goTo()}
-                        className="flex cursor-pointer items-start gap-3 p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-amber-500/10 dark:bg-amber-500/20">
-                          <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Unproxied MCP Server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            List a vendor server without proxying it (Speakeasy
-                            staff only)
                           </span>
                         </div>
                       </DropdownMenuItem>

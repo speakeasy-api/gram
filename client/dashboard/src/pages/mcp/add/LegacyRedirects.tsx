@@ -39,9 +39,11 @@ export function RedirectToAddTunneledMcp(): JSX.Element {
   return <Navigate to={routes.mcp.add.tunneled.href()} replace />;
 }
 
+// Unproxied servers no longer have their own page: the remote form asks
+// whether Speakeasy sits in the request path instead.
 export function RedirectToAddUnproxiedMcp(): JSX.Element {
   const routes = useRoutes();
-  return <Navigate to={routes.mcp.add.unproxied.href()} replace />;
+  return <Navigate to={routes.mcp.add.remote.href()} replace />;
 }
 
 export function RedirectToAddOpenAPI(): JSX.Element {

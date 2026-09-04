@@ -5,16 +5,22 @@ import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { AlertCircle, Loader2, Plug } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
-import {
-  VerifyRemoteMcpUrlAlert,
-  VerifyRemoteMcpUrlButton,
-} from "./VerifyRemoteMcpUrlButton";
+import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+
+// Both backends are, to the administrator, the same thing: a server that lives
+// at a URL somewhere else. The only difference is whether Gram sits in the
+// request path, so that is the one question the form asks — and only of staff,
+// since unproxied servers are staff-only today.
+type ProxyMode = "proxied" | "unproxied";
 
 export default function CreateRemoteMcp(): JSX.Element {
   return <CreateRemoteMcpForm />;
@@ -22,38 +28,67 @@ export default function CreateRemoteMcp(): JSX.Element {
 
 function CreateRemoteMcpForm() {
   const routes = useRoutes();
-  const createSource = useCreateRemoteMcpSource();
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const createRemote = useCreateRemoteMcpSource();
+  const createUnproxied = useCreateUnproxiedMcpSource();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<ProxyMode>("proxied");
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
 
   const verify = useVerifyRemoteMcpUrl(url);
 
+  const isPending = createRemote.isPending || createUnproxied.isPending;
+  const createError = createRemote.error ?? createUnproxied.error;
+  const isCreateError = createRemote.isError || createUnproxied.isError;
+
   const validationError = touched ? validateMcpServerUrl(url) : null;
-  const submitDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
-  const verifyDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
+  const urlUsable = !!url.trim() && validateMcpServerUrl(url) === null;
+  // The verify result is cleared whenever the URL changes (see
+  // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
+  const isVerified = verify.result?.verified === true;
+
+  const handleVerify = () => {
+    setTouched(true);
+    if (!urlUsable) return;
+    void verify.trigger();
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (validateMcpServerUrl(url) !== null) {
+    if (!urlUsable) return;
+    // Connectivity is part of saving rather than a side errand: an unverified
+    // URL falls through to a verify instead of creating a server nobody can
+    // reach.
+    if (!isVerified) {
+      void verify.trigger();
       return;
     }
+
+    const trimmedName = name.trim();
     try {
-      const trimmedName = name.trim();
-      const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
+      if (mode === "unproxied") {
+        const { mcpServer } = await createUnproxied.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+        });
+        toast.success("MCP server added");
+        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        return;
+      }
+
+      const { authAutoConfig, mcpServer } = await createRemote.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
       });
       if (authAutoConfig.status === "configured") {
-        toast.success("Remote MCP server added and authentication configured");
+        toast.success("MCP server added and authentication configured");
       } else {
-        toast.success("Remote MCP server added");
+        toast.success("MCP server added");
         if (authAutoConfig.warn) {
           toast.warning(authAutoConfig.message);
         }
@@ -61,9 +96,7 @@ function CreateRemoteMcpForm() {
       routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to add remote MCP server";
+        error instanceof Error ? error.message : "Failed to add MCP server";
       toast.error(message);
     }
   };
@@ -72,7 +105,7 @@ function CreateRemoteMcpForm() {
     <FormPage
       scope="mcp:write"
       title="New remote MCP server"
-      description="Register an existing remote MCP server by URL. We'll proxy requests to it using streamable-http transport."
+      description="Register a server that already runs somewhere else by its URL."
     >
       <form
         onSubmit={(e) => {
@@ -102,7 +135,7 @@ function CreateRemoteMcpForm() {
               htmlFor="remote-mcp-url"
               className="text-sm leading-none font-medium"
             >
-              Remote MCP server URL
+              MCP server URL
             </label>
             <Input
               id="remote-mcp-url"
@@ -131,41 +164,94 @@ function CreateRemoteMcpForm() {
             <VerifyRemoteMcpUrlAlert state={verify} />
           </Stack>
 
-          <Stack gap={1}>
-            <label className="text-sm leading-none font-medium">
-              Transport
-            </label>
-            <Text muted small>
-              streamable-http
-            </Text>
-          </Stack>
+          {isSpeakeasyStaff && (
+            <Stack gap={2}>
+              <label className="text-sm leading-none font-medium">
+                Connection
+              </label>
+              <RadioGroup
+                value={mode}
+                onValueChange={(value) => setMode(value as ProxyMode)}
+              >
+                <label className="flex items-start gap-2.5">
+                  <RadioGroupItem value="proxied" className="mt-0.5" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm">Proxy through Speakeasy</span>
+                    <Text muted small>
+                      Requests route through us over streamable-http, so we can
+                      manage authentication and see the traffic.
+                    </Text>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5">
+                  <RadioGroupItem value="unproxied" className="mt-0.5" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm">
+                      Clients connect directly{" "}
+                      <span className="text-muted-foreground">
+                        (Speakeasy staff only)
+                      </span>
+                    </span>
+                    <Text muted small>
+                      We list the server but never sit in the request path, so
+                      the vendor&apos;s own OAuth applies. Use this to sidestep
+                      per-vendor callback allowlisting.
+                    </Text>
+                  </span>
+                </label>
+              </RadioGroup>
+            </Stack>
+          )}
 
-          {createSource.isError && (
+          {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
-              {createSource.error.message}
+              {createError.message}
             </Alert>
           )}
 
           <Stack direction="horizontal" gap={2}>
-            <VerifyRemoteMcpUrlButton
-              state={verify}
-              url={url}
-              disabled={verifyDisabled}
-            />
-            <Button type="submit" variant="primary" disabled={submitDisabled}>
-              {createSource.isPending ? (
+            {/* One primary action that advances through the flow: verify, then
+                add. A server that cannot be reached is never worth saving, so
+                the two steps are the same button rather than a check the user
+                can skip. */}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!urlUsable || verify.isPending || isPending}
+            >
+              {verify.isPending || isPending ? (
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
+              ) : !isVerified ? (
+                <Button.LeftIcon>
+                  <Plug className="size-4" />
+                </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {createSource.isPending ? "Adding" : "Add server"}
+                {verify.isPending
+                  ? "Verifying"
+                  : isPending
+                    ? "Adding"
+                    : isVerified
+                      ? "Add server"
+                      : "Verify connectivity"}
               </Button.Text>
             </Button>
+            {isVerified && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={verify.isPending || isPending}
+                onClick={handleVerify}
+              >
+                <Button.Text>Re-verify</Button.Text>
+              </Button>
+            )}
             <Button
               type="button"
               variant="secondary"
-              disabled={createSource.isPending}
+              disabled={isPending}
               onClick={() => routes.mcp.add.goTo()}
             >
               <Button.Text>Cancel</Button.Text>
