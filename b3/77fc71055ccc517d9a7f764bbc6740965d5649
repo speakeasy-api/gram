@@ -1,0 +1,27 @@
+client/dashboard/src/pages/setup/setup-data.test.ts
+  s_31b216bf41c9a1::t_bc2eb145ba2b5e 42-46
+  s_31b216bf41c9a1::t_45145fc1ed0d9e 37-41,47-49
+client/dashboard/src/pages/setup/setup-data.ts
+  s_31b216bf41c9a1::t_bc2eb145ba2b5e 149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b377fc71055ccc517d9a7f764bbc6740965d5649",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_31b216bf41c9a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06bbb-58b2-7ab2-ba88-2ac534d6fd52",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

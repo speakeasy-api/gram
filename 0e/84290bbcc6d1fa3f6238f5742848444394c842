@@ -1,0 +1,44 @@
+server/internal/platformmcp/tool_readiness.go
+  h_9630b74bdac540 21,37,109,117,123
+server/internal/platformmcp/readiness_service_test.go
+  h_9630b74bdac540 66,88,97-119
+server/internal/platformmcp/setup_diagnostics_test.go
+  h_9630b74bdac540 1-147
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 325-333
+server/internal/platformmcp/setup_diagnostics.go
+  h_9630b74bdac540 1-218
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  h_9630b74bdac540 293
+server/internal/platformmcp/direct_remote_test.go
+  h_9630b74bdac540 68-122,138-146
+server/internal/platformmcp/tools_test.go
+  h_9630b74bdac540 13-32
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 144-145,414-415,417-418
+server/internal/platformmcp/diagnostics_test.go
+  h_9630b74bdac540 89-90,92-93,111
+server/internal/platformmcp/catalog_readiness.go
+  h_9630b74bdac540 186
+server/internal/platformmcp/diagnostics.go
+  h_9630b74bdac540 309,312,393-394,409-410,412-413
+server/internal/platformmcp/descriptor.go
+  h_9630b74bdac540 332-335,338-341
+server/internal/platformmcp/tool_catalog_test.go
+  h_9630b74bdac540 57-90
+server/internal/platformmcp/direct_remote.go
+  h_9630b74bdac540 76,80,83,92,96,100,115,121,125-129,135,141,150,191,195,199,205,211-213,215,218,220,225,231,234,238,243,247,254,258,262,265,272-274,276-279,281,286,289,293
+server/internal/platformmcp/tool_catalog.go
+  h_9630b74bdac540 49-50,138,142,149,151-152,171-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0e84290bbcc6d1fa3f6238f5742848444394c842",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

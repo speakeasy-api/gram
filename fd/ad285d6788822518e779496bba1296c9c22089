@@ -1,0 +1,20 @@
+client/dashboard/src/pages/setup/setup-data.test.ts
+  h_2620cc60cfd1e9 31
+client/dashboard/src/pages/setup/setup-data.ts
+  h_2620cc60cfd1e9 64
+server/internal/plugins/generate.go
+  h_2620cc60cfd1e9 2575
+server/internal/plugins/generate_test.go
+  h_2620cc60cfd1e9 2056
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fdad285d6788822518e779496bba1296c9c22089",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
