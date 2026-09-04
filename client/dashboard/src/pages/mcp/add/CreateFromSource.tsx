@@ -7,6 +7,7 @@ import { useIconConfetti } from "@/components/icon-confetti";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
+import { useSidePanel } from "@/components/side-panel/side-panel-context";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
@@ -30,10 +31,12 @@ function SourceCard({
   source,
   selected,
   onSelect,
+  onInspect,
 }: {
   source: SourceOption;
   selected: boolean;
   onSelect: () => void;
+  onInspect: () => void;
 }): JSX.Element {
   const { canvasRef, start, stop } = useIconConfetti();
   const Icon = source.kind === "openapi" ? FileCode : Code;
@@ -70,17 +73,40 @@ function SourceCard({
         </Text>
         {/* An explicit target for the choice: the ring alone reads as hover on
             a card that is already clickable everywhere. */}
-        <div className="mt-auto flex items-center justify-end gap-2 pt-3">
-          <Text small muted={!selected}>
-            {selected ? "Selected" : "Select"}
-          </Text>
-          {selected ? (
-            <div className="bg-foreground flex size-5 items-center justify-center">
-              <Check className="text-background size-3.5" strokeWidth={3} />
-            </div>
-          ) : (
-            <div className="border-border size-5 border" />
-          )}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+          {/* Named, not implicit: reading about a source is a different act
+              from choosing it, and a bare card click hides that. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onInspect();
+            }}
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+          >
+            Show details
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              // Sits inside a card whose own click opens the panel.
+              e.stopPropagation();
+              onSelect();
+            }}
+            aria-pressed={selected}
+            className="hover:text-foreground flex items-center gap-2"
+          >
+            <Text small muted={!selected}>
+              {selected ? "Selected" : "Select"}
+            </Text>
+            {selected ? (
+              <div className="bg-foreground flex size-5 items-center justify-center">
+                <Check className="text-background size-3.5" strokeWidth={3} />
+              </div>
+            ) : (
+              <div className="border-border size-5 border" />
+            )}
+          </button>
         </div>
       </Card.Entity>
     </div>
@@ -97,6 +123,7 @@ function SourceCard({
 export default function CreateFromSource(): JSX.Element {
   const routes = useRoutes();
   const client = useSdkClient();
+  const { openPanel } = useSidePanel();
   const { data: deploymentResult, isLoading: isLoadingDeployment } =
     useLatestDeployment();
   const { data: toolsResult, isLoading: isLoadingTools } = useListTools();
@@ -241,6 +268,17 @@ export default function CreateFromSource(): JSX.Element {
                       // people keep it.
                       if (!name.trim()) setName(source.name);
                     }}
+                    onInspect={() =>
+                      openPanel({
+                        kind: "source",
+                        title: source.name,
+                        subtitle: "Source",
+                        props: {
+                          sourceKind: source.kind,
+                          assetId: source.documentId ?? source.functionId ?? "",
+                        },
+                      })
+                    }
                   />
                 ))}
               </div>

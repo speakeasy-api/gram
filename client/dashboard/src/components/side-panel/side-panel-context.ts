@@ -9,8 +9,7 @@ import { createContext, useContext } from "react";
  * which is free in practice because the opener has already warmed the query
  * cache.
  */
-export type SidePanelDescriptor = {
-  kind: "setup-guide";
+type SidePanelCommon = {
   title: string;
   /** Second header line, naming what the panel holds when the title names its subject. */
   subtitle?: string;
@@ -18,8 +17,18 @@ export type SidePanelDescriptor = {
   iconUrl?: string;
   /** Where the same material lives on the docs site, when it has one page. */
   docsUrl?: string;
-  props: { registrySpecifier?: string; serverUrl?: string };
 };
+
+export type SidePanelDescriptor =
+  | (SidePanelCommon & {
+      kind: "setup-guide";
+      props: { registrySpecifier?: string; serverUrl?: string };
+    })
+  | (SidePanelCommon & {
+      kind: "source";
+      /** The asset id is the key; the panel refetches the rest. */
+      props: { sourceKind: "openapi" | "function"; assetId: string };
+    });
 
 export const SIDE_PANEL_WIDTH_KEY = "gram.side-panel.width";
 

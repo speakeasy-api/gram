@@ -1,4 +1,5 @@
 import { SetupGuidePanel } from "@/components/setup-guide/SetupGuidePanel";
+import { SourceDetailPanel } from "@/components/sources/SourceDetailPanel";
 import type { SidePanelDescriptor } from "./side-panel-context";
 
 /**
@@ -15,5 +16,7 @@ export function SidePanelKind({
   switch (descriptor.kind) {
     case "setup-guide":
       return <SetupGuidePanel {...descriptor.props} />;
+    case "source":
+      return <SourceDetailPanel {...descriptor.props} />;
   }
 }
