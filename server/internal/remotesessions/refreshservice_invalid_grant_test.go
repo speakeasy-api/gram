@@ -119,6 +119,44 @@ func TestRefreshNow_InvalidGrant_DubRefreshTokenNotFound_ClearsRefreshGrant(t *t
 	require.False(t, active.RefreshExpiresAt.Valid)
 }
 
+// GitHub answers a revoked or expired refresh token with HTTP 200 and
+// {"error":"bad_refresh_token"}. The 2xx status must not hide the dead grant:
+// the body is read as invalid_grant and the refresh grant is cleared.
+func TestRefreshNow_InvalidGrant_GitHubSuccessStatusErrorBody_ClearsRefreshGrant(t *testing.T) {
+	t.Parallel()
+
+	active, tokenErr := refreshNowAgainstUpstreamError(
+		t,
+		"refreshnow-github-200-error",
+		http.StatusOK,
+		`{"error":"bad_refresh_token","error_description":"The refresh token passed is incorrect or expired.","error_uri":"https://docs.github.com/apps/oauth-apps/troubleshooting"}`,
+	)
+
+	require.Equal(t, "invalid_grant: The refresh token passed is incorrect or expired.", tokenErr.Reason)
+	require.Equal(t, "bad_refresh_token", tokenErr.UpstreamCode(), "the code is logged as the provider sent it")
+	require.NotContains(t, tokenErr.Error(), "docs.github.com", "the raw body never reaches the cause")
+	require.False(t, active.RefreshTokenEncrypted.Valid)
+	require.False(t, active.RefreshExpiresAt.Valid)
+}
+
+// A 2xx body that carries neither a token set nor an OAuth error says nothing
+// about the grant, so it stays a transient failure and the refresh grant
+// survives for the next attempt.
+func TestRefreshNow_EmptySuccessBody_KeepsRefreshGrant(t *testing.T) {
+	t.Parallel()
+
+	active, tokenErr := refreshNowAgainstUpstreamError(
+		t,
+		"refreshnow-empty-200",
+		http.StatusOK,
+		`{}`,
+	)
+
+	require.Equal(t, "the identity provider returned no access token", tokenErr.Reason)
+	require.Empty(t, tokenErr.UpstreamCode())
+	require.True(t, active.RefreshTokenEncrypted.Valid, "an empty success body must not clear the grant")
+}
+
 // A client authentication failure under the same vendor code is fixed by
 // correcting the client configuration, so the still-valid refresh grant must
 // survive it.

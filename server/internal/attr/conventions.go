@@ -367,7 +367,9 @@ const (
 	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
-	// — used across DCR registration, /authorize, /token, and /revoke.
+	// — the ones Gram emits across DCR registration, /authorize, /token, and
+	// /revoke, and the ones an upstream authorization server answers Gram
+	// with (IdP and remote-login callbacks, token refresh).
 	OAuthErrorKey            = attribute.Key("gram.oauth.error")
 	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
 	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
