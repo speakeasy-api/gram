@@ -183,7 +183,7 @@ func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripp
 	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
 		return ReadinessUnsupported, "response_too_large"
 	}
-	return ReadinessUnreachable, "probe_failed"
+	return ClassifyReadinessProbeFailure(err)
 }
 
 type catalogAuthorizationRoundTripper struct {

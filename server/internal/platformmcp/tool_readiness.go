@@ -18,6 +18,7 @@ type GetMCPReadinessToolOutput struct {
 	RegistrationID string         `json:"registration_id"`
 	State          ReadinessState `json:"state"`
 	EvidenceCode   string         `json:"evidence_code,omitempty"`
+	SetupCategory  SetupCategory  `json:"setup_category,omitempty"`
 	Freshness      string         `json:"freshness"`
 	CheckedAt      string         `json:"checked_at,omitempty"`
 	ExpiresAt      string         `json:"expires_at,omitempty"`
@@ -33,6 +34,7 @@ type GetMCPRepairPlanToolOutput struct {
 	ProjectSlug    string         `json:"project_slug"`
 	RegistrationID string         `json:"registration_id"`
 	State          ReadinessState `json:"state"`
+	SetupCategory  SetupCategory  `json:"setup_category,omitempty"`
 	Freshness      string         `json:"freshness"`
 	Actions        []RepairAction `json:"actions"`
 }
@@ -104,6 +106,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 			ProjectSlug:    project.Slug,
 			RegistrationID: input.RegistrationID,
 			State:          result.State,
+			SetupCategory:  setupCategoryFromReadiness(result),
 			Freshness:      readinessFreshness(result, found),
 			Actions:        repairActions(result.State),
 		}, nil
@@ -111,11 +114,13 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 }
 
 func readinessToolOutput(projectSlug, registrationID string, readiness Readiness, found bool) GetMCPReadinessToolOutput {
+	category := setupCategoryFromReadiness(readiness)
 	return GetMCPReadinessToolOutput{
 		ProjectSlug:    projectSlug,
 		RegistrationID: registrationID,
 		State:          readiness.State,
 		EvidenceCode:   readiness.EvidenceCode,
+		SetupCategory:  category,
 		Freshness:      readinessFreshness(readiness, found),
 		CheckedAt:      readinessTimestamp(readiness.CheckedAt),
 		ExpiresAt:      readinessTimestamp(readiness.ExpiresAt),

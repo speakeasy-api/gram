@@ -305,9 +305,11 @@ type MCPClientEvidence struct {
 // MCPDiagnosticsReadiness is the latest server-side readiness result, with the
 // freshness that decides whether it can exonerate anything.
 type MCPDiagnosticsReadiness struct {
-	State     string `json:"state"`
-	Freshness string `json:"freshness"`
-	CheckedAt string `json:"checked_at,omitempty"`
+	State         string         `json:"state"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Freshness     string         `json:"freshness"`
+	CheckedAt     string         `json:"checked_at,omitempty"`
+	Actions       []RepairAction `json:"actions"`
 }
 
 type GetMCPDiagnosticsOutput struct {
@@ -388,6 +390,8 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	serverTotals := totalsFromRows(serverRows)
 	organizationTotals := totalsFromRows(organizationRows)
 	readiness, readinessFound := s.currentReadiness(ctx, principal, mcp)
+	normalized := normalizedReadiness(readiness, readinessFound)
+	setupCategory := setupCategoryFromReadiness(normalized)
 	clients, truncated := clientEvidence(serverRows)
 
 	attribution := attributeFault(readiness, readinessFound, serverTotals, organizationTotals)
@@ -402,9 +406,11 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		MCPID:     input.MCPID,
 		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window, serverTotals.Total > 0),
 		Readiness: MCPDiagnosticsReadiness{
-			State:     string(normalizedReadiness(readiness, readinessFound).State),
-			Freshness: readinessFreshness(readiness, readinessFound),
-			CheckedAt: readinessTimestamp(readiness.CheckedAt),
+			State:         string(normalized.State),
+			SetupCategory: setupCategory,
+			Freshness:     readinessFreshness(readiness, readinessFound),
+			CheckedAt:     readinessTimestamp(readiness.CheckedAt),
+			Actions:       setupRepairActions(setupCategory, normalized.State),
 		},
 		Outcomes:                    summaryFromTotals(serverTotals),
 		OrganizationOutcomes:        summaryFromTotals(organizationTotals),

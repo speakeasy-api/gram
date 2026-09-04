@@ -290,7 +290,7 @@ func normalizedProbeFailure(err error, authRT *authorizationRoundTripper) (platf
 	if errors.Is(err, errRedirectRejected) {
 		return platformmcp.ReadinessUnsupported, "redirect_rejected"
 	}
-	return platformmcp.ReadinessUnreachable, "probe_failed"
+	return platformmcp.ClassifyReadinessProbeFailure(err)
 }
 
 func validateSetupRequest(request platformmcp.ProviderSetupRequest) error {

@@ -73,14 +73,14 @@ func NewGuardianDirectRemoteInspector(policy *guardian.Policy) *GuardianDirectRe
 
 func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL string) (DirectRemoteInspection, error) {
 	if s == nil || s.policy == nil {
-		return DirectRemoteInspection{}, ErrDirectRemoteUnavailable
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	canonicalURL, err := canonicalDirectRemoteURL(rawURL)
 	if err != nil {
-		return DirectRemoteInspection{}, err
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidURL, err)
 	}
 	if _, err := s.policy.ValidateHTTPSURL(ctx, canonicalURL); err != nil {
-		return DirectRemoteInspection{}, fmt.Errorf("validate direct remote URL: %w", ErrDirectRemoteRejected)
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("validate direct remote URL: %w", ErrDirectRemoteRejected))
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, directRemoteProbeDeadline)
@@ -89,15 +89,15 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 	client := s.policy.Client()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) > directRemoteProbeMaxRedirects || budget.consumeRequest() != nil {
-			return fmt.Errorf("%w: too many redirects", ErrDirectRemoteRejected)
+			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: too many redirects", ErrDirectRemoteRejected))
 		}
 		next, err := canonicalDirectRemoteURL(req.URL.String())
 		if err != nil {
-			return err
+			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, err)
 		}
 		validated, err := s.policy.ValidateHTTPSURL(req.Context(), next)
 		if err != nil {
-			return fmt.Errorf("%w: unsafe redirect", ErrDirectRemoteRejected)
+			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: unsafe redirect", ErrDirectRemoteRejected))
 		}
 		req.URL = validated
 		// This probe never sends credentials. Explicitly clearing Authorization
@@ -112,30 +112,33 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 		"clientInfo":      map[string]string{"name": "gram-platform-mcp", "version": "1"},
 	}, "", budget)
 	if err != nil {
-		return DirectRemoteInspection{}, err
+		return DirectRemoteInspection{}, sanitizedSetupFailure(err)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return directRemoteInspection(finalURL, nil, "authentication_required", directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget), true), nil
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices || initialize.Result == nil {
-		return DirectRemoteInspection{}, ErrDirectRemoteRejected
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	if sessionID != "" {
 		finalURL, status, err = directRemoteNotification(probeCtx, client, finalURL, "notifications/initialized", map[string]any{}, sessionID, budget)
-		if err != nil || status < http.StatusOK || status >= http.StatusMultipleChoices {
-			return DirectRemoteInspection{}, ErrDirectRemoteRejected
+		if err != nil {
+			return DirectRemoteInspection{}, sanitizedSetupFailure(err)
+		}
+		if status < http.StatusOK || status >= http.StatusMultipleChoices {
+			return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 		}
 	}
 
 	tools, finalURL, _, status, err := directRemoteRequest(probeCtx, client, finalURL, "tools/list", map[string]any{}, sessionID, budget)
 	if err != nil {
-		return DirectRemoteInspection{}, err
+		return DirectRemoteInspection{}, sanitizedSetupFailure(err)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return directRemoteInspection(finalURL, nil, "authentication_required", directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget), true), nil
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices || tools.Result == nil {
-		return DirectRemoteInspection{}, ErrDirectRemoteRejected
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 
 	var toolList struct {
@@ -144,7 +147,7 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 		} `json:"tools"`
 	}
 	if err := json.Unmarshal(tools.Result, &toolList); err != nil {
-		return DirectRemoteInspection{}, ErrDirectRemoteRejected
+		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	names := make([]string, 0, min(len(toolList.Tools), directRemoteToolNameLimit))
 	for _, tool := range toolList.Tools {
@@ -185,100 +188,109 @@ func emptyDirectRemoteRPCResponse() directRemoteRPCResponse {
 
 func directRemoteRequest(ctx context.Context, client directRemoteHTTPClient, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (directRemoteRPCResponse, string, string, int, error) {
 	if err := budget.consumeRequest(); err != nil {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, err
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 	if err != nil {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, fmt.Errorf("marshal MCP probe: %w", err)
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, fmt.Errorf("build direct MCP probe: %w", err)
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
 		if len(sessionID) > directRemoteSessionIDMaxBytes {
-			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+			return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 		}
 		req.Header.Set("Mcp-Session-Id", sessionID)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if category := setupCategoryFromError(err); category != "" {
+			return emptyDirectRemoteRPCResponse(), "", "", 0, sanitizedSetupFailure(err)
+		}
 		if errors.Is(err, ErrDirectRemoteRejected) || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
-			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+			return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryUnsafeTargetOrRedirect, ErrDirectRemoteRejected)
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteUnavailable
+			return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTimeout, ErrDirectRemoteUnavailable)
 		}
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteUnavailable
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryUnreachable, ErrDirectRemoteUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	finalURL, err := canonicalDirectRemoteURL(resp.Request.URL.String())
 	if err != nil {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, err
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryUnsafeTargetOrRedirect, ErrDirectRemoteRejected)
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return emptyDirectRemoteRPCResponse(), finalURL, "", resp.StatusCode, nil
 	}
 	if mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])); mediaType != "application/json" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	if budget == nil || budget.remaining <= 0 {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(budget.remaining+1)))
 	if err != nil || len(payload) > budget.remaining {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	budget.remaining -= len(payload)
 	var result directRemoteRPCResponse
 	if err := json.Unmarshal(payload, &result); err != nil {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	sessionID = resp.Header.Get("Mcp-Session-Id")
 	if len(sessionID) > directRemoteSessionIDMaxBytes {
-		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	return result, finalURL, sessionID, resp.StatusCode, nil
 }
 
 func directRemoteNotification(ctx context.Context, client directRemoteHTTPClient, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (string, int, error) {
 	if err := budget.consumeRequest(); err != nil {
-		return "", 0, err
+		return "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 	if err != nil {
-		return "", 0, fmt.Errorf("marshal MCP probe notification: %w", err)
+		return "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
-		return "", 0, fmt.Errorf("build direct MCP probe notification: %w", err)
+		return "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	if len(sessionID) > directRemoteSessionIDMaxBytes {
-		return "", 0, ErrDirectRemoteRejected
+		return "", 0, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Mcp-Session-Id", sessionID)
 	resp, err := client.Do(req)
 	if err != nil {
-		if errors.Is(err, ErrDirectRemoteRejected) || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
-			return "", 0, ErrDirectRemoteRejected
+		if category := setupCategoryFromError(err); category != "" {
+			return "", 0, sanitizedSetupFailure(err)
 		}
-		return "", 0, ErrDirectRemoteUnavailable
+		if errors.Is(err, ErrDirectRemoteRejected) || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
+			return "", 0, setupFailure(SetupCategoryUnsafeTargetOrRedirect, ErrDirectRemoteRejected)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return "", 0, setupFailure(SetupCategoryTimeout, ErrDirectRemoteUnavailable)
+		}
+		return "", 0, setupFailure(SetupCategoryUnreachable, ErrDirectRemoteUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	finalURL, err := canonicalDirectRemoteURL(resp.Request.URL.String())
 	if err != nil {
-		return "", 0, err
+		return "", 0, setupFailure(SetupCategoryUnsafeTargetOrRedirect, ErrDirectRemoteRejected)
 	}
 	if budget == nil || budget.remaining <= 0 {
-		return "", 0, ErrDirectRemoteRejected
+		return "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(budget.remaining+1)))
 	if err != nil || len(payload) > budget.remaining {
-		return "", 0, ErrDirectRemoteRejected
+		return "", 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	budget.remaining -= len(payload)
 	return finalURL, resp.StatusCode, nil

@@ -322,6 +322,15 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	}
 }
 
+func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetMCPReadinessToolOutput]("get_mcp_readiness")
+	category := schema.Properties["setup_category"]
+	require.NotNil(t, category)
+	require.Equal(t, setupCategoryEnumValues(), category.Enum)
+}
+
 // Schema inference panics at process boot, so a tool input the nil-dependency
 // server never registers can crash-loop production while CI stays green. The
 // jsonschema tag is a description; a "word=" prefix is rejected outright.
