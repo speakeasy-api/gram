@@ -1,4 +1,4 @@
-h1:tPYIYqcVW2Ky8bxT3BUHn1xt71brG4+4dlFaBTjCN4c=
+h1:x53nfv6C2BODMjyyMCXe9PpvFjJliyuZr/ZyKHNO+04=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -389,3 +389,4 @@ h1:tPYIYqcVW2Ky8bxT3BUHn1xt71brG4+4dlFaBTjCN4c=
 20260904130247_aim-191-delegated-agent-credential-columns.sql h1:ai8nyCt3GN33WzGoe8iMil/GP1Zw9xSI5ReYhdbM2Fk=
 20260904163525_remote-session-issuers-enrichment-columns.sql h1:/6Gvmw0aMKQf7JwkkwMHwXTqEuO/YgssOKFhYY61xG8=
 20260904175818_remote-session-issuers-metadata-fetched-at.sql h1:6Mv6VlCWePJ7kVwX/zNyZPPVeZTgIgf+0bOe9wo97Oo=
+20260904183136_remote-sessions-upstream-identity-and-validation.sql h1:Fjxn84Lz5kawPkSu+YJjJyAJ/w3cpIrKR34HaEdiy2s=

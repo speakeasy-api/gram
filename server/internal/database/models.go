@@ -2195,6 +2195,19 @@ type RemoteSession struct {
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
 	LastUsedAt             pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamEmailVerified  pgtype.Bool
+	UpstreamDisplayName    pgtype.Text
+	UpstreamPictureUrl     pgtype.Text
+	UpstreamSessionID      pgtype.Text
+	UpstreamAuthTime       pgtype.Timestamptz
+	IdentitySource         pgtype.Text
+	IdentityVerifiedAt     pgtype.Timestamptz
+	Enrichment             []byte
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
