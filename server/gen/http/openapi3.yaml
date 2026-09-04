@@ -58635,6 +58635,120 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateToolset
+    /rpc/toolsets.updateExternalOAuthServer:
+        post:
+            description: Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+            operationId: updateExternalOAuthServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset whose attached external OAuth server is updated
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateExternalOAuthServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateExternalOAuthServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: updateExternalOAuthServer
+            x-speakeasy-react-hook:
+                name: UpdateExternalOAuthServer
     /rpc/triggers.create:
         post:
             description: Create a trigger instance.
@@ -72026,7 +72140,7 @@ components:
             properties:
                 authorization_server_issuer:
                     type: string
-                    description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present.
+                    description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.
                     format: uri
                     maxLength: 500
                 created_at:
@@ -72059,16 +72173,19 @@ components:
         ExternalOAuthServerForm:
             type: object
             properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
                 metadata:
-                    description: The metadata for the external OAuth server
+                    description: JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
-            required:
-                - slug
-                - metadata
         FetchImageFromURLForm:
             type: object
             properties:
@@ -89408,6 +89525,37 @@ components:
             required:
                 - entries_to_update
                 - entries_to_remove
+        UpdateExternalOAuthServerForm:
+            type: object
+            properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
+                metadata:
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - slug
+        UpdateExternalOAuthServerRequestBody:
+            type: object
+            properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
+                metadata:
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
         UpdateGcpIamCredentialRequestBody:
             type: object
             properties:

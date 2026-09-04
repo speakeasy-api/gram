@@ -18,7 +18,8 @@ type ExternalOAuthServer struct {
 	// one of metadata and authorization_server_issuer is present.
 	Metadata any
 	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
-	// Exactly one of authorization_server_issuer and metadata is present.
+	// Exactly one of authorization_server_issuer and metadata is present; changing
+	// modes may require clients to register or authenticate again.
 	AuthorizationServerIssuer *string
 	// When the external OAuth server was created.
 	CreatedAt string
