@@ -934,3 +934,22 @@ SELECT column_name::text
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'agents'
 ORDER BY ordinal_position;
+
+-- name: GetOpenRouterAPIKeyDisableCausesColumnFixture :one
+-- Test-only: observes the disable_causes column contract.
+SELECT is_nullable::text AS is_nullable, column_default::text AS column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'openrouter_api_keys'
+  AND column_name = 'disable_causes';
+
+-- name: InsertOpenRouterAPIKeyOmittingDisableCausesFixture :one
+-- Test-only: insert that relies on the column default.
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash)
+VALUES (@organization_id, @key_type, @key_hash)
+RETURNING disable_causes;
+
+-- name: InsertOpenRouterAPIKeyNullDisableCausesFixture :exec
+-- Test-only: explicit NULL write used to prove the NOT NULL contract.
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash, disable_causes)
+VALUES (@organization_id, @key_type, @key_hash, NULL);

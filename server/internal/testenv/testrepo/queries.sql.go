@@ -685,6 +685,27 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	return id, err
 }
 
+const getOpenRouterAPIKeyDisableCausesColumnFixture = `-- name: GetOpenRouterAPIKeyDisableCausesColumnFixture :one
+SELECT is_nullable::text AS is_nullable, column_default::text AS column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'openrouter_api_keys'
+  AND column_name = 'disable_causes'
+`
+
+type GetOpenRouterAPIKeyDisableCausesColumnFixtureRow struct {
+	IsNullable    string
+	ColumnDefault string
+}
+
+// Test-only: observes the disable_causes column contract.
+func (q *Queries) GetOpenRouterAPIKeyDisableCausesColumnFixture(ctx context.Context) (GetOpenRouterAPIKeyDisableCausesColumnFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterAPIKeyDisableCausesColumnFixture)
+	var i GetOpenRouterAPIKeyDisableCausesColumnFixtureRow
+	err := row.Scan(&i.IsNullable, &i.ColumnDefault)
+	return i, err
+}
+
 const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
 FROM openrouter_api_keys
@@ -1242,6 +1263,43 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 		arg.MissingSince,
 	)
 	return err
+}
+
+const insertOpenRouterAPIKeyNullDisableCausesFixture = `-- name: InsertOpenRouterAPIKeyNullDisableCausesFixture :exec
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash, disable_causes)
+VALUES ($1, $2, $3, NULL)
+`
+
+type InsertOpenRouterAPIKeyNullDisableCausesFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	KeyHash        string
+}
+
+// Test-only: explicit NULL write used to prove the NOT NULL contract.
+func (q *Queries) InsertOpenRouterAPIKeyNullDisableCausesFixture(ctx context.Context, arg InsertOpenRouterAPIKeyNullDisableCausesFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertOpenRouterAPIKeyNullDisableCausesFixture, arg.OrganizationID, arg.KeyType, arg.KeyHash)
+	return err
+}
+
+const insertOpenRouterAPIKeyOmittingDisableCausesFixture = `-- name: InsertOpenRouterAPIKeyOmittingDisableCausesFixture :one
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash)
+VALUES ($1, $2, $3)
+RETURNING disable_causes
+`
+
+type InsertOpenRouterAPIKeyOmittingDisableCausesFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	KeyHash        string
+}
+
+// Test-only: insert that relies on the column default.
+func (q *Queries) InsertOpenRouterAPIKeyOmittingDisableCausesFixture(ctx context.Context, arg InsertOpenRouterAPIKeyOmittingDisableCausesFixtureParams) ([]string, error) {
+	row := q.db.QueryRow(ctx, insertOpenRouterAPIKeyOmittingDisableCausesFixture, arg.OrganizationID, arg.KeyType, arg.KeyHash)
+	var disable_causes []string
+	err := row.Scan(&disable_causes)
+	return disable_causes, err
 }
 
 const insertOrganizationTierUserSessionIssuerFixture = `-- name: InsertOrganizationTierUserSessionIssuerFixture :one

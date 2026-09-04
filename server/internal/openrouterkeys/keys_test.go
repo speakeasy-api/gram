@@ -45,14 +45,6 @@ func TestStubProvisionerDisableCausesMirrorLocalState(t *testing.T) {
 	ctx, ti := newTestService(t)
 	orgID := seedKey(t, ctx, ti, "stub-causes", string(openrouter.KeyTypeChat), "sk-or-stub-causes")
 	queries := orgrepo.New(ti.conn)
-	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: nil,
-	}))
-
-	_, err := ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock)
-	require.ErrorContains(t, err, "unclassified")
-	_, _, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
-	require.ErrorContains(t, err, "unclassified")
 	change, err := ti.provisioner.AddAPIKeyDisableCause(ctx, "missing-org", openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock)
 	require.NoError(t, err)
 	require.Equal(t, openrouter.DisableCauseChange{}, change)
