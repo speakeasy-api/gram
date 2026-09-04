@@ -22,6 +22,12 @@ const AM_TESTING_TELEMETRY = false;
 const isPublicSharePath = (): boolean =>
   window.location.pathname.startsWith("/shared/");
 
+// Localhost and PR preview hosts (*.dev.getgram.ai) skip PostHog flag
+// evaluation so gated UI such as Watchdog and Functions is visible. Shared
+// staging (dev.getgram.ai) and production stay on the real project.
+export const shouldUseDevTelemetry = (serverURL: string): boolean =>
+  serverURL.includes("localhost") || serverURL.includes(".dev.getgram.ai");
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
@@ -75,7 +81,7 @@ export const TelemetryProvider = (props: {
   }, []);
 
   let value: Telemetry = ph ?? nullTelemetry;
-  if (!isPublicSharePath() && getServerURL().includes("localhost")) {
+  if (!isPublicSharePath() && shouldUseDevTelemetry(getServerURL())) {
     value = AM_TESTING_TELEMETRY ? testTelemetry : devTelemetry;
   }
 
