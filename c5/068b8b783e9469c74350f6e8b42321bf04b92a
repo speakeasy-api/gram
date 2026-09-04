@@ -1,0 +1,14 @@
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  h_e404c1a6a54184 317-320,480-482,737-742
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c5068b8b783e9469c74350f6e8b42321bf04b92a",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
