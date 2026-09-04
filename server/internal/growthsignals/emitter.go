@@ -29,8 +29,16 @@ type Emitter struct {
 }
 
 func NewEmitter(logger *slog.Logger, client PostHogClient, enricher Enricher, siteURL *url.URL) *Emitter {
+	componentLogger := logger.With(attr.SlogComponent("growth-signals"))
+	if siteURL == nil {
+		// Every activity would then report no dashboard link, and a Slack
+		// destination that renders one as a button omits it. Worth saying once
+		// at startup rather than leaving it to be noticed in the channel.
+		componentLogger.WarnContext(context.Background(), "growth signals have no site url; activities will carry no dashboard link")
+	}
+
 	return &Emitter{
-		logger:   logger.With(attr.SlogComponent("growth-signals")),
+		logger:   componentLogger,
 		client:   client,
 		enricher: enricher,
 		siteURL:  siteURL,
