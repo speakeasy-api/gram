@@ -144,6 +144,11 @@ func (f metadataFamily) other() metadataFamily {
 type issuerProbeCandidate struct {
 	url    string
 	family metadataFamily
+	// fallback marks an origin-root location probed only because the
+	// path-form issuer's own locations had no document. Such a document may
+	// describe the whole host rather than this issuer, so it is adopted only
+	// when every path-form candidate answered definitively.
+	fallback bool
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -1094,17 +1099,33 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// order the probes ran in and even when a later candidate of its family
 	// merged, and a refresh must not mistake their absence for withdrawal.
 	unreadable := make(map[metadataFamily]string, 2)
+	// unreadableErr is the first transient failure, returned whenever an
+	// unreadable candidate leaves the run unable to say what the issuer
+	// serves: the caller must retry rather than act on a guess.
+	var unreadableErr *discoveryError
 	for _, candidate := range candidates {
 		if primary != nil && candidate.family == primaryFamily {
 			continue
+		}
+		// An origin-root document may describe a sibling tenant or the whole
+		// host. While one of the issuer's own locations is unreadable it is
+		// not known to be the issuer's document, so it must not become the
+		// primary; only definitive misses on the path candidates reach it.
+		if candidate.fallback && primary == nil && unreadableErr != nil {
+			return discoveryResult{}, unreadableErr
 		}
 		doc, attemptErr := attemptIssuerProbe(reqCtx, client, candidate.url)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
 			}
-			if _, seen := unreadable[candidate.family]; attemptErr.transient() && !seen {
-				unreadable[candidate.family] = candidate.url
+			if attemptErr.transient() {
+				if unreadableErr == nil {
+					unreadableErr = attemptErr
+				}
+				if _, seen := unreadable[candidate.family]; !seen {
+					unreadable[candidate.family] = candidate.url
+				}
 			}
 			continue
 		}
@@ -1147,8 +1168,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		return result, nil
 	}
 
-	if fallback != nil {
+	// An endpoint-less document is only worth returning when it is all the
+	// issuer has. With a candidate unread, the real document may be behind
+	// the outage, so the run is transient rather than a verdict on the issuer.
+	if fallback != nil && unreadableErr == nil {
 		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
+	}
+	if unreadableErr != nil {
+		return discoveryResult{}, unreadableErr
 	}
 
 	return discoveryResult{}, firstErr
@@ -1349,25 +1376,25 @@ func issuerProbeCandidates(issuerURL string) ([]issuerProbeCandidate, error) {
 
 	seen := make(map[string]struct{})
 	candidates := make([]issuerProbeCandidate, 0, 5)
-	add := func(raw string, family metadataFamily) {
+	add := func(raw string, family metadataFamily, fallback bool) {
 		if _, ok := seen[raw]; ok {
 			return
 		}
 		seen[raw] = struct{}{}
-		candidates = append(candidates, issuerProbeCandidate{url: raw, family: family})
+		candidates = append(candidates, issuerProbeCandidate{url: raw, family: family, fallback: fallback})
 	}
 
 	// RFC 8414 §3: well-known inserted between host and issuer path.
-	add(origin+"/.well-known/oauth-authorization-server"+path, familyOAuthAuthorizationServer)
+	add(origin+"/.well-known/oauth-authorization-server"+path, familyOAuthAuthorizationServer, false)
 	// RFC 8414 §3.1 OIDC-compatible form: openid-configuration inserted between
 	// host and issuer path.
-	add(origin+"/.well-known/openid-configuration"+path, familyOpenIDConfiguration)
+	add(origin+"/.well-known/openid-configuration"+path, familyOpenIDConfiguration, false)
 	if path != "" {
 		// OpenID Connect Discovery: well-known appended after the issuer path.
-		add(origin+path+"/.well-known/openid-configuration", familyOpenIDConfiguration)
+		add(origin+path+"/.well-known/openid-configuration", familyOpenIDConfiguration, false)
 		// Origin-style fallback: strip the issuer path entirely.
-		add(origin+"/.well-known/oauth-authorization-server", familyOAuthAuthorizationServer)
-		add(origin+"/.well-known/openid-configuration", familyOpenIDConfiguration)
+		add(origin+"/.well-known/oauth-authorization-server", familyOAuthAuthorizationServer, true)
+		add(origin+"/.well-known/openid-configuration", familyOpenIDConfiguration, true)
 	}
 
 	return candidates, nil

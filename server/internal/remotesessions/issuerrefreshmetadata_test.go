@@ -477,6 +477,101 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreachableUpstreamIsGatewayError(t 
 	require.Contains(t, err.Error(), "Unexpected HTTP 503")
 }
 
+// A path-form issuer whose own well-known locations are down is not described
+// by the origin root: on a multi-tenant host that document belongs to another
+// tenant or to the host itself. The outage is reported as transient and the
+// stored endpoints stand; once the path locations answer 404 the origin
+// document is adopted as before.
+func TestRefreshRemoteSessionIssuerMetadata_TransientPathOutageDoesNotAdoptOriginDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var pathStatus atomic.Int32
+	pathStatus.Store(http.StatusServiceUnavailable)
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                           upstream.URL,
+				"authorization_endpoint":           upstream.URL + "/authorize",
+				"token_endpoint":                   upstream.URL + "/token",
+				"code_challenge_methods_supported": []string{"S256"},
+			})
+		default:
+			w.WriteHeader(int(pathStatus.Load()))
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-path-outage", upstream.URL+"/tenant"))
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+	require.Equal(t, "https://stale.example.com/authorize", loadIssuerRow(t, ctx, ti, created).AuthorizationEndpoint.String, "the origin document was not adopted")
+
+	pathStatus.Store(http.StatusNotFound)
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "a definitive miss on the path locations still reaches the origin fallback")
+	require.Equal(t, upstream.URL+"/authorize", *result.Issuer.AuthorizationEndpoint)
+}
+
+// An endpoint-less document is returned only when it is all the issuer has.
+// While another candidate is unreadable the real document may be behind the
+// outage, so the run is transient rather than a 422 verdict on the issuer.
+func TestRefreshRemoteSessionIssuerMetadata_EndpointlessDocumentWithUnreadableCandidateIsTransient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oauthStatus atomic.Int32
+	oauthStatus.Store(http.StatusServiceUnavailable)
+	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+		oauthStatus: &oauthStatus,
+		mutateOIDC: func(doc map[string]any) {
+			delete(doc, "authorization_endpoint")
+			delete(doc, "token_endpoint")
+		},
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-endpointless-outage", upstream.URL))
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+
+	oauthStatus.Store(http.StatusNotFound)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "advertises no authorization_endpoint")
+}
+
 // issuerProbeCandidates falls back to the origin-root well-known URL when the
 // path-aware candidates miss, and gateways serving metadata only there advertise
 // the origin rather than the configured path. That mismatch is created by
