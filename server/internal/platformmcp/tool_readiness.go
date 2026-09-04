@@ -102,13 +102,14 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 			return nil, GetMCPRepairPlanToolOutput{}, err
 		}
 		result = normalizedReadiness(result, found)
+		category := setupCategoryFromReadiness(result)
 		return nil, GetMCPRepairPlanToolOutput{
 			ProjectSlug:    project.Slug,
 			RegistrationID: input.RegistrationID,
 			State:          result.State,
-			SetupCategory:  setupCategoryFromReadiness(result),
+			SetupCategory:  category,
 			Freshness:      readinessFreshness(result, found),
-			Actions:        repairActions(result.State),
+			Actions:        setupRepairActions(category, result.State),
 		}, nil
 	})
 }
@@ -124,6 +125,6 @@ func readinessToolOutput(projectSlug, registrationID string, readiness Readiness
 		Freshness:      readinessFreshness(readiness, found),
 		CheckedAt:      readinessTimestamp(readiness.CheckedAt),
 		ExpiresAt:      readinessTimestamp(readiness.ExpiresAt),
-		Actions:        repairActions(readiness.State),
+		Actions:        setupRepairActions(category, readiness.State),
 	}
 }

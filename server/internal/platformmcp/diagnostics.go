@@ -306,6 +306,7 @@ type MCPClientEvidence struct {
 // freshness that decides whether it can exonerate anything.
 type MCPDiagnosticsReadiness struct {
 	State         string         `json:"state"`
+	EvidenceCode  string         `json:"evidence_code,omitempty"`
 	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
 	Freshness     string         `json:"freshness"`
 	CheckedAt     string         `json:"checked_at,omitempty"`
@@ -390,7 +391,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	serverTotals := totalsFromRows(serverRows)
 	organizationTotals := totalsFromRows(organizationRows)
 	readiness, readinessFound := s.currentReadiness(ctx, principal, mcp)
-	normalized := normalizedReadiness(readiness, readinessFound)
+	normalized := diagnosticsReadiness(mcp, readiness, readinessFound)
 	setupCategory := setupCategoryFromReadiness(normalized)
 	clients, truncated := clientEvidence(serverRows)
 
@@ -407,6 +408,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window, serverTotals.Total > 0),
 		Readiness: MCPDiagnosticsReadiness{
 			State:         string(normalized.State),
+			EvidenceCode:  normalized.EvidenceCode,
 			SetupCategory: setupCategory,
 			Freshness:     readinessFreshness(readiness, readinessFound),
 			CheckedAt:     readinessTimestamp(readiness.CheckedAt),
@@ -477,6 +479,16 @@ func (s *DiagnosticsService) currentReadiness(ctx context.Context, principal Pri
 		return Readiness{}, false
 	}
 	return readiness, found
+}
+
+// diagnosticsReadiness preserves the inventory's unsupported state for MCPs
+// that are not managed by a Platform registration while normalizing missing
+// evidence for registered MCPs as a retryable gap.
+func diagnosticsReadiness(mcp MCP, readiness Readiness, found bool) Readiness {
+	if mcp.Registration == nil || mcp.Registration.ID == "" {
+		return Readiness{State: ReadinessUnsupported, EvidenceCode: "readiness_not_managed"}
+	}
+	return normalizedReadiness(readiness, found)
 }
 
 func totalsFromRows(rows []telemetryrepo.MCPOutcomeBreakdownRow) outcomeTotals {

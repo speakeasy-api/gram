@@ -87,6 +87,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		Envelope:  newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		Readiness: MCPDiagnosticsReadiness{
 			State:         string(ReadinessUnauthorized),
+			EvidenceCode:  "provider_authorization_rejected",
 			SetupCategory: SetupCategoryProviderAuthorizationRejected,
 			Freshness:     "fresh",
 			CheckedAt:     now.Format(time.RFC3339),
@@ -108,7 +109,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
-		"readiness", "state", "setup_category", "freshness", "checked_at", "actions", "kind", "label",
+		"readiness", "state", "evidence_code", "setup_category", "freshness", "checked_at", "actions", "kind", "label",
 		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"organization_outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"organization_outcomes_partial",
@@ -116,6 +117,29 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"clients_truncated",
 		"attribution", "fault", "reason", "readiness_exonerates", "scope",
 	}, decodeKeys(t, output))
+}
+
+func TestDiagnosticsReadinessKeepsUnmanagedMCPUnsupportedWithoutRetry(t *testing.T) {
+	t.Parallel()
+
+	readiness := diagnosticsReadiness(MCP{Registration: nil}, Readiness{}, false)
+	category := setupCategoryFromReadiness(readiness)
+
+	require.Equal(t, ReadinessUnsupported, readiness.State)
+	require.Equal(t, "readiness_not_managed", readiness.EvidenceCode)
+	require.Empty(t, category)
+	require.Empty(t, setupRepairActions(category, readiness.State))
+}
+
+func TestDiagnosticsReadinessKeepsMissingRegisteredEvidenceRetryable(t *testing.T) {
+	t.Parallel()
+
+	readiness := diagnosticsReadiness(MCP{Registration: &MCPRegistration{ID: "registration"}}, Readiness{}, false)
+	category := setupCategoryFromReadiness(readiness)
+
+	require.Equal(t, ReadinessDegraded, readiness.State)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, category)
+	require.Equal(t, []RepairAction{{Kind: "retry_readiness", Label: "Check again whether this MCP server is working"}}, setupRepairActions(category, readiness.State))
 }
 
 func TestMetricsMode_NamesWhatTheCountsMeasure(t *testing.T) {

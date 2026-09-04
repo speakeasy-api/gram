@@ -95,6 +95,18 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 	require.NotContains(t, string(encoded), "connection_generation")
 }
 
+func TestReadinessToolOutputUsesCategorySpecificActions(t *testing.T) {
+	t.Parallel()
+
+	output := readinessToolOutput("project", "registration", Readiness{
+		State:        ReadinessUnsupported,
+		EvidenceCode: "redirect_rejected",
+	}, true)
+
+	require.Equal(t, SetupCategoryUnsafeTargetOrRedirect, output.SetupCategory)
+	require.Equal(t, []RepairAction{{Kind: "review_remote_url", Label: "Review this MCP server's HTTPS URL in the dashboard"}}, output.Actions)
+}
+
 func TestReadyStateSuppressesStaleFailureEvidence(t *testing.T) {
 	t.Parallel()
 

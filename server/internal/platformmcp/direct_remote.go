@@ -88,22 +88,7 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 	budget := &directRemoteResponseBudget{remaining: directRemoteProbeMaxBytes, requestsRemaining: directRemoteProbeMaxRequests}
 	client := s.policy.Client()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) > directRemoteProbeMaxRedirects || budget.consumeRequest() != nil {
-			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: too many redirects", ErrDirectRemoteRejected))
-		}
-		next, err := canonicalDirectRemoteURL(req.URL.String())
-		if err != nil {
-			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, err)
-		}
-		validated, err := s.policy.ValidateHTTPSURL(req.Context(), next)
-		if err != nil {
-			return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: unsafe redirect", ErrDirectRemoteRejected))
-		}
-		req.URL = validated
-		// This probe never sends credentials. Explicitly clearing Authorization
-		// keeps that invariant if a client implementation changes later.
-		req.Header.Del("Authorization")
-		return nil
+		return directRemoteRedirectCheck(s.policy, budget, req, via)
 	}
 
 	initialize, finalURL, sessionID, status, err := directRemoteRequest(probeCtx, client, canonicalURL, "initialize", map[string]any{
@@ -159,6 +144,28 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 		}
 	}
 	return directRemoteInspection(finalURL, names, "anonymous", "not_advertised", false), nil
+}
+
+func directRemoteRedirectCheck(policy *guardian.Policy, budget *directRemoteResponseBudget, req *http.Request, via []*http.Request) error {
+	if len(via) > directRemoteProbeMaxRedirects {
+		return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: too many redirects", ErrDirectRemoteRejected))
+	}
+	if budget.consumeRequest() != nil {
+		return setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+	}
+	next, err := canonicalDirectRemoteURL(req.URL.String())
+	if err != nil {
+		return setupFailure(SetupCategoryUnsafeTargetOrRedirect, err)
+	}
+	validated, err := policy.ValidateHTTPSURL(req.Context(), next)
+	if err != nil {
+		return setupFailure(SetupCategoryUnsafeTargetOrRedirect, fmt.Errorf("%w: unsafe redirect", ErrDirectRemoteRejected))
+	}
+	req.URL = validated
+	// This probe never sends credentials. Explicitly clearing Authorization
+	// keeps that invariant if a client implementation changes later.
+	req.Header.Del("Authorization")
+	return nil
 }
 
 type directRemoteResponseBudget struct {
@@ -378,7 +385,7 @@ func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client di
 		return nil, 0, ErrDirectRemoteRejected
 	}
 	if err := budget.consumeRequest(); err != nil {
-		return nil, 0, err
+		return nil, 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, canonicalURL, nil)
 	if err != nil {

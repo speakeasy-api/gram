@@ -2,8 +2,11 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
 // SetupCategory is the privacy-safe reason an MCP setup needs attention. Values
@@ -119,10 +122,30 @@ func ClassifyReadinessProbeFailure(err error) (ReadinessState, string) {
 		}
 		return ReadinessUnreachable, "probe_unreachable"
 	}
-	// Preserve the established readiness state and evidence for MCP negotiation
-	// failures that do not expose a typed network cause. More specific producers
-	// such as response-size and redirect guards retain their existing evidence.
+	if _, ok := errors.AsType[*json.SyntaxError](err); ok {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
+	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
+	if protocolError, ok := errors.AsType[*jsonrpc.Error](err); ok {
+		switch protocolError.Code {
+		case jsonrpc.CodeParseError, jsonrpc.CodeInvalidRequest, jsonrpc.CodeInvalidParams:
+			return ReadinessUnsupported, "invalid_mcp_response"
+		}
+	}
+	// Unknown failures remain transport failures here. Producers that know an
+	// error crossed a valid HTTP response boundary classify that stage before
+	// delegating to this fallback.
 	return ReadinessUnreachable, "probe_failed"
+}
+
+// IsReadinessMCPErrorResponse reports whether an SDK error preserves a
+// well-formed server-authored JSON-RPC error. Provider adapters use it to avoid
+// treating a valid error response as malformed protocol data.
+func IsReadinessMCPErrorResponse(err error) bool {
+	_, ok := errors.AsType[*jsonrpc.Error](err)
+	return ok
 }
 
 func setupCategoryFromReadiness(readiness Readiness) SetupCategory {
@@ -138,8 +161,12 @@ func setupCategoryFromReadiness(readiness Readiness) SetupCategory {
 		return SetupCategoryTimeout
 	case "probe_failed", "probe_unreachable":
 		return SetupCategoryUnreachable
-	case "invalid_mcp_response", "response_too_large":
+	case "invalid_mcp_response", "initialize_response_too_large":
 		return SetupCategoryInvalidMCPResponse
+	case "tools_list_response_too_large", "probe_temporarily_unavailable":
+		return SetupCategoryTemporarilyUnavailable
+	case "readiness_not_managed":
+		return ""
 	case "upstream_authorization_required", "no_valid_authorization":
 		return SetupCategoryAuthenticationRequired
 	case "required_header_missing", "request_header_not_supported", "multiple_upstream_identity_providers", "upstream_identity_provider_not_configured", "no_reviewed_client":
@@ -199,7 +226,7 @@ func inspectionResultActions(category SetupCategory) []RepairAction {
 }
 
 func setupRepairActions(category SetupCategory, state ReadinessState) []RepairAction {
-	if state == ReadinessReady && category == "" {
+	if category == "" && (state == ReadinessReady || state == ReadinessUnsupported) {
 		return []RepairAction{}
 	}
 

@@ -135,6 +135,22 @@ func TestDirectRemoteNotificationAcceptsJSONAndSSE(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, status)
 }
 
+func TestDirectRemoteRedirectCheckDistinguishesUnsafeRedirectFromBudgetExhaustion(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://remote.example.test/redirect", nil)
+	require.NoError(t, err)
+
+	budgetErr := directRemoteRedirectCheck(directRemoteTestPolicy(t), &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 0}, request, nil)
+	require.ErrorIs(t, budgetErr, ErrDirectRemoteUnavailable)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(budgetErr))
+
+	via := make([]*http.Request, directRemoteProbeMaxRedirects+1)
+	redirectErr := directRemoteRedirectCheck(directRemoteTestPolicy(t), &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 1}, request, via)
+	require.ErrorIs(t, redirectErr, ErrDirectRemoteRejected)
+	require.Equal(t, SetupCategoryUnsafeTargetOrRedirect, setupCategoryFromError(redirectErr))
+}
+
 func TestDirectRemoteRequestClassifiesBudgetExhaustionAsTemporarilyUnavailable(t *testing.T) {
 	t.Parallel()
 
