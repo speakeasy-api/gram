@@ -47,6 +47,10 @@ import {
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
+import {
+  effectiveScopeKinds,
+  encodeKindScope,
+} from "@/pages/security/policy-scope";
 import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
@@ -161,9 +165,7 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
   "assistant_message",
 ];
 
-// The risk policy API returns `action`/`messageTypes` as free-form strings, so
-// values are validated before entering local state — an unknown value would
-// otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
+// The risk policy API returns `action` as a free-form string.
 function isPolicyAction(value: unknown): value is PolicyAction {
   return (
     value === "flag" ||
@@ -171,10 +173,6 @@ function isPolicyAction(value: unknown): value is PolicyAction {
     value === "warn" ||
     value === "quarantine"
   );
-}
-
-function isPolicyMessageType(value: unknown): value is PolicyMessageType {
-  return (MESSAGE_TYPES as string[]).includes(value as string);
 }
 
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -298,7 +296,12 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          messageTypes: [...nextCfg.messageTypes],
+          detectionScopes: [
+            {
+              category: cat,
+              scopeInclude: encodeKindScope([...nextCfg.messageTypes]),
+            },
+          ],
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -327,14 +330,18 @@ export function ConfigurePoliciesStep({
         const serverAction = isPolicyAction(existing.action)
           ? existing.action
           : next[cat].action;
-        const serverMessageTypes = new Set<PolicyMessageType>(
-          (existing.messageTypes ?? []).filter(isPolicyMessageType),
+        const detectionScope = existing.detectionScopes?.find(
+          (scope) => scope.category === cat,
         );
-        // Server returned no recognizable message types — keep local defaults
-        // rather than rendering an empty ("Off") policy.
-        if (serverMessageTypes.size === 0) {
-          for (const t of next[cat].messageTypes) serverMessageTypes.add(t);
-        }
+        const effectiveScope = detectionScope
+          ? effectiveScopeKinds(detectionScope)
+          : null;
+        const serverMessageTypes =
+          effectiveScope === null ||
+          effectiveScope.custom ||
+          effectiveScope.kinds.size === 0
+            ? new Set(next[cat].messageTypes)
+            : new Set(effectiveScope.kinds);
         const messageTypesEqual =
           formatMessageTypes(serverMessageTypes) ===
           formatMessageTypes(next[cat].messageTypes);
@@ -377,7 +384,12 @@ export function ConfigurePoliciesStep({
             createRiskPolicyRequestBody: {
               enabled: true,
               ...buildPolicyPayload(cat),
-              messageTypes: [...cfg.messageTypes],
+              detectionScopes: [
+                {
+                  category: cat,
+                  scopeInclude: encodeKindScope([...cfg.messageTypes]),
+                },
+              ],
               action: cfg.action,
               autoName: true,
             },
