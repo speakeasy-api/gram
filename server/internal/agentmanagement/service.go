@@ -35,7 +35,12 @@ import (
 )
 
 type sessionAuthorizer interface {
-	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
+	AuthorizeWithPostAuthenticationCheck(
+		context.Context,
+		string,
+		*security.APIKeyScheme,
+		func(context.Context) error,
+	) (context.Context, error)
 }
 
 type Service struct {
@@ -80,14 +85,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	authorizedCtx, err := s.auth.Authorize(ctx, key, schema)
-	if err != nil {
-		return authorizedCtx, fmt.Errorf("authorize agent management session: %w", err)
-	}
-	if err := s.requireM1Enabled(authorizedCtx); err != nil {
-		return authorizedCtx, err
-	}
-	return authorizedCtx, nil
+	return s.auth.AuthorizeWithPostAuthenticationCheck(ctx, key, schema, s.requireM1Enabled)
 }
 
 func (s *Service) requireM1Enabled(ctx context.Context) error {
