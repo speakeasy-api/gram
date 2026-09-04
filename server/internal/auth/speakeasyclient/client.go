@@ -335,6 +335,7 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 
 	if err := orgs.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              conv.ToPGText(user.ID),
+		PreserveExisting:    false,
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
 	}); err != nil {
