@@ -199,6 +199,10 @@ export function SetupBoardColumns({
                             layout
                             data-testid="setup-task-drop-space"
                             className="border border-dashed border-neutral-hover bg-surface-primary-default/50"
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: draggedTaskHeight, opacity: 1 }}
                             transition={{ duration: 0.15, ease: "easeOut" }}
@@ -282,6 +286,10 @@ export function SetupBoardColumns({
                       layout
                       data-testid="setup-task-drop-space"
                       className="border border-dashed border-neutral-hover bg-surface-primary-default/50"
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: draggedTaskHeight, opacity: 1 }}
                       transition={{ duration: 0.15, ease: "easeOut" }}

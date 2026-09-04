@@ -323,8 +323,25 @@ describe("SetupBoard", () => {
     };
 
     fireEvent.dragStart(draggedTask, { dataTransfer });
-    fireEvent.dragOver(destination, { dataTransfer });
-    expect(screen.getByTestId("setup-task-drop-space")).toBeTruthy();
+    fireEvent.dragOver(
+      screen.getByTestId("setup-task-draggable-instrument-agents"),
+      { clientY: 0, dataTransfer },
+    );
+    const dropSpace = screen.getByTestId("setup-task-drop-space");
+    expect(
+      dropSpace.nextElementSibling?.contains(
+        screen.getByTestId("setup-task-instrument-agents"),
+      ),
+    ).toBe(true);
+
+    // The placeholder now sits under the pointer. It must not bubble an event
+    // that relocates itself to the end of the column.
+    fireEvent.dragOver(dropSpace, { dataTransfer });
+    expect(
+      dropSpace.nextElementSibling?.contains(
+        screen.getByTestId("setup-task-instrument-agents"),
+      ),
+    ).toBe(true);
     fireEvent.drop(destination, { dataTransfer });
 
     await waitFor(() =>
