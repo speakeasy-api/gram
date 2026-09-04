@@ -30,9 +30,11 @@ export function VerifiedOAuthMetadata({
       />
       <Alert
         variant={
-          metadata.authorizationResponseIssParameterSupported
-            ? "success"
-            : "error"
+          metadata.authorizationResponseIssParameterSupported === undefined
+            ? "warning"
+            : metadata.authorizationResponseIssParameterSupported
+              ? "success"
+              : "error"
         }
       >
         <a
@@ -43,9 +45,11 @@ export function VerifiedOAuthMetadata({
         >
           RFC 9207
         </a>{" "}
-        {metadata.authorizationResponseIssParameterSupported
-          ? "Supported"
-          : "Unsupported"}
+        {metadata.authorizationResponseIssParameterSupported === undefined
+          ? "Not advertised"
+          : metadata.authorizationResponseIssParameterSupported
+            ? "Supported"
+            : "Unsupported"}
       </Alert>
     </Stack>
   );
@@ -57,7 +61,7 @@ function MetadataRow({ label, value }: { label: string; value: string }) {
       <Text small className="font-medium">
         {label}
       </Text>
-      <Text muted small>
+      <Text muted small className="break-all">
         {value}
       </Text>
     </div>

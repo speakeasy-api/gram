@@ -141,10 +141,13 @@ function ExistingConfigReview({
     requestRef.current = { generation: requestRef.current.generation + 1 };
     setStage("intro");
     setIssuer(config.issuer);
+    setMetadataJson(
+      config.metadata ? JSON.stringify(config.metadata, null, 2) : "",
+    );
     setVerified(null);
     setError(null);
     setPending(false);
-  }, [config.issuer, isOpen]);
+  }, [config.issuer, config.metadata, isOpen]);
 
   useEffect(
     () => () => {

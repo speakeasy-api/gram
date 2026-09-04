@@ -299,6 +299,23 @@ describe("OAuthWizard - external OAuth sources", () => {
     ).toBeTruthy();
   });
 
+  it("associates issuer validation text with the issuer input", () => {
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Provider-hosted metadata/ }),
+    );
+
+    const input = screen.getByLabelText("Issuer URL");
+    fireEvent.change(input, { target: { value: "http://auth.example.com" } });
+    const error = screen.getByText("Provider issuer must use HTTPS");
+
+    expect(error.id).not.toBe("");
+    expect(input.getAttribute("aria-describedby")?.split(" ")).toContain(
+      error.id,
+    );
+  });
+
   it("warns that Gram-hosted metadata is for multi-origin compatibility", () => {
     renderWizard();
     fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
@@ -365,6 +382,35 @@ describe("OAuthWizard — existing external OAuth config", () => {
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
+  it("labels an omitted RFC 9207 capability as not advertised", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
+      issuer: existingConfig.issuer,
+      authorizationEndpoint: "https://auth.example.com/authorize",
+    });
+    renderWizard({ existingConfig });
+
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+
+    const rfcStatus = (await screen.findByText("RFC 9207")).parentElement;
+    expect(rfcStatus?.textContent).toContain("Not advertised");
+    expect(screen.queryByText("Unsupported")).toBeNull();
+  });
+
+  it("wraps long discovered endpoint values", async () => {
+    const authorizationEndpoint = `https://auth.example.com/${"a".repeat(200)}`;
+    mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
+      issuer: existingConfig.issuer,
+      authorizationEndpoint,
+    });
+    renderWizard({ existingConfig });
+
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+
+    expect(
+      (await screen.findByText(authorizationEndpoint)).className,
+    ).toContain("break-all");
+  });
+
   it("changes a provider-hosted issuer after reviewing the replacement", async () => {
     mocks.fetchRemoteSessionIssuerMetadata.mockResolvedValueOnce({
       issuer: "https://replacement.example.com",
@@ -395,6 +441,40 @@ describe("OAuthWizard — existing external OAuth config", () => {
         }),
       }),
     );
+  });
+
+  it("resets a Gram-hosted metadata draft after closing", () => {
+    const rendered = renderWizard({ existingConfig });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+    );
+    fireEvent.change(screen.getByLabelText("OAuth Metadata JSON"), {
+      target: { value: '{"issuer":"https://draft.example.com"}' },
+    });
+
+    const modal = (isOpen: boolean) => (
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <ConnectOAuthModal
+            isOpen={isOpen}
+            onClose={() => {}}
+            toolsetSlug="mytoolset"
+            toolset={toolset}
+            existingConfig={existingConfig}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>
+    );
+    rendered.rerender(modal(false));
+    rendered.rerender(modal(true));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep Gram-hosted metadata" }),
+    );
+
+    expect(
+      (screen.getByLabelText("OAuth Metadata JSON") as HTMLTextAreaElement)
+        .value,
+    ).toBe(JSON.stringify(existingConfig.metadata, null, 2));
   });
 
   it("ignores discovery from a closed session after a rapid reopen", async () => {

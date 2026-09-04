@@ -71,6 +71,11 @@ export function Input({
   const [validationError, setValidationError] = useState<string | null>(() =>
     runValidation(value ?? ""),
   );
+  const validationErrorId = React.useId();
+  const describedBy =
+    [props["aria-describedby"], validationError ? validationErrorId : undefined]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const [isFocused, setIsFocused] = useState(false);
 
   const handleFocus = (
@@ -146,6 +151,7 @@ export function Input({
       onFocus={handleFocus}
       onBlur={handleBlur}
       className={cn(fieldClassName, "max-h-60 min-h-16 resize-y py-1")}
+      aria-describedby={describedBy}
     />
   ) : (
     <input
@@ -164,6 +170,7 @@ export function Input({
         ...props.style,
       }}
       className={fieldClassName}
+      aria-describedby={describedBy}
     />
   );
 
@@ -208,7 +215,10 @@ export function Input({
         )}
       </div>
       {validationError && validationError !== DEFAULT_ERROR && (
-        <span className="text-xs text-default-destructive">
+        <span
+          id={validationErrorId}
+          className="text-xs text-default-destructive"
+        >
           {validationError}
         </span>
       )}
