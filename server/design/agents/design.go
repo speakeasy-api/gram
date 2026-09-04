@@ -56,7 +56,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 var PolicyGrantForm = Type("AgentPolicyGrantForm", func() {
 	Required("scope", "effect", "selector")
 	Attribute("scope", String, "Agent-runtime-safe scope to grant", func() { MinLength(1) })
-	Attribute("effect", String, "Grant effect; direct agent policy is allow-only", func() { Enum("allow", "deny") })
+	Attribute("effect", String, "Grant effect; direct agent policy is allow-only", func() { Enum("allow") })
 	Attribute("selector", PolicySelector)
 })
 

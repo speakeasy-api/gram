@@ -81,18 +81,22 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-validation", "owner")
 
-	tests := map[string]*gen.CreatePolicyGrantPayload{
-		"deny":               {AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "deny", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}},
-		"unknown":            {AgentID: agent.ID.String(), Scope: "unknown:scope", Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}},
-		"root":               {AgentID: agent.ID.String(), Scope: string(authz.ScopeRoot), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "*", ResourceID: "*"}},
-		"management":         {AgentID: agent.ID.String(), Scope: string(authz.ScopeAgentWrite), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindAgent, ResourceID: "*"}},
-		"blocklist":          {AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectBlockedRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}},
-		"malformed selector": {AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}},
+	tests := []struct {
+		name    string
+		payload gen.CreatePolicyGrantPayload
+	}{
+		{name: "deny", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "deny", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "unknown", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: "unknown:scope", Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "root", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeRoot), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "*", ResourceID: "*"}}},
+		{name: "management", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeAgentWrite), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindAgent, ResourceID: "*"}}},
+		{name: "blocklist", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectBlockedRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
+		{name: "malformed selector", payload: gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}}},
 	}
-	for name, payload := range tests {
-		t.Log(name)
-		_, err := service.CreatePolicyGrant(ctx, payload)
-		requireOopsCode(t, err, oops.CodeBadRequest)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.CreatePolicyGrant(ctx, &tt.payload)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
 
 	var count int
