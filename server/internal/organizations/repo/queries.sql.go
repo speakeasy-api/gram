@@ -1768,8 +1768,8 @@ func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) er
 
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :many
 WITH input_memberships AS (
-    SELECT unnest($2::text[]) AS workos_org_id,
-           unnest($3::text[]) AS workos_membership_id
+    SELECT unnest($3::text[]) AS workos_org_id,
+           unnest($4::text[]) AS workos_membership_id
 ),
 resolved AS (
     SELECT organization_metadata.id AS organization_id,
@@ -1817,6 +1817,7 @@ UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = $1
+  AND NOT $2::boolean
   AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
@@ -1827,6 +1828,7 @@ RETURNING organization_id, user_id
 
 type SetUserWorkOSMembershipsParams struct {
 	UserID              pgtype.Text
+	PreserveExisting    bool
 	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
@@ -1838,11 +1840,11 @@ type SetUserWorkOSMembershipsRow struct {
 
 // Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 // (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
-// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
-// other relationships where the org has a non-NULL workos_id. Orgs without a
-// workos_id are unaffected. Other users' memberships are never modified.
+// the provided (workos_org_id, workos_membership_id) pairs and, unless
+// preserve_existing is true, soft-deletes any other relationships where the org
+// has a non-NULL workos_id. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) ([]SetUserWorkOSMembershipsRow, error) {
-	rows, err := q.db.Query(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	rows, err := q.db.Query(ctx, setUserWorkOSMemberships, arg.UserID, arg.PreserveExisting, arg.WorkosOrgIds, arg.WorkosMembershipIds)
 	if err != nil {
 		return nil, err
 	}
