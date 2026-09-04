@@ -3,26 +3,43 @@
  */
 
 import { agentsCreate } from "../funcs/agentsCreate.js";
+import { agentsCreatePolicyGrant } from "../funcs/agentsCreatePolicyGrant.js";
 import { agentsDelete } from "../funcs/agentsDelete.js";
+import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
+import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
 import { agentsRename } from "../funcs/agentsRename.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
 import { agentsSuspend } from "../funcs/agentsSuspend.js";
+import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
   CreateAgentSecurity,
 } from "../models/operations/createagent.js";
 import {
+  CreateAgentPolicyGrantRequest,
+  CreateAgentPolicyGrantSecurity,
+} from "../models/operations/createagentpolicygrant.js";
+import {
   DeleteAgentRequest,
   DeleteAgentSecurity,
 } from "../models/operations/deleteagent.js";
 import {
+  DeleteAgentPolicyGrantRequest,
+  DeleteAgentPolicyGrantSecurity,
+} from "../models/operations/deleteagentpolicygrant.js";
+import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
+import {
+  ListAgentPolicyGrantsRequest,
+  ListAgentPolicyGrantsSecurity,
+} from "../models/operations/listagentpolicygrants.js";
 import {
   RenameAgentRequest,
   RenameAgentSecurity,
@@ -39,6 +56,10 @@ import {
   SuspendAgentRequest,
   SuspendAgentSecurity,
 } from "../models/operations/suspendagent.js";
+import {
+  UpdateAgentPolicyGrantRequest,
+  UpdateAgentPolicyGrantSecurity,
+} from "../models/operations/updateagentpolicygrant.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agents extends ClientSDK {
@@ -51,6 +72,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createPolicyGrant agents
+   */
+  async createPolicyGrant(
+    request: CreateAgentPolicyGrantRequest,
+    security?: CreateAgentPolicyGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AgentPolicyGrant> {
+    return unwrapAsync(agentsCreatePolicyGrant(
       this,
       request,
       security,
@@ -75,6 +112,22 @@ export class Agents extends ClientSDK {
   }
 
   /**
+   * deletePolicyGrant agents
+   */
+  async deletePolicyGrant(
+    request: DeleteAgentPolicyGrantRequest,
+    security?: DeleteAgentPolicyGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentsDeletePolicyGrant(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * get agents
    */
   async get(
@@ -83,6 +136,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPolicyGrants agents
+   */
+  async listPolicyGrants(
+    request: ListAgentPolicyGrantsRequest,
+    security?: ListAgentPolicyGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<AgentPolicyGrant>> {
+    return unwrapAsync(agentsListPolicyGrants(
       this,
       request,
       security,
@@ -147,6 +216,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsSuspend(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updatePolicyGrant agents
+   */
+  async updatePolicyGrant(
+    request: UpdateAgentPolicyGrantRequest,
+    security?: UpdateAgentPolicyGrantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AgentPolicyGrant> {
+    return unwrapAsync(agentsUpdatePolicyGrant(
       this,
       request,
       security,
