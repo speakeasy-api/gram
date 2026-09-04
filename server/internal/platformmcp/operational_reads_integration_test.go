@@ -37,6 +37,15 @@ func TestOperationalReadersRequireHTTPSDashboardURL(t *testing.T) {
 	require.False(t, validDashboardURL(mustParseURL(t, "https://user@app.getgram.test")))
 }
 
+func TestRecentToolCallsRequirePostgres(t *testing.T) {
+	t.Parallel()
+
+	reader := NewPostgresReader(testenv.NewLogger(t), nil).
+		WithRecentToolCalls(&recordingRecentToolCallReader{}, mustParseURL(t, "https://app.getgram.test"))
+	_, err := reader.ListRecentToolCalls(t.Context(), Principal{OrganizationID: "organization"}, ListRecentToolCallsInput{ProjectSlug: "project"})
+	require.ErrorIs(t, err, ErrUnavailable)
+}
+
 func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	t.Parallel()
 

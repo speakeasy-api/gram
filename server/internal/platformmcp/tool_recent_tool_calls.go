@@ -35,7 +35,7 @@ type RecentToolCallReadService struct {
 
 // WithRecentToolCalls enables recent project-scoped Tool Logs summaries.
 func (r *PostgresReader) WithRecentToolCalls(telemetry RecentToolCallReader, dashboardURL *url.URL) *PostgresReader {
-	if r != nil && telemetry != nil && validDashboardURL(dashboardURL) {
+	if r != nil && r.db != nil && telemetry != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		r.recentToolCalls = &RecentToolCallReadService{telemetry: telemetry, dashboardURL: &copyURL, now: time.Now}
 	}
