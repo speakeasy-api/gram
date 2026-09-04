@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -110,7 +111,7 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 	destinations, err := query.ListOtelDestinationsWithProjectMetadata(ctx, dataexportsrepo.ListOtelDestinationsWithProjectMetadataParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      projectID,
-		ResultLimit:    int32(limit + 1),
+		ResultLimit:    conv.SafeInt32(limit + 1),
 	})
 	if err != nil {
 		return ListDataExportsOutput{}, fmt.Errorf("list platform data export destinations: %w", err)
@@ -118,7 +119,7 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 	routes, err := query.ListDataExportRoutesWithProjectMetadata(ctx, dataexportsrepo.ListDataExportRoutesWithProjectMetadataParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      projectID,
-		ResultLimit:    int32(limit + 1),
+		ResultLimit:    conv.SafeInt32(limit + 1),
 	})
 	if err != nil {
 		return ListDataExportsOutput{}, fmt.Errorf("list platform data export routes: %w", err)
