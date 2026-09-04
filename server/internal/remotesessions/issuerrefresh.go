@@ -64,7 +64,8 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		// NULL ("never captured").
 		CodeChallengeMethodsSupported: doc.CodeChallengeMethodsSupported,
 
-		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+		ClientIDMetadataDocumentSupported:          doc.ClientIDMetadataDocumentSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 
 		// Gram behavior flags, not discovered metadata. A draft never proposes
 		// them; the operator opts in on the create form.

@@ -13,7 +13,7 @@ import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMod
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
@@ -322,9 +322,11 @@ function IdentityProviderSetupField({
   return (
     <Field>
       <FieldLabel>Identity Provider</FieldLabel>
-      <SettingsInlineEmptyState
-        title="No authentication configured"
-        description="Configure an upstream identity provider so MCP clients authenticate before reaching this server."
+      <InlineEmptyState
+        icon="key-round"
+        heading="Set up authentication"
+        description="Require MCP clients to authenticate through an upstream identity provider before reaching this server."
+        className="py-8"
         action={
           <AuthenticationSetupActions
             probeStatus={probeStatus}

@@ -5,6 +5,7 @@ import { buildCreateUserSessionIssuerMutation } from "@gram/client/react-query/c
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
 import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { Gram } from "@gram/client";
 import { fromPromise } from "xstate";
 
@@ -43,9 +44,12 @@ function narrowTokenEndpointAuthMethod(
 
 export type AddExternalOAuthInput = {
   toolsetSlug: string;
-  slug: string;
-  metadata: Record<string, unknown>;
+  authorizationServerIssuer?: string;
+  metadata?: Record<string, unknown>;
 };
+
+export type DiscoverExternalOAuthInput = { issuer: string };
+export type DiscoverExternalOAuthOutput = RemoteSessionIssuerDraft;
 
 // The custom path provisions a user_session_issuer + remote_session_issuer +
 // remote_session_client from the operator-supplied upstream metadata and
@@ -85,6 +89,9 @@ export type AuthedFetch = (
 
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
+  discoverExternalOAuth: ReturnType<
+    typeof fromPromise<DiscoverExternalOAuthOutput, DiscoverExternalOAuthInput>
+  >;
   provisionUserSession: ReturnType<
     typeof fromPromise<void, ProvisionUserSessionInput>
   >;
@@ -99,6 +106,18 @@ export function createWizardServices(
   client: GramClient,
   authedFetch: AuthedFetch,
 ): WizardServices {
+  const discoverExternalOAuth = fromPromise<
+    DiscoverExternalOAuthOutput,
+    DiscoverExternalOAuthInput
+  >(async ({ input, signal }) => {
+    const { mutationFn } =
+      buildFetchRemoteSessionIssuerMetadataMutation(client);
+    return mutationFn({
+      request: { fetchIssuerMetadataRequestBody: { issuer: input.issuer } },
+      ...fetchOptions({ signal }),
+    });
+  });
+
   const addExternalOAuth = fromPromise<void, AddExternalOAuthInput>(
     async ({ input, signal }) => {
       const { mutationFn } = buildAddExternalOAuthServerMutation(client);
@@ -107,7 +126,7 @@ export function createWizardServices(
           slug: input.toolsetSlug,
           addExternalOAuthServerRequestBody: {
             externalOauthServer: {
-              slug: input.slug,
+              authorizationServerIssuer: input.authorizationServerIssuer,
               metadata: input.metadata,
             },
           },
@@ -262,6 +281,7 @@ export function createWizardServices(
 
   return {
     addExternalOAuth,
+    discoverExternalOAuth,
     provisionUserSession,
     registerClient,
   };

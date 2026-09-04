@@ -26,22 +26,25 @@ export function AuthenticationSetupActions({
 
   return (
     <RequireScope scope="mcp:write" level="component">
-      <div className="flex flex-wrap items-center gap-2">
-        {discoverAvailable ? (
-          <Button variant="secondary" onClick={onUseDiscovered}>
-            <Button.Text>Use Discovered</Button.Text>
-          </Button>
-        ) : (
+      <div className="flex flex-col items-center gap-2">
+        {!discoverAvailable && (
           <Text muted small>
             {probing
               ? "Checking for advertised OAuth metadata…"
               : "OAuth metadata was not advertised by this server."}
           </Text>
         )}
-        <Button variant="secondary" onClick={onStartManual}>
-          <Button.Text>Configure Manually</Button.Text>
-        </Button>
-        {additionalAction}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {discoverAvailable && (
+            <Button variant="secondary" onClick={onUseDiscovered}>
+              <Button.Text>Use Discovered</Button.Text>
+            </Button>
+          )}
+          <Button variant="secondary" onClick={onStartManual}>
+            <Button.Text>Configure Manually</Button.Text>
+          </Button>
+          {additionalAction}
+        </div>
       </div>
     </RequireScope>
   );

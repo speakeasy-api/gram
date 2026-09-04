@@ -81336,6 +81336,9 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer advertises the RFC 9207 authorization response iss parameter.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -81401,6 +81404,7 @@ components:
                 - oidc
                 - passthrough
                 - client_id_metadata_document_supported
+                - authorization_response_iss_parameter_supported
                 - discovery_warnings
         RemoteSessionIssuerDuplicateMatch:
             type: object
