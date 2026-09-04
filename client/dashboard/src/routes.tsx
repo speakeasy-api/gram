@@ -33,6 +33,7 @@ import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import AgentsPage from "./pages/agents/Agents";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -1393,6 +1394,12 @@ const ORG_ROUTE_STRUCTURE = {
         component: MdmIntegrationDetail,
       },
     },
+  },
+  agents: {
+    title: "Agents",
+    url: "agent-management",
+    icon: "bot",
+    component: AgentsPage,
   },
   access: {
     title: "Roles & Permissions",
