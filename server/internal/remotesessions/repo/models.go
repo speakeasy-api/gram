@@ -86,6 +86,9 @@ type RemoteSessionIssuer struct {
 	LogoAssetID                                uuid.NullUUID
 	ClientSetupDocumentationUrl                pgtype.Text
 	Metadata                                   []byte
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastError                          pgtype.Text
+	MetadataLastErrorAt                        pgtype.Timestamptz
 	CreatedAt                                  pgtype.Timestamptz
 	UpdatedAt                                  pgtype.Timestamptz
 	DeletedAt                                  pgtype.Timestamptz

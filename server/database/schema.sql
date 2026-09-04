@@ -2399,6 +2399,18 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- drop the OIDC fields they omit.
   metadata JSONB,
 
+  -- When discovery last wrote the discovered endpoint, capability, and
+  -- metadata columns. updated_at also moves on operator edits, so this is
+  -- the only way to tell a stale capability set from a fresh one and the
+  -- only thing a scheduled refresh can order by. NULL for rows created from
+  -- the form or predating capture.
+  metadata_fetched_at timestamptz,
+  -- The public-safe reason the most recent metadata refresh failed, and when.
+  -- NULL when the row has never failed a refresh; cleared by the next
+  -- successful one.
+  metadata_last_error TEXT,
+  metadata_last_error_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
