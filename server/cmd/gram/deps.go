@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -1385,4 +1386,16 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		}
 		return client, nil
 	}, nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }
