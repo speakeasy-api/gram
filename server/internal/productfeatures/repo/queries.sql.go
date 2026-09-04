@@ -101,8 +101,8 @@ type EnableFeatureIfNeverConfiguredParams struct {
 	FeatureName    string
 }
 
-// PAYG activation grants purchased capabilities to legacy organizations while
-// preserving a soft-deleted row as an explicit administrator choice.
+// Paid-tier activation grants enterprise-access capabilities while preserving
+// a soft-deleted row as an explicit administrator choice.
 func (q *Queries) EnableFeatureIfNeverConfigured(ctx context.Context, arg EnableFeatureIfNeverConfiguredParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enableFeatureIfNeverConfigured, arg.OrganizationID, arg.FeatureName)
 	if err != nil {
@@ -149,6 +149,47 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const lockAndCheckProOrganization = `-- name: LockAndCheckProOrganization :one
+SELECT gram_account_type = 'pro' AS is_pro
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockAndCheckProOrganization(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, lockAndCheckProOrganization, organizationID)
+	var isPro bool
+	err := row.Scan(&isPro)
+	return isPro, err
+}
+
+const listProOrganizations = `-- name: ListProOrganizations :many
+SELECT id
+FROM organization_metadata
+WHERE gram_account_type = 'pro'
+ORDER BY id
+`
+
+func (q *Queries) ListProOrganizations(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listProOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
