@@ -191,6 +191,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          payload.Name,
 		Scopes:           finalScopes,
+		AgentCredential:  nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").LogError(ctx, s.logger)
 	}
@@ -200,17 +201,21 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	}
 
 	return &gen.Key{
-		ID:              createdKey.ID.String(),
-		Name:            createdKey.Name,
-		OrganizationID:  createdKey.OrganizationID,
-		ProjectID:       conv.FromNullableUUID(createdKey.ProjectID),
-		Key:             &fullKey,
-		KeyPrefix:       createdKey.KeyPrefix,
-		Scopes:          createdKey.Scopes,
-		CreatedByUserID: createdKey.CreatedByUserID,
-		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       createdKey.UpdatedAt.Time.Format(time.RFC3339),
-		LastAccessedAt:  nil,
+		ID:                     createdKey.ID.String(),
+		Name:                   createdKey.Name,
+		OrganizationID:         createdKey.OrganizationID,
+		ProjectID:              conv.FromNullableUUID(createdKey.ProjectID),
+		Key:                    &fullKey,
+		KeyPrefix:              createdKey.KeyPrefix,
+		Scopes:                 createdKey.Scopes,
+		CreatedByUserID:        createdKey.CreatedByUserID,
+		SubjectUrn:             nil,
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: nil,
+		ExpiresAt:              nil,
+		CreatedAt:              createdKey.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              createdKey.UpdatedAt.Time.Format(time.RFC3339),
+		LastAccessedAt:         nil,
 	}, nil
 }
 
@@ -240,17 +245,21 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		}
 
 		result = append(result, &gen.Key{
-			ID:              key.ID.String(),
-			Name:            key.Name,
-			OrganizationID:  key.OrganizationID,
-			ProjectID:       conv.FromNullableUUID(key.ProjectID),
-			Key:             nil,
-			KeyPrefix:       key.KeyPrefix,
-			Scopes:          key.Scopes,
-			CreatedByUserID: key.CreatedByUserID,
-			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
-			LastAccessedAt:  lastAccessedAt,
+			ID:                     key.ID.String(),
+			Name:                   key.Name,
+			OrganizationID:         key.OrganizationID,
+			ProjectID:              conv.FromNullableUUID(key.ProjectID),
+			Key:                    nil,
+			KeyPrefix:              key.KeyPrefix,
+			Scopes:                 key.Scopes,
+			CreatedByUserID:        key.CreatedByUserID,
+			SubjectUrn:             nil,
+			DelegatedGrants:        nil,
+			DelegatedGrantsVersion: nil,
+			ExpiresAt:              nil,
+			CreatedAt:              key.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:              key.UpdatedAt.Time.Format(time.RFC3339),
+			LastAccessedAt:         lastAccessedAt,
 		})
 	}
 
@@ -327,6 +336,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyURN:           urn.NewAPIKey(keyID),
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
+		AgentCredential:  nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").LogError(ctx, s.logger)
 	}

@@ -271,6 +271,7 @@ trackedFiles:
   src/funcs/keysCreate.ts: {}
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
+  src/funcs/keysRotate.ts: {}
   src/funcs/keysValidate.ts: {}
   src/funcs/killswitchesBatchUserBadges.ts: {}
   src/funcs/killswitchesCreate.ts: {}
@@ -699,12 +700,15 @@ trackedFiles:
   src/models/components/addskillversionrequestbody.ts: {}
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
+  src/models/components/agentdelegatedgrant.ts: {}
+  src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpolicygrant.ts: {}
+  src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicygrantidform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentsessionmeta.ts: {}
@@ -1348,6 +1352,7 @@ trackedFiles:
   src/models/components/rolegrant.ts: {}
   src/models/components/rolesummary.ts: {}
   src/models/components/rootmcpserveroption.ts: {}
+  src/models/components/rotatekeyform.ts: {}
   src/models/components/rotatetunneledmcpserverkeyform.ts: {}
   src/models/components/rotatetunneledmcpserverkeyresult.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
@@ -2125,6 +2130,7 @@ trackedFiles:
   src/models/operations/revokeusersession.ts: {}
   src/models/operations/revokeusersessionclient.ts: {}
   src/models/operations/revokeusersessionconsent.ts: {}
+  src/models/operations/rotateapikey.ts: {}
   src/models/operations/rotatelitellminstancekey.ts: {}
   src/models/operations/rotatetunneledmcpserverkey.ts: {}
   src/models/operations/saveriskevalreview.ts: {}
@@ -2621,6 +2627,7 @@ trackedFiles:
   src/react-query/interruptAssistantTurn.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.core.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.ts: {}
+  src/react-query/keysRotate.ts: {}
   src/react-query/killswitch.core.ts: {}
   src/react-query/killswitch.ts: {}
   src/react-query/killswitchCapabilities.core.ts: {}
@@ -3685,7 +3692,7 @@ examples:
   createAPIKey:
     speakeasy-default-create-API-key:
       requestBody:
-        application/json: {"name": "<value>", "scopes": ["<value 1>"]}
+        application/json: {"name": "<value>"}
       responses:
         "200":
           application/json: {"created_at": "2025-08-12T19:00:14.438Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>"], "updated_at": "2026-11-16T04:17:02.536Z"}
@@ -9318,6 +9325,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  rotateAPIKey:
+    speakeasy-default-rotate-API-key:
+      requestBody:
+        application/json: {"delegated_grants_version": 531887, "id": "3d3a0ea2-de53-4fa3-a0f9-a07f5b06d531", "name": "<value>", "requested_grants": [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "agent"}}]}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-03-19T09:26:57.903Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-07-05T07:01:53.186Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   rotateLiteLLMInstanceKey:
     speakeasy-default-rotate-lite-LLM-instance-key:
       requestBody:
