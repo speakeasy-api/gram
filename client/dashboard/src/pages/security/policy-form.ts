@@ -191,20 +191,6 @@ export function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
   return pinned;
 }
 
-export function policyMessageTypesForForm(
-  messageTypes?: string[],
-): Set<PolicyMessageType> {
-  if (!messageTypes?.length) {
-    return new Set(ALL_POLICY_MESSAGE_TYPES);
-  }
-
-  return new Set(
-    messageTypes.filter((type): type is PolicyMessageType =>
-      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
-    ),
-  );
-}
-
 /** Example scope CEL snippets offered beneath the include field — narrow a
  *  policy to a subset of messages. Lives in cel-examples.json so the celenv
  *  Go test compile-checks every snippet against the real engine. */
