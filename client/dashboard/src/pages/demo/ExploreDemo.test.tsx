@@ -92,4 +92,24 @@ describe("ExploreDemo", () => {
       );
     });
   });
+
+  it("rejects path-traversal redirect params and falls back to the demo landing path", async () => {
+    mocks.info.mockResolvedValue({
+      result: { activeOrganizationId: "org-1", organizations: [{ id: "org-1", slug: "my-org" }] },
+    });
+    mocks.enterDemo.mockResolvedValue({});
+    const replace = vi.fn();
+    vi.stubGlobal("location", {
+      replace,
+      search: `?redirect=${encodeURIComponent(`/${DEMO_ORG_SLUG}/../login`)}`,
+      origin: "https://app.getgram.ai",
+    });
+
+    const { default: ExploreDemo } = await import("./ExploreDemo");
+    render(<ExploreDemo />);
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledWith(DEMO_LANDING_PATH);
+    });
+  });
 });

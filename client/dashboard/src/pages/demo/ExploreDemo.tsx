@@ -26,14 +26,26 @@ export default function ExploreDemo(): JSX.Element {
 
     // A ?redirect= param lets callers deep-link into a specific demo page.
     // Validate it stays within the demo org so we can't be used as an open
-    // redirect to an arbitrary destination.
+    // redirect to an arbitrary destination. Normalize via URL so path traversal
+    // like /acme-demo/../login cannot bypass the prefix check.
     const rawRedirect = new URLSearchParams(window.location.search).get(
       DEMO_REDIRECT_PARAM,
     );
-    const destination =
-      rawRedirect && rawRedirect.startsWith(`/${DEMO_ORG_SLUG}/`)
-        ? rawRedirect
-        : DEMO_LANDING_PATH;
+    const destination = (() => {
+      if (!rawRedirect) return DEMO_LANDING_PATH;
+      try {
+        const url = new URL(rawRedirect, window.location.origin);
+        if (
+          url.origin === window.location.origin &&
+          url.pathname.startsWith(`/${DEMO_ORG_SLUG}/`)
+        ) {
+          return `${url.pathname}${url.search}${url.hash}`;
+        }
+      } catch {
+        // Ignore malformed redirects.
+      }
+      return DEMO_LANDING_PATH;
+    })();
 
     void (async () => {
       // Remember where the user came from so Exit demo can return them to
