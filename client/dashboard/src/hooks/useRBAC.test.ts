@@ -66,6 +66,10 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("chat:read")).toBe("chat");
   });
 
+  it("returns 'agent' for agent scopes", () => {
+    expect(resourceKindForScope("agent:read")).toBe("agent");
+  });
+
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");

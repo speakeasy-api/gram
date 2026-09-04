@@ -99,9 +99,9 @@ type OAuthRepo interface {
 // URL uses an `mcp_endpoints.slug` instead — see the companion
 // resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
 //
-// resourceURL is the absolute URL of the protected resource — the same value
-// [ResolveOAuthProtectedResourceFromToolset] emits as `resource` and
-// `authorization_servers`. For the external-OAuth-server case it becomes the
+// resourceURL is the absolute URL of the protected resource. For metadata-based
+// External OAuth configurations, protected-resource metadata
+// also advertises this value as its authorization server, so it becomes the
 // served document's `issuer` so the metadata satisfies RFC 8414 §3.3 (the
 // served `issuer` must equal the issuer identifier the client fetched it
 // under); the proxy case ignores it and keys its issuer off oauthSlug.
@@ -125,12 +125,18 @@ func ResolveOAuthServerMetadataFromToolset(
 			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
+		// Issuer-only configurations use upstream discovery and deliberately do
+		// not expose this retained Gram-hosted RFC 8414 compatibility route.
+		if externalOAuthServer.AuthorizationServerIssuer.Valid {
+			return nil, nil
+		}
+
 		// The captured upstream document's `issuer` identifies the upstream
 		// authorization server, but Gram re-serves that document from its own
 		// `/.well-known/oauth-authorization-server/...` URL. RFC 8414 §3.3
 		// requires the served `issuer` to equal the issuer identifier the
 		// client used to fetch the document — here the Gram resource URL that
-		// the protected-resource metadata advertises in
+		// metadata-based protected-resource metadata advertises in
 		// `authorization_servers` — so a spec-compliant MCP client does not
 		// reject the metadata on a mismatch. The upstream's own
 		// authorization/token/registration endpoints are preserved verbatim;
@@ -186,11 +192,9 @@ func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage,
 // Metadata for a toolset, or nil if the toolset is not OAuth-protected.
 //
 // resourceURL is the absolute URL of the protected resource (the runtime MCP
-// endpoint). For /mcp callers this is `<baseURL>/mcp/<toolset.mcp_slug>`; for
-// /x/mcp callers this is `<baseURL>/x/mcp/<mcp_endpoint.slug>`. It is used
-// verbatim for both `resource` and `authorization_servers` so that the
-// `/.well-known/...` discovery path on the protected resource resolves back
-// to the Gram-hosted authorization server metadata.
+// endpoint). It is always emitted verbatim as `resource`. Metadata-based
+// configurations also advertise it as their Gram-hosted authorization server;
+// issuer-based configurations advertise their exact stored issuer instead.
 func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -199,11 +203,24 @@ func ResolveOAuthProtectedResourceFromToolset(
 	toolset *toolsets_repo.Toolset,
 	resourceURL string,
 ) (*OAuthProtectedResourceMetadata, error) {
-	// Check for external OAuth server configuration
+	// Check for external OAuth server configuration.
 	if toolset.ExternalOauthServerID.Valid {
+		external, err := repo.New(db).GetExternalOAuthServerMetadata(ctx, repo.GetExternalOAuthServerMetadataParams{
+			ProjectID: toolset.ProjectID,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
+		}
+
+		authorizationServer := resourceURL
+		if external.AuthorizationServerIssuer.Valid {
+			authorizationServer = external.AuthorizationServerIssuer.String
+		}
+
 		return &OAuthProtectedResourceMetadata{
 			Resource:               resourceURL,
-			AuthorizationServers:   []string{resourceURL},
+			AuthorizationServers:   []string{authorizationServer},
 			ScopesSupported:        nil,
 			BearerMethodsSupported: nil,
 			ResourceDocumentation:  "",

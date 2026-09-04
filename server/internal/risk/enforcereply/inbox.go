@@ -55,6 +55,9 @@ type Outcome struct {
 	// ByLane contains the first reply received for each requested lane.
 	ByLane map[Lane]*riskv1.EnforcementReply
 
+	// Failed contains transport errors for lanes that did not reply.
+	Failed map[Lane]error
+
 	// Complete reports whether every requested lane replied.
 	Complete bool
 

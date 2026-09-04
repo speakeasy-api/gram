@@ -440,6 +440,9 @@ func (s *Service) serveTunneledPublicInit(
 
 	committed := false
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+			return rejection
+		}
 		stripPublicResponseHeaders(resp)
 		if !reserved {
 			return nil
@@ -691,6 +694,9 @@ func (s *Service) serveTunneledPublicSession(
 
 	isDelete := r.Method == http.MethodDelete
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		if rejection := tunnelrouting.BusyResponseRejection(resp); rejection != nil {
+			return rejection
+		}
 		stripPublicResponseHeaders(resp)
 
 		// The exact agent session is gone: the backend session died with it.

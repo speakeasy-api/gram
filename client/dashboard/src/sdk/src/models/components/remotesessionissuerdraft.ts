@@ -17,6 +17,10 @@ export type RemoteSessionIssuerDraft = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer advertises the RFC 9207 authorization response iss parameter.
+   */
+  authorizationResponseIssParameterSupported: boolean;
+  /**
    * Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
    */
   clientIdMetadataDocumentSupported: boolean;
@@ -81,6 +85,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorization_endpoint: z.optional(z.string()),
+    authorization_response_iss_parameter_supported: z.boolean(),
     client_id_metadata_document_supported: z.boolean(),
     code_challenge_methods_supported: z.optional(
       z.nullable(z.array(z.string())),
@@ -104,6 +109,8 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
+      "authorization_response_iss_parameter_supported":
+        "authorizationResponseIssParameterSupported",
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
       "code_challenge_methods_supported": "codeChallengeMethodsSupported",

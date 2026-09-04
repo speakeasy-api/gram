@@ -33,6 +33,9 @@ type ReadingRow struct {
 	// Unit is the workload measurement unit.
 	Unit string `ch:"unit"`
 
+	// MeasurementMethod identifies how the workload quantity was measured.
+	MeasurementMethod string `ch:"measurement_method"`
+
 	// Value is the signed workload value.
 	Value int64 `ch:"value"`
 
@@ -75,6 +78,7 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 		"meter_id",
 		"operation_id",
 		"unit",
+		"measurement_method",
 		"value",
 		"occurred_at",
 		"produced_at",
@@ -94,6 +98,7 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 			row.MeterID,
 			row.OperationID,
 			row.Unit,
+			row.MeasurementMethod,
 			row.Value,
 			row.OccurredAt.Format("2006-01-02 15:04:05.999999999"),
 			row.ProducedAt.Format("2006-01-02 15:04:05.999999999"),

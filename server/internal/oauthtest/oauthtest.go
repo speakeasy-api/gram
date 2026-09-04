@@ -34,6 +34,9 @@ type ExternalOAuthToolsetOpts struct {
 	// (e.g. dev-idp via devidptest) should pass the bytes returned by the
 	// server's metadata helper here (e.g. inst.OAuth21Metadata(t)).
 	Metadata []byte
+	// AuthorizationServerIssuer is the optional provider-hosted issuer. When
+	// set, Metadata must be nil to preserve the database source XOR.
+	AuthorizationServerIssuer *string
 }
 
 // CreateExternalOAuthToolset creates a toolset linked to an external OAuth server.
@@ -52,7 +55,7 @@ func CreateExternalOAuthToolset(
 	}
 	slug := opts.Slug + "-" + suffix
 
-	if opts.Metadata == nil {
+	if opts.Metadata == nil && opts.AuthorizationServerIssuer == nil {
 		meta := map[string]any{
 			"issuer":                   "https://test-oauth-server.example.com",
 			"authorization_endpoint":   "https://test-oauth-server.example.com/authorize",
@@ -68,10 +71,16 @@ func CreateExternalOAuthToolset(
 	oauthRepo := oauth_repo.New(conn)
 	toolsetsRepo := toolsets_repo.New(conn)
 
+	authorizationServerIssuer := pgtype.Text{}
+	if opts.AuthorizationServerIssuer != nil {
+		authorizationServerIssuer = conv.ToPGText(*opts.AuthorizationServerIssuer)
+	}
+
 	serverMetadata, err := oauthRepo.CreateExternalOAuthServerMetadata(ctx, oauth_repo.CreateExternalOAuthServerMetadataParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      "external-oauth-" + suffix,
-		Metadata:  opts.Metadata,
+		ProjectID:                 *authCtx.ProjectID,
+		Slug:                      "external-oauth-" + suffix,
+		Metadata:                  opts.Metadata,
+		AuthorizationServerIssuer: authorizationServerIssuer,
 	})
 	require.NoError(t, err)
 

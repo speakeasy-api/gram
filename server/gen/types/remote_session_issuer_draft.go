@@ -46,6 +46,9 @@ type RemoteSessionIssuerDraft struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool
+	// Whether the issuer advertises the RFC 9207 authorization response iss
+	// parameter.
+	AuthorizationResponseIssParameterSupported bool
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string
 }

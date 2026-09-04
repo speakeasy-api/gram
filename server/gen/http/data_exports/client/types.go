@@ -3662,8 +3662,8 @@ func ValidateCreateRouteResponseBody(body *CreateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3706,8 +3706,8 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -5998,8 +5998,8 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

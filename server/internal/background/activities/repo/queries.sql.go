@@ -1794,6 +1794,156 @@ func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, ar
 	return items, nil
 }
 
+const listTenantDimensionOrganizations = `-- name: ListTenantDimensionOrganizations :many
+SELECT
+    om.id,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.workos_updated_at,
+    om.webhooks_enabled,
+    om.scim_enabled,
+    om.sso_enabled,
+    om.whitelisted,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    t.tier AS trial_tier,
+    t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
+    t.created_at AS trial_created_at,
+    t.updated_at AS trial_updated_at,
+    om.created_at,
+    om.updated_at,
+    om.disabled_at
+FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.organization_id = om.id
+)
+ORDER BY om.id
+`
+
+type ListTenantDimensionOrganizationsRow struct {
+	ID                 string
+	Slug               string
+	AccountType        string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WebhooksEnabled    pgtype.Bool
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	TrialTier          pgtype.Text
+	TrialEndsAt        pgtype.Timestamptz
+	TrialConvertedAt   pgtype.Timestamptz
+	TrialDemotedAt     pgtype.Timestamptz
+	TrialCreatedAt     pgtype.Timestamptz
+	TrialUpdatedAt     pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Full reporting projection for ClickHouse organizations that own at least
+// one project. The caller runs this and ListTenantDimensionProjects in one
+// repeatable-read transaction so both generations come from one source
+// snapshot.
+func (q *Queries) ListTenantDimensionOrganizations(ctx context.Context) ([]ListTenantDimensionOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantDimensionOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantDimensionOrganizationsRow
+	for rows.Next() {
+		var i ListTenantDimensionOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.AccountType,
+			&i.WorkosID,
+			&i.WorkosUpdatedAt,
+			&i.WebhooksEnabled,
+			&i.ScimEnabled,
+			&i.SsoEnabled,
+			&i.Whitelisted,
+			&i.FreeTrialStartedAt,
+			&i.FreeTrialEndsAt,
+			&i.TrialTier,
+			&i.TrialEndsAt,
+			&i.TrialConvertedAt,
+			&i.TrialDemotedAt,
+			&i.TrialCreatedAt,
+			&i.TrialUpdatedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantDimensionProjects = `-- name: ListTenantDimensionProjects :many
+SELECT
+    id,
+    organization_id,
+    slug,
+    created_at,
+    updated_at,
+    deleted_at
+FROM projects
+ORDER BY organization_id, id
+`
+
+type ListTenantDimensionProjectsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+// Includes soft-deleted projects so retained ClickHouse facts keep their
+// human-readable dimension and reports can choose lifecycle semantics.
+func (q *Queries) ListTenantDimensionProjects(ctx context.Context) ([]ListTenantDimensionProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantDimensionProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantDimensionProjectsRow
+	for rows.Next() {
+		var i ListTenantDimensionProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWeeklyUsageSummaryTargets = `-- name: ListWeeklyUsageSummaryTargets :many
 SELECT
     om.id AS organization_id,

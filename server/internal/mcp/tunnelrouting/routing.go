@@ -100,6 +100,28 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 	return available[index.Int64()], true
 }
 
+// BusyResponseRejection converts an exhausted internal capacity response to a
+// transport-neutral JSON-RPC error for POST requests. GET and DELETE retain
+// their HTTP response semantics; the gateway supplies their generic body.
+func BusyResponseRejection(resp *http.Response) *proxy.RejectError {
+	if resp == nil ||
+		resp.Request == nil ||
+		resp.Request.Method != http.MethodPost ||
+		resp.StatusCode != http.StatusBadGateway ||
+		resp.Header.Get(ErrorHeader) != wire.TunnelErrorTunnelBusy {
+		return nil
+	}
+
+	return &proxy.RejectError{
+		Code:    proxy.RejectCodeServerError,
+		Message: "The MCP server is temporarily unavailable. Please retry.",
+		Data: map[string]any{
+			"code":      "service_unavailable",
+			"retryable": true,
+		},
+	}
+}
+
 // Retryer returns the tunnel-specific proxy retry policy.
 func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.UpstreamResponseRetryer {
 	return func(ctx context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {

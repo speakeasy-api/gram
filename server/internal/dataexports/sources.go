@@ -2,10 +2,16 @@ package dataexports
 
 import "fmt"
 
+const (
+	DataSourceProductTelemetry = "product_telemetry"
+	DataSourceRiskFindings     = "risk_findings"
+)
+
 type dataSource string
 
 var validDataSources = map[dataSource]struct{}{
-	"product_telemetry": {},
+	DataSourceProductTelemetry: {},
+	DataSourceRiskFindings:     {},
 }
 
 func parseDataSource(value string) (dataSource, error) {

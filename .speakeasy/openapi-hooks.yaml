@@ -720,11 +720,6 @@ components:
         - raw_sha256
         - content
   securitySchemes:
-    admin_auth_header_Authorization:
-      type: apiKey
-      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
-      name: Authorization
-      in: header
     apikey_header_Authorization:
       type: apiKey
       description: key based auth.
@@ -772,8 +767,6 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories

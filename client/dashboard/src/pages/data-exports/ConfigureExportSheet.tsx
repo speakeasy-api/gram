@@ -24,6 +24,7 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { isValidDataExportEndpointURL } from "@/lib/data-export-validation";
 import {
   blankWriteOnlyHeader,
   hasValidWriteOnlyHeaders,
@@ -65,15 +66,6 @@ export type ConfigureExportValues = {
   headers: EditableWriteOnlyHeader[];
 };
 
-function isValidEndpointURL(value: string): boolean {
-  try {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function initialDestinationID(
   route: DataExportRoute | undefined,
   destinations: OtelDataExportDestination[],
@@ -100,7 +92,7 @@ function destinationSelectionIsValid(
   }
   return (
     values.destinationName.trim() !== "" &&
-    isValidEndpointURL(values.endpointUrl.trim()) &&
+    isValidDataExportEndpointURL(values.endpointUrl.trim()) &&
     hasValidWriteOnlyHeaders(values.headers)
   );
 }
@@ -118,6 +110,7 @@ function submitLabel(
 export function ConfigureExportSheet({
   projects,
   project,
+  dataSources,
   destinations,
   route,
   saving,
@@ -128,6 +121,11 @@ export function ConfigureExportSheet({
 }: {
   projects: ProjectEntry[];
   project: ProjectEntry;
+  dataSources: Array<{
+    value: DataSourceValue;
+    label: string;
+    description: string;
+  }>;
   destinations: OtelDataExportDestination[];
   route?: DataExportRoute;
   saving: boolean;
@@ -176,10 +174,12 @@ export function ConfigureExportSheet({
     [destinations],
   );
   const initialDestinationId = initialDestinationID(route, destinations);
+  const initialDataSource =
+    route?.dataSource ?? dataSources[0]?.value ?? DataSource.ProductTelemetry;
   const form = useForm({
     defaultValues: {
       projectSlug: project.slug,
-      dataSource: DataSource.ProductTelemetry,
+      dataSource: initialDataSource as DataSourceValue,
       destinationId: initialDestinationId,
       enabled: (route?.enabled ?? true) as boolean,
       destinationName: "",
@@ -240,29 +240,36 @@ export function ConfigureExportSheet({
             </div>
 
             <form.Field name="dataSource">
-              {(field) => (
-                <div className="space-y-3 border-t py-5">
-                  <Label htmlFor={sourceControlId}>Data to export</Label>
-                  <Select
-                    value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange(value as DataSourceValue)
-                    }
-                  >
-                    <SelectTrigger id={sourceControlId} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={DataSource.ProductTelemetry}>
-                        Product telemetry
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Text muted className="text-sm leading-relaxed">
-                    OTLP traces and logs from MCP servers and tool calls.
-                  </Text>
-                </div>
-              )}
+              {(field) => {
+                const selectedSource = dataSources.find(
+                  (source) => source.value === field.state.value,
+                );
+                return (
+                  <div className="space-y-3 border-t py-5">
+                    <Label htmlFor={sourceControlId}>Data to export</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(value) =>
+                        field.handleChange(value as DataSourceValue)
+                      }
+                    >
+                      <SelectTrigger id={sourceControlId} className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dataSources.map((source) => (
+                          <SelectItem key={source.value} value={source.value}>
+                            {source.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Text muted className="text-sm leading-relaxed">
+                      {selectedSource?.description}
+                    </Text>
+                  </div>
+                );
+              }}
             </form.Field>
 
             <form.Field name="destinationId">
@@ -456,7 +463,7 @@ export function ConfigureExportSheet({
                   <div className="space-y-1">
                     <Label>Start exporting</Label>
                     <Text muted className="text-sm">
-                      Turn off to save this export paused.
+                      When enabled, data starts exporting as soon as you save.
                     </Text>
                   </div>
                   <Switch

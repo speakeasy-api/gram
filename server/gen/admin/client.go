@@ -15,61 +15,75 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                        goa.Endpoint
-	CallbackEndpoint                     goa.Endpoint
-	LogoutEndpoint                       goa.Endpoint
-	GetProjectEndpoint                   goa.Endpoint
-	UpdateOrganizationEndpoint           goa.Endpoint
-	BulkUpdateAccountTypeEndpoint        goa.Endpoint
-	DisableOrganizationEndpoint          goa.Endpoint
-	EnableOrganizationEndpoint           goa.Endpoint
-	GetOrganizationEndpoint              goa.Endpoint
-	ListOrganizationMembersEndpoint      goa.Endpoint
-	ListOrganizationProjectsEndpoint     goa.Endpoint
-	ListOrganizationActivityEndpoint     goa.Endpoint
-	ListOrganizationsEndpoint            goa.Endpoint
-	ExtendTrialEndpoint                  goa.Endpoint
-	CreateOrganizationEndpoint           goa.Endpoint
-	RearmTrialEndpoint                   goa.Endpoint
-	GetOrganizationStatsEndpoint         goa.Endpoint
-	GetInferenceKeysEndpoint             goa.Endpoint
-	SetInferenceKeyMonthlyLimitEndpoint  goa.Endpoint
-	GetInferenceSpendHistoryEndpoint     goa.Endpoint
-	GetPaygBillingSummaryEndpoint        goa.Endpoint
-	GetStripeSubscriptionEndpoint        goa.Endpoint
-	CancelStripeSubscriptionEndpoint     goa.Endpoint
-	ResumeStripeSubscriptionEndpoint     goa.Endpoint
-	MarkEnterpriseTrialConvertedEndpoint goa.Endpoint
+	LoginEndpoint                               goa.Endpoint
+	CallbackEndpoint                            goa.Endpoint
+	LogoutEndpoint                              goa.Endpoint
+	GetSessionEndpoint                          goa.Endpoint
+	GetOrganizationFeaturesEndpoint             goa.Endpoint
+	SetOrganizationFeatureEndpoint              goa.Endpoint
+	GetOrganizationChatAnalysisSettingsEndpoint goa.Endpoint
+	SetOrganizationChatAnalysisSettingsEndpoint goa.Endpoint
+	TriggerOrganizationChatAnalysisEndpoint     goa.Endpoint
+	OpenOrganizationInDashboardEndpoint         goa.Endpoint
+	GetProjectEndpoint                          goa.Endpoint
+	UpdateOrganizationEndpoint                  goa.Endpoint
+	BulkUpdateAccountTypeEndpoint               goa.Endpoint
+	DisableOrganizationEndpoint                 goa.Endpoint
+	EnableOrganizationEndpoint                  goa.Endpoint
+	GetOrganizationEndpoint                     goa.Endpoint
+	ListOrganizationMembersEndpoint             goa.Endpoint
+	ListOrganizationProjectsEndpoint            goa.Endpoint
+	ListOrganizationActivityEndpoint            goa.Endpoint
+	ListOrganizationsEndpoint                   goa.Endpoint
+	ExtendTrialEndpoint                         goa.Endpoint
+	CreateOrganizationEndpoint                  goa.Endpoint
+	RearmTrialEndpoint                          goa.Endpoint
+	GetOrganizationStatsEndpoint                goa.Endpoint
+	GetInferenceKeysEndpoint                    goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint         goa.Endpoint
+	GetInferenceSpendHistoryEndpoint            goa.Endpoint
+	GetPaygBillingSummaryEndpoint               goa.Endpoint
+	GetStripeSubscriptionEndpoint               goa.Endpoint
+	CancelStripeSubscriptionEndpoint            goa.Endpoint
+	ResumeStripeSubscriptionEndpoint            goa.Endpoint
+	MarkEnterpriseTrialConvertedEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                        login,
-		CallbackEndpoint:                     callback,
-		LogoutEndpoint:                       logout,
-		GetProjectEndpoint:                   getProject,
-		UpdateOrganizationEndpoint:           updateOrganization,
-		BulkUpdateAccountTypeEndpoint:        bulkUpdateAccountType,
-		DisableOrganizationEndpoint:          disableOrganization,
-		EnableOrganizationEndpoint:           enableOrganization,
-		GetOrganizationEndpoint:              getOrganization,
-		ListOrganizationMembersEndpoint:      listOrganizationMembers,
-		ListOrganizationProjectsEndpoint:     listOrganizationProjects,
-		ListOrganizationActivityEndpoint:     listOrganizationActivity,
-		ListOrganizationsEndpoint:            listOrganizations,
-		ExtendTrialEndpoint:                  extendTrial,
-		CreateOrganizationEndpoint:           createOrganization,
-		RearmTrialEndpoint:                   rearmTrial,
-		GetOrganizationStatsEndpoint:         getOrganizationStats,
-		GetInferenceKeysEndpoint:             getInferenceKeys,
-		SetInferenceKeyMonthlyLimitEndpoint:  setInferenceKeyMonthlyLimit,
-		GetInferenceSpendHistoryEndpoint:     getInferenceSpendHistory,
-		GetPaygBillingSummaryEndpoint:        getPaygBillingSummary,
-		GetStripeSubscriptionEndpoint:        getStripeSubscription,
-		CancelStripeSubscriptionEndpoint:     cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint:     resumeStripeSubscription,
-		MarkEnterpriseTrialConvertedEndpoint: markEnterpriseTrialConverted,
+		LoginEndpoint:                               login,
+		CallbackEndpoint:                            callback,
+		LogoutEndpoint:                              logout,
+		GetSessionEndpoint:                          getSession,
+		GetOrganizationFeaturesEndpoint:             getOrganizationFeatures,
+		SetOrganizationFeatureEndpoint:              setOrganizationFeature,
+		GetOrganizationChatAnalysisSettingsEndpoint: getOrganizationChatAnalysisSettings,
+		SetOrganizationChatAnalysisSettingsEndpoint: setOrganizationChatAnalysisSettings,
+		TriggerOrganizationChatAnalysisEndpoint:     triggerOrganizationChatAnalysis,
+		OpenOrganizationInDashboardEndpoint:         openOrganizationInDashboard,
+		GetProjectEndpoint:                          getProject,
+		UpdateOrganizationEndpoint:                  updateOrganization,
+		BulkUpdateAccountTypeEndpoint:               bulkUpdateAccountType,
+		DisableOrganizationEndpoint:                 disableOrganization,
+		EnableOrganizationEndpoint:                  enableOrganization,
+		GetOrganizationEndpoint:                     getOrganization,
+		ListOrganizationMembersEndpoint:             listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:            listOrganizationProjects,
+		ListOrganizationActivityEndpoint:            listOrganizationActivity,
+		ListOrganizationsEndpoint:                   listOrganizations,
+		ExtendTrialEndpoint:                         extendTrial,
+		CreateOrganizationEndpoint:                  createOrganization,
+		RearmTrialEndpoint:                          rearmTrial,
+		GetOrganizationStatsEndpoint:                getOrganizationStats,
+		GetInferenceKeysEndpoint:                    getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint:         setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:            getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:               getPaygBillingSummary,
+		GetStripeSubscriptionEndpoint:               getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:            cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:            resumeStripeSubscription,
+		MarkEnterpriseTrialConvertedEndpoint:        markEnterpriseTrialConverted,
 	}
 }
 
@@ -133,6 +147,166 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (err error) {
 	_, err = c.LogoutEndpoint(ctx, p)
 	return
+}
+
+// GetSession calls the "getSession" endpoint of the "admin" service.
+// GetSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSession(ctx context.Context, p *GetSessionPayload) (res *AdminSession, err error) {
+	var ires any
+	ires, err = c.GetSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSession), nil
+}
+
+// GetOrganizationFeatures calls the "getOrganizationFeatures" endpoint of the
+// "admin" service.
+// GetOrganizationFeatures may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationFeatures(ctx context.Context, p *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error) {
+	var ires any
+	ires, err = c.GetOrganizationFeaturesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ProductFeatures), nil
+}
+
+// SetOrganizationFeature calls the "setOrganizationFeature" endpoint of the
+// "admin" service.
+// SetOrganizationFeature may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetOrganizationFeature(ctx context.Context, p *SetOrganizationFeaturePayload) (res *ProductFeatures, err error) {
+	var ires any
+	ires, err = c.SetOrganizationFeatureEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ProductFeatures), nil
+}
+
+// GetOrganizationChatAnalysisSettings calls the
+// "getOrganizationChatAnalysisSettings" endpoint of the "admin" service.
+// GetOrganizationChatAnalysisSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationChatAnalysisSettings(ctx context.Context, p *GetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error) {
+	var ires any
+	ires, err = c.GetOrganizationChatAnalysisSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminChatAnalysisSettings), nil
+}
+
+// SetOrganizationChatAnalysisSettings calls the
+// "setOrganizationChatAnalysisSettings" endpoint of the "admin" service.
+// SetOrganizationChatAnalysisSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetOrganizationChatAnalysisSettings(ctx context.Context, p *SetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error) {
+	var ires any
+	ires, err = c.SetOrganizationChatAnalysisSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminChatAnalysisSettings), nil
+}
+
+// TriggerOrganizationChatAnalysis calls the "triggerOrganizationChatAnalysis"
+// endpoint of the "admin" service.
+// TriggerOrganizationChatAnalysis may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TriggerOrganizationChatAnalysis(ctx context.Context, p *TriggerOrganizationChatAnalysisPayload) (res *AdminChatAnalysisTriggerResult, err error) {
+	var ires any
+	ires, err = c.TriggerOrganizationChatAnalysisEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminChatAnalysisTriggerResult), nil
+}
+
+// OpenOrganizationInDashboard calls the "openOrganizationInDashboard" endpoint
+// of the "admin" service.
+// OpenOrganizationInDashboard may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) OpenOrganizationInDashboard(ctx context.Context, p *OpenOrganizationInDashboardPayload) (res *AdminDashboardRedirect, err error) {
+	var ires any
+	ires, err = c.OpenOrganizationInDashboardEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminDashboardRedirect), nil
 }
 
 // GetProject calls the "getProject" endpoint of the "admin" service.
@@ -525,6 +699,7 @@ func (c *Client) GetInferenceSpendHistory(ctx context.Context, p *GetInferenceSp
 // GetPaygBillingSummary calls the "getPaygBillingSummary" endpoint of the
 // "admin" service.
 // GetPaygBillingSummary may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -548,6 +723,7 @@ func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSum
 // GetStripeSubscription calls the "getStripeSubscription" endpoint of the
 // "admin" service.
 // GetStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -571,6 +747,7 @@ func (c *Client) GetStripeSubscription(ctx context.Context, p *GetStripeSubscrip
 // CancelStripeSubscription calls the "cancelStripeSubscription" endpoint of
 // the "admin" service.
 // CancelStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -594,6 +771,7 @@ func (c *Client) CancelStripeSubscription(ctx context.Context, p *CancelStripeSu
 // ResumeStripeSubscription calls the "resumeStripeSubscription" endpoint of
 // the "admin" service.
 // ResumeStripeSubscription may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

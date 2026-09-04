@@ -2665,7 +2665,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TriggerAnalysisResponseBody'
+                $ref: '#/components/schemas/AdminChatAnalysisTriggerResult'
           description: OK response.
         "400":
           content:
@@ -36578,7 +36578,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetProductFeaturesResponseBody'
+                $ref: '#/components/schemas/ProductFeatures'
           description: OK response.
         "400":
           content:
@@ -36659,7 +36659,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetProductFeatureRequestBody'
+              $ref: '#/components/schemas/SetOrganizationFeatureRequestBody'
         required: true
       responses:
         "200":
@@ -56566,6 +56566,121 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateToolset
+  /rpc/toolsets.updateExternalOAuthServer:
+    post:
+      description: Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+      operationId: updateExternalOAuthServer
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset whose attached external OAuth server is updated
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExternalOAuthServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateExternalOAuthServer toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: updateExternalOAuthServer
+      x-speakeasy-react-hook:
+        name: UpdateExternalOAuthServer
   /rpc/triggers.create:
     post:
       description: Create a trigger instance.
@@ -63366,21 +63481,6 @@ components:
         - name
         - slug
         - registry_server_specifier
-    AddExternalOAuthServerForm:
-      type: object
-      properties:
-        external_oauth_server:
-          $ref: '#/components/schemas/ExternalOAuthServerForm'
-        project_slug_input:
-          type: string
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - slug
-        - external_oauth_server
     AddExternalOAuthServerRequestBody:
       type: object
       properties:
@@ -63459,29 +63559,6 @@ components:
         - asset_id
         - name
         - slug
-    AddOpenAPIv3SourceForm:
-      type: object
-      properties:
-        asset_id:
-          type: string
-          description: The ID of the uploaded asset.
-        name:
-          type: string
-          description: The name to give the document as it will be displayed in UIs.
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - asset_id
-        - name
-        - slug
-    AddOpenAPIv3SourceResult:
-      type: object
-      properties:
-        deployment:
-          $ref: '#/components/schemas/Deployment'
     AddPackageForm:
       type: object
       properties:
@@ -63554,131 +63631,15 @@ components:
       description: Result of a strictly additive tool metadata batch insert.
       required:
         - tools
-    AdminBulkUpdateAccountTypeResult:
+    AdminChatAnalysisTriggerResult:
       type: object
       properties:
-        missing_ids:
-          type: array
-          items:
-            type: string
-          description: IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.
-        updated_ids:
-          type: array
-          items:
-            type: string
-          description: 'IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.'
-      description: Outcome of a bulk account type change.
-      required:
-        - updated_ids
-        - missing_ids
-    AdminInferenceKey:
-      type: object
-      properties:
-        credits_used:
-          type: number
-          description: Credits spent this month in USD.
-          format: double
-        disable_causes:
-          type: array
-          items:
-            type: string
-          description: Active internal disable causes. Omitted for legacy unclassified rows.
-        disable_causes_classified:
-          type: boolean
-          description: Whether disable_causes is classified, including an explicitly empty cause set.
-        disabled:
-          type: boolean
-        key_type:
-          type: string
-        monthly_credits:
+        projects_signaled:
           type: integer
           format: int64
-      description: Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
       required:
-        - key_type
-        - credits_used
-        - monthly_credits
-        - disabled
-        - disable_causes_classified
-    AdminInferenceKeyLimit:
-      type: object
-      properties:
-        key_type:
-          type: string
-        monthly_credits:
-          type: integer
-          format: int64
-      description: The configured monthly limit for one materialized platform-managed OpenRouter key.
-      required:
-        - key_type
-        - monthly_credits
-    AdminInferenceSpendMonth:
-      type: object
-      properties:
-        period_end:
-          type: string
-          description: Exclusive end of the UTC calendar month.
-          format: date
-        period_start:
-          type: string
-          format: date
-        spend_usd:
-          type: string
-      required:
-        - period_start
-        - period_end
-        - spend_usd
-    AdminListOrganizationActivityResult:
-      type: object
-      properties:
-        logs:
-          type: array
-          items:
-            $ref: '#/components/schemas/AuditLog'
-          description: List of organization activity.
-        next_cursor:
-          type: string
-          description: Cursor for the next page of results.
-      required:
-        - logs
-    AdminListOrganizationMembersResult:
-      type: object
-      properties:
-        members:
-          type: array
-          items:
-            $ref: '#/components/schemas/AdminOrganizationMember'
-          description: The members of the organization.
-      required:
-        - members
-    AdminListOrganizationProjectsResult:
-      type: object
-      properties:
-        projects:
-          type: array
-          items:
-            $ref: '#/components/schemas/AdminProject'
-          description: The projects belonging to the organization.
-      required:
-        - projects
-    AdminListOrganizationsResult:
-      type: object
-      properties:
-        next_cursor:
-          type: string
-          description: Cursor for the next page; empty when exhausted. Omitted in offset mode.
-        organizations:
-          type: array
-          items:
-            $ref: '#/components/schemas/AdminOrganization'
-          description: The page of organizations.
-        total:
-          type: integer
-          description: Number of organizations matching the filters, before paging.
-          format: int64
-      required:
-        - organizations
-        - total
+        - projects_signaled
+      x-speakeasy-name-override: TriggerAnalysisResponseBody
     AdminOpenRouterKey:
       type: object
       properties:
@@ -63728,317 +63689,6 @@ components:
         - disabled
         - created_at
         - updated_at
-    AdminOrganization:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: Gram account type (e.g. free, pro, payg, enterprise).
-        created_at:
-          type: string
-          description: The creation date of the organization.
-          format: date-time
-        disabled_at:
-          type: string
-          description: The time at which the organization was disabled, if any.
-          format: date-time
-        id:
-          type: string
-          description: The ID of the organization
-        member_count:
-          type: integer
-          description: Number of active members in the organization.
-          format: int64
-        name:
-          type: string
-          description: The name of the organization
-        slug:
-          type: string
-          description: The slug of the organization
-        trial_converted_at:
-          type: string
-          description: The time at which the trial converted to a paid plan, if any.
-          format: date-time
-        trial_demoted_at:
-          type: string
-          description: The time at which the organization was demoted after its trial, if any.
-          format: date-time
-        trial_ends_at:
-          type: string
-          description: The time at which the enterprise trial ends. Absent when the organization never trialled.
-          format: date-time
-        trial_state:
-          type: string
-          description: Lifecycle state of the organization's enterprise trial.
-          enum:
-            - none
-            - running
-            - ending_soon
-            - expired
-            - demoted
-            - converted
-        trial_tier:
-          type: string
-          description: The trial tier. Absent when the organization never trialled.
-        updated_at:
-          type: string
-          description: The last update date of the organization.
-          format: date-time
-        whitelisted:
-          type: boolean
-          description: Whether the organization is whitelisted for full access.
-        workos_id:
-          type: string
-          description: WorkOS organization ID, if linked.
-      description: Organization details surfaced to admin operators.
-      required:
-        - id
-        - name
-        - slug
-        - account_type
-        - whitelisted
-        - member_count
-        - created_at
-        - updated_at
-    AdminOrganizationMember:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        display_name:
-          type: string
-          description: User display name.
-        email:
-          type: string
-          description: User email address.
-        id:
-          type: string
-          description: User ID.
-        last_login:
-          type: string
-          description: The time the user last logged in, if any.
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      description: Organization member surfaced to admin operators.
-      required:
-        - id
-        - email
-        - display_name
-        - created_at
-        - updated_at
-    AdminOrganizationStats:
-      type: object
-      properties:
-        created_last_7_days:
-          type: integer
-          description: Organizations created in the last 7 days, whatever their current status.
-          format: int64
-        customers:
-          type: integer
-          description: Organizations on a paid account type (payg or enterprise), disabled ones included.
-          format: int64
-        customers_created_last_7_days:
-          type: integer
-          description: Customers created in the last 7 days, whatever their current status.
-          format: int64
-        disabled:
-          type: integer
-          description: Organizations with disabled_at set.
-          format: int64
-        disabled_last_7_days:
-          type: integer
-          description: Organizations disabled in the last 7 days.
-          format: int64
-        total:
-          type: integer
-          description: Every organization on the platform, disabled ones included.
-          format: int64
-        trials_ending_soon:
-          type: integer
-          description: Organizations whose trial_state is ending_soon.
-          format: int64
-      description: Platform-wide organization counts surfaced above the admin organizations list.
-      required:
-        - total
-        - created_last_7_days
-        - customers
-        - customers_created_last_7_days
-        - trials_ending_soon
-        - disabled
-        - disabled_last_7_days
-    AdminPaygBillingSummary:
-      type: object
-      properties:
-        estimated_total_usd:
-          type: string
-        other_inference_spend_usd:
-          type: string
-        period_end:
-          type: string
-          format: date-time
-        period_start:
-          type: string
-          format: date-time
-        recorded_through:
-          type: string
-          format: date
-        tum_cost_usd:
-          type: string
-        tum_tokens:
-          type: integer
-          format: int64
-        tum_unit_price_usd:
-          type: string
-      required:
-        - period_start
-        - period_end
-        - tum_tokens
-        - tum_unit_price_usd
-        - tum_cost_usd
-        - other_inference_spend_usd
-        - estimated_total_usd
-    AdminProject:
-      type: object
-      properties:
-        created_at:
-          type: string
-          description: The creation date of the project.
-          format: date-time
-        id:
-          type: string
-          description: The ID of the project
-        mcp_server_count:
-          type: integer
-          description: Number of MCP servers in the project, counting both toolset-backed servers and mcp_servers rows.
-          format: int64
-        name:
-          type: string
-          description: The name of the project
-        slug:
-          type: string
-          description: The slug of the project
-        updated_at:
-          type: string
-          description: The last update date of the project.
-          format: date-time
-      description: Project summary surfaced to admin operators.
-      required:
-        - id
-        - name
-        - slug
-        - mcp_server_count
-        - created_at
-        - updated_at
-    AdminProjectDetail:
-      type: object
-      properties:
-        api_key_count:
-          type: integer
-          description: Number of active API keys in the project.
-          format: int64
-        assistant_count:
-          type: integer
-          description: Number of active assistants in the project.
-          format: int64
-        created_at:
-          type: string
-          format: date-time
-        deployment_count:
-          type: integer
-          description: Total number of deployments in the project.
-          format: int64
-        environment_count:
-          type: integer
-          description: Number of active environments in the project.
-          format: int64
-        functions_runner_version:
-          type: string
-          description: Functions runner version pin, if set.
-        http_tool_count:
-          type: integer
-          description: Number of active HTTP tool definitions in the project.
-          format: int64
-        id:
-          type: string
-          description: Project ID.
-        logo_asset_id:
-          type: string
-          description: Project logo asset ID, if set.
-        name:
-          type: string
-          description: Project name.
-        organization_id:
-          type: string
-          description: Owning organization ID.
-        slug:
-          type: string
-          description: Project slug.
-        toolset_count:
-          type: integer
-          description: Number of active toolsets in the project.
-          format: int64
-        updated_at:
-          type: string
-          format: date-time
-      description: Full project detail surfaced to admin operators, including aggregated counts of child resources.
-      required:
-        - id
-        - name
-        - slug
-        - organization_id
-        - toolset_count
-        - deployment_count
-        - http_tool_count
-        - environment_count
-        - api_key_count
-        - assistant_count
-        - created_at
-        - updated_at
-    AdminStripeSubscription:
-      type: object
-      properties:
-        cancel_at:
-          type: string
-          format: date-time
-        cancel_at_period_end:
-          type: boolean
-        canceled_at:
-          type: string
-          format: date-time
-        current_period_end:
-          type: string
-          format: date-time
-        current_period_start:
-          type: string
-          format: date-time
-        payment_failed:
-          type: boolean
-        status:
-          type: string
-          enum:
-            - incomplete
-            - incomplete_expired
-            - trialing
-            - active
-            - past_due
-            - canceled
-            - unpaid
-            - paused
-        trial_end:
-          type: string
-          format: date-time
-        trial_start:
-          type: string
-          format: date-time
-      required:
-        - status
-        - current_period_start
-        - current_period_end
-        - cancel_at_period_end
-        - payment_failed
     AgentMarketplace:
       type: object
       properties:
@@ -64920,112 +64570,6 @@ components:
         - name
         - created_at
         - updated_at
-    BaseResourceAttributes:
-      type: object
-      properties:
-        created_at:
-          type: string
-          description: The creation date of the resource.
-          format: date-time
-        description:
-          type: string
-          description: Description of the resource
-        id:
-          type: string
-          description: The ID of the resource
-        mime_type:
-          type: string
-          description: Optional MIME type of the resource
-        name:
-          type: string
-          description: The name of the resource
-        project_id:
-          type: string
-          description: The ID of the project
-        resource_urn:
-          type: string
-          description: The URN of this resource
-        title:
-          type: string
-          description: Optional title for the resource
-        updated_at:
-          type: string
-          description: The last update date of the resource.
-          format: date-time
-        uri:
-          type: string
-          description: The URI of the resource
-      description: Common attributes shared by all resource types
-      required:
-        - id
-        - project_id
-        - name
-        - description
-        - uri
-        - resource_urn
-        - created_at
-        - updated_at
-    BaseToolAttributes:
-      type: object
-      properties:
-        annotations:
-          $ref: '#/components/schemas/ToolAnnotations'
-        canonical:
-          $ref: '#/components/schemas/CanonicalToolAttributes'
-        canonical_name:
-          type: string
-          description: The canonical name of the tool. Will be the same as the name if there is no variation.
-        confirm:
-          type: string
-          description: Confirmation mode for the tool
-        confirm_prompt:
-          type: string
-          description: Prompt for the confirmation
-        created_at:
-          type: string
-          description: The creation date of the tool.
-          format: date-time
-        description:
-          type: string
-          description: Description of the tool
-        id:
-          type: string
-          description: The ID of the tool
-        name:
-          type: string
-          description: The name of the tool
-        project_id:
-          type: string
-          description: The ID of the project
-        schema:
-          type: string
-          description: JSON schema for the request
-        schema_version:
-          type: string
-          description: Version of the schema
-        summarizer:
-          type: string
-          description: Summarizer for the tool
-        tool_urn:
-          type: string
-          description: The URN of this tool
-        updated_at:
-          type: string
-          description: The last update date of the tool.
-          format: date-time
-        variation:
-          $ref: '#/components/schemas/ToolVariation'
-      description: Common attributes shared by all tool types
-      required:
-        - id
-        - project_id
-        - name
-        - canonical_name
-        - description
-        - schema
-        - tool_urn
-        - created_at
-        - updated_at
     BillingEmail:
       type: object
       properties:
@@ -65071,28 +64615,6 @@ components:
         - id
         - reason
         - description
-    BulkUpdateAccountTypeRequestBody:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: New gram_account_type for every listed organization.
-          enum:
-            - free
-            - pro
-            - payg
-            - enterprise
-        ids:
-          type: array
-          items:
-            type: string
-            minLength: 1
-          description: Organization IDs to update.
-          minItems: 1
-          maxItems: 1000
-      required:
-        - ids
-        - account_type
     BusinessMemory:
       type: object
       properties:
@@ -65174,13 +64696,6 @@ components:
       required:
         - scope
         - memory_count
-    CancelStripeSubscriptionRequestBody:
-      type: object
-      properties:
-        organization_id:
-          type: string
-      required:
-        - organization_id
     CanonicalToolAttributes:
       type: object
       properties:
@@ -66194,24 +65709,6 @@ components:
         - cost_micros
         - models
         - query_sources
-    CloneEnvironmentForm:
-      type: object
-      properties:
-        copy_values:
-          type: boolean
-          description: If true, copy the encrypted secret values from the source. If false (default), copy only variable names with empty placeholder values.
-        new_name:
-          type: string
-          description: The name for the new cloned environment
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      description: Form for cloning an existing environment into a new one
-      required:
-        - slug
-        - new_name
     CloneEnvironmentRequestBody:
       type: object
       properties:
@@ -66465,6 +65962,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -66476,54 +65974,6 @@ components:
       description: Form for creating the selected data source's export route.
       required:
         - data_source
-    CreateDeploymentForm:
-      type: object
-      properties:
-        external_id:
-          type: string
-          description: The external ID to refer to the deployment. This can be a git commit hash for example.
-          example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
-        external_url:
-          type: string
-          description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-        functions:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddFunctionsForm'
-        github_pr:
-          type: string
-          description: The github pull request that resulted in the deployment.
-          example: "1234"
-        github_repo:
-          type: string
-          description: The github repository in the form of "owner/repo".
-          example: speakeasyapi/gram
-        github_sha:
-          type: string
-          description: The commit hash that triggered the deployment.
-          example: f33e693e9e12552043bc0ec5c37f1b8a9e076161
-        idempotency_key:
-          type: string
-          description: A unique identifier that will mitigate against duplicate deployments.
-          example: 01jqq0ajmb4qh9eppz48dejr2m
-        non_blocking:
-          type: boolean
-          description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
-          example: false
-        openapiv3_assets:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddOpenAPIv3DeploymentAssetForm'
-        packages:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddDeploymentPackageForm'
-      required:
-        - idempotency_key
     CreateDeploymentRequestBody:
       type: object
       properties:
@@ -66630,29 +66080,6 @@ components:
         - organization_id
         - name
         - entries
-    CreateExternalKeyFields:
-      type: object
-      properties:
-        algorithm:
-          type: string
-          description: The signing algorithm of the key.
-          enum:
-            - RS256
-            - ES256
-        customer_grant_reference:
-          type: string
-          description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
-        external_credential_id:
-          type: string
-          description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
-          format: uuid
-        name:
-          type: string
-          description: A human-readable name for the key.
-      required:
-        - external_credential_id
-        - algorithm
-        - name
     CreateGcpIamCredentialForm:
       type: object
       properties:
@@ -66978,15 +66405,6 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
-    CreateOrganizationRequestBody:
-      type: object
-      properties:
-        name:
-          type: string
-          description: Display name for the new organization.
-          minLength: 1
-      required:
-        - name
     CreateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -67107,23 +66525,6 @@ components:
       required:
         - url
         - token
-    CreateProjectForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        name:
-          type: string
-          description: The name of the project
-          maxLength: 40
-        organization_id:
-          type: string
-          description: The ID of the organization to create the project in
-        session_token:
-          type: string
-      required:
-        - organization_id
-        - name
     CreateProjectRequestBody:
       type: object
       properties:
@@ -67669,30 +67070,6 @@ components:
       required:
         - url
         - expires_at
-    CreateSignedChatAttachmentURLForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        chat_sessions_token:
-          type: string
-        id:
-          type: string
-          description: The ID of the chat attachment
-        project_id:
-          type: string
-          description: The project ID that the attachment belongs to
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-        ttl_seconds:
-          type: integer
-          description: 'Time-to-live in seconds (default: 600, max: 3600)'
-          format: int64
-      required:
-        - id
-        - project_id
     CreateSignedChatAttachmentURLForm2:
       type: object
       properties:
@@ -67777,36 +67154,6 @@ components:
         - target
         - limit_usd
         - window_kind
-    CreateToolsetForm:
-      type: object
-      properties:
-        default_environment_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        description:
-          type: string
-          description: Description of the toolset
-        name:
-          type: string
-          description: The name of the toolset
-        origin:
-          $ref: '#/components/schemas/ToolsetOrigin'
-        project_slug_input:
-          type: string
-        resource_urns:
-          type: array
-          items:
-            type: string
-          description: List of resource URNs to include in the toolset
-        tool_urns:
-          type: array
-          items:
-            type: string
-          description: List of tool URNs to include in the toolset
-      required:
-        - name
     CreateToolsetRequestBody:
       type: object
       properties:
@@ -68225,6 +67572,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -68287,14 +67635,6 @@ components:
           description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
       required:
         - provider
-    DeleteGlobalToolVariationForm:
-      type: object
-      properties:
-        variation_id:
-          type: string
-          description: The ID of the variation to delete
-      required:
-        - variation_id
     DeleteGlobalToolVariationResult:
       type: object
       properties:
@@ -68602,21 +67942,6 @@ components:
         - sensitive_data
         - created_at
         - updated_at
-    DetachUserSessionIssuerForm:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The remote_session_client id.
-          format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The user_session_issuer to detach.
-          format: uuid
-      description: Form for detaching a user_session_issuer from a remote_session_client via the join table.
-      required:
-        - id
-        - user_session_issuer_id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -68901,15 +68226,6 @@ components:
       required:
         - organization_id
         - key_type
-    DisableOrganizationRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Organization ID.
-          minLength: 1
-      required:
-        - id
     DiscoverProtectedResourceMetadataRequestBody:
       type: object
       properties:
@@ -69058,15 +68374,6 @@ components:
       required:
         - organization_id
         - key_type
-    EnableOrganizationRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Organization ID.
-          minLength: 1
-      required:
-        - id
     EnsureServerReviewRequestBody:
       type: object
       properties:
@@ -69448,22 +68755,6 @@ components:
       required:
         - ok
         - error
-    ExtendTrialRequestBody:
-      type: object
-      properties:
-        days:
-          type: integer
-          description: Number of days to add to the trial's current end date.
-          format: int64
-          minimum: 1
-          maximum: 365
-        id:
-          type: string
-          description: Organization ID.
-          minLength: 1
-      required:
-        - id
-        - days
     ExternalCredentialSummary:
       type: object
       properties:
@@ -69967,6 +69258,11 @@ components:
     ExternalOAuthServer:
       type: object
       properties:
+        authorization_server_issuer:
+          type: string
+          description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.
+          format: uri
+          maxLength: 500
         created_at:
           type: string
           description: When the external OAuth server was created.
@@ -69975,7 +69271,7 @@ components:
           type: string
           description: The ID of the external OAuth server
         metadata:
-          description: The metadata for the external OAuth server
+          description: The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
         project_id:
           type: string
           description: The project ID this external OAuth server belongs to
@@ -69992,36 +69288,24 @@ components:
         - id
         - project_id
         - slug
-        - metadata
         - created_at
         - updated_at
     ExternalOAuthServerForm:
       type: object
       properties:
+        authorization_server_issuer:
+          type: string
+          description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
+          format: uri
+          pattern: ^https://
+          maxLength: 500
         metadata:
-          description: The metadata for the external OAuth server
+          description: JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
-      required:
-        - slug
-        - metadata
-    FetchImageFromURLForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-        url:
-          type: string
-          description: The URL to fetch the image from
-      required:
-        - url
     FetchImageFromURLForm2:
       type: object
       properties:
@@ -70038,20 +69322,6 @@ components:
           description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
       required:
         - issuer
-    FetchOpenAPIv3FromURLForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-        url:
-          type: string
-          description: The URL to fetch the OpenAPI document from
-      required:
-        - url
     FetchOpenAPIv3FromURLForm2:
       type: object
       properties:
@@ -70419,25 +69689,6 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
-    GetDeploymentForm:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The ID of the deployment
-      required:
-        - id
-    GetDeploymentLogsForm:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: The cursor to fetch results from
-        deployment_id:
-          type: string
-          description: The ID of the deployment
-      required:
-        - deployment_id
     GetDeploymentLogsResult:
       type: object
       properties:
@@ -70782,24 +70033,6 @@ components:
         - time_series
         - skill_time_series
         - skill_breakdown
-    GetInstanceForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        chat_sessions_token:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-        toolset_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - toolset_slug
     GetInstanceResult:
       type: object
       properties:
@@ -70848,16 +70081,6 @@ components:
         - name
         - tools
         - mcp_servers
-    GetIntegrationForm:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The ID of the integration to get (refers to a package id).
-        name:
-          type: string
-          description: The name of the integration to get (refers to a package name).
-      description: Get a third-party integration by ID or name.
     GetIntegrationResult:
       type: object
       properties:
@@ -71080,96 +70303,6 @@ components:
         - etag
         - marketplaces
         - plugins
-    GetProductFeaturesResponseBody:
-      type: object
-      properties:
-        ai_platform_push_integrations_enabled:
-          type: boolean
-          description: Whether the organization can provision push integrations for AI platforms
-        authz_challenge_logging_enabled:
-          type: boolean
-          description: Whether authz challenge logging to ClickHouse is enabled
-        consent_tool_filtering_enabled:
-          type: boolean
-          description: Whether MCP consent screens offer the tool filtering picker for the organization
-        custom_model_keys_enabled:
-          type: boolean
-          description: Whether the organization can supply its own model provider API keys (BYOK)
-        customer_managed_encryption_keys_enabled:
-          type: boolean
-          description: Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption
-        device_agent:
-          type: boolean
-          description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
-        hooks_browser_login_enabled:
-          type: boolean
-          description: Whether generated hook plugins may mint per-user keys via the interactive browser login
-        hooks_fail_open_enabled:
-          type: boolean
-          description: Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
-        logs_enabled:
-          type: boolean
-          description: Whether logging is enabled
-        platform_mcp_enabled:
-          type: boolean
-          description: Whether the organization can use the Gram Platform MCP capability
-        remote_session_auto_refresh_enabled:
-          type: boolean
-          description: Whether consent screens expose automatic remote-session refresh for the organization
-        remote_session_auto_refresh_enforced_enabled:
-          type: boolean
-          description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
-        scim_enabled:
-          type: boolean
-          description: Whether SCIM/directory sync setup is enabled for the organization
-        session_capture_enabled:
-          type: boolean
-          description: Whether Claude Code session capture is enabled
-        session_portability_enabled:
-          type: boolean
-          description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
-        skill_capture_metadata_only:
-          type: boolean
-          description: Whether skill capture stores activation metadata without requesting manifest content
-        skills_enabled:
-          type: boolean
-          description: Whether the Skills page is enabled for the organization
-        sso_enabled:
-          type: boolean
-          description: Whether SSO setup is enabled for the organization
-        tool_io_logs_enabled:
-          type: boolean
-          description: Whether tool I/O logging is enabled
-      required:
-        - logs_enabled
-        - tool_io_logs_enabled
-        - session_capture_enabled
-        - authz_challenge_logging_enabled
-        - sso_enabled
-        - scim_enabled
-        - hooks_browser_login_enabled
-        - hooks_fail_open_enabled
-        - custom_model_keys_enabled
-        - skills_enabled
-        - skill_capture_metadata_only
-        - ai_platform_push_integrations_enabled
-        - platform_mcp_enabled
-        - customer_managed_encryption_keys_enabled
-        - remote_session_auto_refresh_enabled
-        - remote_session_auto_refresh_enforced_enabled
-        - consent_tool_filtering_enabled
-        - session_portability_enabled
-        - device_agent
-    GetProjectForm:
-      type: object
-      properties:
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - slug
     GetProjectMetricsSummaryPayload:
       type: object
       properties:
@@ -71184,23 +70317,6 @@ components:
           example: "2025-12-19T11:00:00Z"
           format: date-time
       description: Payload for getting project-level metrics summary
-      required:
-        - from
-        - to
-    GetProjectOverviewPayload:
-      type: object
-      properties:
-        from:
-          type: string
-          description: Start time in ISO 8601 format
-          example: "2025-12-19T10:00:00Z"
-          format: date-time
-        to:
-          type: string
-          description: End time in ISO 8601 format
-          example: "2025-12-19T11:00:00Z"
-          format: date-time
-      description: Payload for getting project-level overview
       required:
         - from
         - to
@@ -71286,14 +70402,6 @@ components:
           description: The ID of the function asset
       required:
         - asset_id
-    GetSignedAssetURLResult:
-      type: object
-      properties:
-        url:
-          type: string
-          description: The signed URL to access the asset
-      required:
-        - url
     GetSkillResult:
       type: object
       properties:
@@ -72424,30 +71532,6 @@ components:
         - has_active_subscription
         - whitelisted
         - trial
-    IngestHookPayload:
-      type: object
-      properties:
-        data:
-          $ref: '#/components/schemas/HookIngestData'
-        event:
-          $ref: '#/components/schemas/HookIngestEvent'
-        idempotency_key:
-          type: string
-          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
-        raw:
-          description: Original provider payload for debugging. The backend does not use this for feature behavior.
-        schema_version:
-          type: string
-          description: Contract version. The current version is hook.ingest.v1.
-        session:
-          $ref: '#/components/schemas/HookIngestSession'
-        source:
-          $ref: '#/components/schemas/HookIngestSource'
-      description: Feature-first unified hook event payload.
-      required:
-        - schema_version
-        - source
-        - event
     IngestHookResult:
       type: object
       properties:
@@ -73402,23 +72486,6 @@ components:
           description: Assistants for the current project.
       required:
         - assistants
-    ListAttributeKeysPayload:
-      type: object
-      properties:
-        from:
-          type: string
-          description: Start time in ISO 8601 format
-          example: "2025-12-19T10:00:00Z"
-          format: date-time
-        to:
-          type: string
-          description: End time in ISO 8601 format
-          example: "2025-12-19T11:00:00Z"
-          format: date-time
-      description: Payload for listing distinct attribute keys available for filtering
-      required:
-        - from
-        - to
     ListAttributeKeysResult:
       type: object
       properties:
@@ -73440,12 +72507,6 @@ components:
           description: Audiences that can be assigned to plugins.
       required:
         - audiences
-    ListAuditLogFacetsForm:
-      type: object
-      properties:
-        project_slug:
-          type: string
-          description: Project slug to filter facet values to a specific project.
     ListAuditLogFacetsResult:
       type: object
       properties:
@@ -73468,44 +72529,6 @@ components:
         - actors
         - actions
         - surfaces
-    ListAuditLogsForm:
-      type: object
-      properties:
-        acting_surface:
-          type: string
-          description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
-        action:
-          type: string
-          description: Action to filter audit logs to a specific action.
-        actor_id:
-          type: string
-          description: Actor ID to filter audit logs to a specific actor.
-        cursor:
-          type: string
-          description: The cursor for paginating through audit logs.
-        from:
-          type: string
-          description: Inclusive start of the window to list changes from. Omit for the whole history.
-          format: date-time
-        project_slug:
-          type: string
-          description: Project slug to filter audit logs to a specific project.
-        subject_id:
-          type: string
-          description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
-        subject_ids:
-          type: array
-          items:
-            type: string
-          description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
-          maxItems: 200
-        subject_type:
-          type: string
-          description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
-        to:
-          type: string
-          description: Exclusive end of the window to list changes from. Omit for the whole history.
-          format: date-time
     ListAuditLogsResult:
       type: object
       properties:
@@ -73695,12 +72718,6 @@ components:
             $ref: '#/components/schemas/PlatformKillswitchDefinition'
       required:
         - definitions
-    ListDeploymentForm:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: The cursor to fetch results from
     ListDeploymentResult:
       type: object
       properties:
@@ -73982,15 +72999,6 @@ components:
             $ref: '#/components/schemas/LiteLLMInstance'
       required:
         - instances
-    ListIntegrationsForm:
-      type: object
-      properties:
-        keywords:
-          type: array
-          items:
-            type: string
-            maxLength: 20
-          description: Keywords to filter integrations by
     ListIntegrationsResult:
       type: object
       properties:
@@ -74215,18 +73223,6 @@ components:
             $ref: '#/components/schemas/PlatformKillswitchPrescription'
       required:
         - prescriptions
-    ListProjectsPayload:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        organization_id:
-          type: string
-          description: The ID of the organization to list projects for
-        session_token:
-          type: string
-      required:
-        - organization_id
     ListProjectsResult:
       type: object
       properties:
@@ -74432,6 +73428,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -74469,6 +73469,10 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - agent:read
+              - agent:write
+              - agent:authorize
+              - agent:transfer
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -75182,14 +74186,6 @@ components:
             $ref: '#/components/schemas/ToolVariation'
       required:
         - variations
-    ListVersionsForm:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The name of the package
-      required:
-        - name
     ListVersionsResult:
       type: object
       properties:
@@ -75557,29 +74553,6 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
-    MarkEnterpriseTrialConvertedRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Organization ID.
-          minLength: 1
-      required:
-        - id
-    MarkEnterpriseTrialConvertedResult:
-      type: object
-      properties:
-        converted_at:
-          type: string
-          description: The time at which the enterprise trial was recorded as converted.
-          format: date-time
-        organization_id:
-          type: string
-          description: The converted organization ID.
-      description: Privacy-minimal result of recording an enterprise trial conversion.
-      required:
-        - organization_id
-        - converted_at
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -76727,31 +75700,6 @@ components:
         - state
         - created_at
         - updated_at
-    OrganizationInvitationAccept:
-      type: object
-      properties:
-        accept_invitation_url:
-          type: string
-          description: URL to complete acceptance in WorkOS (may be empty when not actionable).
-        email:
-          type: string
-          description: Invitee email address.
-        organization_name:
-          type: string
-          description: Gram organization display name when the org is linked in Gram; empty if unknown.
-        state:
-          type: string
-          description: Invitation lifecycle state.
-          enum:
-            - pending
-            - accepted
-            - expired
-            - revoked
-      required:
-        - email
-        - state
-        - organization_name
-        - accept_invitation_url
     OrganizationIssuerDeletePreflight:
       type: object
       properties:
@@ -77737,6 +76685,86 @@ components:
         - window_start
         - window_end
         - actors
+    ProductFeatures:
+      type: object
+      properties:
+        ai_platform_push_integrations_enabled:
+          type: boolean
+          description: Whether the organization can provision push integrations for AI platforms
+        authz_challenge_logging_enabled:
+          type: boolean
+          description: Whether authz challenge logging to ClickHouse is enabled
+        consent_tool_filtering_enabled:
+          type: boolean
+          description: Whether MCP consent screens offer the tool filtering picker for the organization
+        custom_model_keys_enabled:
+          type: boolean
+          description: Whether the organization can supply its own model provider API keys (BYOK)
+        customer_managed_encryption_keys_enabled:
+          type: boolean
+          description: Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption
+        device_agent:
+          type: boolean
+          description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        hooks_browser_login_enabled:
+          type: boolean
+          description: Whether generated hook plugins may mint per-user keys via the interactive browser login
+        hooks_fail_open_enabled:
+          type: boolean
+          description: Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage
+        logs_enabled:
+          type: boolean
+          description: Whether logging is enabled
+        platform_mcp_enabled:
+          type: boolean
+          description: Whether the organization can use the Gram Platform MCP capability
+        remote_session_auto_refresh_enabled:
+          type: boolean
+          description: Whether consent screens expose automatic remote-session refresh for the organization
+        remote_session_auto_refresh_enforced_enabled:
+          type: boolean
+          description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
+        scim_enabled:
+          type: boolean
+          description: Whether SCIM/directory sync setup is enabled for the organization
+        session_capture_enabled:
+          type: boolean
+          description: Whether Claude Code session capture is enabled
+        session_portability_enabled:
+          type: boolean
+          description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
+        skill_capture_metadata_only:
+          type: boolean
+          description: Whether skill capture stores activation metadata without requesting manifest content
+        skills_enabled:
+          type: boolean
+          description: Whether the Skills page is enabled for the organization
+        sso_enabled:
+          type: boolean
+          description: Whether SSO setup is enabled for the organization
+        tool_io_logs_enabled:
+          type: boolean
+          description: Whether tool I/O logging is enabled
+      required:
+        - logs_enabled
+        - tool_io_logs_enabled
+        - session_capture_enabled
+        - authz_challenge_logging_enabled
+        - sso_enabled
+        - scim_enabled
+        - hooks_browser_login_enabled
+        - hooks_fail_open_enabled
+        - custom_model_keys_enabled
+        - skills_enabled
+        - skill_capture_metadata_only
+        - ai_platform_push_integrations_enabled
+        - platform_mcp_enabled
+        - customer_managed_encryption_keys_enabled
+        - remote_session_auto_refresh_enabled
+        - remote_session_auto_refresh_enforced_enabled
+        - consent_tool_filtering_enabled
+        - session_portability_enabled
+        - device_agent
     Project:
       type: object
       properties:
@@ -78601,22 +77629,6 @@ components:
       required:
         - group_value
         - points
-    RearmTrialRequestBody:
-      type: object
-      properties:
-        days:
-          type: integer
-          description: Number of days the re-armed trial runs for, counted from now.
-          format: int64
-          minimum: 1
-          maximum: 365
-        id:
-          type: string
-          description: Organization ID.
-          minLength: 1
-      required:
-        - id
-        - days
     RecordDashboardCtaEventRequestBody:
       type: object
       properties:
@@ -79068,6 +78080,9 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer advertises the RFC 9207 authorization response iss parameter.
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -79134,6 +78149,7 @@ components:
         - oidc
         - passthrough
         - client_id_metadata_document_supported
+        - authorization_response_iss_parameter_supported
         - discovery_warnings
     RemoteSessionIssuerDuplicateMatch:
       type: object
@@ -79336,6 +78352,10 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -79520,15 +78540,6 @@ components:
           description: The created resolution records.
       required:
         - resolutions
-    ResolveIdentityForm:
-      type: object
-      properties:
-        urn:
-          type: string
-          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
-          example: user:user_01abc
-      required:
-        - urn
     ResolveShadowMCPInventoryRequestForm:
       type: object
       properties:
@@ -79619,13 +78630,6 @@ components:
       required:
         - id
         - version_id
-    ResumeStripeSubscriptionRequestBody:
-      type: object
-      properties:
-        organization_id:
-          type: string
-      required:
-        - organization_id
     RetryScheduleRequestBody:
       type: object
       properties:
@@ -80967,6 +79971,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -81134,6 +80142,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
         slug:
           type: string
           description: Unique scope identifier.
@@ -81165,6 +80174,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -81649,6 +80662,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
             - '*'
         server_url:
           type: string
@@ -81762,149 +80776,6 @@ components:
       required:
         - chat_id
         - accepted
-    ServeChatAttachmentForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        chat_sessions_token:
-          type: string
-        id:
-          type: string
-          description: The ID of the attachment to serve
-        project_id:
-          type: string
-          description: The project ID that the attachment belongs to
-        session_token:
-          type: string
-      required:
-        - id
-        - project_id
-    ServeChatAttachmentResult:
-      type: object
-      properties:
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        last_modified:
-          type: string
-      required:
-        - content_type
-        - content_length
-        - last_modified
-    ServeChatAttachmentSignedForm:
-      type: object
-      properties:
-        token:
-          type: string
-          description: The signed JWT token
-      required:
-        - token
-    ServeChatAttachmentSignedResult:
-      type: object
-      properties:
-        access_control_allow_origin:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        last_modified:
-          type: string
-      required:
-        - content_type
-        - content_length
-        - last_modified
-    ServeFunctionForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        id:
-          type: string
-          description: The ID of the asset to serve
-        project_id:
-          type: string
-          description: The procect ID that the asset belongs to
-        session_token:
-          type: string
-      required:
-        - id
-        - project_id
-    ServeFunctionResult:
-      type: object
-      properties:
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        last_modified:
-          type: string
-      required:
-        - content_type
-        - content_length
-        - last_modified
-    ServeImageForm:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The ID of the asset to serve
-      required:
-        - id
-    ServeImageResult:
-      type: object
-      properties:
-        access_control_allow_origin:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        cross_origin_resource_policy:
-          type: string
-        last_modified:
-          type: string
-      required:
-        - content_type
-        - content_length
-        - last_modified
-        - cross_origin_resource_policy
-    ServeOpenAPIv3Form:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        id:
-          type: string
-          description: The ID of the asset to serve
-        project_id:
-          type: string
-          description: The procect ID that the asset belongs to
-        session_token:
-          type: string
-      required:
-        - id
-        - project_id
-    ServeOpenAPIv3Result:
-      type: object
-      properties:
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        last_modified:
-          type: string
-      required:
-        - content_type
-        - content_length
-        - last_modified
     ServerNameOverride:
       type: object
       properties:
@@ -82107,25 +80978,6 @@ components:
           minimum: 0
       required:
         - billing_cycle_anchor_day
-    SetInferenceKeyMonthlyLimitRequestBody:
-      type: object
-      properties:
-        key_type:
-          type: string
-          enum:
-            - chat
-            - internal
-        monthly_credits:
-          type: integer
-          format: int64
-          minimum: 1
-          maximum: 10000
-        organization_id:
-          type: string
-      required:
-        - organization_id
-        - key_type
-        - monthly_credits
     SetKeyEnabledRequestBody:
       type: object
       properties:
@@ -82176,6 +81028,40 @@ components:
           description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+    SetOrganizationFeatureRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        feature_name:
+          type: string
+          enum:
+            - logs
+            - tool_io_logs
+            - session_capture
+            - authz_challenge_logging
+            - sso
+            - scim
+            - hooks_browser_login
+            - hooks_fail_open
+            - custom_model_keys
+            - skills
+            - skill_capture_metadata_only
+            - ai_platform_push_integrations
+            - platform_mcp
+            - customer_managed_encryption_keys
+            - remote_session_auto_refresh
+            - remote_session_auto_refresh_enforced
+            - consent_tool_filtering
+            - session_portability
+          maxLength: 60
+        organization_id:
+          type: string
+      required:
+        - organization_id
+        - feature_name
+        - enabled
+      x-speakeasy-name-override: SetProductFeatureRequestBody
     SetOrganizationWhitelistRequestBody:
       type: object
       properties:
@@ -82224,50 +81110,6 @@ components:
           description: The updated assignments.
       required:
         - assignments
-    SetProductFeatureRequestBody:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: Whether the feature should be enabled
-        feature_name:
-          type: string
-          description: Name of the feature to update
-          enum:
-            - logs
-            - tool_io_logs
-            - session_capture
-            - authz_challenge_logging
-            - sso
-            - scim
-            - hooks_browser_login
-            - hooks_fail_open
-            - custom_model_keys
-            - skills
-            - skill_capture_metadata_only
-            - ai_platform_push_integrations
-            - platform_mcp
-            - customer_managed_encryption_keys
-            - remote_session_auto_refresh
-            - remote_session_auto_refresh_enforced
-            - consent_tool_filtering
-            - session_portability
-          maxLength: 60
-        organization_id:
-          type: string
-          description: Organization whose product feature to update.
-      required:
-        - organization_id
-        - feature_name
-        - enabled
-    SetProjectLogoForm:
-      type: object
-      properties:
-        asset_id:
-          type: string
-          description: The ID of the asset
-      required:
-        - asset_id
     SetProjectLogoResult:
       type: object
       properties:
@@ -82420,22 +81262,6 @@ components:
       required:
         - mcp_server_id
         - tool_name
-    SetToolVariationsGroupForm:
-      type: object
-      properties:
-        project_slug_input:
-          type: string
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        tool_variations_group_id:
-          type: string
-          description: The tool variations group id to assign, or null to disable filtering.
-          format: uuid
-      required:
-        - slug
     SetToolVariationsGroupRequestBody:
       type: object
       properties:
@@ -82457,22 +81283,6 @@ components:
       required:
         - toolset_id
         - environment_id
-    SetUserSessionIssuerForm:
-      type: object
-      properties:
-        project_slug_input:
-          type: string
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        user_session_issuer_id:
-          type: string
-          description: The user_session_issuer id to link, or null to unlink.
-          format: uuid
-      required:
-        - slug
     SetUserSessionIssuerRequestBody:
       type: object
       properties:
@@ -82635,24 +81445,6 @@ components:
         - id
         - status
         - requester_count
-    ShadowMCPInventoryPolicyBypassForm:
-      type: object
-      properties:
-        policy_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        project_id:
-          type: string
-          format: uuid
-        server_url:
-          type: string
-          format: uri
-      required:
-        - project_id
-        - server_url
-        - policy_ids
     ShadowMCPInventoryRequestSummary:
       type: object
       properties:
@@ -82827,40 +81619,6 @@ components:
           format: uuid
       required:
         - skill_id
-    SharedSkill:
-      type: object
-      properties:
-        cache_control:
-          type: string
-          description: The Cache-Control response header.
-        content:
-          type: string
-          description: The latest SKILL.md content.
-        display_name:
-          type: string
-          description: The user-facing skill name.
-        name:
-          type: string
-          description: The normalized skill name.
-        referrer_policy:
-          type: string
-          description: The Referrer-Policy response header.
-        summary:
-          type: string
-          description: The optional skill summary.
-        updated_at:
-          type: string
-          description: When the shared content was last updated.
-          format: date-time
-        x_robots_tag:
-          type: string
-          description: The X-Robots-Tag response header.
-      description: The public view of a shared skill. It deliberately carries no project, organization, or user identifiers.
-      required:
-        - name
-        - display_name
-        - content
-        - updated_at
     SharedSkill2:
       type: object
       properties:
@@ -84576,31 +83334,6 @@ components:
       required:
         - date
         - tokens
-    TelemetryFilter:
-      type: object
-      properties:
-        deployment_id:
-          type: string
-          description: Deployment ID filter
-          format: uuid
-        from:
-          type: string
-          description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
-          example: "2025-12-19T10:00:00Z"
-          format: date-time
-        function_id:
-          type: string
-          description: Function ID filter
-          format: uuid
-        gram_urn:
-          type: string
-          description: Gram URN filter (single URN, use gram_urns for multiple)
-        to:
-          type: string
-          description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
-          example: "2025-12-19T11:00:00Z"
-          format: date-time
-      description: Filter criteria for telemetry queries
     TelemetryLogRecord:
       type: object
       properties:
@@ -86256,16 +84989,6 @@ components:
           description: Organization whose projects to signal.
       required:
         - organization_id
-    TriggerAnalysisResponseBody:
-      type: object
-      properties:
-        projects_signaled:
-          type: integer
-          description: Number of projects whose analysis coordinator was woken.
-          format: int64
-      description: How far the trigger reached.
-      required:
-        - projects_signaled
     TriggerDefinition:
       type: object
       properties:
@@ -87011,22 +85734,6 @@ components:
       required:
         - id
         - name
-    UpdateAwsKmsKeyForm:
-      type: object
-      properties:
-        customer_grant_reference:
-          type: string
-          description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
-        external_credential_id:
-          type: string
-          description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
-          format: uuid
-        name:
-          type: string
-          description: A human-readable name for the key.
-      required:
-        - external_credential_id
-        - name
     UpdateAwsKmsKeyRequestBody:
       type: object
       properties:
@@ -87089,59 +85796,6 @@ components:
         - id
         - title
         - severity
-    UpdateDataExportRouteForm:
-      type: object
-      properties:
-        data_source:
-          type: string
-          description: Class of data exported by this route.
-          enum:
-            - product_telemetry
-        enabled:
-          type: boolean
-          description: Whether the route is enabled.
-        id:
-          type: string
-          description: Route ID.
-          format: uuid
-        otel_destination_id:
-          type: string
-          description: OTEL destination configured on this route. Required when enabled.
-          format: uuid
-      description: Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.
-      required:
-        - id
-        - data_source
-        - enabled
-    UpdateDestinationForm:
-      type: object
-      properties:
-        destination_type:
-          type: string
-          description: Destination transport type.
-          enum:
-            - otel
-        id:
-          type: string
-          description: Destination ID.
-          format: uuid
-        name:
-          type: string
-          description: Human-readable destination name.
-        otel:
-          $ref: '#/components/schemas/UpdateOtelDestinationInput'
-        sensitive_data:
-          type: string
-          description: Sensitive-data policy.
-          enum:
-            - exclude
-            - include
-      description: Full replacement form for a data export destination. Supply the transport configuration selected by destination_type.
-      required:
-        - id
-        - name
-        - destination_type
-        - sensitive_data
     UpdateDestinationRequestBody:
       type: object
       properties:
@@ -87176,35 +85830,6 @@ components:
         openai_apps_challenge_token:
           type: string
           description: Replacement OpenAI app-submission verification token. Pass an empty string to clear it.
-    UpdateEnvironmentForm:
-      type: object
-      properties:
-        description:
-          type: string
-          description: The description of the environment
-        entries_to_remove:
-          type: array
-          items:
-            type: string
-          description: List of environment entry names to remove
-        entries_to_update:
-          type: array
-          items:
-            $ref: '#/components/schemas/EnvironmentEntryInput'
-          description: List of environment entries to update or create
-        name:
-          type: string
-          description: The name of the environment
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      description: Form for updating an environment
-      required:
-        - slug
-        - entries_to_update
-        - entries_to_remove
     UpdateEnvironmentRequestBody:
       type: object
       properties:
@@ -87227,6 +85852,17 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateExternalOAuthServerRequestBody:
+      type: object
+      properties:
+        authorization_server_issuer:
+          type: string
+          description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+          format: uri
+          pattern: ^https://
+          maxLength: 500
+        metadata:
+          description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
     UpdateGcpIamCredentialRequestBody:
       type: object
       properties:
@@ -87269,22 +85905,6 @@ components:
       required:
         - id
         - name
-    UpdateGcpKmsKeyForm:
-      type: object
-      properties:
-        customer_grant_reference:
-          type: string
-          description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
-        external_credential_id:
-          type: string
-          description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
-          format: uuid
-        name:
-          type: string
-          description: A human-readable name for the key.
-      required:
-        - external_credential_id
-        - name
     UpdateGcpKmsKeyRequestBody:
       type: object
       properties:
@@ -87318,19 +85938,6 @@ components:
       required:
         - invitation_id
         - role_id
-    UpdateJSONWebKeySetForm:
-      type: object
-      properties:
-        external_key_id:
-          type: string
-          description: 'The external key to back the set with from now on. Must be a live, organization-owned GCP KMS key; AWS KMS keys are not supported yet. Already-published keys are unaffected: each keeps signing with the external key it was minted from.'
-          format: uuid
-        name:
-          type: string
-          description: A human-readable name for the key set.
-      required:
-        - name
-        - external_key_id
     UpdateJSONWebKeySetRequestBody:
       type: object
       properties:
@@ -87497,25 +86104,6 @@ components:
       required:
         - id
         - name
-    UpdateOrganizationRequestBody:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: New gram_account_type (free, pro, payg, or enterprise).
-          enum:
-            - free
-            - pro
-            - payg
-            - enterprise
-        id:
-          type: string
-          description: Organization ID.
-        whitelisted:
-          type: boolean
-          description: New whitelisted flag.
-      required:
-        - id
     UpdateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -87990,6 +86578,7 @@ components:
           description: Class of data exported by this route.
           enum:
             - product_telemetry
+            - risk_findings
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -88000,28 +86589,6 @@ components:
       required:
         - data_source
         - enabled
-    UpdateSecurityVariableDisplayNameForm:
-      type: object
-      properties:
-        display_name:
-          type: string
-          description: The user-friendly display name. Set to empty string to clear and use the original name.
-          maxLength: 120
-        project_slug_input:
-          type: string
-        security_key:
-          type: string
-          description: The security scheme key (e.g., 'BearerAuth', 'ApiKeyAuth') from the OpenAPI spec
-          maxLength: 60
-        toolset_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - toolset_slug
-        - security_key
-        - display_name
     UpdateServerForm:
       type: object
       properties:
@@ -88189,61 +86756,6 @@ components:
             - monthly
       required:
         - id
-    UpdateToolsetForm:
-      type: object
-      properties:
-        custom_domain_id:
-          type: string
-          description: The ID of the custom domain to use for the toolset
-        default_environment_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        description:
-          type: string
-          description: The new description of the toolset
-        mcp_enabled:
-          type: boolean
-          description: Whether the toolset is enabled for MCP
-        mcp_is_public:
-          type: boolean
-          description: Whether the toolset is public in MCP
-        mcp_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        name:
-          type: string
-          description: The new name of the toolset
-        project_slug_input:
-          type: string
-        prompt_template_names:
-          type: array
-          items:
-            type: string
-          description: 'List of prompt template names to include (note: for actual prompts, not tools)'
-        resource_urns:
-          type: array
-          items:
-            type: string
-          description: List of resource URNs to include in the toolset
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        tool_selection_mode:
-          type: string
-          description: The mode to use for tool selection
-        tool_urns:
-          type: array
-          items:
-            type: string
-          description: List of tool URNs to include in the toolset
-      required:
-        - slug
     UpdateToolsetRequestBody:
       type: object
       properties:
@@ -88389,25 +86901,6 @@ components:
       description: Form for updating a user_session_issuer. All non-id fields are optional patches.
       required:
         - id
-    UploadChatAttachmentForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        chat_sessions_token:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
     UploadChatAttachmentResult:
       type: object
       properties:
@@ -88419,23 +86912,6 @@ components:
       required:
         - asset
         - url
-    UploadFunctionsForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
     UploadFunctionsResult:
       type: object
       properties:
@@ -88443,23 +86919,6 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
-    UploadImageForm:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
     UploadImageResult:
       type: object
       properties:
@@ -88467,23 +86926,6 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
-    UploadOpenAPIv3Form:
-      type: object
-      properties:
-        apikey_token:
-          type: string
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        project_slug_input:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
     UploadOpenAPIv3Result:
       type: object
       properties:
@@ -88491,32 +86933,6 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
-    UploadOrganizationImageForm:
-      type: object
-      properties:
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
-    UploadPlatformImageForm:
-      type: object
-      properties:
-        content_length:
-          type: integer
-          format: int64
-        content_type:
-          type: string
-        session_token:
-          type: string
-      required:
-        - content_type
-        - content_length
     UploadSkillContentPayload:
       type: object
       properties:
@@ -89611,11 +88027,6 @@ components:
             end: {$ref: "#/components/schemas/KillswitchScheduleEndBounded"}
             ends_at: {type: string, format: date-time}
   securitySchemes:
-    admin_auth_header_Authorization:
-      type: apiKey
-      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
-      name: Authorization
-      in: header
     apikey_header_Authorization:
       type: apiKey
       description: key based auth.
@@ -89663,8 +88074,6 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories

@@ -1,0 +1,116 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Admin SDK policy
+  version: 0.0.0
+actions:
+  # Retain only operations owned by the standalone Admin service.
+  - target: $.paths.*[?count(@.tags[?@=='admin'])==0]
+    remove: true
+  - target: $.paths[?length(@)==0]
+    remove: true
+  - target: $.tags[?@.name!='admin']
+    remove: true
+  # Browser requests authenticate with the ambient same-origin Admin cookie.
+  - target: $.paths..security
+    remove: true
+  - target: $.components.securitySchemes["admin_auth_header_Authorization"]
+    remove: true
+  - target: $.servers[0].url
+    update: /
+  # Goa's service-method separator is not a valid generated operation name.
+  - target: $.paths.*[?@.operationId=='admin#logout']
+    update:
+      operationId: adminLogout
+      x-speakeasy-name-override: logout
+  # Keep resource-local SDK methods from repeating the admin namespace.
+  - target: $.paths.*[?@.operationId=='adminBulkUpdateAccountType']
+    update:
+      x-speakeasy-name-override: bulkUpdateAccountType
+  - target: $.paths.*[?@.operationId=='adminCancelStripeSubscription']
+    update:
+      x-speakeasy-name-override: cancelStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminCreateOrganization']
+    update:
+      x-speakeasy-name-override: createOrganization
+  - target: $.paths.*[?@.operationId=='adminDisableOrganization']
+    update:
+      x-speakeasy-name-override: disableOrganization
+  - target: $.paths.*[?@.operationId=='adminEnableOrganization']
+    update:
+      x-speakeasy-name-override: enableOrganization
+  - target: $.paths.*[?@.operationId=='adminExtendTrial']
+    update:
+      x-speakeasy-name-override: extendTrial
+  - target: $.paths.*[?@.operationId=='adminGetInferenceKeys']
+    update:
+      x-speakeasy-name-override: getInferenceKeys
+  - target: $.paths.*[?@.operationId=='adminGetInferenceSpendHistory']
+    update:
+      x-speakeasy-name-override: getInferenceSpendHistory
+  - target: $.paths.*[?@.operationId=='adminGetOrganization']
+    update:
+      x-speakeasy-name-override: getOrganization
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationChatAnalysisSettings']
+    update:
+      x-speakeasy-name-override: getOrganizationChatAnalysisSettings
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
+    update:
+      x-speakeasy-name-override: getOrganizationFeatures
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationStats']
+    update:
+      x-speakeasy-name-override: getOrganizationStats
+  - target: $.paths.*[?@.operationId=='adminGetPaygBillingSummary']
+    update:
+      x-speakeasy-name-override: getPaygBillingSummary
+  - target: $.paths.*[?@.operationId=='adminGetProject']
+    update:
+      x-speakeasy-name-override: getProject
+  - target: $.paths.*[?@.operationId=='adminGetSession']
+    update:
+      x-speakeasy-name-override: getSession
+  - target: $.paths.*[?@.operationId=='adminGetStripeSubscription']
+    update:
+      x-speakeasy-name-override: getStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminListOrganizationActivity']
+    update:
+      x-speakeasy-name-override: listOrganizationActivity
+  - target: $.paths.*[?@.operationId=='adminListOrganizationMembers']
+    update:
+      x-speakeasy-name-override: listOrganizationMembers
+  - target: $.paths.*[?@.operationId=='adminListOrganizationProjects']
+    update:
+      x-speakeasy-name-override: listOrganizationProjects
+  - target: $.paths.*[?@.operationId=='adminListOrganizations']
+    update:
+      x-speakeasy-name-override: listOrganizations
+  - target: $.paths.*[?@.operationId=='adminMarkEnterpriseTrialConverted']
+    update:
+      x-speakeasy-name-override: markEnterpriseTrialConverted
+  - target: $.paths.*[?@.operationId=='adminRearmTrial']
+    update:
+      x-speakeasy-name-override: rearmTrial
+  - target: $.paths.*[?@.operationId=='adminResumeStripeSubscription']
+    update:
+      x-speakeasy-name-override: resumeStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminSetInferenceKeyMonthlyLimit']
+    update:
+      x-speakeasy-name-override: setInferenceKeyMonthlyLimit
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationChatAnalysisSettings']
+    update:
+      x-speakeasy-name-override: setOrganizationChatAnalysisSettings
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationFeature']
+    update:
+      x-speakeasy-name-override: setOrganizationFeature
+  - target: $.paths.*[?@.operationId=='adminTriggerOrganizationChatAnalysis']
+    update:
+      x-speakeasy-name-override: triggerOrganizationChatAnalysis
+  - target: $.paths.*[?@.operationId=='adminUpdateOrganization']
+    update:
+      x-speakeasy-name-override: updateOrganization
+  - target: $.paths.*[?@.operationId=='adminLogout'].parameters[?@.in=='cookie']
+    remove: true
+  # These operations navigate the browser rather than making SDK requests.
+  - target: $.paths.*[?(@.operationId=='admin#login' || @.operationId=='admin#callback' || @.operationId=='adminOpenOrganizationInDashboard')]
+    update:
+      x-speakeasy-ignore: true

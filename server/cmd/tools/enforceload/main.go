@@ -637,10 +637,12 @@ func runFullPoint(
 			<-gate
 			started := time.Now()
 			outcome, dispatchErr := dispatcher.Dispatch(pointCtx, enforcereply.DispatchRequest{
-				OrganizationID: "load-org",
-				ProjectID:      "load-project",
-				Content:        content,
-				Lanes:          []enforcereply.Lane{lane},
+				OrganizationID:         "load-org",
+				ProjectID:              "load-project",
+				Content:                content,
+				PresidioEntities:       nil,
+				PresidioScoreThreshold: nil,
+				Lanes:                  []enforcereply.Lane{lane},
 			})
 			reply := outcome.ByLane[lane]
 			if dispatchErr == nil && !outcome.Deadline && (!outcome.Complete || reply == nil || reply.GetStatus() != riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK || len(reply.GetFindings()) == 0) {

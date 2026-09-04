@@ -11,6 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const DataSource = {
   ProductTelemetry: "product_telemetry",
+  RiskFindings: "risk_findings",
 } as const;
 /**
  * Class of data exported by this route.

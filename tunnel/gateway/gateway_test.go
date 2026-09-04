@@ -223,6 +223,7 @@ func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, wire.TunnelErrorTunnelBusy, rec.Header().Get("X-Gram-Tunnel-Error"))
+	require.Equal(t, "MCP server is temporarily unavailable\n", rec.Body.String())
 }
 
 // recordingKeyStore wraps StaticKeyStore with a MarkConnected spy.

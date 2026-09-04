@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -139,9 +141,40 @@ func TestValidatePrincipal(t *testing.T) {
 	rolePrincipal, err := urn.ParsePrincipal(role.RoleUrn)
 	require.NoError(t, err)
 
+	otherOrganizationID := "org_validate_principal_other"
+	seedOrganization(t, ctx, conn, otherOrganizationID)
+	agent, err := agentsrepo.New(conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: organizationID,
+		OwnerUserID:    userID,
+		Name:           "Principal Validator Agent",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, AllUsersPrincipal()))
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID)))
 	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, rolePrincipal))
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	err = testrepo.New(conn).SetAgentSuspendedFixture(ctx, agent.ID)
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	err = testrepo.New(conn).SetAgentRevokedAndOwnerLatchFixture(ctx, agent.ID)
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, agentPrincipal))
+
+	err = ValidatePrincipal(ctx, conn, otherOrganizationID, agentPrincipal)
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, "not-a-uuid"))
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
+	err = testrepo.New(conn).SoftDeleteAgentFixture(ctx, agent.ID)
+	require.NoError(t, err)
+	err = ValidatePrincipal(ctx, conn, organizationID, agentPrincipal)
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, "user_missing"))
 	require.ErrorIs(t, err, ErrPrincipalNotFound)

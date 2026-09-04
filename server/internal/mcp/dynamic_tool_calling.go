@@ -70,7 +70,7 @@ func buildDynamicSessionTools(
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
-	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema. Do not call a tool without first describing it to get the input schema."
+	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
 	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
 	if len(availableTags) > 0 {

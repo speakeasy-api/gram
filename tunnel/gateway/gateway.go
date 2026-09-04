@@ -356,7 +356,7 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		// is healthy: callers must not unpublish its route; they may retry
 		// another gateway or surface the 502.
 		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
-		http.Error(w, "tunnel is at capacity", http.StatusBadGateway)
+		http.Error(w, "MCP server is temporarily unavailable", http.StatusBadGateway)
 		return
 	default:
 		// Distinguish known tunnel/no live session from auth failures.

@@ -507,6 +507,15 @@ const (
 	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
 	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
+	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
+	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
+	RiskTagsKey                    = attribute.Key("gram.risk.tags")
+	RiskSurfaceKey                 = attribute.Key("gram.risk.surface")
+	RiskFieldKey                   = attribute.Key("gram.risk.field")
+	RiskPathKey                    = attribute.Key("gram.risk.path")
+	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
+	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -577,30 +586,33 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey             = attribute.Key("gram.hook.block_reason")
-	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
-	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
-	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
-	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
-	IdentityFoldOrderChangedKey    = attribute.Key("gram.identity_fold.order_changed")
-	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
-	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
-	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
-	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
-	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
-	LiteLLMTraceIDKey              = attribute.Key("gram.litellm.trace_id")
-	LiteLLMUserIDKey               = attribute.Key("gram.litellm.user_id")
-	LiteLLMUserEmailKey            = attribute.Key("gram.litellm.user_email")
-	LiteLLMTeamIDKey               = attribute.Key("gram.litellm.team_id")
-	LiteLLMTeamAliasKey            = attribute.Key("gram.litellm.team_alias")
-	LiteLLMEndUserIDKey            = attribute.Key("gram.litellm.end_user_id")
-	LiteLLMOrganizationIDKey       = attribute.Key("gram.litellm.org_id")
-	LiteLLMAPIKeyHashKey           = attribute.Key("gram.litellm.api_key_hash")
-	LiteLLMAPIKeyAliasKey          = attribute.Key("gram.litellm.api_key_alias")
-	LiteLLMInputCostKey            = attribute.Key("litellm.cost.input")
-	LiteLLMOutputCostKey           = attribute.Key("litellm.cost.output")
-	LiteLLMCacheReadCostKey        = attribute.Key("litellm.cost.cache_read")
-	LiteLLMCacheWriteCostKey       = attribute.Key("litellm.cost.cache_creation")
+	HookBlockReasonKey                   = attribute.Key("gram.hook.block_reason")
+	IdentityFoldCanonicalGroupsKey       = attribute.Key("gram.identity_fold.canonical_groups")
+	IdentityFoldCostDeltaKey             = attribute.Key("gram.identity_fold.cost_delta")
+	IdentityFoldLiteralGroupsKey         = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityFoldNewKeysKey               = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldOrderChangedKey          = attribute.Key("gram.identity_fold.order_changed")
+	IdentityFoldTruncatedKey             = attribute.Key("gram.identity_fold.truncated")
+	IdentityFoldTokenDeltaKey            = attribute.Key("gram.identity_fold.token_delta")
+	IdentityMapEntryCountKey             = attribute.Key("gram.identity_map.entry_count")
+	TenantDimensionOrganizationCountKey  = attribute.Key("gram.tenant_dimensions.organization_count")
+	TenantDimensionProjectCountKey       = attribute.Key("gram.tenant_dimensions.project_count")
+	TenantDimensionOrphanProjectCountKey = attribute.Key("gram.tenant_dimensions.orphan_project_count")
+	LiteLLMInstanceIDKey                 = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey                     = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey                    = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey                     = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey                  = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey                     = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey                  = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey                  = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey             = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey                 = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey                = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey                  = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey                 = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey              = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey             = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -994,6 +1006,27 @@ func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
 
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
+
+func TenantDimensionOrganizationCount(v int) attribute.KeyValue {
+	return TenantDimensionOrganizationCountKey.Int(v)
+}
+func SlogTenantDimensionOrganizationCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrganizationCountKey), v)
+}
+
+func TenantDimensionProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionProjectCountKey.Int(v)
+}
+func SlogTenantDimensionProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionProjectCountKey), v)
+}
+
+func TenantDimensionOrphanProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionOrphanProjectCountKey.Int(v)
+}
+func SlogTenantDimensionOrphanProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrphanProjectCountKey), v)
+}
 
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }
@@ -2120,6 +2153,37 @@ func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
 func SlogRiskScanGateReason(v string) slog.Attr {
 	return slog.String(string(RiskScanGateReasonKey), v)
 }
+
+func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
+func SlogRiskFindingID(v string) slog.Attr      { return slog.String(string(RiskFindingIDKey), v) }
+
+func RiskPolicyVersion(v int64) attribute.KeyValue { return RiskPolicyVersionKey.Int64(v) }
+func SlogRiskPolicyVersion(v int64) slog.Attr {
+	return slog.Int64(string(RiskPolicyVersionKey), v)
+}
+
+func RiskConfidence(v float64) attribute.KeyValue { return RiskConfidenceKey.Float64(v) }
+func SlogRiskConfidence(v float64) slog.Attr {
+	return slog.Float64(string(RiskConfidenceKey), v)
+}
+
+func RiskTags(v []string) attribute.KeyValue { return RiskTagsKey.StringSlice(v) }
+func SlogRiskTags(v []string) slog.Attr      { return slog.Any(string(RiskTagsKey), v) }
+
+func RiskSurface(v string) attribute.KeyValue { return RiskSurfaceKey.String(v) }
+func SlogRiskSurface(v string) slog.Attr      { return slog.String(string(RiskSurfaceKey), v) }
+
+func RiskField(v string) attribute.KeyValue { return RiskFieldKey.String(v) }
+func SlogRiskField(v string) slog.Attr      { return slog.String(string(RiskFieldKey), v) }
+
+func RiskPath(v string) attribute.KeyValue { return RiskPathKey.String(v) }
+func SlogRiskPath(v string) slog.Attr      { return slog.String(string(RiskPathKey), v) }
+
+func RiskStartPos(v int64) attribute.KeyValue { return RiskStartPosKey.Int64(v) }
+func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskStartPosKey), v) }
+
+func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
+func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

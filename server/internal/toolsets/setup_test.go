@@ -80,7 +80,7 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
+func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -90,6 +90,9 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	meterProvider := testenv.NewMeterProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
+	if len(policies) > 0 {
+		guardianPolicy = policies[0]
+	}
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -122,9 +125,8 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
@@ -223,12 +225,12 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,
+		feature:        f,
 		conn:           conn,
 		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,

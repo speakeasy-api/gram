@@ -33,7 +33,7 @@ type FailedInvite = { email: string; roleId: string };
 
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <SetupShell>
+    <SetupShell view="board">
       <main className="flex min-h-0 flex-1 overflow-hidden">
         <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
           <Page.Section>

@@ -13,8 +13,12 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { toError } from "@/lib/errors";
+import { writeOnlyHeaderInput } from "@/lib/write-only-headers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
+import {
+  DataSource,
+  type DataSource as DataSourceValue,
+} from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportsForOrgResult } from "@gram/client/models/components/listdataexportsfororgresult.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
@@ -26,9 +30,14 @@ import { useDeleteDataExportRouteMutation } from "@gram/client/react-query/delet
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateDataExportDestinations } from "@gram/client/react-query/dataExportDestinations.js";
 import { buildListDataExportsForOrgQuery } from "@gram/client/react-query/listDataExportsForOrg.js";
+import { useUpdateDataExportDestinationMutation } from "@gram/client/react-query/updateDataExportDestination.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import {
+  ConfigureDestinationSheet,
+  type ConfigureDestinationValues,
+} from "./ConfigureDestinationSheet";
 import {
   ConfigureExportSheet,
   type ConfigureExportValues,
@@ -38,6 +47,24 @@ import {
 const EMPTY_PROJECTS: ProjectEntry[] = [];
 const EMPTY_DESTINATIONS: OtelDataExportDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
+
+const DATA_SOURCE_OPTIONS: Array<{
+  value: DataSourceValue;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: DataSource.ProductTelemetry,
+    label: "Product telemetry",
+    description:
+      "OTLP traces, logs, and metrics from MCP servers and tool calls.",
+  },
+  {
+    value: DataSource.RiskFindings,
+    label: "Risk findings",
+    description: "OTLP logs for findings detected by Gram risk scanners.",
+  },
+];
 
 type ExportRow = {
   route: DataExportRoute;
@@ -80,7 +107,7 @@ function visualSource({ route }: ProjectExportRow): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: "OTLP traces, logs, and metrics",
+    detail: sourceDescription(route.dataSource),
   };
 }
 
@@ -97,10 +124,23 @@ type DeleteCandidate = {
   project: ProjectEntry;
   route: DataExportRoute;
 };
+type DestinationEditCandidate = {
+  project: ProjectEntry;
+  destination: OtelDataExportDestination;
+};
 
 function sourceLabel(dataSource: string): string {
-  if (dataSource === DataSource.ProductTelemetry) return "Product telemetry";
-  return dataSource.replaceAll("_", " ");
+  return (
+    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
+    dataSource.replaceAll("_", " ")
+  );
+}
+
+function sourceDescription(dataSource: string): string {
+  return (
+    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)
+      ?.description ?? "OTLP data"
+  );
 }
 
 export default function DataExports(): JSX.Element {
@@ -183,31 +223,49 @@ function DataExportsInner(): JSX.Element {
     (state) =>
       !state.pending &&
       !state.error &&
-      !state.routes.some(
-        (route) => route.dataSource === DataSource.ProductTelemetry,
+      DATA_SOURCE_OPTIONS.some(
+        (source) =>
+          !state.routes.some((route) => route.dataSource === source.value),
       ),
   );
   const projectQueriesPending = exportsQuery.isPending;
   const projectQueryError = exportsQuery.error;
 
   const createDestination = useCreateDataExportDestinationMutation();
+  const updateDestination = useUpdateDataExportDestinationMutation();
   const createRoute = useCreateDataExportRouteMutation();
   const updateRoute = useUpdateDataExportRouteMutation();
   const deleteRoute = useDeleteDataExportRouteMutation();
-  const [configureProjectSlug, setConfigureProjectSlug] = useState<string>();
+  const [configureTarget, setConfigureTarget] = useState<{
+    projectSlug: string;
+    routeId?: string;
+  }>();
   const [deleteCandidate, setDeleteCandidate] = useState<DeleteCandidate>();
+  const [destinationEditCandidate, setDestinationEditCandidate] =
+    useState<DestinationEditCandidate>();
   const configureState = projectExports.find(
-    ({ project }) => project.slug === configureProjectSlug,
+    ({ project }) => project.slug === configureTarget?.projectSlug,
   );
   const configureRoute = configureState?.routes.find(
-    (route) => route.dataSource === DataSource.ProductTelemetry,
+    (route) => route.id === configureTarget?.routeId,
   );
+  const configureDataSources = configureRoute
+    ? DATA_SOURCE_OPTIONS.filter(
+        (source) => source.value === configureRoute.dataSource,
+      )
+    : DATA_SOURCE_OPTIONS.filter(
+        (source) =>
+          !configureState?.routes.some(
+            (route) => route.dataSource === source.value,
+          ),
+      );
   const configureProjects =
     configureState && configureRoute
       ? [configureState.project]
       : availableProjectExports.map(({ project }) => project);
   const mutating =
     createDestination.isPending ||
+    updateDestination.isPending ||
     createRoute.isPending ||
     updateRoute.isPending ||
     deleteRoute.isPending;
@@ -285,10 +343,40 @@ function DataExportsInner(): JSX.Element {
 
       await invalidateProjectExports(state.project.slug);
       toast.success(existingRoute ? "Export updated" : "Export configured");
-      setConfigureProjectSlug(undefined);
+      setConfigureTarget(undefined);
     } catch (error) {
       await invalidateProjectExports(state.project.slug);
       toast.error(`Failed to configure export: ${toError(error).message}`);
+    }
+  };
+  const handleSaveDestination = async (
+    values: ConfigureDestinationValues,
+  ): Promise<void> => {
+    if (!destinationEditCandidate) return;
+
+    const { project, destination } = destinationEditCandidate;
+    try {
+      await updateDestination.mutateAsync({
+        request: {
+          id: destination.id,
+          gramProject: project.slug,
+          updateDestinationRequestBody: {
+            destinationType: "otel",
+            name: values.destinationName.trim(),
+            sensitiveData: values.includeSensitiveData ? "include" : "exclude",
+            otel: {
+              endpointUrl: values.endpointUrl.trim(),
+              headers: values.headers.map(writeOnlyHeaderInput),
+            },
+          },
+        },
+      });
+      await invalidateProjectExports(project.slug);
+      toast.success("Destination updated");
+      setDestinationEditCandidate(undefined);
+    } catch (error) {
+      await invalidateProjectExports(project.slug);
+      toast.error(`Failed to update destination: ${toError(error).message}`);
     }
   };
 
@@ -365,7 +453,9 @@ function DataExportsInner(): JSX.Element {
       <Button
         variant="primary"
         size="sm"
-        onClick={() => setConfigureProjectSlug(newExportProject.slug)}
+        onClick={() =>
+          setConfigureTarget({ projectSlug: newExportProject.slug })
+        }
       >
         New export
       </Button>
@@ -390,7 +480,15 @@ function DataExportsInner(): JSX.Element {
         <ExportMap
           exports={configuredExports}
           mutating={mutating}
-          onConfigure={(project) => setConfigureProjectSlug(project.slug)}
+          onConfigure={(project, route) =>
+            setConfigureTarget({
+              projectSlug: project.slug,
+              routeId: route.id,
+            })
+          }
+          onConfigureDestination={(project, destination) =>
+            setDestinationEditCandidate({ project, destination })
+          }
           onToggle={(project, route, enabled) =>
             void handleToggleExport(project, route, enabled)
           }
@@ -434,9 +532,10 @@ function DataExportsInner(): JSX.Element {
 
       {configureState ? (
         <ConfigureExportSheet
-          key={`${configureState.project.slug}:${configureState.pending ? "pending" : "ready"}`}
+          key={`${configureState.project.slug}:${configureRoute?.id ?? "new"}:${configureState.pending ? "pending" : "ready"}`}
           projects={configureProjects}
           project={configureState.project}
+          dataSources={configureDataSources}
           destinations={configureState.destinations}
           route={configureRoute}
           loading={configureState.pending}
@@ -445,9 +544,18 @@ function DataExportsInner(): JSX.Element {
             createRoute.isPending ||
             updateRoute.isPending
           }
-          onClose={() => setConfigureProjectSlug(undefined)}
-          onProjectChange={setConfigureProjectSlug}
+          onClose={() => setConfigureTarget(undefined)}
+          onProjectChange={(projectSlug) => setConfigureTarget({ projectSlug })}
           onSave={handleSaveExport}
+        />
+      ) : null}
+      {destinationEditCandidate ? (
+        <ConfigureDestinationSheet
+          key={destinationEditCandidate.destination.id}
+          destination={destinationEditCandidate.destination}
+          saving={updateDestination.isPending}
+          onClose={() => setDestinationEditCandidate(undefined)}
+          onSave={handleSaveDestination}
         />
       ) : null}
 
@@ -484,24 +592,64 @@ function ExportAnimationStyles(): JSX.Element {
   );
 }
 
-function ExportMap({
-  exports,
-  mutating,
-  onConfigure,
-  onToggle,
-  onDelete,
-}: {
+type ExportDestinationGroup = {
+  destination: VisualDestination;
+  firstExport: ProjectExportRow;
+  exports: ProjectExportRow[];
+};
+
+const EXPORT_NODE_HEIGHT = 112;
+const EXPORT_ROW_GAP = 24;
+
+function groupExportsByDestination(
+  exports: ProjectExportRow[],
+): ExportDestinationGroup[] {
+  const groups = new Map<string, ExportDestinationGroup>();
+
+  for (const exportRow of exports) {
+    const destination = visualDestination(exportRow);
+    const existing = groups.get(destination.key);
+    if (existing) {
+      existing.exports.push(exportRow);
+      continue;
+    }
+
+    groups.set(destination.key, {
+      destination,
+      firstExport: exportRow,
+      exports: [exportRow],
+    });
+  }
+
+  return [...groups.values()];
+}
+
+type ExportMapProps = {
   exports: ProjectExportRow[];
   mutating: boolean;
-  onConfigure: (project: ProjectEntry) => void;
+  onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
+  onConfigureDestination: (
+    project: ProjectEntry,
+    destination: OtelDataExportDestination,
+  ) => void;
   onToggle: (
     project: ProjectEntry,
     route: DataExportRoute,
     enabled: boolean,
   ) => void;
   onDelete: (project: ProjectEntry, route: DataExportRoute) => void;
-}): JSX.Element {
+};
+
+export function ExportMap({
+  exports,
+  mutating,
+  onConfigure,
+  onConfigureDestination,
+  onToggle,
+  onDelete,
+}: ExportMapProps): JSX.Element {
   const markerID = `export-map-arrow-${useId().replaceAll(":", "")}`;
+  const destinationGroups = groupExportsByDestination(exports);
 
   return (
     <div className="overflow-x-auto border bg-card px-6 py-6">
@@ -512,146 +660,272 @@ function ExportMap({
           <span className="text-eyebrow text-muted-foreground">Sent to</span>
         </div>
         <div className="space-y-6">
-          {exports.map((exportRow, exportIndex) => {
-            const { project, route } = exportRow;
-            const source = visualSource(exportRow);
-            const destination = visualDestination(exportRow);
-            const arrowID = `${markerID}-${exportIndex}`;
-            return (
-              <div
-                key={route.id}
-                className="grid grid-cols-[360px_minmax(180px,260px)_minmax(360px,1fr)] items-stretch"
-              >
-                <div className="relative min-h-28 border border-foreground px-5 py-3">
-                  <div className="min-w-0 pr-10 pb-8">
-                    <div className="mb-1 flex items-center gap-2">
-                      <ProjectAvatar
-                        project={project}
-                        className="size-3 min-h-3 min-w-3"
-                      />
-                      <span className="text-eyebrow text-muted-foreground">
-                        {project.name}
-                      </span>
-                    </div>
-                    <Text className="truncate font-medium">{source.name}</Text>
-                    <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                      {source.detail}
-                    </span>
-                  </div>
-                  <RequireScope scope="org:admin" level="component">
-                    <div className="absolute top-3 right-3">
-                      <MoreActions
-                        actions={[
-                          {
-                            label: "Configure export",
-                            icon: "pencil",
-                            onClick: () => onConfigure(project),
-                          },
-                          {
-                            label: "Delete export",
-                            icon: "trash-2",
-                            destructive: true,
-                            disabled: mutating,
-                            onClick: () => onDelete(project, route),
-                          },
-                        ]}
-                      />
-                    </div>
-                  </RequireScope>
-                  <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                    <span
-                      className={
-                        route.enabled
-                          ? "flex items-center gap-1.5 text-sm text-default-success"
-                          : "text-sm text-placeholder"
-                      }
-                    >
-                      {route.enabled ? (
-                        <Icon name="check" className="size-3.5" />
-                      ) : null}
-                      {route.enabled ? "Enabled" : "Paused"}
-                    </span>
-                    <RequireScope scope="org:admin" level="component">
-                      <Switch
-                        checked={route.enabled}
-                        onCheckedChange={(enabled) =>
-                          onToggle(project, route, enabled)
-                        }
-                        disabled={mutating}
-                        aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
-                      />
-                    </RequireScope>
-                  </div>
-                </div>
-                <svg
-                  viewBox="0 0 200 100"
-                  preserveAspectRatio="none"
-                  className="h-full min-h-24 w-full overflow-visible"
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <marker
-                      id={arrowID}
-                      markerWidth="8"
-                      markerHeight="8"
-                      refX="7"
-                      refY="4"
-                      orient="auto"
-                    >
-                      <path
-                        d="M0,0 L8,4 L0,8 Z"
-                        className="fill-card stroke-card"
-                        strokeWidth="3"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M0,0 L8,4 L0,8 Z"
-                        className={
-                          route.enabled
-                            ? "fill-foreground"
-                            : "fill-muted-foreground"
-                        }
-                      />
-                    </marker>
-                  </defs>
-                  <path
-                    d="M 0 50 C 70 50, 120 50, 196 50"
-                    fill="none"
-                    className={
-                      route.enabled
-                        ? "data-export-flow-line stroke-foreground"
-                        : "stroke-muted-foreground"
-                    }
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeDasharray={route.enabled ? "8 7" : undefined}
-                    vectorEffect="non-scaling-stroke"
-                    markerEnd={`url(#${arrowID})`}
-                  />
-                </svg>
-                <div className="flex min-h-24 items-center justify-between gap-4 border px-5 py-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge size="sm">{destination.type}</Badge>
-                      <Text className="truncate font-medium">
-                        {destination.name}
-                      </Text>
-                      {destination.sensitive ? (
-                        <Badge variant="warning" background={false} size="sm">
-                          Sensitive
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                      {destination.detail}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {destinationGroups.map((group, groupIndex) => (
+            <div
+              key={group.destination.key}
+              className="grid grid-cols-[360px_minmax(180px,260px)_minmax(360px,1fr)] gap-y-6"
+              style={{
+                gridTemplateRows: `repeat(${group.exports.length}, ${EXPORT_NODE_HEIGHT}px)`,
+              }}
+            >
+              {group.exports.map((exportRow, rowIndex) => (
+                <ExportSourceNode
+                  key={exportRow.route.id}
+                  exportRow={exportRow}
+                  row={rowIndex + 1}
+                  mutating={mutating}
+                  onConfigure={onConfigure}
+                  onToggle={onToggle}
+                  onDelete={onDelete}
+                />
+              ))}
+              <ExportFlow
+                exports={group.exports}
+                markerID={`${markerID}-${groupIndex}`}
+              />
+              <ExportDestinationNode
+                destination={group.destination}
+                configuredDestination={group.firstExport.destination}
+                project={group.firstExport.project}
+                rowSpan={group.exports.length}
+                mutating={mutating}
+                onConfigure={onConfigureDestination}
+              />
+            </div>
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ExportSourceNode({
+  exportRow,
+  row,
+  mutating,
+  onConfigure,
+  onToggle,
+  onDelete,
+}: {
+  exportRow: ProjectExportRow;
+  row: number;
+  mutating: boolean;
+  onConfigure: ExportMapProps["onConfigure"];
+  onToggle: ExportMapProps["onToggle"];
+  onDelete: ExportMapProps["onDelete"];
+}): JSX.Element {
+  const { project, route } = exportRow;
+  const source = visualSource(exportRow);
+
+  return (
+    <div
+      className="relative h-full border border-foreground px-5 py-3"
+      style={{ gridColumn: 1, gridRow: row }}
+    >
+      <RequireScope scope="org:admin" level="component">
+        <button
+          type="button"
+          onClick={() => onConfigure(project, route)}
+          disabled={mutating}
+          aria-label={`Configure ${source.name} export`}
+          className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        />
+      </RequireScope>
+      <div className="pointer-events-none relative z-20 min-w-0 pr-10 pb-8">
+        <div className="mb-1 flex items-center gap-2">
+          <ProjectAvatar project={project} className="size-3 min-h-3 min-w-3" />
+          <span className="text-eyebrow text-muted-foreground">
+            {project.name}
+          </span>
+        </div>
+        <Text className="truncate font-medium">{source.name}</Text>
+        <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+          {source.detail}
+        </span>
+      </div>
+      <RequireScope scope="org:admin" level="component">
+        <div className="pointer-events-auto absolute top-3 right-3 z-30">
+          <MoreActions
+            actions={[
+              {
+                label: "Configure export",
+                icon: "pencil",
+                onClick: () => onConfigure(project, route),
+              },
+              {
+                label: "Delete export",
+                icon: "trash-2",
+                destructive: true,
+                disabled: mutating,
+                onClick: () => onDelete(project, route),
+              },
+            ]}
+          />
+        </div>
+      </RequireScope>
+      <div className="pointer-events-none absolute right-3 bottom-3 z-20 flex items-center gap-2">
+        <span
+          className={
+            route.enabled
+              ? "flex items-center gap-1.5 text-sm text-default-success"
+              : "text-sm text-placeholder"
+          }
+        >
+          {route.enabled ? <Icon name="check" className="size-3.5" /> : null}
+          {route.enabled ? "Enabled" : "Paused"}
+        </span>
+        <RequireScope scope="org:admin" level="component">
+          <div className="pointer-events-auto">
+            <Switch
+              checked={route.enabled}
+              onCheckedChange={(enabled) => onToggle(project, route, enabled)}
+              disabled={mutating}
+              aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
+            />
+          </div>
+        </RequireScope>
+      </div>
+    </div>
+  );
+}
+
+function ExportFlow({
+  exports,
+  markerID,
+}: {
+  exports: ProjectExportRow[];
+  markerID: string;
+}): JSX.Element {
+  const height =
+    exports.length * EXPORT_NODE_HEIGHT + (exports.length - 1) * EXPORT_ROW_GAP;
+  const destinationY = height / 2;
+  const anyEnabled = exports.some(({ route }) => route.enabled);
+
+  return (
+    <svg
+      viewBox={`0 0 200 ${height}`}
+      preserveAspectRatio="none"
+      className="h-full w-full overflow-visible"
+      style={{ gridColumn: 2, gridRow: `1 / span ${exports.length}` }}
+      aria-hidden="true"
+    >
+      <defs>
+        <marker
+          id={markerID}
+          markerWidth="8"
+          markerHeight="8"
+          refX="7"
+          refY="4"
+          orient="auto"
+        >
+          <path
+            d="M0,0 L8,4 L0,8 Z"
+            className="fill-card stroke-card"
+            strokeWidth="3"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M0,0 L8,4 L0,8 Z"
+            className={anyEnabled ? "fill-foreground" : "fill-muted-foreground"}
+          />
+        </marker>
+      </defs>
+      {exports.map(({ route }, rowIndex) => {
+        const sourceY =
+          rowIndex * (EXPORT_NODE_HEIGHT + EXPORT_ROW_GAP) +
+          EXPORT_NODE_HEIGHT / 2;
+
+        return (
+          <path
+            key={route.id}
+            d={`M 0 ${sourceY} C 70 ${sourceY}, 120 ${destinationY}, 184 ${destinationY}`}
+            fill="none"
+            className={
+              route.enabled
+                ? "data-export-flow-line stroke-foreground"
+                : "stroke-muted-foreground"
+            }
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={route.enabled ? "8 7" : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+      <path
+        d={`M 184 ${destinationY} L 196 ${destinationY}`}
+        fill="none"
+        className={anyEnabled ? "stroke-foreground" : "stroke-muted-foreground"}
+        strokeWidth="2"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+        markerEnd={`url(#${markerID})`}
+      />
+    </svg>
+  );
+}
+
+function ExportDestinationNode({
+  destination,
+  configuredDestination,
+  project,
+  rowSpan,
+  mutating,
+  onConfigure,
+}: {
+  destination: VisualDestination;
+  configuredDestination: OtelDataExportDestination | undefined;
+  project: ProjectEntry;
+  rowSpan: number;
+  mutating: boolean;
+  onConfigure: ExportMapProps["onConfigureDestination"];
+}): JSX.Element {
+  return (
+    <div
+      className="relative flex min-h-24 self-center items-center gap-4 border px-5 py-3"
+      style={{ gridColumn: 3, gridRow: `1 / span ${rowSpan}` }}
+    >
+      {configuredDestination ? (
+        <RequireScope scope="org:admin" level="component">
+          <button
+            type="button"
+            onClick={() => onConfigure(project, configuredDestination)}
+            disabled={mutating}
+            aria-label={`Configure ${destination.name} destination`}
+            className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          />
+        </RequireScope>
+      ) : null}
+      <div className="pointer-events-none relative z-20 min-w-0 pr-10">
+        <div className="flex items-center gap-2">
+          <Badge size="sm">{destination.type}</Badge>
+          <Text className="truncate font-medium">{destination.name}</Text>
+          {destination.sensitive ? (
+            <Badge variant="warning" background={false} size="sm">
+              Sensitive
+            </Badge>
+          ) : null}
+        </div>
+        <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+          {destination.detail}
+        </span>
+      </div>
+      {configuredDestination ? (
+        <RequireScope scope="org:admin" level="component">
+          <div className="pointer-events-auto absolute top-3 right-3 z-30">
+            <MoreActions
+              actions={[
+                {
+                  label: "Configure destination",
+                  icon: "pencil",
+                  disabled: mutating,
+                  onClick: () => onConfigure(project, configuredDestination),
+                },
+              ]}
+            />
+          </div>
+        </RequireScope>
+      ) : null}
     </div>
   );
 }

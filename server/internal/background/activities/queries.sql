@@ -1032,3 +1032,51 @@ WHERE NOT EXISTS (
       AND dd.email_lower = uao.email_lower
 )
 ORDER BY organization_id, email_lower;
+
+-- name: ListTenantDimensionOrganizations :many
+-- Full reporting projection for ClickHouse organizations that own at least
+-- one project. The caller runs this and ListTenantDimensionProjects in one
+-- repeatable-read transaction so both generations come from one source
+-- snapshot.
+SELECT
+    om.id,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.workos_updated_at,
+    om.webhooks_enabled,
+    om.scim_enabled,
+    om.sso_enabled,
+    om.whitelisted,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    t.tier AS trial_tier,
+    t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
+    t.created_at AS trial_created_at,
+    t.updated_at AS trial_updated_at,
+    om.created_at,
+    om.updated_at,
+    om.disabled_at
+FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.organization_id = om.id
+)
+ORDER BY om.id;
+
+-- name: ListTenantDimensionProjects :many
+-- Includes soft-deleted projects so retained ClickHouse facts keep their
+-- human-readable dimension and reports can choose lifecycle semantics.
+SELECT
+    id,
+    organization_id,
+    slug,
+    created_at,
+    updated_at,
+    deleted_at
+FROM projects
+ORDER BY organization_id, id;

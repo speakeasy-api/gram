@@ -237,9 +237,9 @@ type Proxy struct {
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
 	// relayed to the user. It may mutate resp.Header (headers are copied to
-	// the client afterwards). A non-nil error aborts the relay entirely; no
-	// status or headers have been written yet, so the caller's error path
-	// owns the client response.
+	// the client afterwards). On POST, a [RejectError] is converted into a
+	// correlated JSON-RPC error response; any other non-nil error aborts the
+	// relay entirely so the caller's error path owns the client response.
 	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
 
 	// DisableRedirects stops the upstream client from following redirect
@@ -698,6 +698,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	if p.UpstreamResponseInterceptor != nil {
 		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			if rejection, ok := errors.AsType[*RejectError](err); ok {
+				responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
+				return nil
+			}
 			return fmt.Errorf("upstream response interceptor: %w", err)
 		}
 	}

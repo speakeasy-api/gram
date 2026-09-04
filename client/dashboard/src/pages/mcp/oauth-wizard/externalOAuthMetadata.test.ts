@@ -4,6 +4,7 @@ import {
   metadataFromIssuerDraft,
   validateExternalMetadataJson,
   validateIssuerUrl,
+  validateProviderIssuerUrl,
 } from "./externalOAuthMetadata";
 
 const VALID_METADATA = {
@@ -23,6 +24,15 @@ describe("validateIssuerUrl", () => {
     expect(validateIssuerUrl("")).toBe("Issuer URL is required");
     expect(validateIssuerUrl("/oauth")).toContain("absolute");
     expect(validateIssuerUrl("ftp://auth.example.com")).toContain("HTTP");
+  });
+});
+
+describe("validateProviderIssuerUrl", () => {
+  it("requires an exact HTTPS provider issuer", () => {
+    expect(validateProviderIssuerUrl("https://auth.example.com")).toBeNull();
+    expect(validateProviderIssuerUrl("http://auth.example.com")).toBe(
+      "Provider issuer must use HTTPS",
+    );
   });
 });
 
@@ -76,6 +86,7 @@ describe("metadataFromIssuerDraft", () => {
       grantTypesSupported: ["authorization_code"],
       responseTypesSupported: ["code"],
       tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+      authorizationResponseIssParameterSupported: false,
       clientIdMetadataDocumentSupported: false,
       discoveryWarnings: [],
       oidc: false,
@@ -97,6 +108,7 @@ describe("metadataFromIssuerDraft", () => {
   it("preserves a mismatched issuer advertised by discovery", () => {
     const metadata = metadataFromIssuerDraft({
       issuer: "https://different.example.com",
+      authorizationResponseIssParameterSupported: false,
       clientIdMetadataDocumentSupported: false,
       discoveryWarnings: [],
       oidc: false,

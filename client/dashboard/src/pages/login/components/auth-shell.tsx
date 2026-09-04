@@ -77,6 +77,7 @@ export function AuthShell({
   page,
   headerAction,
   contentClassName,
+  sectionClassName,
   showTerms = true,
   singleColumn = false,
   children,
@@ -86,6 +87,8 @@ export function AuthShell({
   headerAction?: React.ReactNode;
   /** Overrides the right-pane column width (default max-w-[380px]). */
   contentClassName?: string;
+  /** Adjusts the section that positions the content column. */
+  sectionClassName?: string;
   showTerms?: boolean;
   /**
    * Drops the session showcase and the brand lockup for one centered column.
@@ -135,6 +138,7 @@ export function AuthShell({
             "relative flex flex-1 flex-col items-center justify-center border-(--edge-soft) bg-(--card) px-8",
             singleColumn ? "pt-14" : "pt-16 xl:border-l",
             showTerms ? "pb-28" : singleColumn ? "pb-10" : "pb-12",
+            sectionClassName,
           )}
         >
           <div
