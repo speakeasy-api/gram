@@ -17,11 +17,13 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -408,12 +410,27 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		workosOrgIDs[i] = m.OrganizationID
 		membershipIDs[i] = m.ID
 	}
-	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+	tx, err := r.orgRepo.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin membership reconciliation: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := orgRepo.New(tx)
+	lost, err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("set user workos memberships: %w", err)
+	}
+	for _, membership := range lost {
+		if err := agentownership.LatchOwnerLossByMembership(ctx, tx, membership.OrganizationID, gramUserID, agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil); err != nil {
+			return fmt.Errorf("latch agent owner membership loss: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit membership reconciliation: %w", err)
 	}
 
 	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {

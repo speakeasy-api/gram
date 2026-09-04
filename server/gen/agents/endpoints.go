@@ -16,13 +16,15 @@ import (
 
 // Endpoints wraps the "agents" service endpoints.
 type Endpoints struct {
-	Create  goa.Endpoint
-	Get     goa.Endpoint
-	Rename  goa.Endpoint
-	Suspend goa.Endpoint
-	Resume  goa.Endpoint
-	Revoke  goa.Endpoint
-	Delete  goa.Endpoint
+	Create   goa.Endpoint
+	Get      goa.Endpoint
+	Rename   goa.Endpoint
+	Transfer goa.Endpoint
+	Reassign goa.Endpoint
+	Suspend  goa.Endpoint
+	Resume   goa.Endpoint
+	Revoke   goa.Endpoint
+	Delete   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agents" service with endpoints.
@@ -30,13 +32,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:  NewCreateEndpoint(s, a.APIKeyAuth),
-		Get:     NewGetEndpoint(s, a.APIKeyAuth),
-		Rename:  NewRenameEndpoint(s, a.APIKeyAuth),
-		Suspend: NewSuspendEndpoint(s, a.APIKeyAuth),
-		Resume:  NewResumeEndpoint(s, a.APIKeyAuth),
-		Revoke:  NewRevokeEndpoint(s, a.APIKeyAuth),
-		Delete:  NewDeleteEndpoint(s, a.APIKeyAuth),
+		Create:   NewCreateEndpoint(s, a.APIKeyAuth),
+		Get:      NewGetEndpoint(s, a.APIKeyAuth),
+		Rename:   NewRenameEndpoint(s, a.APIKeyAuth),
+		Transfer: NewTransferEndpoint(s, a.APIKeyAuth),
+		Reassign: NewReassignEndpoint(s, a.APIKeyAuth),
+		Suspend:  NewSuspendEndpoint(s, a.APIKeyAuth),
+		Resume:   NewResumeEndpoint(s, a.APIKeyAuth),
+		Revoke:   NewRevokeEndpoint(s, a.APIKeyAuth),
+		Delete:   NewDeleteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -45,6 +49,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
 	e.Rename = m(e.Rename)
+	e.Transfer = m(e.Transfer)
+	e.Reassign = m(e.Reassign)
 	e.Suspend = m(e.Suspend)
 	e.Resume = m(e.Resume)
 	e.Revoke = m(e.Revoke)
@@ -117,6 +123,52 @@ func NewRenameEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Rename(ctx, p)
+	}
+}
+
+// NewTransferEndpoint returns an endpoint function that calls the method
+// "transfer" of service "agents".
+func NewTransferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TransferPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Transfer(ctx, p)
+	}
+}
+
+// NewReassignEndpoint returns an endpoint function that calls the method
+// "reassign" of service "agents".
+func NewReassignEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReassignPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Reassign(ctx, p)
 	}
 }
 

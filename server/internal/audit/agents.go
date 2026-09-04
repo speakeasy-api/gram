@@ -13,20 +13,25 @@ import (
 )
 
 const (
-	ActionAgentCreate  Action = "agent:create"
-	ActionAgentRename  Action = "agent:rename"
-	ActionAgentSuspend Action = "agent:suspend"
-	ActionAgentResume  Action = "agent:resume"
-	ActionAgentRevoke  Action = "agent:revoke"
-	ActionAgentDelete  Action = "agent:delete"
+	ActionAgentCreate    Action = "agent:create"
+	ActionAgentRename    Action = "agent:rename"
+	ActionAgentSuspend   Action = "agent:suspend"
+	ActionAgentResume    Action = "agent:resume"
+	ActionAgentRevoke    Action = "agent:revoke"
+	ActionAgentDelete    Action = "agent:delete"
+	ActionAgentOwnerLoss Action = "agent:owner_loss"
+	ActionAgentTransfer  Action = "agent:transfer"
+	ActionAgentReassign  Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an
 // agent. It intentionally excludes policy and credential data.
 type AgentSnapshot struct {
-	OwnerUserID string `json:"owner_user_id"`
-	Name        string `json:"name"`
-	Lifecycle   string `json:"lifecycle"`
+	OwnerUserID                 string  `json:"owner_user_id"`
+	OwnerReassignmentRequiredAt *string `json:"owner_reassignment_required_at,omitempty"`
+	OwnerReassignmentReason     *string `json:"owner_reassignment_reason,omitempty"`
+	Name                        string  `json:"name"`
+	Lifecycle                   string  `json:"lifecycle"`
 }
 
 type LogAgentEvent struct {

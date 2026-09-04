@@ -149,6 +149,30 @@ func (a *Authorizer) RequireAgentForUpdate(ctx context.Context, dbtx repo.DBTX, 
 	return a.requireAgent(ctx, dbtx, agentID, predicate, true)
 }
 
+// RequireTransfer pins the replacement owner's active user and membership
+// rows, then locks and authorizes the selected agent until commit.
+func (a *Authorizer) RequireTransfer(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, repo.Agent, error) {
+	human, err := a.RequireHuman(ctx, dbtx)
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, err
+	}
+
+	_, err = orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
+		UserID:         conv.ToPGText(ownerUserID),
+		OrganizationID: human.Auth.ActiveOrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
+	}
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, fmt.Errorf("lock eligible replacement owner: %w", err)
+	}
+
+	// Owner-loss paths lock the user relationship before latching agents. Keep
+	// transfers in the same order so concurrent lifecycle changes cannot deadlock.
+	return a.RequireAgentForUpdate(ctx, dbtx, agentID, OwnedAgentTransfer)
+}
+
 func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {
 	scope, ok := scopeForOwnerPredicate(predicate)
 	if !ok {

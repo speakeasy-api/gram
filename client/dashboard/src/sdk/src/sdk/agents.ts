@@ -5,10 +5,12 @@
 import { agentsCreate } from "../funcs/agentsCreate.js";
 import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsGet } from "../funcs/agentsGet.js";
+import { agentsReassign } from "../funcs/agentsReassign.js";
 import { agentsRename } from "../funcs/agentsRename.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
 import { agentsSuspend } from "../funcs/agentsSuspend.js";
+import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
@@ -23,6 +25,10 @@ import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
+import {
+  ReassignAgentRequest,
+  ReassignAgentSecurity,
+} from "../models/operations/reassignagent.js";
 import {
   RenameAgentRequest,
   RenameAgentSecurity,
@@ -39,6 +45,10 @@ import {
   SuspendAgentRequest,
   SuspendAgentSecurity,
 } from "../models/operations/suspendagent.js";
+import {
+  TransferAgentRequest,
+  TransferAgentSecurity,
+} from "../models/operations/transferagent.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agents extends ClientSDK {
@@ -83,6 +93,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reassign agents
+   */
+  async reassign(
+    request: ReassignAgentRequest,
+    security?: ReassignAgentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ManagedAgent> {
+    return unwrapAsync(agentsReassign(
       this,
       request,
       security,
@@ -147,6 +173,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsSuspend(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * transfer agents
+   */
+  async transfer(
+    request: TransferAgentRequest,
+    security?: TransferAgentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ManagedAgent> {
+    return unwrapAsync(agentsTransfer(
       this,
       request,
       security,

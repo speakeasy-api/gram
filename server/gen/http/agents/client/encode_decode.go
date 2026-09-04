@@ -719,6 +719,474 @@ func DecodeRenameResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildTransferRequest instantiates a HTTP request object with method and path
+// set to call the "agents" service "transfer" endpoint
+func (c *Client) BuildTransferRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TransferAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "transfer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTransferRequest returns an encoder for requests sent to the agents
+// transfer server.
+func EncodeTransferRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.TransferPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "transfer", "*agents.TransferPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewTransferRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "transfer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTransferResponse returns a decoder for responses returned by the
+// agents transfer endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeTransferResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTransferResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body TransferResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			res := NewTransferManagedAgentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TransferUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TransferForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TransferBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TransferNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TransferConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TransferUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TransferInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TransferInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+				}
+				err = ValidateTransferInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "transfer", err)
+				}
+				return nil, NewTransferInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TransferUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+				}
+				err = ValidateTransferUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "transfer", err)
+				}
+				return nil, NewTransferUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "transfer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TransferGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "transfer", err)
+			}
+			err = ValidateTransferGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "transfer", err)
+			}
+			return nil, NewTransferGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "transfer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReassignRequest instantiates a HTTP request object with method and path
+// set to call the "agents" service "reassign" endpoint
+func (c *Client) BuildReassignRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReassignAgentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "reassign", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReassignRequest returns an encoder for requests sent to the agents
+// reassign server.
+func EncodeReassignRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.ReassignPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "reassign", "*agents.ReassignPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewReassignRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agents", "reassign", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReassignResponse returns a decoder for responses returned by the
+// agents reassign endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeReassignResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReassignResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReassignResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			res := NewReassignManagedAgentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReassignUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReassignForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReassignBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReassignNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReassignConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReassignUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReassignInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReassignInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+				}
+				err = ValidateReassignInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "reassign", err)
+				}
+				return nil, NewReassignInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReassignUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+				}
+				err = ValidateReassignUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "reassign", err)
+				}
+				return nil, NewReassignUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "reassign", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReassignGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "reassign", err)
+			}
+			err = ValidateReassignGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "reassign", err)
+			}
+			return nil, NewReassignGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "reassign", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSuspendRequest instantiates a HTTP request object with method and path
 // set to call the "agents" service "suspend" endpoint
 func (c *Client) BuildSuspendRequest(ctx context.Context, v any) (*http.Request, error) {

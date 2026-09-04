@@ -96,10 +96,12 @@ trackedFiles:
   src/funcs/agentsCreate.ts: {}
   src/funcs/agentsDelete.ts: {}
   src/funcs/agentsGet.ts: {}
+  src/funcs/agentsReassign.ts: {}
   src/funcs/agentsRename.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
   src/funcs/agentsSuspend.ts: {}
+  src/funcs/agentsTransfer.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
@@ -695,6 +697,7 @@ trackedFiles:
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
+  src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentsessionmeta.ts: {}
@@ -2059,6 +2062,7 @@ trackedFiles:
   src/models/operations/query.ts: {}
   src/models/operations/queryskillefficacyinsights.ts: {}
   src/models/operations/querytumdetails.ts: {}
+  src/models/operations/reassignagent.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/recheckplatformmcponboardingreadiness.ts: {}
   src/models/operations/recordmcpapprovaldecision.ts: {}
@@ -2164,6 +2168,7 @@ trackedFiles:
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/testdeviceintegrationconnection.ts: {}
   src/models/operations/tokenexchange.ts: {}
+  src/models/operations/transferagent.ts: {}
   src/models/operations/triggerchatanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/triggerskillsuggestion.ts: {}
@@ -2794,6 +2799,7 @@ trackedFiles:
   src/react-query/publishPlugins.ts: {}
   src/react-query/publishStatus.core.ts: {}
   src/react-query/publishStatus.ts: {}
+  src/react-query/reassignAgent.ts: {}
   src/react-query/recheckPlatformMCPOnboardingReadiness.ts: {}
   src/react-query/recordMcpApprovalDecision.ts: {}
   src/react-query/recordPlatformMCPAgentConfigurationCopied.ts: {}
@@ -3041,6 +3047,7 @@ trackedFiles:
   src/react-query/toolVariationGroups.ts: {}
   src/react-query/toolset.core.ts: {}
   src/react-query/toolset.ts: {}
+  src/react-query/transferAgent.ts: {}
   src/react-query/trigger.core.ts: {}
   src/react-query/trigger.ts: {}
   src/react-query/triggerChatAnalysis.ts: {}
@@ -8679,6 +8686,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  reassignAgent:
+    speakeasy-default-reassign-agent:
+      requestBody:
+        application/json: {"agent_id": "a38c6acf-b5fe-4c45-aa9b-8fbd6e7a30af", "owner_user_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-11-06T03:07:33.179Z", "id": "22781590-7904-4528-9a64-67a892cea937", "lifecycle": "suspended", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": false, "transfer": false, "write": false}, "updated_at": "2026-04-08T03:40:25.744Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   receiveWorkOSWebhook: {}
   recheckPlatformMCPOnboardingReadiness:
     speakeasy-default-recheck-platform-MCP-onboarding-readiness:
@@ -9832,6 +9850,17 @@ examples:
       responses:
         "200":
           application/json: {"access_token": "<value>", "expires_in": 235611, "refresh_token": "<value>", "user_email": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  transferAgent:
+    speakeasy-default-transfer-agent:
+      requestBody:
+        application/json: {"agent_id": "93f39476-030a-4ab8-b2ff-9b7226474ec4", "owner_user_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-03-29T09:41:13.013Z", "id": "1074ec9c-b33b-40a4-9a98-f962ee0ede6d", "lifecycle": "active", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": false, "transfer": false, "write": false}, "updated_at": "2024-04-11T18:15:06.046Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

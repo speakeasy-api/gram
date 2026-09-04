@@ -50,6 +50,48 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: TransferAgent :one
+UPDATE agents
+SET owner_user_id = @owner_user_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NULL
+  AND owner_user_id <> @owner_user_id
+RETURNING *;
+
+-- name: ReassignAgent :one
+UPDATE agents
+SET owner_user_id = @owner_user_id,
+    owner_reassignment_required_at = NULL,
+    owner_reassignment_reason = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NOT NULL
+RETURNING *;
+
+-- name: LatchAgentsForOwnerLossByUser :many
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = @owner_reassignment_reason,
+    updated_at = clock_timestamp()
+WHERE owner_user_id = @owner_user_id
+  AND owner_reassignment_required_at IS NULL
+RETURNING *;
+
+-- name: LatchAgentsForOwnerLossByMembership :many
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = @owner_reassignment_reason,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+  AND owner_reassignment_required_at IS NULL
+RETURNING *;
+
 -- name: SuspendAgent :one
 UPDATE agents
 SET suspended_at = clock_timestamp(),

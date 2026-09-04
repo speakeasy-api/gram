@@ -31,6 +31,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -722,6 +723,14 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		UserID:         conv.ToPGText(payload.UserID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").LogError(ctx, logger)
+	}
+
+	if err := agentownership.LatchOwnerLossByMembership(
+		ctx, tx, ac.ActiveOrganizationID, payload.UserID,
+		agentownership.OwnerReassignmentReasonMembershipLost,
+		urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ac.Email,
+	); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "latch agents after owner membership loss").LogError(ctx, logger)
 	}
 
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
