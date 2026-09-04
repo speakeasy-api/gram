@@ -110,7 +110,6 @@ import {
 import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
-import PlatformAdminFeatures from "./pages/platform-admin/Features";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
@@ -1350,12 +1349,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "platform-admin/rbac",
     icon: "shield",
     component: PlatformAdminRbacOverride,
-  },
-  platformAdminFeatures: {
-    title: "Platform Features",
-    url: "platform-admin/features",
-    icon: "sliders-horizontal",
-    component: PlatformAdminFeatures,
   },
   platformAdminOnboarding: {
     title: "Enterprise Onboarding",
