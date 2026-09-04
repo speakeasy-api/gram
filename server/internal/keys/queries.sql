@@ -18,6 +18,34 @@ INSERT INTO api_keys (
 )
 RETURNING *;
 
+-- name: CreateAgentAPIKey :one
+INSERT INTO api_keys (
+    organization_id
+  , project_id
+  , created_by_user_id
+  , name
+  , key_prefix
+  , key_hash
+  , scopes
+  , subject_urn
+  , delegated_grants
+  , delegated_grants_version
+  , expires_at
+) VALUES (
+    @organization_id
+  , NULL
+  , @created_by_user_id
+  , @name
+  , @key_prefix
+  , @key_hash
+  , ARRAY[]::text[]
+  , @subject_urn
+  , @delegated_grants::jsonb
+  , @delegated_grants_version
+  , @expires_at
+)
+RETURNING *;
+
 -- name: GetAPIKeyByKeyHash :one
 SELECT api_keys.*, users.email
 FROM api_keys
@@ -50,6 +78,7 @@ SELECT api_keys.*
 FROM api_keys
 WHERE api_keys.organization_id = @organization_id
   AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
   AND NOT EXISTS (
     SELECT 1
     FROM litellm_instances li
@@ -86,6 +115,27 @@ WHERE k.organization_id = member.organization_id
   AND k.deleted IS FALSE
   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = k.created_by_user_id);
 
+-- name: ListAgentAPIKeys :many
+SELECT *
+FROM api_keys
+WHERE organization_id = @organization_id
+  AND subject_urn = @subject_urn
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: GetAPIKeyByID :one
+SELECT *
+FROM api_keys
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- name: GetAPIKeyByIDForUpdate :one
+SELECT *
+FROM api_keys
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE;
+
 -- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (
   SELECT 1
@@ -105,8 +155,19 @@ UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = @id
   AND organization_id = @organization_id
+  AND subject_urn IS NULL
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, scopes;
+
+-- name: DeleteAgentAPIKey :one
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND subject_urn = @subject_urn
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: DeleteAPIKeyByProject :one
 UPDATE api_keys

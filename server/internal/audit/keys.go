@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -17,6 +18,13 @@ const (
 	ActionKeyRevoke Action = "api_key:revoke"
 )
 
+type AgentKeyCredentialMetadata struct {
+	SubjectURN             string          `json:"subject_urn"`
+	DelegatedGrants        json.RawMessage `json:"delegated_grants"`
+	DelegatedGrantsVersion int32           `json:"delegated_grants_version"`
+	ExpiresAt              string          `json:"expires_at"`
+}
+
 type LogKeyCreateEvent struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
@@ -28,15 +36,22 @@ type LogKeyCreateEvent struct {
 	KeyURN  urn.APIKey
 	KeyName string
 
-	Scopes []string
+	Scopes          []string
+	AgentCredential *AgentKeyCredentialMetadata
+}
+
+func keyAuditMetadata(scopes []string, credential *AgentKeyCredentialMetadata) ([]byte, error) {
+	fields := map[string]any{"scopes": scopes}
+	if credential != nil {
+		fields["agent_credential"] = credential
+	}
+	return marshalAuditPayload(fields)
 }
 
 func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) error {
 	action := ActionKeyCreate
 
-	metadata, err := marshalAuditPayload(map[string]any{
-		"scopes": event.Scopes,
-	})
+	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -76,15 +91,14 @@ type LogKeyRevokeEvent struct {
 	KeyURN  urn.APIKey
 	KeyName string
 
-	Scopes []string
+	Scopes          []string
+	AgentCredential *AgentKeyCredentialMetadata
 }
 
 func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) error {
 	action := ActionKeyRevoke
 
-	metadata, err := marshalAuditPayload(map[string]any{
-		"scopes": event.Scopes,
-	})
+	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
