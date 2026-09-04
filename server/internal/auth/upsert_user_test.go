@@ -177,12 +177,11 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
-	_, err = instance.conn.Exec(ctx, `
-		UPDATE organization_user_relationships
-		SET workos_user_id = $1
-		WHERE organization_id = $2 AND user_id = $3 AND deleted_at IS NULL
-	`, oldWorkosID, organizationID, gramUserID)
-	require.NoError(t, err)
+	require.NoError(t, orgRepo.New(instance.conn).SetOrganizationUserWorkOSID(ctx, orgRepo.SetOrganizationUserWorkOSIDParams{
+		WorkosUserID:   conv.ToPGText(oldWorkosID),
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	}))
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, instance.conn, organizationID))
 	_, err = accessrepo.New(instance.conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
 		OrganizationID:     organizationID,
