@@ -236,6 +236,19 @@ func isFindingLevelDropped(entityType string) bool {
 	return drop
 }
 
+// FilterPinnedEntities trims blocklisted entity types from a pinned list so
+// callers outside this package (the realtime pub/sub path) apply the same
+// policy as the local scanner. Nil stays nil (default entity set).
+func FilterPinnedEntities(entities []string) []string {
+	return filterEntities(entities)
+}
+
+// IsEntityFindingDropped reports whether findings of this entity type must
+// never surface regardless of how the scan was scoped.
+func IsEntityFindingDropped(entityType string) bool {
+	return isFindingLevelDropped(entityType)
+}
+
 // filterEntities removes blocklisted entity types from the caller's list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the

@@ -125,6 +125,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -845,6 +846,8 @@ func newStartCommand() *cli.Command {
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
 				pubsubShutdown          func(context.Context) error
+				enforcementDispatcher   *enforcereply.Dispatcher
+				enforcementInbox        *enforcereply.Inbox
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				var errs []error
@@ -866,6 +869,12 @@ func newStartCommand() *cli.Command {
 				if telemetryLoggerShutdown != nil {
 					errs = append(errs, telemetryLoggerShutdown(ctx))
 				}
+				if enforcementDispatcher != nil {
+					errs = append(errs, enforcementDispatcher.Close(ctx))
+				}
+				if enforcementInbox != nil {
+					errs = append(errs, enforcementInbox.Close())
+				}
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
 				}
@@ -885,6 +894,25 @@ func newStartCommand() *cli.Command {
 			publishersShutdown = shutdown
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
+			}
+
+			var inboxErr error
+			enforcementInbox, inboxErr = enforcereply.New(ctx, logger, tracerProvider, meterProvider, enforcereply.Config{
+				RedisOptions: *redisClient.Options(),
+				ReplicaID:    "",
+				PollInterval: 0,
+				DrainGate:    nil,
+			})
+			if inboxErr != nil {
+				logger.ErrorContext(ctx, "pub/sub enforcement disabled: create reply inbox", attr.SlogError(inboxErr))
+			} else {
+				var dispatcherErr error
+				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
+				if dispatcherErr != nil {
+					logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(dispatcherErr))
+					_ = enforcementInbox.Close()
+					enforcementInbox = nil
+				}
 			}
 			authzEngine := authz.NewEngine(
 				logger,
@@ -1315,7 +1343,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
