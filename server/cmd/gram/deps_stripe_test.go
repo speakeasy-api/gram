@@ -235,6 +235,72 @@ func TestNewStripeCatalogRejectsMissingTUMEventName(t *testing.T) {
 	require.ErrorContains(t, err, "stripe TUM meter event name is not configured")
 }
 
+func TestNewStripeCatalogMapsMCPBandwidthMeters(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name-mcp-bandwidth-ingress": "mcp_bandwidth_ingress",
+		"stripe-meter-event-name-mcp-bandwidth-egress":  "mcp_bandwidth_egress",
+		stripeMeterEventExportFlagName:                  "true",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_bandwidth_ingress", ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_bandwidth_egress", egressName)
+}
+
+func TestNewStripeCatalogLeavesBandwidthMetersUnmappedWithoutNames(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName: "true",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Empty(t, ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Empty(t, egressName)
+}
+
+func TestNewStripeCatalogDropsMCPBandwidthMetersWhenExportDisabled(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name-mcp-bandwidth-ingress": "mcp_bandwidth_ingress",
+		"stripe-meter-event-name-mcp-bandwidth-egress":  "mcp_bandwidth_egress",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Empty(t, ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Empty(t, egressName)
+}
+
+func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "prod",
+			"stripe-api-key":               "sk_test_placeholder",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
 func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 	t.Parallel()
 
@@ -288,8 +354,11 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-price-id-tum", "", "")
 	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
+	set.String("stripe-meter-event-name-mcp-bandwidth-ingress", "", "")
+	set.String("stripe-meter-event-name-mcp-bandwidth-egress", "", "")
 	set.String("stripe-portal-configuration-id", "", "")
 	set.Bool(stripeTUMMeterStreamingFlagName, false, "")
+	set.Bool(stripeMeterEventExportFlagName, false, "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))

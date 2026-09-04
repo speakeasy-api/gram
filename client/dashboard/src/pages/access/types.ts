@@ -26,7 +26,26 @@ export type ResourceType =
   | "environment"
   | "skill"
   | "risk_policy"
-  | "chat";
+  | "chat"
+  | "agent";
+
+export function isUnrestrictedResourceType(
+  resourceType: ResourceType,
+): resourceType is "org" | "environment" | "chat" | "agent" {
+  return (
+    resourceType === "org" ||
+    resourceType === "environment" ||
+    resourceType === "chat" ||
+    resourceType === "agent"
+  );
+}
+
+export function unrestrictedResourceLabel(resourceType: ResourceType): string {
+  if (resourceType === "environment") return "All in project";
+  if (resourceType === "chat") return "All sessions";
+  if (resourceType === "agent") return "All agents";
+  return "All";
+}
 
 export function isProjectSelectableResourceType(
   resourceType: ResourceType,

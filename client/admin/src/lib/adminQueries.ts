@@ -14,7 +14,6 @@ import {
 import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
-  getOrganizationFeatures,
   getOrganizationStats,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -31,7 +30,6 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
-  type AdminOrganizationFeatures,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -126,18 +124,6 @@ export function invalidateOrganizationActivity(
 ): void {
   void qc.invalidateQueries({
     queryKey: organizationActivityQuery(organizationID).queryKey,
-  });
-}
-
-export function organizationFeaturesQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminOrganizationFeatures,
-  readonly ["gram-admin-organization-features", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-organization-features", organizationID] as const,
-    queryFn: () => getOrganizationFeatures(organizationID),
   });
 }
 

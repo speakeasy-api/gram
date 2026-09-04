@@ -4076,8 +4076,8 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The slug of the external OAuth server
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The JSON object metadata Gram hosts in compatibility mode. Exactly one of
-	// metadata and authorization_server_issuer is present.
+	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
+	// one of metadata and authorization_server_issuer is present.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
 	// Exactly one of authorization_server_issuer and metadata is present; changing

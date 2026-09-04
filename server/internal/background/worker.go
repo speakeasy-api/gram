@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -200,6 +201,7 @@ func ForDeploymentProcessing(
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
+			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
 			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
@@ -451,6 +453,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
+	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
@@ -576,6 +579,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
+	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
@@ -746,6 +750,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
 	}
 
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {

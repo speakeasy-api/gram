@@ -586,30 +586,33 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey             = attribute.Key("gram.hook.block_reason")
-	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
-	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
-	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
-	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
-	IdentityFoldOrderChangedKey    = attribute.Key("gram.identity_fold.order_changed")
-	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
-	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
-	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
-	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
-	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
-	LiteLLMTraceIDKey              = attribute.Key("gram.litellm.trace_id")
-	LiteLLMUserIDKey               = attribute.Key("gram.litellm.user_id")
-	LiteLLMUserEmailKey            = attribute.Key("gram.litellm.user_email")
-	LiteLLMTeamIDKey               = attribute.Key("gram.litellm.team_id")
-	LiteLLMTeamAliasKey            = attribute.Key("gram.litellm.team_alias")
-	LiteLLMEndUserIDKey            = attribute.Key("gram.litellm.end_user_id")
-	LiteLLMOrganizationIDKey       = attribute.Key("gram.litellm.org_id")
-	LiteLLMAPIKeyHashKey           = attribute.Key("gram.litellm.api_key_hash")
-	LiteLLMAPIKeyAliasKey          = attribute.Key("gram.litellm.api_key_alias")
-	LiteLLMInputCostKey            = attribute.Key("litellm.cost.input")
-	LiteLLMOutputCostKey           = attribute.Key("litellm.cost.output")
-	LiteLLMCacheReadCostKey        = attribute.Key("litellm.cost.cache_read")
-	LiteLLMCacheWriteCostKey       = attribute.Key("litellm.cost.cache_creation")
+	HookBlockReasonKey                   = attribute.Key("gram.hook.block_reason")
+	IdentityFoldCanonicalGroupsKey       = attribute.Key("gram.identity_fold.canonical_groups")
+	IdentityFoldCostDeltaKey             = attribute.Key("gram.identity_fold.cost_delta")
+	IdentityFoldLiteralGroupsKey         = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityFoldNewKeysKey               = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldOrderChangedKey          = attribute.Key("gram.identity_fold.order_changed")
+	IdentityFoldTruncatedKey             = attribute.Key("gram.identity_fold.truncated")
+	IdentityFoldTokenDeltaKey            = attribute.Key("gram.identity_fold.token_delta")
+	IdentityMapEntryCountKey             = attribute.Key("gram.identity_map.entry_count")
+	TenantDimensionOrganizationCountKey  = attribute.Key("gram.tenant_dimensions.organization_count")
+	TenantDimensionProjectCountKey       = attribute.Key("gram.tenant_dimensions.project_count")
+	TenantDimensionOrphanProjectCountKey = attribute.Key("gram.tenant_dimensions.orphan_project_count")
+	LiteLLMInstanceIDKey                 = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey                     = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey                    = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey                     = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey                  = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey                     = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey                  = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey                  = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey             = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey                 = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey                = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey                  = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey                 = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey              = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey             = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -1003,6 +1006,27 @@ func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
 
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
+
+func TenantDimensionOrganizationCount(v int) attribute.KeyValue {
+	return TenantDimensionOrganizationCountKey.Int(v)
+}
+func SlogTenantDimensionOrganizationCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrganizationCountKey), v)
+}
+
+func TenantDimensionProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionProjectCountKey.Int(v)
+}
+func SlogTenantDimensionProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionProjectCountKey), v)
+}
+
+func TenantDimensionOrphanProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionOrphanProjectCountKey.Int(v)
+}
+func SlogTenantDimensionOrphanProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrphanProjectCountKey), v)
+}
 
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }

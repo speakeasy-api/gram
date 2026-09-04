@@ -1,6 +1,8 @@
 speakeasyVersion: 1.796.1
 sources: {}
 targets:
+    gram-admin:
+        source: Gram-Admin
     gram-internal:
         source: Gram-Internal
     hooks-go:
@@ -9,18 +11,33 @@ workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: 1.796.1
     sources:
+        Gram-Admin:
+            inputs:
+                - location: server/gen/http/openapi3.yaml
+            overlays:
+                - location: overlays/goa-common.yaml
+                - location: overlays/admin-sdk.yaml
+            transformations:
+                - removeUnused: true
+            output: .speakeasy/out.admin.openapi.yaml
         Gram-Internal:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
-                - location: overlays/goa.yaml
+                - location: overlays/goa-common.yaml
+                - location: overlays/dashboard-sdk.yaml
+            transformations:
+                - removeUnused: true
             output: .speakeasy/out.openapi.yaml
         Gram-Public:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
-                - location: overlays/goa.yaml
+                - location: overlays/goa-common.yaml
+                - location: overlays/dashboard-sdk.yaml
                 - location: overlays/public-sdk.yaml
+            transformations:
+                - removeUnused: true
             output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
@@ -28,13 +45,18 @@ workflow:
             inputs:
                 - location: server/gen/http/openapi3.yaml
             overlays:
-                - location: overlays/goa.yaml
+                - location: overlays/goa-common.yaml
+                - location: overlays/dashboard-sdk.yaml
             transformations:
                 - filterOperations:
                     operations: ingestHookEvent,uploadSkillContent,skillFeedback
                 - removeUnused: true
             output: .speakeasy/openapi-hooks.yaml
     targets:
+        gram-admin:
+            target: typescript
+            source: Gram-Admin
+            output: client/admin/src/sdk
         gram-internal:
             target: typescript
             source: Gram-Internal

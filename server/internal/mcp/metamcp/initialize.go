@@ -14,7 +14,7 @@ Work from the outside in:
 1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when the gateway cannot observe the member's health.
 2. describe_server — that server's tools, as qualified names (server--tool) with descriptions but no input schemas.
 3. describe_tools — input schemas for the specific tools you intend to call.
-4. execute_tool — run one, by qualified name.
+4. execute_tool — run one: the qualified name goes in "name", its JSON payload in "arguments".
 
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 

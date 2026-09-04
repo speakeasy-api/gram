@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -71,7 +72,9 @@ func requestedOrganizationID(ctx context.Context) string {
 
 type testInstance struct {
 	service        *productfeatures.Service
+	client         *productfeatures.Client
 	conn           *pgxpool.Pool
+	redisClient    *redis.Client
 	sessionManager *sessions.Manager
 }
 
@@ -129,7 +132,9 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 
 	return ctx, &testInstance{
 		service:        svc,
+		client:         productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 		conn:           conn,
+		redisClient:    redisClient,
 		sessionManager: sessionManager,
 	}
 }

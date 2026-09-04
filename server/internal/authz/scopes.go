@@ -43,6 +43,10 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeAgentRead               Scope = "agent:read"
+	ScopeAgentWrite              Scope = "agent:write"
+	ScopeAgentAuthorize          Scope = "agent:authorize"
+	ScopeAgentTransfer           Scope = "agent:transfer"
 )
 
 type scopeVisibility int
@@ -69,6 +73,10 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAgentRead,
+	ScopeAgentWrite,
+	ScopeAgentAuthorize,
+	ScopeAgentTransfer,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -112,6 +120,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeAgentRead:               scopeVisibilityUserVisible,
+	ScopeAgentWrite:              scopeVisibilityUserVisible,
+	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
+	ScopeAgentTransfer:           scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -136,6 +148,16 @@ func (s Scope) Parts() ScopeParts {
 	}
 
 	return ScopeParts{Resource: resource, Action: action}
+}
+
+// RegisteredScopes returns the scopes known to authorization in stable order.
+func RegisteredScopes() []Scope {
+	scopes := make([]Scope, 0, len(scopeVisibilityByScope))
+	for scope := range scopeVisibilityByScope {
+		scopes = append(scopes, scope)
+	}
+	slices.Sort(scopes)
+	return scopes
 }
 
 func ScopeVisibilityFor(scope Scope) (string, bool) {
@@ -199,6 +221,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeAgentRead:               nil,
+	ScopeAgentWrite:              nil,
+	ScopeAgentAuthorize:          nil,
+	ScopeAgentTransfer:           nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -233,6 +259,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeAgentRead:               "",
+	ScopeAgentWrite:              "",
+	ScopeAgentAuthorize:          "",
+	ScopeAgentTransfer:           "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
@@ -275,4 +305,33 @@ func CalculateSubScopes(scope Scope) []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// ScopeImplicationClosure returns the complete set of checks that a grant for
+// scope can satisfy, including scope itself.
+func ScopeImplicationClosure(scope Scope) []Scope {
+	seen := make(map[Scope]struct{}, 1)
+	seen[scope] = struct{}{}
+	queue := []Scope{scope}
+	for len(queue) > 0 {
+		granted := queue[0]
+		queue = queue[1:]
+		for checked, satisfying := range scopeExpansions {
+			if !slices.Contains(satisfying, granted) {
+				continue
+			}
+			if _, ok := seen[checked]; ok {
+				continue
+			}
+			seen[checked] = struct{}{}
+			queue = append(queue, checked)
+		}
+	}
+
+	closure := make([]Scope, 0, len(seen))
+	for implied := range seen {
+		closure = append(closure, implied)
+	}
+	slices.Sort(closure)
+	return closure
 }

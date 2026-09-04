@@ -10,3 +10,5 @@
 # [stripe]
 # price_id_tum = "..."
 # meter_event_name = "tum"
+# meter_event_name_mcp_bandwidth_ingress = "mcp_bandwidth_ingress"
+# meter_event_name_mcp_bandwidth_egress = "mcp_bandwidth_egress"

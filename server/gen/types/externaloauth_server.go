@@ -14,8 +14,8 @@ type ExternalOAuthServer struct {
 	ProjectID string
 	// The slug of the external OAuth server
 	Slug Slug
-	// The JSON object metadata Gram hosts in compatibility mode. Exactly one of
-	// metadata and authorization_server_issuer is present.
+	// The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly
+	// one of metadata and authorization_server_issuer is present.
 	Metadata any
 	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
 	// Exactly one of authorization_server_issuer and metadata is present; changing

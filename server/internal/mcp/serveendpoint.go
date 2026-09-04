@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -45,6 +46,7 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	if err != nil {
 		return err
 	}
+	attributeMCPBandwidthServer(ctx, mcpServer, metaServer, slug)
 
 	if metaServer != nil {
 		// Meta-backed endpoints are served only on the canonical /mcp
@@ -64,6 +66,24 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	}
 
 	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
+}
+
+func attributeMCPBandwidthServer(ctx context.Context, mcpServer *mcpserversrepo.McpServer, metaServer *metamcprepo.MetaMcpServer, serverSlug string) {
+	if mcpServer != nil && mcpServer.Slug.Valid && mcpServer.Slug.String != "" {
+		serverSlug = mcpServer.Slug.String
+	}
+	switch {
+	case metaServer != nil:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeMeta, metaServer.ID.String(), serverSlug)
+	case mcpServer == nil:
+		return
+	case mcpServer.RemoteMcpServerID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeRemote, mcpServer.ID.String(), serverSlug)
+	case mcpServer.TunneledMcpServerID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeTunneled, mcpServer.ID.String(), serverSlug)
+	case mcpServer.ToolsetID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeHosted, mcpServer.ID.String(), serverSlug)
+	}
 }
 
 // enforceCustomDomainLockdown 403s a public-host MCP request when the owning
@@ -93,11 +113,13 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 }
 
 // customDomainLockdownApplies reports whether a platform-origin request must
-// be kept away from runtime-like MCP surfaces. Requests already carrying a
-// custom-domain context passed through the ingress allowlist and are never
-// locked down here.
+// be kept away from runtime-like MCP surfaces. Once project ownership is known,
+// it also attributes an active bandwidth exchange; calls from non-runtime
+// surfaces are no-ops. Requests already carrying a custom-domain context passed
+// through the ingress allowlist and are never locked down here.
 func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (bool, error) {
-	if customdomains.FromContext(ctx) != nil {
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		metering.AttributeMCPBandwidth(ctx, domainCtx.OrganizationID, projectID)
 		return false, nil
 	}
 
@@ -108,6 +130,7 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 	case err != nil:
 		return false, oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
 	}
+	metering.AttributeMCPBandwidth(ctx, project.OrganizationID, projectID)
 
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
 	switch {

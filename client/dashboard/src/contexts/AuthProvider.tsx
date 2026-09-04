@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
   "/guide",
-  "/talk-to-us",
+  "/trial-ended",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -86,6 +87,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
+  const trialNow = useTrialNow(session?.trial);
   const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
@@ -154,14 +156,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // Past this point the upgrade gate has to render, or the redirect below
-    // sends the user to a route that bounces them straight back to it.
-    if (!isPath(location.pathname, "/talk-to-us")) {
-      // An org that never trialed (or is still mid-trial) falls through to the
-      // cold-signup gate.
-      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-        return <Navigate to="/talk-to-us" replace />;
+    const trialLifecycle = getTrialLifecycleFromDates(session.trial, trialNow);
+
+    if (trialLifecycle === "expired") {
+      if (!isPath(location.pathname, "/trial-ended")) {
+        return <Navigate to="/trial-ended" replace />;
       }
+    } else {
       return <BookDemo />;
     }
   }

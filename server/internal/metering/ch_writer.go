@@ -288,6 +288,7 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 		MeterID:           string(definition.id),
 		OperationID:       message.GetOperationId(),
 		Unit:              string(definition.unit),
+		MeasurementMethod: string(definition.measurementMethod),
 		Value:             message.GetValue(),
 		OccurredAt:        occurredAt,
 		ProducedAt:        producedAt,

@@ -22,7 +22,7 @@ export type ExternalOAuthServer = {
    */
   id: string;
   /**
-   * The JSON object metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
+   * The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
    */
   metadata?: any | undefined;
   /**

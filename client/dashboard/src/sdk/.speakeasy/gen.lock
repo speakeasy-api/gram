@@ -915,7 +915,6 @@ trackedFiles:
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
-  src/models/components/getproductfeaturesresponsebody.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
@@ -1231,6 +1230,7 @@ trackedFiles:
   src/models/components/policybypassredemption.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
+  src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
   src/models/components/projectoverviewsummary.ts: {}

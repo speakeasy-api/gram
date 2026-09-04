@@ -17,7 +17,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 27)
+	require.Len(t, result.Scopes, 31)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
@@ -34,6 +34,11 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyBypass)].ResourceType)
 	require.Equal(t, "chat", bySlug[string(authz.ScopeChatRead)].ResourceType)
+	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
+		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope)
+	}
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)

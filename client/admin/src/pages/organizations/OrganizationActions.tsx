@@ -209,7 +209,9 @@ export function OrganizationActions({
     // The controlled dialog can unmount without Radix firing close-autofocus in
     // a browser. Restore after React disconnects the dialog control instead of
     // relying on DialogTrigger behavior these dialogs do not have.
-    setTimeout(() => focusOrigin(control));
+    setTimeout(() => {
+      focusOrigin(control);
+    });
   };
 
   const closeAfterWrite = (): void => {

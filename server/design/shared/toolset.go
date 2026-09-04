@@ -176,7 +176,7 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Attribute("id", String, "The ID of the external OAuth server")
 	Attribute("project_id", String, "The project ID this external OAuth server belongs to")
 	Attribute("slug", Slug, "The slug of the external OAuth server")
-	Attribute("metadata", Any, "The JSON object metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
+	Attribute("metadata", Any, "The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.")
 	Attribute("authorization_server_issuer", String, "The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.", func() {
 		Format(FormatURI)
 		MaxLength(500)
