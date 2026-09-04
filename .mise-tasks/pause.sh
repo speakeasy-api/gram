@@ -10,6 +10,8 @@ set -e
 # the compose project: containers and volumes stay, so waking again is a
 # `docker compose start` rather than a re-create plus migrations plus seed.
 # The shared stack (compose.shared.yml) is left alone -- other worktrees use it.
+# Recurring Temporal schedules are namespace-scoped, so they can be paused for
+# this worktree without disrupting another worktree's worker.
 
 gitdir="$(git rev-parse --absolute-git-dir)"
 
@@ -65,6 +67,14 @@ if [ "$locked" != true ]; then
     echo "Another pause or wake (pid ${owner:-unknown}) has held this worktree's stack lock for a minute; giving up." >&2
     echo "If nothing is running, remove $lock and retry." >&2
     exit 1
+fi
+
+# Stopping a Gram worker does not stop Temporal schedules: the shared server
+# would keep firing them, accumulating executions and CPU work while the stack
+# is asleep. Pause them before stopping the worker, and remember only the ones
+# changed here so wake does not override a developer's manual pause.
+if ! mise run temporal:schedules --state pause; then
+    echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
 fi
 
 # Best-effort, as in infra:stop: a supervisor that is not running is not an

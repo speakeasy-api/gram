@@ -497,45 +497,6 @@ checksum = "sha256:352711fa7dcb05dcdfefca0ad71b2c9a74fd090f8d7fc609419de4cbc7254
 url = "https://github.com/sqlc-dev/sqlc/releases/download/v1.31.1/sqlc_1.31.1_windows_amd64.zip"
 url_api = "https://api.github.com/repos/sqlc-dev/sqlc/releases/assets/402612157"
 
-[[tools."github:temporalio/cli"]]
-version = "1.8.2"
-backend = "github:temporalio/cli"
-
-[tools."github:temporalio/cli"."platforms.linux-arm64"]
-checksum = "sha256:83600a8fac6e3da54093e5da6918d399f501532b9f1172235603f9606f4ac6e4"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832526"
-
-[tools."github:temporalio/cli"."platforms.linux-arm64-musl"]
-checksum = "sha256:83600a8fac6e3da54093e5da6918d399f501532b9f1172235603f9606f4ac6e4"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832526"
-
-[tools."github:temporalio/cli"."platforms.linux-x64"]
-checksum = "sha256:d8421bda989e6514b4bdb4d63a9012a8a05a806892e881a5aad8510496349a94"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832528"
-
-[tools."github:temporalio/cli"."platforms.linux-x64-musl"]
-checksum = "sha256:d8421bda989e6514b4bdb4d63a9012a8a05a806892e881a5aad8510496349a94"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832528"
-
-[tools."github:temporalio/cli"."platforms.macos-arm64"]
-checksum = "sha256:dacdc3587682c04cf27e67c8878ca2d755230b6ad63c0c6ebddd7348ae90ed94"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832538"
-
-[tools."github:temporalio/cli"."platforms.macos-x64"]
-checksum = "sha256:489d7f5420cae02b559774ac23df035141954c33a51dba96f5759a0ddccdf1b6"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832529"
-
-[tools."github:temporalio/cli"."platforms.windows-x64"]
-checksum = "sha256:72e02498fa7849657c369377f7de69a8709b3d2183b6f2749f6c8bd54a984501"
-url = "https://github.com/temporalio/cli/releases/download/v1.8.2/temporal_cli_1.8.2_windows_amd64.zip"
-url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/496832572"
-
 [[tools.go]]
 version = "1.27.0"
 backend = "core:go"

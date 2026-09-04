@@ -126,6 +126,12 @@ mise run infra:start
 release_port
 mise run start
 
+# Schedule registration runs when the worker starts. Resume only schedules
+# that `pause` changed; schedules paused manually remain paused.
+if ! mise run temporal:schedules --state unpause; then
+    echo "⚠️  Some Temporal schedules remain paused; retry with `mise run wake`." >&2
+fi
+
 # A stack that is up is no longer paused, is no longer failed (a `failed`
 # marker outranks `paused` in git:workstatus, so a recovered worktree would
 # keep reading as broken), and starts its idle clock from now.

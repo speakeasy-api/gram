@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 #MISE description="Destroy all infra resources"
 #MISE dir="{{ config_root }}"
 
@@ -14,6 +15,18 @@ for arg in "$@"; do
     esac
 done
 
+# A worktree's Temporal schedules live in the shared server, outside its
+# Compose project. Stop them before tearing down the worker. Worktree
+# namespaces follow this generated prefix; never delete the primary tree's
+# `default` namespace if somebody passes --keep-shared there by hand.
+delete_temporal_namespace=0
+if [ "$keep_shared" -eq 1 ] && [[ "$TEMPORAL_NAMESPACE" == gram-infra-* ]]; then
+    delete_temporal_namespace=1
+    if ! mise run temporal:schedules --state pause; then
+        echo "⚠️  Could not pause every schedule in $TEMPORAL_NAMESPACE before cleanup." >&2
+    fi
+fi
+
 # Best-effort: stop this worktree's pitchfork daemons and prune stopped
 # entries from `pitchfork list` (clean is global across worktrees)
 if pitchfork supervisor status &> /dev/null; then
@@ -28,6 +41,22 @@ docker compose --profile "*" down --volumes --remove-orphans
 # hence --keep-shared for worktree removal.
 if [ "$keep_shared" -eq 0 ]; then
     docker compose -f compose.shared.yml -p gram-shared down --volumes --remove-orphans
+fi
+
+# Worktree removal is the end of this namespace's lifecycle. Without deleting
+# it, every removed worktree leaves its schedules and a Temporal system worker
+# behind forever in the shared SQLite database. Best-effort so an unavailable
+# shared server does not make an otherwise-local worktree impossible to remove;
+# the schedules were still paused above when Temporal was reachable.
+if [ "$delete_temporal_namespace" -eq 1 ]; then
+    if docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+        temporal operator namespace delete \
+        --namespace "$TEMPORAL_NAMESPACE" \
+        --yes > /dev/null; then
+        rm -f "$(git rev-parse --absolute-git-dir)/gram-stack-paused-schedules"
+    else
+        echo "⚠️  Could not delete Temporal namespace $TEMPORAL_NAMESPACE; it may need manual cleanup." >&2
+    fi
 fi
 
 # dev-idp's SQLite database lives outside docker -- nuke it too so a
