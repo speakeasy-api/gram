@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { toRoleSlug } from "./types";
+import {
+  isUnrestrictedResourceType,
+  toRoleSlug,
+  unrestrictedResourceLabel,
+} from "./types";
 
 describe("toRoleSlug", () => {
   it("adds org- prefix to plain name", () => {
@@ -32,6 +36,13 @@ describe("toRoleSlug", () => {
 
   it("handles single word", () => {
     expect(toRoleSlug("viewer")).toBe("org-viewer");
+  });
+});
+
+describe("unrestricted resource types", () => {
+  it("treats agents as unrestricted", () => {
+    expect(isUnrestrictedResourceType("agent")).toBe(true);
+    expect(unrestrictedResourceLabel("agent")).toBe("All agents");
   });
 });
 

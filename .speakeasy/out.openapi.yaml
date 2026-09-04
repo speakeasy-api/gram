@@ -74434,6 +74434,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -74471,6 +74475,10 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - agent:read
+              - agent:write
+              - agent:authorize
+              - agent:transfer
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -79338,6 +79346,10 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -80969,6 +80981,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         selectors:
           type: array
           items:
@@ -81136,6 +81152,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
         slug:
           type: string
           description: Unique scope identifier.
@@ -81167,6 +81184,10 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - agent:read
+            - agent:write
+            - agent:authorize
+            - agent:transfer
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -81651,6 +81672,7 @@ components:
             - skill
             - risk_policy
             - chat
+            - agent
             - '*'
         server_url:
           type: string
