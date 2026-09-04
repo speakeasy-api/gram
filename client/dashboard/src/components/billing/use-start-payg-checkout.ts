@@ -38,7 +38,7 @@ export function useStartPaygCheckout(activeOrganizationId: string): {
       {
         onSuccess: (link) => {
           const url = safeExternalHttpUrl(link);
-          if (url === null) {
+          if (url === null || new URL(url).protocol !== "https:") {
             telemetry.capture("payg_checkout_error", {
               error: "unusable checkout link",
             });

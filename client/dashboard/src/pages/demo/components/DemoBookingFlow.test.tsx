@@ -178,6 +178,7 @@ describe("DemoBookingFlow", () => {
 
     window.dispatchEvent(
       new MessageEvent("message", {
+        origin: "https://app.cal.com",
         data: JSON.stringify({
           originator: "CAL",
           fullType: "CAL:bookingSuccessful",
@@ -193,6 +194,30 @@ describe("DemoBookingFlow", () => {
         email: "jane@acme.com",
       }),
     );
+  });
+
+  it("constrains the calendar to the viewport on short screens", () => {
+    render(<DemoBookingFlow />);
+
+    expect(screen.getByTestId("cal-embed").parentElement?.className).toContain(
+      "max-h-[calc(100dvh-220px)]",
+    );
+  });
+
+  it("ignores booking messages from another origin", () => {
+    render(<DemoBookingFlow />);
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: "https://attacker.test",
+        data: JSON.stringify({
+          originator: "CAL",
+          fullType: "CAL:bookingSuccessful",
+        }),
+      }),
+    );
+
+    expect(captureMock).not.toHaveBeenCalled();
   });
 
   it("ignores non-Cal postMessages", () => {

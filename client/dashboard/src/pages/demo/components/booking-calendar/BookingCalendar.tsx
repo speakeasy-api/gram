@@ -6,6 +6,7 @@ import { BOOKING_CALENDAR_LINK, splitDisplayName } from "./booking-calendar";
 
 type CalProps = Parameters<typeof _Cal>[0];
 const Cal = _Cal as unknown as (props: CalProps) => React.ReactElement | null;
+const CAL_ORIGIN = "https://app.cal.com";
 
 const CAL_BRAND_VARS = {
   "cal-bg": "transparent",
@@ -72,6 +73,7 @@ export function BookingCalendar({
             ? (JSON.parse(event.data) as Record<string, unknown>)
             : (event.data as Record<string, unknown>);
         if (
+          event.origin === CAL_ORIGIN &&
           data?.originator === "CAL" &&
           (data?.fullType as string)?.endsWith("bookingSuccessful")
         ) {
@@ -103,9 +105,10 @@ export function BookingCalendar({
             Details prefilled from your account: {prefill}
           </p>
         ) : null}
-        <div className="h-[clamp(500px,54vh,640px)] w-full overflow-auto">
+        <div className="h-[clamp(500px,54vh,640px)] max-h-[calc(100dvh-220px)] w-full overflow-auto">
           <Cal
             calLink={BOOKING_CALENDAR_LINK}
+            calOrigin={CAL_ORIGIN}
             namespace={namespace}
             config={{
               ...Object.fromEntries(
