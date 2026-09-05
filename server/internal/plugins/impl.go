@@ -1899,7 +1899,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// bumps and installed copies refresh. The hooks component is still gated
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
-		SkipIfUnchanged: false,
+		SkipIfUnchanged:   false,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -1958,9 +1960,11 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames: nil,
-		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged: input.SkipIfUnchanged,
+		GitHubUsernames:   nil,
+		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:   input.SkipIfUnchanged,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -1986,6 +1990,13 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// RotateHooksKey forces the hooks subtree to regenerate so a newly minted
+	// hooks credential is baked into the published observability plugin.
+	RotateHooksKey bool
+	// HooksKeyCandidate is the already-minted hooks key to embed when
+	// RotateHooksKey is set. persistPluginAPIKeys writes it after a successful
+	// GitHub push.
+	HooksKeyCandidate *pluginAPIKeyCandidate
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2111,10 +2122,12 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// MCP packages so installed copies pick up a new manifest version. A
 	// Platform-only transition deliberately carries those customer packages
 	// unchanged. Hooks change independently based on their version and
-	// output-affecting config.
-	mcpChanged := firstPublish ||
+	// output-affecting config. Credential rotation is hooks-only: it never
+	// treats MCP as changed, so published consumer packages and their embedded
+	// key stay carried.
+	mcpChanged := !input.RotateHooksKey && (firstPublish ||
 		!input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints)
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2160,6 +2173,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 	hooksChanged := firstPublish ||
+		input.RotateHooksKey ||
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
@@ -2206,6 +2220,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
+	if input.RotateHooksKey && input.HooksKeyCandidate != nil {
+		hooksCandidate = input.HooksKeyCandidate
+		candidates = append(candidates, *input.HooksKeyCandidate)
+	}
 
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
@@ -2497,7 +2515,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// if the org isn't cleared, the new name still reaches MCP and the
 				// marketplace manifests while the Codex hooks are carried and catch
 				// up once eligible; the outcome reports that so we can tell the user.
-				SkipIfUnchanged: false,
+				SkipIfUnchanged:   false,
+				RotateHooksKey:    false,
+				HooksKeyCandidate: nil,
 			})
 			if err != nil {
 				return nil, err

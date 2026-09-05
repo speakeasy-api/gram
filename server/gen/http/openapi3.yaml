@@ -38426,6 +38426,101 @@ paths:
             x-speakeasy-name-override: removePluginServer
             x-speakeasy-react-hook:
                 name: RemovePluginServer
+    /rpc/plugins.rotateObservabilityCredential:
+        post:
+            description: Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, optionally republishes the marketplace so installs can pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.
+            operationId: rotateObservabilityCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateObservabilityCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RotateObservabilityCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: rotateObservabilityCredential plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: rotateObservabilityCredential
+            x-speakeasy-react-hook:
+                name: RotateObservabilityCredential
     /rpc/plugins.setPluginAssignments:
         put:
             description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -83336,6 +83431,52 @@ components:
                 - project_id
                 - project_name
                 - is_domain_root
+        RotateObservabilityCredentialRequestBody:
+            type: object
+            properties:
+                previous_key_fate:
+                    type: string
+                    description: What happens to existing observability plugin hooks keys after the replacement is minted.
+                    enum:
+                        - revoke_immediately
+                        - grace
+            required:
+                - previous_key_fate
+        RotateObservabilityCredentialResult:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: The newly minted hooks-scoped API key. Returned only on this response.
+                key_prefix:
+                    type: string
+                    description: The recognizable prefix of the new key.
+                marketplace_republished:
+                    type: boolean
+                    description: Whether the published marketplace was updated with the new credential.
+                marketplace_update_deferred:
+                    type: boolean
+                    description: True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version). Existing marketplace installs keep the previous credential until the marketplace is republished.
+                previous_key_fate:
+                    type: string
+                    description: What happened to previous observability plugin hooks keys.
+                    enum:
+                        - revoke_immediately
+                        - grace
+                previous_keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RotatedObservabilityKey'
+                    description: Previous observability plugin hooks keys that were revoked or scheduled to expire.
+                previous_keys_expire_at:
+                    type: string
+                    description: When previous keys stop authenticating if previous_key_fate is grace.
+                    format: date-time
+            required:
+                - key_prefix
+                - previous_key_fate
+                - previous_keys
+                - marketplace_republished
         RotateTunneledMcpServerKeyForm:
             type: object
             properties:
@@ -83358,6 +83499,23 @@ components:
             required:
                 - server
                 - tunnel_key
+        RotatedObservabilityKey:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The API key ID.
+                    format: uuid
+                key_prefix:
+                    type: string
+                    description: The recognizable prefix of the previous key.
+                name:
+                    type: string
+                    description: The API key name.
+            required:
+                - id
+                - name
+                - key_prefix
         SaveRiskEvalReviewRequestBody:
             type: object
             properties:
