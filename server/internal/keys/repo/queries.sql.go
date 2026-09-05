@@ -156,6 +156,7 @@ FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
   AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 `
 
 type GetAPIKeyByKeyHashRow struct {
@@ -284,6 +285,106 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const listPluginHooksAPIKeysByProject = `-- name: ListPluginHooksAPIKeysByProject :many
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE organization_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name LIKE 'plugins-hooks-%'
+ORDER BY created_at DESC
+`
+
+type ListPluginHooksAPIKeysByProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// Plugin distribution mints hooks keys as plugins-hooks-* (publish) or
+// plugins-hooks-download-* (ZIP download). User-created keys cannot use the
+// reserved plugins- prefix, so this listing is the observability-plugin set.
+// Expired keys are omitted so a later grace rotation cannot revive them.
+func (q *Queries) ListPluginHooksAPIKeysByProject(ctx context.Context, arg ListPluginHooksAPIKeysByProjectParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listPluginHooksAPIKeysByProject, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setAPIKeyExpiresAt = `-- name: SetAPIKeyExpiresAt :one
+UPDATE api_keys
+SET expires_at = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type SetAPIKeyExpiresAtParams struct {
+	ExpiresAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SetAPIKeyExpiresAt(ctx context.Context, arg SetAPIKeyExpiresAtParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, setAPIKeyExpiresAt, arg.ExpiresAt, arg.ID, arg.OrganizationID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

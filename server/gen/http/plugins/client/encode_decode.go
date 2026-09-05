@@ -2624,6 +2624,245 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildRotateObservabilityCredentialRequest instantiates a HTTP request object
+// with method and path set to call the "plugins" service
+// "rotateObservabilityCredential" endpoint
+func (c *Client) BuildRotateObservabilityCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RotateObservabilityCredentialPluginsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "rotateObservabilityCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRotateObservabilityCredentialRequest returns an encoder for requests
+// sent to the plugins rotateObservabilityCredential server.
+func EncodeRotateObservabilityCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.RotateObservabilityCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "rotateObservabilityCredential", "*plugins.RotateObservabilityCredentialPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewRotateObservabilityCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("plugins", "rotateObservabilityCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRotateObservabilityCredentialResponse returns a decoder for responses
+// returned by the plugins rotateObservabilityCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRotateObservabilityCredentialResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRotateObservabilityCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RotateObservabilityCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			res := NewRotateObservabilityCredentialResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RotateObservabilityCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RotateObservabilityCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RotateObservabilityCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RotateObservabilityCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RotateObservabilityCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RotateObservabilityCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RotateObservabilityCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RotateObservabilityCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+				}
+				err = ValidateRotateObservabilityCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+				}
+				return nil, NewRotateObservabilityCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RotateObservabilityCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+				}
+				err = ValidateRotateObservabilityCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+				}
+				return nil, NewRotateObservabilityCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "rotateObservabilityCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RotateObservabilityCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "rotateObservabilityCredential", err)
+			}
+			err = ValidateRotateObservabilityCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "rotateObservabilityCredential", err)
+			}
+			return nil, NewRotateObservabilityCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "rotateObservabilityCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDownloadObservabilityPluginRequest instantiates a HTTP request object
 // with method and path set to call the "plugins" service
 // "downloadObservabilityPlugin" endpoint
@@ -4135,6 +4374,19 @@ func unmarshalPluginAudienceResponseBodyToPluginsPluginAudience(v *PluginAudienc
 		DisplayName:  *v.DisplayName,
 		MemberCount:  v.MemberCount,
 		PrincipalUrn: *v.PrincipalUrn,
+	}
+
+	return res
+}
+
+// unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKey
+// builds a value of type *plugins.RotatedObservabilityKey from a value of type
+// *RotatedObservabilityKeyResponseBody.
+func unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKey(v *RotatedObservabilityKeyResponseBody) *plugins.RotatedObservabilityKey {
+	res := &plugins.RotatedObservabilityKey{
+		ID:        *v.ID,
+		Name:      *v.Name,
+		KeyPrefix: *v.KeyPrefix,
 	}
 
 	return res

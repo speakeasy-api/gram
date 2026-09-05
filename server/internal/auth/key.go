@@ -119,11 +119,32 @@ func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix
 	return plaintext, keyHash, keyPrefix + token[:5], nil
 }
 
+// IsPluginHooksAPIKeyName recognizes the reserved name shape used by plugin
+// publish and observability-download hooks keys, without requiring the
+// plaintext token. Rotation uses this to find previous keys to revoke or
+// expire; authentication still goes through IsOrgWidePluginHooksAPIKey.
+func IsPluginHooksAPIKeyName(name string) bool {
+	_, ok := pluginHooksAPIKeyTokenMarker(name)
+	return ok
+}
+
 // IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
 // observability-download flows. The generated name embeds the first six token
 // characters while keyPrefix stores the first five, so authentication can
 // verify minting provenance instead of trusting a formerly-unrestricted name.
 func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
+	tokenMarker, ok := pluginHooksAPIKeyTokenMarker(name)
+	if !ok {
+		return false
+	}
+
+	return len(key) > len(keyPrefix) &&
+		strings.HasPrefix(key, keyPrefix) &&
+		strings.HasSuffix(keyPrefix, tokenMarker[:5]) &&
+		key[len(keyPrefix)] == tokenMarker[5]
+}
+
+func pluginHooksAPIKeyTokenMarker(name string) (string, bool) {
 	var suffix string
 	switch {
 	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-download-"):
@@ -131,30 +152,26 @@ func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
 	case strings.HasPrefix(name, PluginAPIKeyNamePrefix+"hooks-"):
 		suffix = strings.TrimPrefix(name, PluginAPIKeyNamePrefix+"hooks-")
 	default:
-		return false
+		return "", false
 	}
 
 	parts := strings.Split(suffix, "-")
 	if len(parts) != 3 || len(parts[0]) != 8 || len(parts[1]) != 6 || len(parts[2]) != 6 {
-		return false
+		return "", false
 	}
 	const timestampLayout = "20060102-150405"
 	timestamp := parts[0] + "-" + parts[1]
 	parsedTimestamp, err := time.Parse(timestampLayout, timestamp)
 	if err != nil || parsedTimestamp.Format(timestampLayout) != timestamp {
-		return false
+		return "", false
 	}
 	for _, char := range parts[2] {
 		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
-			return false
+			return "", false
 		}
 	}
 
-	tokenMarker := parts[2]
-	return len(key) > len(keyPrefix) &&
-		strings.HasPrefix(key, keyPrefix) &&
-		strings.HasSuffix(keyPrefix, tokenMarker[:5]) &&
-		key[len(keyPrefix)] == tokenMarker[5]
+	return parts[2], true
 }
 
 // DeviceAgentKeyName builds a unique, human-readable name for a minted

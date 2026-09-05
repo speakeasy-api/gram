@@ -43,6 +43,11 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
+	// Rotate the observability plugin's hooks-scoped ingest credential. Mints a
+	// replacement key, optionally republishes the marketplace so installs can pick
+	// it up, and either revokes previous plugin hooks keys immediately or keeps
+	// them valid for a grace window.
+	RotateObservabilityCredential(context.Context, *RotateObservabilityCredentialPayload) (res *RotateObservabilityCredentialResult, err error)
 	// Download a ZIP of the per-org observability plugin (Gram hooks). Mints a
 	// fresh hooks-scoped API key on each download and embeds it in the plugin's
 	// hook script.
@@ -92,7 +97,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [18]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "rotateObservabilityCredential", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -378,6 +383,48 @@ type RemovePluginServerPayload struct {
 	PluginID         string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// RotateObservabilityCredentialPayload is the payload type of the plugins
+// service rotateObservabilityCredential method.
+type RotateObservabilityCredentialPayload struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate  string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// RotateObservabilityCredentialResult is the result type of the plugins
+// service rotateObservabilityCredential method.
+type RotateObservabilityCredentialResult struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key *string
+	// The recognizable prefix of the new key.
+	KeyPrefix string
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate string
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKey
+	// When previous keys stop authenticating if previous_key_fate is grace.
+	PreviousKeysExpireAt *string
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished bool
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version). Existing
+	// marketplace installs keep the previous credential until the marketplace is
+	// republished.
+	MarketplaceUpdateDeferred *bool
+}
+
+type RotatedObservabilityKey struct {
+	// The API key ID.
+	ID string
+	// The API key name.
+	Name string
+	// The recognizable prefix of the previous key.
+	KeyPrefix string
 }
 
 // SetPluginAssignmentsPayload is the payload type of the plugins service
