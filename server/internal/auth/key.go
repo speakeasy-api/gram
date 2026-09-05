@@ -322,7 +322,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		projectID = &apiKey.ProjectID.UUID
 	}
 
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  apiKey.OrganizationID,
 		HasActiveSubscription: org.HasActiveSubscription,
 		Whitelisted:           org.Whitelisted,
