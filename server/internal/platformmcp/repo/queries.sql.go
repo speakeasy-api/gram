@@ -2775,9 +2775,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2785,18 +2785,36 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-WHERE p.id = $2
-  AND p.project_id = $3
-  AND p.organization_id = $1
-  AND projects.organization_id = $1
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
+WHERE p.id = $3
+  AND p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
   AND projects.deleted IS FALSE
   AND p.deleted IS FALSE
 `
 
 type GetPlatformMCPPluginInventoryItemParams struct {
+	ProjectID      uuid.UUID
 	OrganizationID string
 	PluginID       uuid.UUID
-	ProjectID      uuid.UUID
 }
 
 type GetPlatformMCPPluginInventoryItemRow struct {
@@ -2815,7 +2833,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 }
 
 func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg GetPlatformMCPPluginInventoryItemParams) (GetPlatformMCPPluginInventoryItemRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.OrganizationID, arg.PluginID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.ProjectID, arg.OrganizationID, arg.PluginID)
 	var i GetPlatformMCPPluginInventoryItemRow
 	err := row.Scan(
 		&i.ID,
@@ -4415,6 +4433,8 @@ WITH active_roles AS (
     'Everyone'::text AS display_name,
     NULL::bigint AS member_count,
     '*'::text AS principal_urn
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR '*' = ANY($1::text[])
   UNION ALL
   SELECT
     1::int,
@@ -4429,6 +4449,8 @@ WITH active_roles AS (
     AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
     AND ora.user_id IS NOT NULL
     AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY($1::text[])
   GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
   UNION ALL
   SELECT
@@ -4450,6 +4472,10 @@ WITH active_roles AS (
   WHERE dg.organization_id = $3
     AND dg.deleted IS FALSE
     AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY($1::text[])
+    )
   GROUP BY dg.id, dg.name
   UNION ALL
   SELECT
@@ -4473,6 +4499,12 @@ WITH active_roles AS (
     AND du.workos_deleted IS FALSE
     AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
     AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY($1::text[])
+    )
   GROUP BY attribute.key, attribute.value
 )
 SELECT kind, display_name, member_count, principal_urn
@@ -4593,9 +4625,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = $1 AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -4603,9 +4635,27 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-WHERE p.project_id = $2
-  AND p.organization_id = $1
-  AND projects.organization_id = $1
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
   AND projects.deleted IS FALSE
   AND p.deleted IS FALSE
   AND (NOT $3::boolean OR p.id > $4)
@@ -4614,8 +4664,8 @@ LIMIT $5
 `
 
 type ListPlatformMCPPluginInventoryParams struct {
-	OrganizationID string
 	ProjectID      uuid.UUID
+	OrganizationID string
 	UseAfter       bool
 	AfterID        uuid.UUID
 	ResultLimit    int32
@@ -4646,8 +4696,8 @@ type ListPlatformMCPPluginInventoryRow struct {
 // surface must not carry.
 func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPlatformMCPPluginInventoryParams) ([]ListPlatformMCPPluginInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginInventory,
-		arg.OrganizationID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.UseAfter,
 		arg.AfterID,
 		arg.ResultLimit,

@@ -150,8 +150,9 @@ func TestListPluginAssignmentsBoundsResolverWorkInSQL(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	now := time.Now().UTC()
+	var beyondBoundRole string
 	for index := range maxPluginMembers + 1 {
-		_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		role, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 			OrganizationID:    principal.OrganizationID,
 			WorkosSlug:        fmt.Sprintf("role-%03d", index),
 			WorkosName:        fmt.Sprintf("Role %03d", index),
@@ -161,13 +162,27 @@ func TestListPluginAssignmentsBoundsResolverWorkInSQL(t *testing.T) {
 			WorkosLastEventID: pgtype.Text{},
 		})
 		require.NoError(t, err)
+		if index == maxPluginMembers {
+			beyondBoundRole = role.RoleUrn
+		}
 	}
 
-	result, err := testPluginTargets(conn).ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
+	service := testPluginTargets(conn)
+	result, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	require.True(t, result.Truncated)
 	require.Len(t, result.Assignments, maxPluginMembers)
 	require.Equal(t, "everyone", result.Assignments[0].Kind)
+
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Beyond Bound", "beyond-bound")
+	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: beyondBoundRole})
+	require.NoError(t, err)
+	detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.True(t, detail.AssignmentDetailsComplete)
+	require.False(t, detail.AssignmentsTruncated)
+	require.Len(t, detail.Assignments, 1)
+	require.Equal(t, "Role 100", detail.Assignments[0].DisplayName)
 }
 
 func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *testing.T) {
@@ -187,7 +202,7 @@ func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *te
 	longValue := strings.Repeat("long-attribute-value-", 8)
 	_, err = directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID: principal.OrganizationID, UserID: pgtype.Text{}, WorkosDirectoryUserID: "directory-user-" + uuid.NewString(),
-		Email: conv.ToPGText("member@example.test"), Attributes: []byte(`{"department_name":"` + longValue + `"}`),
+		Email: conv.ToPGText("member@example.test"), Attributes: []byte(`{"department_name":"` + longValue + `","manager_email":"private@example.test"}`),
 		WorkosCreatedAt: conv.ToPGTimestamptz(now), WorkosUpdatedAt: conv.ToPGTimestamptz(now), WorkosLastEventID: pgtype.Text{}, RestoreDeleted: true,
 	})
 	require.NoError(t, err)
@@ -199,6 +214,7 @@ func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *te
 	for _, assignment := range result.Assignments {
 		byName[assignment.DisplayName] = assignment
 	}
+	require.NotContains(t, byName, "manager_email: private@example.test")
 	for displayName, expectedURN := range map[string]string{
 		"Custom Role":                   role.RoleUrn,
 		"department_name: " + longValue: directory.AttributePrincipal("department_name", longValue),
@@ -209,6 +225,15 @@ func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *te
 		require.NoError(t, err)
 		require.Equal(t, expectedURN, resolved)
 	}
+
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Sensitive Attribute", "sensitive-attribute")
+	sensitiveURN := directory.AttributePrincipal("manager_email", "private@example.test")
+	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: sensitiveURN})
+	require.NoError(t, err)
+	detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.False(t, detail.AssignmentDetailsComplete)
+	require.Empty(t, detail.Assignments)
 }
 
 func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) {

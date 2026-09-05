@@ -2583,9 +2583,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2593,6 +2593,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND projects.organization_id = @organization_id
@@ -2623,9 +2641,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.organization_id = @organization_id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2633,6 +2651,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.id = @plugin_id
   AND p.project_id = @project_id
   AND p.organization_id = @organization_id
@@ -2750,6 +2786,8 @@ WITH active_roles AS (
     'Everyone'::text AS display_name,
     NULL::bigint AS member_count,
     '*'::text AS principal_urn
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR '*' = ANY(@selected_principal_urns::text[])
   UNION ALL
   SELECT
     1::int,
@@ -2764,6 +2802,8 @@ WITH active_roles AS (
     AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
     AND ora.user_id IS NOT NULL
     AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY(@selected_principal_urns::text[])
   GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
   UNION ALL
   SELECT
@@ -2785,6 +2825,10 @@ WITH active_roles AS (
   WHERE dg.organization_id = @organization_id
     AND dg.deleted IS FALSE
     AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY(@selected_principal_urns::text[])
+    )
   GROUP BY dg.id, dg.name
   UNION ALL
   SELECT
@@ -2808,6 +2852,12 @@ WITH active_roles AS (
     AND du.workos_deleted IS FALSE
     AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
     AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY(@selected_principal_urns::text[])
+    )
   GROUP BY attribute.key, attribute.value
 )
 SELECT kind, display_name, member_count, principal_urn
