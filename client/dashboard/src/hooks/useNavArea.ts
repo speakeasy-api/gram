@@ -1,10 +1,9 @@
 import { useLocation } from "react-router";
 
 export type NavArea =
-  | "Observe"
-  | "Secure"
-  | "Connect"
-  | "Distribute"
+  | "Observability"
+  | "MCP Gateway"
+  | "Security and Policy"
   | "Organization";
 
 // First path segment after /projects/:slug/ → sidebar area. Kept as a plain
@@ -12,32 +11,29 @@ export type NavArea =
 // routes.tsx imports every page component, which drags the whole app graph
 // into any test that renders a component using this hook.
 const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
-  // Observe
-  costs: "Observe",
-  insights: "Observe",
-  "agent-sessions": "Observe",
-  "org-memory": "Observe",
-  logs: "Observe",
-  employees: "Observe",
-  // Secure
-  watchdog: "Secure",
-  "risk-overview": "Secure",
-  "risk-policies": "Secure",
-  "risk-events": "Secure",
-  "shadow-mcp": "Secure",
-  "request-access": "Secure",
-  "detection-rules": "Secure",
-  // Connect
-  sources: "Connect",
-  catalog: "Connect",
-  playground: "Connect",
-  deployments: "Connect",
-  // Distribute
-  mcp: "Distribute",
-  skills: "Distribute",
-  plugins: "Distribute",
-  environments: "Distribute",
-  assistants: "Distribute",
+  // Observability
+  costs: "Observability",
+  insights: "Observability",
+  "agent-sessions": "Observability",
+  "org-memory": "Observability",
+  logs: "Observability",
+  employees: "Observability",
+  // Security and Policy
+  watchdog: "Security and Policy",
+  "risk-overview": "Security and Policy",
+  "risk-policies": "Security and Policy",
+  "risk-events": "Security and Policy",
+  "shadow-mcp": "Security and Policy",
+  "request-access": "Security and Policy",
+  "detection-rules": "Security and Policy",
+  // MCP Gateway
+  mcp: "MCP Gateway",
+  playground: "MCP Gateway",
+  deployments: "MCP Gateway",
+  skills: "MCP Gateway",
+  plugins: "MCP Gateway",
+  environments: "MCP Gateway",
+  assistants: "MCP Gateway",
 };
 
 // Org-level pages that should not read as "Organization" administration.

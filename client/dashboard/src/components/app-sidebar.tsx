@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -92,7 +92,6 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
-  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
@@ -117,14 +116,6 @@ export function AppSidebar({
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
-  const isWideSidebarDetailRoute =
-    routes.mcp.details.active ||
-    routes.mcp.x.active ||
-    routes.mcp.gateway.active ||
-    routes.mcp.builtIn.active ||
-    routes.skills.detail.active ||
-    routes.plugins.detail.active;
-
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
     // Shaped like the real list below — 3 top-level items, the divider, the
@@ -136,6 +127,32 @@ export function AppSidebar({
         divideAfter={3}
         className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
       />
+    );
+  } else if (routes.mcp.add.active) {
+    // Adding a server is a focused flow: no nav competing with the choice,
+    // just the way back — in the same spot the detail sidebars put theirs.
+    // Standard width, so arriving from the MCP index doesn't shift the page.
+    sidebarContent = (
+      <SidebarMenu className="gap-1 group-data-[collapsible=icon]:px-0">
+        <SidebarMenuItem>
+          {/* Rule matches the breadcrumb bar's on the other side of the pane
+              boundary: same vertical padding and text size, so the two read as
+              one line across the sidebar edge. */}
+          <Link
+            to={routes.mcp.href()}
+            // -mt-2 cancels SidebarContent's 8px top padding so the row starts
+            // flush against the sidebar header rule; py-3.5 then centres the
+            // label in the band, landing its bottom border level with the
+            // breadcrumb bar's across the pane boundary.
+            className="text-foreground hover:bg-accent trans border-foreground/10 -mt-2 flex items-center gap-2 border-b px-4 py-3.5 text-sm hover:no-underline group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <ArrowLeft className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="truncate group-data-[collapsible=icon]:hidden">
+              Back to all MCPs
+            </span>
+          </Link>
+        </SidebarMenuItem>
+      </SidebarMenu>
     );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
@@ -188,9 +205,9 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observe group */}
+          {/* Observability group */}
           <ScopeGatedNavGroup
-            label="Observe"
+            label="Observability"
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
               // First in the group: an identity is the subject the rest of
@@ -209,9 +226,25 @@ export function AppSidebar({
             ]}
           />
 
-          {/* Secure group */}
+          {/* MCP Gateway group */}
           <ScopeGatedNavGroup
-            label="Secure"
+            label="MCP Gateway"
+            Icon={(p) => <Icon {...p} name="hammer" />}
+            items={[
+              { item: routes.mcp, ...accessFor(routes.mcp) },
+              ...(isAssistantsEnabled
+                ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
+                : []),
+              { item: routes.skills, ...accessFor(routes.skills) },
+              { item: routes.plugins, ...accessFor(routes.plugins) },
+              { item: routes.environments, ...accessFor(routes.environments) },
+              { item: routes.playground, ...accessFor(routes.playground) },
+            ]}
+          />
+
+          {/* Security and Policy group */}
+          <ScopeGatedNavGroup
+            label="Security and Policy"
             Icon={(p) => <Icon {...p} name="shield" />}
             items={[
               // Watchdog supersedes Risk Overview: exactly one of the two
@@ -231,40 +264,6 @@ export function AppSidebar({
             ]}
           />
 
-          {/* Connect group */}
-          <ScopeGatedNavGroup
-            label="Connect"
-            Icon={(p) => <Icon {...p} name="plug" />}
-            items={[
-              { item: routes.sources, ...accessFor(routes.sources) },
-              { item: routes.catalog, ...accessFor(routes.catalog) },
-              { item: routes.playground, ...accessFor(routes.playground) },
-              ...(isDeploymentsPageEnabled
-                ? [
-                    {
-                      item: routes.deployments,
-                      ...accessFor(routes.deployments),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-
-          {/* Distribute group */}
-          <ScopeGatedNavGroup
-            label="Distribute"
-            Icon={(p) => <Icon {...p} name="hammer" />}
-            items={[
-              { item: routes.mcp, ...accessFor(routes.mcp) },
-              ...(isAssistantsEnabled
-                ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
-                : []),
-              { item: routes.skills, ...accessFor(routes.skills) },
-              { item: routes.plugins, ...accessFor(routes.plugins) },
-              { item: routes.environments, ...accessFor(routes.environments) },
-            ]}
-          />
-
           {/* Settings — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.settings}
@@ -276,15 +275,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar
-      collapsible="icon"
-      style={
-        isWideSidebarDetailRoute
-          ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
-          : undefined
-      }
-      {...props}
-    >
+    <Sidebar collapsible="icon" {...props}>
       {/* Logo row only — the project switcher now lives in the page header.
           The row is exactly --header-height and closes with the same crosshatch
           rule the page header uses, so the divider reads as one line running

@@ -23,7 +23,7 @@ type UnproxiedMcpOverviewTabProps = {
 /**
  * A scoped-down stand-in for MCPOverviewTab: unproxied servers have no
  * Gram-proxied traffic, so the summary cards, top-tools breakdowns, and
- * comparison stats that tab shows (all sourced from Gram's own proxy
+ * comparison stats that tab shows (all sourced from Speakeasy's own proxy
  * telemetry) don't apply. This shows only a daily call-count chart, sourced
  * from Shadow MCP's hook-reported traces matched by URL. Plugin/publish
  * status is backend-agnostic, so it's shown the same as every other server.

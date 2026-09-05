@@ -59,8 +59,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
-      { route: routes.sources, scope: readWrite },
-      { route: routes.catalog, scope: ["project:read", "mcp:write"] },
       {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],

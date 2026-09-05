@@ -219,11 +219,11 @@ export default function CatalogDetail(): JSX.Element {
               <Text muted className="mt-2">
                 The requested MCP server could not be found in the catalog.
               </Text>
-              <routes.catalog.Link className="mt-4 inline-block">
+              <routes.mcp.add.catalog.Link className="mt-4 inline-block">
                 <Button variant="secondary" className="mt-4">
                   <Button.Text>Back to Catalog</Button.Text>
                 </Button>
-              </routes.catalog.Link>
+              </routes.mcp.add.catalog.Link>
             </Card.Content>
           </Card>
         </Page.Body>

@@ -1,5 +1,16 @@
 import "./App.css";
 import NotFound from "@/pages/not-found/NotFound";
+import {
+  RedirectToAddFunction,
+  RedirectToAddOpenAPI,
+  RedirectToAddRemoteMcp,
+  RedirectToAddTunneledMcp,
+  RedirectToAddUnproxiedMcp,
+  RedirectToCatalog,
+  RedirectToCatalogDetail,
+  RedirectToSourceDetail,
+  RedirectToSources,
+} from "@/pages/mcp/add/LegacyRedirects";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -393,6 +404,7 @@ const RouteProvider = () => {
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            {legacyMcpRedirects}
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
@@ -455,6 +467,31 @@ const routesToNavActions = (
     .map(([key, route]) =>
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
+
+// S-853 moved Sources and the catalog under /mcp. These keep the old top-level
+// URLs resolving. They live here rather than in the route structure so they
+// stay out of the sidebar, breadcrumbs, and the command palette.
+const legacyMcpRedirects = (
+  <>
+    <Route path="sources">
+      <Route index element={<RedirectToSources />} />
+      <Route path="add-openapi" element={<RedirectToAddOpenAPI />} />
+      <Route path="add-function" element={<RedirectToAddFunction />} />
+      <Route path="add-from-catalog" element={<RedirectToCatalog />} />
+      <Route path="add-remote-mcp" element={<RedirectToAddRemoteMcp />} />
+      <Route path="add-tunneled-mcp" element={<RedirectToAddTunneledMcp />} />
+      <Route path="add-unproxied-mcp" element={<RedirectToAddUnproxiedMcp />} />
+      <Route
+        path=":sourceKind/:sourceSlug"
+        element={<RedirectToSourceDetail />}
+      />
+    </Route>
+    <Route path="catalog">
+      <Route index element={<RedirectToCatalog />} />
+      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
+    </Route>
+  </>
+);
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes

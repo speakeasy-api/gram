@@ -31,12 +31,14 @@ export function SetupGuideCallout({
   if (!guide || (!guide.openGuide && !guide.only)) return null;
 
   return (
-    <StatusBanner tone="warning">
-      <div className="flex flex-col gap-4 p-6">
-        <div className="flex max-w-md flex-col gap-3">
+    <StatusBanner tone="information" className="mb-8">
+      {/* Copy left, actions right on one row: the banner is a short aside, and
+          stacking the buttons under it gave it the height of a page section. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <BookOpen className="text-warning-foreground h-4 w-4 shrink-0" />
-            <Text className="text-warning-foreground text-base font-semibold">
+            <BookOpen className="text-default-information h-4 w-4 shrink-0" />
+            <Text className="text-default-information text-sm font-semibold">
               Setup guide available
             </Text>
           </div>
@@ -44,7 +46,7 @@ export function SetupGuideCallout({
             {describeSetupWork(guide.only)}
           </Text>
         </div>
-        <div className="flex items-center gap-2 self-end">
+        <div className="flex shrink-0 items-center gap-2">
           {guide.openGuide && (
             <Button size="sm" variant="primary" onClick={guide.openGuide}>
               <Button.Text>Read the guide</Button.Text>
@@ -74,6 +76,6 @@ export function SetupGuideCallout({
 
 function describeSetupWork(only: MCPSetupGuide | undefined): string {
   if (only)
-    return `${only.title} needs some setup before it will work in Gram.`;
-  return "This server needs some setup before it will work in Gram.";
+    return `${only.title} needs some setup before it will work in Speakeasy.`;
+  return "This server needs some setup before it will work in Speakeasy.";
 }

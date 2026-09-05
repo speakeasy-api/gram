@@ -1,4 +1,3 @@
-import { InputDialog } from "@/components/input-dialog";
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
@@ -12,27 +11,15 @@ import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
-import {
-  useProjectSlugForRequests,
-  useSdkClient,
-  useSlugs,
-} from "@/contexts/Sdk";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { createDefaultGatewayEndpoint } from "@/lib/mcpEndpoints";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
-import {
-  invalidateAllMcpEndpoints,
-  useMcpEndpoints,
-} from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import {
-  invalidateAllMetaMcpServers,
-  useMetaMcpServers,
-} from "@gram/client/react-query/metaMcpServers.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import {
   indexMcpActivity,
   lookupMcpActivity,
@@ -45,7 +32,6 @@ import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
-import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
@@ -116,9 +102,6 @@ export const MCPPage = (): JSX.Element => {
 function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const { orgSlug } = useSlugs();
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
   // (toolset-backed) MCP servers also source from mcp_servers. Until then the
@@ -284,10 +267,6 @@ function MCPOverview() {
     isGatewaysError;
 
   const [viewMode, setViewMode] = useViewMode();
-  const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
-  const [newMcpServerName, setNewMcpServerName] = useState("");
-  const [newGatewayDialogOpen, setNewGatewayDialogOpen] = useState(false);
-  const [newGatewayName, setNewGatewayName] = useState("");
   const [search, setSearch] = useState("");
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
@@ -362,68 +341,16 @@ function MCPOverview() {
     filteredMcpServers.length === 0 &&
     filteredGateways.length === 0;
 
-  const handleCreateMcpServerSubmit = async () => {
-    const result = await client.toolsets.create({
-      createToolsetRequestBody: {
-        name: newMcpServerName,
-      },
-    });
-
-    toast.success(`MCP server "${result.name}" created`);
-
-    routes.mcp.details.tools.goTo(result.slug);
-  };
-
-  // Creation is two calls: the gateway, then its default address. The address
-  // is best-effort (createDefaultGatewayEndpoint warns rather than throwing),
-  // so a failure there still lands the user on a usable gateway page.
-  const handleCreateGatewaySubmit = async () => {
-    const gateway = await client.metaMcp.create({
-      createMetaMcpServerForm: { name: newGatewayName },
-    });
-
-    if (orgSlug) {
-      await createDefaultGatewayEndpoint(
-        client,
-        gateway.id,
-        gateway.name,
-        orgSlug,
-      );
-    }
-
-    await Promise.all([
-      invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
-      invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-    ]);
-    toast.success(`Gateway "${gateway.name}" created`);
-    routes.mcp.gateway.overview.goTo(gateway.id);
-  };
-
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
-      <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
+      <Button size="sm" onClick={() => routes.mcp.add.goTo()}>
         <Button.LeftIcon>
           <Plus />
         </Button.LeftIcon>
-        <Button.Text>New MCP Server</Button.Text>
+        <Button.Text>Add new</Button.Text>
       </Button>
     </RequireScope>
   );
-
-  const newGatewayButton = gatewaysEnabled ? (
-    <RequireScope scope="mcp:write" level="component">
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => setNewGatewayDialogOpen(true)}
-      >
-        <Button.LeftIcon>
-          <Plus />
-        </Button.LeftIcon>
-        <Button.Text>New Gateway</Button.Text>
-      </Button>
-    </RequireScope>
-  ) : null;
 
   const refreshErrorIndicator = (
     <SimpleTooltip tooltip="We couldn't reach the server to refresh this list. Showing the most recently loaded data.">
@@ -434,58 +361,6 @@ function MCPOverview() {
         <Badge.Text>Couldn&apos;t refresh</Badge.Text>
       </Badge>
     </SimpleTooltip>
-  );
-
-  const newMcpServerDialog = (
-    <InputDialog
-      open={newMcpDialogOpen}
-      onOpenChange={setNewMcpDialogOpen}
-      title="Create MCP Server"
-      description={`Create a new MCP server`}
-      submitButtonText="Create"
-      inputs={{
-        label: "MCP server name",
-        placeholder: "My MCP Server",
-        value: newMcpServerName,
-        onChange: setNewMcpServerName,
-        onSubmit: () => void handleCreateMcpServerSubmit(),
-        validate: (value) => value.length > 0 && value.length <= 40,
-        hint: (value) => (
-          <div className="flex w-full justify-between">
-            <p className="text-destructive">
-              {value.length > 40 && "Must be 40 characters or less"}
-            </p>
-            <p>{value.length}/40</p>
-          </div>
-        ),
-      }}
-    />
-  );
-
-  const newGatewayDialog = (
-    <InputDialog
-      open={newGatewayDialogOpen}
-      onOpenChange={setNewGatewayDialogOpen}
-      title="Create Gateway"
-      description="One MCP endpoint fronting a set of MCP servers. Add members after creating it."
-      submitButtonText="Create"
-      inputs={{
-        label: "Gateway name",
-        placeholder: "My Gateway",
-        value: newGatewayName,
-        onChange: setNewGatewayName,
-        onSubmit: () => void handleCreateGatewaySubmit(),
-        validate: (value) => value.length > 0 && value.length <= 40,
-        hint: (value) => (
-          <div className="flex w-full justify-between">
-            <p className="text-destructive">
-              {value.length > 40 && "Must be 40 characters or less"}
-            </p>
-            <p>{value.length}/40</p>
-          </div>
-        ),
-      }}
-    />
   );
 
   const builtInSection = (
@@ -508,6 +383,28 @@ function MCPOverview() {
     </Page.Section>
   );
 
+  // The material servers are built from, one step back from the inventory
+  // itself: sources lost their own section when MCP became the inventory, and
+  // this is the way in from the app rather than from a CLI link.
+  const advancedSection = (
+    <Page.Section>
+      <Page.Section.Title area="" className="text-display-xs">
+        Advanced
+      </Page.Section.Title>
+      <Page.Section.Description>
+        The OpenAPI documents and functions this project deploys, and the tools
+        they produce.
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <Button variant="secondary" asChild>
+          <routes.mcp.sources.Link>
+            <Button.Text>View sources</Button.Text>
+          </routes.mcp.sources.Link>
+        </Button>
+      </Page.Section.Body>
+    </Page.Section>
+  );
+
   if (
     !isLoading &&
     !hasRefreshError &&
@@ -519,8 +416,7 @@ function MCPOverview() {
       <>
         <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
-        {newMcpServerDialog}
-        {newGatewayDialog}
+        {advancedSection}
       </>
     );
   }
@@ -532,12 +428,11 @@ function MCPOverview() {
         {hasRefreshError ? (
           <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
         ) : null}
-        <Page.Section.CTA>{newGatewayButton}</Page.Section.CTA>
         <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
-          Sources exposed as MCP servers. These include all types of sources
-          such as OpenAPI, functions, third-party servers from the catalog, and
-          custom remote MCPs imported by URL.
+          Every MCP server this organization runs, however it is reached —
+          picked from the catalog, hosted remotely, tunneled, or built from your
+          own API.
           {gatewaysEnabled &&
             " Gateways front a set of these servers behind a single URL."}
         </Page.Section.Description>
@@ -684,8 +579,7 @@ function MCPOverview() {
         </Page.Section.Body>
       </Page.Section>
       {builtInSection}
-      {newMcpServerDialog}
-      {newGatewayDialog}
+      {advancedSection}
     </>
   );
 }
