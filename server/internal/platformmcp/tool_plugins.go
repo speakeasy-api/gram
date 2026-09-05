@@ -25,7 +25,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "Set Plugin Assignments",
 		Description: setDescription,
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
-		return pluginToolCall(ctx, func(principal Principal) (SetPluginAssignmentsOutput, error) {
+		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (SetPluginAssignmentsOutput, error) {
 			return plugins.SetPluginAssignments(ctx, principal, input)
 		})
 	})
@@ -36,7 +36,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Description: "List up to 100 existing roles and directory assignment targets that can receive plugins in an explicit project. Each assignment has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete assignment set.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
-		return pluginToolCall(ctx, func(principal Principal) (ListPluginAssignmentsOutput, error) {
+		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginAssignmentsOutput, error) {
 			return plugins.ListPluginAssignments(ctx, principal, input)
 		})
 	})
