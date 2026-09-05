@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ import {
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
 import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
@@ -535,6 +537,7 @@ function ObservabilityPluginCard({
   ) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
+  const [isRotateOpen, setIsRotateOpen] = useState(false);
   const isConnected = !!publishStatus?.connected;
   const installTarget =
     isConnected && publishStatus?.repoOwner && publishStatus.repoName
@@ -575,13 +578,27 @@ function ObservabilityPluginCard({
             ? "Included in your marketplace"
             : "Available as a direct download"}
         </Text>
-        <DropdownMenu
-          open={isDownloadMenuOpen}
-          onOpenChange={onDownloadMenuOpenChange}
-        >
-          <DropdownMenuTrigger asChild>
-            <PluginInstallButton size="sm" />
-          </DropdownMenuTrigger>
+        <div className="flex items-center gap-1">
+          <RequireScope scope="org:admin" level="component">
+            <MoreActions
+              triggerAriaLabel="Observability plugin actions"
+              actions={[
+                {
+                  label: "Rotate credential",
+                  onClick: () => {
+                    setIsRotateOpen(true);
+                  },
+                },
+              ]}
+            />
+          </RequireScope>
+          <DropdownMenu
+            open={isDownloadMenuOpen}
+            onOpenChange={onDownloadMenuOpenChange}
+          >
+            <DropdownMenuTrigger asChild>
+              <PluginInstallButton size="sm" />
+            </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               disabled={!installTarget}
@@ -644,7 +661,15 @@ function ObservabilityPluginCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
+
+      <RotateObservabilityCredentialDialog
+        open={isRotateOpen}
+        onOpenChange={setIsRotateOpen}
+        isDownloading={isDownloading}
+        onDownload={onDownload}
+      />
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet
           (real per-platform slugs, API key minting, full instructions)
