@@ -14,6 +14,6 @@ CREATE ROLE IF NOT EXISTS `marts_reader` SETTINGS
   `max_concurrent_queries_for_user` = 4 CONST;
 -- Create a non-login principal with only the source access required by the views.
 CREATE USER IF NOT EXISTS `marts_definer` HOST NONE;
-GRANT SELECT ON `default`.`attribute_metrics_summaries` TO `marts_definer`;
+GRANT SELECT ON `gram`.`attribute_metrics_summaries` TO `marts_definer`;
 -- Grant access to present and future approved mart views.
 GRANT SELECT ON `marts`.* TO `marts_reader`;
