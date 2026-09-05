@@ -2379,6 +2379,14 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   backchannel_logout_supported BOOLEAN,
   authorization_response_iss_parameter_supported BOOLEAN,
 
+  -- Operator-pinned scope request, sent verbatim in place of the discovered
+  -- scope set. NULL is unset; an empty array on create or update clears it.
+  scope_override TEXT[],
+  -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
+  -- learned. False once a login succeeded only after the resource parameter
+  -- was dropped, or when an operator states it.
+  resource_indicator_supported BOOLEAN,
+
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
