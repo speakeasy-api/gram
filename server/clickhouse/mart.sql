@@ -25,98 +25,23 @@ GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 
 GRANT SELECT ON marts.* TO marts_reader;
 
--- Daily adoption of externally observed AI clients. Gram-hosted inference is
--- excluded so platform work is not attributed to customer users.
-CREATE VIEW IF NOT EXISTS marts.daily_agent_adoption
+-- Completed UTC weeks only. Counts span all organizations and are per surface:
+-- a person using multiple surfaces counts in each, so rows are not additive.
+-- Unknown surface strings are never published verbatim.
+CREATE VIEW IF NOT EXISTS marts.weekly_ai_surface_adoption
 DEFINER = marts_definer SQL SECURITY DEFINER
 AS
 SELECT
-    toDate(time_bucket) AS usage_date,
-    multiIf(
-        hook_source IN ('claude-code', 'codex', 'cowork', 'cursor', 'litellm', 'local', 'mcp', 'openclaw', 'opencode'), hook_source,
+    toMonday(time_bucket) AS week_start,
+    if(
+        hook_source IN ('claude-code', 'codex', 'cowork', 'cursor', 'litellm', 'local', 'mcp', 'openclaw', 'opencode'),
+        hook_source,
         'other'
     ) AS surface,
-    if(account_type = 'personal', 'personal', 'team') AS account_kind,
-    uniqExactIf(user_email, user_email != '') AS active_users,
-    uniqExactIfMerge(total_chats) AS conversations,
-    toInt64(sumIfMerge(total_input_tokens)) AS input_tokens,
-    toInt64(sumIfMerge(total_output_tokens)) AS output_tokens,
-    toInt64(sumIfMerge(cache_read_input_tokens)) AS cache_read_tokens,
-    toInt64(sumIfMerge(cache_creation_input_tokens)) AS cache_creation_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens)) AS llm_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens)) AS managed_tokens,
-    toUInt64(if(
-        uniqExactIfMerge(unique_tool_calls) = 0,
-        countIfMerge(total_tool_calls),
-        uniqExactIfMerge(unique_tool_calls)
-    )) AS tool_calls
+    uniqExactIf(user_email, user_email != '') AS active_users
 FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
+  AND time_bucket < toDateTime(toMonday(now('UTC')), 'UTC')
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
-GROUP BY usage_date, surface, account_kind
-HAVING active_users >= 10;
-
--- Daily model adoption. Exact model names are retained only for cohorts large
--- enough to satisfy the same privacy threshold.
-CREATE VIEW IF NOT EXISTS marts.daily_model_usage
-DEFINER = marts_definer SQL SECURITY DEFINER
-AS
-SELECT
-    toDate(time_bucket) AS usage_date,
-    multiIf(
-        provider IN ('anthropic', 'aws-bedrock', 'azure-openai', 'cursor', 'google', 'openai', 'openrouter'), provider,
-        provider = '', 'unknown',
-        'other'
-    ) AS provider_name,
-    model AS model_name,
-    uniqExactIf(user_email, user_email != '') AS active_users,
-    uniqExactIfMerge(total_chats) AS conversations,
-    toInt64(sumIfMerge(total_input_tokens)) AS input_tokens,
-    toInt64(sumIfMerge(total_output_tokens)) AS output_tokens,
-    toInt64(sumIfMerge(cache_read_input_tokens)) AS cache_read_tokens,
-    toInt64(sumIfMerge(cache_creation_input_tokens)) AS cache_creation_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens)) AS llm_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens)) AS managed_tokens
-FROM gram.attribute_metrics_summaries
-WHERE is_active = 1
-  AND model != ''
-  AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
-GROUP BY usage_date, provider_name, model_name
-HAVING active_users >= 10;
-
--- Daily adoption by coarse job function. Free-form department names and job
--- titles are used only inside the definer query and never leave the view.
-CREATE VIEW IF NOT EXISTS marts.daily_function_adoption
-DEFINER = marts_definer SQL SECURITY DEFINER
-AS
-WITH lowerUTF8(concat(department_name, ' ', job_title)) AS employee_context
-SELECT
-    toDate(time_bucket) AS usage_date,
-    multiIf(
-        employee_context = ' ', 'unknown',
-        match(employee_context, '(engineering|engineer|developer|software|platform|infrastructure|devops|sre|security|quality|qa|data)'), 'engineering',
-        match(employee_context, '(product|design|research|ux|user experience)'), 'product_design',
-        match(employee_context, '(sales|business development|revenue|account executive|solutions)'), 'sales',
-        match(employee_context, '(marketing|growth|brand|content|communications)'), 'marketing',
-        match(employee_context, '(customer success|customer support|support|services)'), 'customer_success',
-        match(employee_context, '(finance|legal|people|human resources|operations|recruit|talent)'), 'business_operations',
-        'other'
-    ) AS employee_function,
-    uniqExactIf(user_email, user_email != '') AS active_users,
-    uniqExactIfMerge(total_chats) AS conversations,
-    toInt64(sumIfMerge(total_input_tokens)) AS input_tokens,
-    toInt64(sumIfMerge(total_output_tokens)) AS output_tokens,
-    toInt64(sumIfMerge(cache_read_input_tokens)) AS cache_read_tokens,
-    toInt64(sumIfMerge(cache_creation_input_tokens)) AS cache_creation_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens)) AS llm_tokens,
-    toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens)) AS managed_tokens,
-    toUInt64(if(
-        uniqExactIfMerge(unique_tool_calls) = 0,
-        countIfMerge(total_tool_calls),
-        uniqExactIfMerge(unique_tool_calls)
-    )) AS tool_calls
-FROM gram.attribute_metrics_summaries
-WHERE is_active = 1
-  AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
-GROUP BY usage_date, employee_function
+GROUP BY week_start, surface
 HAVING active_users >= 10;
