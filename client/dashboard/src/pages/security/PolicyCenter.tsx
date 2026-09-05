@@ -57,6 +57,7 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
+import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import {
   invalidateAllRiskListPolicies,
   useRiskListPolicies,
@@ -91,13 +92,16 @@ import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
   ALL_POLICY_MESSAGE_TYPES,
+  PRESIDIO_CATEGORIES,
   categoriesToPayload,
-  policyMessageTypesForForm,
+  policyToCategories,
 } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
@@ -109,6 +113,7 @@ import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
+import { effectivePolicyScopeKinds } from "./policy-scope";
 import {
   togglePolicyEnabledVariables,
   useTogglePolicyEnabled,
@@ -387,10 +392,20 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_response",
 ]);
 
-function policyMessageTypesForDisplay(
-  messageTypes?: string[],
-): PolicyMessageType[] {
-  return [...policyMessageTypesForForm(messageTypes)];
+function policyCategoriesForScope(policy: RiskPolicy): Set<RuleCategory> {
+  if (isPromptPolicy(policy)) return new Set(["prompt_policy"]);
+
+  const categories = policyToCategories(
+    policy.sources,
+    policy.presidioEntities,
+  );
+  if (policy.sources.includes("presidio") && !policy.presidioEntities?.length) {
+    for (const category of [...PRESIDIO_CATEGORIES, "off_policy" as const]) {
+      categories.add(category);
+    }
+  }
+  if (policy.customRuleIds?.length) categories.add("custom");
+  return categories;
 }
 
 function policyAudienceSummary(row: PolicyRow): string {
@@ -632,12 +647,21 @@ function PolicyCenterContent() {
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+  } = useRiskCategories();
+  const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
     isError: quarantinesError,
     refetch: refetchQuarantines,
   } = useRiskListSessionQuarantines();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
+  const recommendedScopesFlag = useFeatureFlag(
+    FEATURE_FLAGS.riskRecommendedScopes,
+  );
+  const recommendedScopesEnabled = recommendedScopesFlag.status === "enabled";
 
   const policyRows = useMemo(
     (): PolicyRow[] =>
@@ -895,31 +919,67 @@ function PolicyCenterContent() {
       header: "Applies To",
       width: "2.1fr",
       render: (row) => {
-        const types = policyMessageTypesForDisplay(row.policy.messageTypes);
-        const typeSet = new Set(types);
-        const tooltip = types
-          .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-          .join(", ");
-
-        if (
-          typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
-          hasOnlyToolCallMessageTypes(typeSet)
-        ) {
+        if (recommendedScopesEnabled && !categoriesData) {
           return (
-            <SimpleTooltip tooltip={tooltip}>
-              <span className="text-muted-foreground text-sm">
-                {messageTypesSummary(typeSet)}
-              </span>
-            </SimpleTooltip>
+            <span className="text-muted-foreground text-sm">
+              {categoriesLoading && !categoriesError
+                ? "Loading scope..."
+                : "Scope unavailable"}
+            </span>
           );
         }
 
+        const scope = effectivePolicyScopeKinds({
+          categories: policyCategoriesForScope(row.policy),
+          detectionScopes: recommendedScopesEnabled
+            ? row.policy.detectionScopes
+            : undefined,
+          categoryDefinitions: recommendedScopesEnabled
+            ? categoriesData?.categories
+            : undefined,
+          messageTypes: row.policy.messageTypes,
+          scopeInclude: row.policy.scopeInclude,
+          scopeExempt: row.policy.scopeExempt,
+        });
+        const types = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
+          scope.kinds.has(type),
+        );
+        const typeSet = new Set(types);
+        const labels = [
+          ...types.map((type) => POLICY_MESSAGE_TYPE_META[type].label),
+          ...[...scope.additionalKinds].map(() => "Prompt Attachments"),
+        ];
+        let summary: string;
+        if (labels.length === 0) {
+          summary = scope.custom ? "Custom scope" : "Nothing in scope";
+        } else if (
+          scope.additionalKinds.size === 0 &&
+          (typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
+            hasOnlyToolCallMessageTypes(typeSet))
+        ) {
+          summary = messageTypesSummary(typeSet);
+        } else {
+          summary = labels.join(", ");
+        }
+        if (scope.custom && labels.length > 0) summary += " + custom CEL";
+
+        let tooltipSummary = labels.join(", ");
+        if (labels.length === 0) {
+          tooltipSummary = scope.custom
+            ? "Additional or custom scope applies"
+            : "No message types in scope";
+        }
+        const tooltip = [
+          tooltipSummary,
+          ...(scope.custom && labels.length > 0
+            ? ["Custom CEL scope also applies"]
+            : []),
+        ].join(". ");
+
         return (
-          <span className="text-muted-foreground text-sm">
-            {types
-              .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-              .join(", ")}
-          </span>
+          <SimpleTooltip tooltip={tooltip}>
+            <span className="text-muted-foreground text-sm">{summary}</span>
+          </SimpleTooltip>
         );
       },
     },

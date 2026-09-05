@@ -37,6 +37,8 @@ import { Label } from "@/components/ui/Label";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { StepContainer } from "../step-container";
 import {
   RULE_CATEGORY_META,
@@ -47,6 +49,11 @@ import {
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
+import {
+  effectiveScopeKinds,
+  kindScopeForMessageTypes,
+  replaceCategoryDetectionScope,
+} from "@/pages/security/policy-scope";
 import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
@@ -161,9 +168,7 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
   "assistant_message",
 ];
 
-// The risk policy API returns `action`/`messageTypes` as free-form strings, so
-// values are validated before entering local state — an unknown value would
-// otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
+// The risk policy API returns `action` as a free-form string.
 function isPolicyAction(value: unknown): value is PolicyAction {
   return (
     value === "flag" ||
@@ -171,10 +176,6 @@ function isPolicyAction(value: unknown): value is PolicyAction {
     value === "warn" ||
     value === "quarantine"
   );
-}
-
-function isPolicyMessageType(value: unknown): value is PolicyMessageType {
-  return (MESSAGE_TYPES as string[]).includes(value as string);
 }
 
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -235,6 +236,10 @@ export function ConfigurePoliciesStep({
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
+  const recommendedScopesFlag = useFeatureFlag(
+    FEATURE_FLAGS.riskRecommendedScopes,
+  );
+  const recommendedScopesEnabled = recommendedScopesFlag.status === "enabled";
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
@@ -298,7 +303,21 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          messageTypes: [...nextCfg.messageTypes],
+          ...(recommendedScopesEnabled
+            ? {
+                messageTypes: [],
+                detectionScopes: replaceCategoryDetectionScope(
+                  existing.detectionScopes,
+                  {
+                    category: cat,
+                    ...kindScopeForMessageTypes([...nextCfg.messageTypes]),
+                  },
+                ),
+              }
+            : {
+                messageTypes: [...nextCfg.messageTypes],
+                detectionScopes: [],
+              }),
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -327,13 +346,26 @@ export function ConfigurePoliciesStep({
         const serverAction = isPolicyAction(existing.action)
           ? existing.action
           : next[cat].action;
-        const serverMessageTypes = new Set<PolicyMessageType>(
-          (existing.messageTypes ?? []).filter(isPolicyMessageType),
+        const detectionScope = existing.detectionScopes?.find(
+          (scope) => scope.category === cat,
         );
-        // Server returned no recognizable message types — keep local defaults
-        // rather than rendering an empty ("Off") policy.
-        if (serverMessageTypes.size === 0) {
-          for (const t of next[cat].messageTypes) serverMessageTypes.add(t);
+        const effectiveScope = detectionScope
+          ? effectiveScopeKinds(detectionScope)
+          : null;
+        let serverMessageTypes: Set<PolicyMessageType>;
+        if (recommendedScopesEnabled) {
+          serverMessageTypes =
+            effectiveScope === null || effectiveScope.custom
+              ? new Set(next[cat].messageTypes)
+              : new Set(effectiveScope.kinds);
+        } else if (existing.messageTypes?.length) {
+          serverMessageTypes = new Set(
+            existing.messageTypes.filter((type): type is PolicyMessageType =>
+              MESSAGE_TYPES.includes(type as PolicyMessageType),
+            ),
+          );
+        } else {
+          serverMessageTypes = new Set(MESSAGE_TYPES);
         }
         const messageTypesEqual =
           formatMessageTypes(serverMessageTypes) ===
@@ -360,7 +392,7 @@ export function ConfigurePoliciesStep({
         requestAnimationFrame(() => setAnimationsReady(true));
       });
     }
-  }, [policiesData, policyForCategory]);
+  }, [policiesData, policyForCategory, recommendedScopesEnabled]);
 
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
@@ -377,7 +409,16 @@ export function ConfigurePoliciesStep({
             createRiskPolicyRequestBody: {
               enabled: true,
               ...buildPolicyPayload(cat),
-              messageTypes: [...cfg.messageTypes],
+              ...(recommendedScopesEnabled
+                ? {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...kindScopeForMessageTypes([...cfg.messageTypes]),
+                      },
+                    ],
+                  }
+                : { messageTypes: [...cfg.messageTypes] }),
               action: cfg.action,
               autoName: true,
             },
@@ -436,6 +477,9 @@ export function ConfigurePoliciesStep({
     let next: CategoryConfig | undefined;
     setConfigs((prev) => {
       const types = new Set(prev[cat].messageTypes);
+      if (!recommendedScopesEnabled && types.has(t) && types.size === 1) {
+        return prev;
+      }
       if (types.has(t)) types.delete(t);
       else types.add(t);
       next = { ...prev[cat], messageTypes: types };
@@ -690,7 +734,12 @@ export function ConfigurePoliciesStep({
                           <Checkbox
                             id={id}
                             checked={checked}
-                            disabled={!activeConfig.enabled}
+                            disabled={
+                              !activeConfig.enabled ||
+                              (!recommendedScopesEnabled &&
+                                checked &&
+                                activeConfig.messageTypes.size === 1)
+                            }
                             onCheckedChange={() =>
                               toggleMessageType(activeCategory, t)
                             }
