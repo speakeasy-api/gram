@@ -127,14 +127,14 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate)
+	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
