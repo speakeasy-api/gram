@@ -1,0 +1,32 @@
+server/internal/platformmcp/feedback_test.go
+  h_9630b74bdac540 43,49-50,52-53
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 8,85-87,89-95,97-99,102,104-107,109,111-113,214-227,230-240,244-245,310-311
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2710-2817
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 6-8,11,13,19,21,42-44,81-86,175-176,214-216,218-219,223,227,231,233-234,247-248,252-263,268,270-271,335,337-338,340-342,344,346,348,350,352-354,412-414,416,418,420-423,439-440,550-552,557,573,575-576,579-580,585-590,592-593,598-601,603-604,610-611,614-620,622-633,637-649,668
+.changeset/platform-mcp-plugin-audiences.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/feedback.go
+  h_9630b74bdac540 405
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 26,30-32,47,62
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 187
+server/internal/platformmcp/plugins_test.go
+  h_9630b74bdac540 4-5,7,11-12,50-52,54,56-65,67-69,98,100-103,118,129-137,139-144,146-150,152,154,156-173,177,181,183-184,186-187,190-192,195-209
+server/internal/platformmcp/subject_reference.go
+  h_9630b74bdac540 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "18a3f470895555bffbc70e3d5ebb0d4b2c5d6eb3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
