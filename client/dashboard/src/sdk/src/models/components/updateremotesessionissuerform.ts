@@ -60,11 +60,19 @@ export type UpdateRemoteSessionIssuerForm = {
    * Upstream RFC 7591 registration endpoint.
    */
   registrationEndpoint?: string | undefined;
+  /**
+   * Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.
+   */
+  resourceIndicatorSupported?: boolean | undefined;
   responseTypesSupported?: Array<string> | undefined;
   /**
    * Upstream RFC 7009 revocation endpoint.
    */
   revocationEndpoint?: string | undefined;
+  /**
+   * Set or clear the operator-pinned scope request. Omitting the field leaves the stored value unchanged; an empty array clears it.
+   */
+  scopeOverride?: Array<string> | undefined;
   scopesSupported?: Array<string> | undefined;
   /**
    * Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
@@ -98,8 +106,10 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
+  resource_indicator_supported?: boolean | undefined;
   response_types_supported?: Array<string> | undefined;
   revocation_endpoint?: string | undefined;
+  scope_override?: Array<string> | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug?: string | undefined;
@@ -128,8 +138,10 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
+    resourceIndicatorSupported: z.optional(z.boolean()),
     responseTypesSupported: z.optional(z.array(z.string())),
     revocationEndpoint: z.optional(z.string()),
+    scopeOverride: z.optional(z.array(z.string())),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.optional(z.string()),
@@ -149,8 +161,10 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       opPolicyUri: "op_policy_uri",
       opTosUri: "op_tos_uri",
       registrationEndpoint: "registration_endpoint",
+      resourceIndicatorSupported: "resource_indicator_supported",
       responseTypesSupported: "response_types_supported",
       revocationEndpoint: "revocation_endpoint",
+      scopeOverride: "scope_override",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",

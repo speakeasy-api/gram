@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -208,6 +209,10 @@ type remoteSessionCard struct {
 	Expired    bool
 	Unroutable bool
 	CanRefresh bool
+	// IdentityReconnect marks a connected grant that carries no openid scope
+	// while a reconnect would now request it, so the page offers the
+	// reconnect that upgrades the session with an identity.
+	IdentityReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
 	// with "no expiry." Empty values mean the provider omitted that lifetime.
@@ -1082,6 +1087,9 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		requested, _ := c.RequestedScopes()
+		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
+		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
 			IssuerSlug:             c.IssuerSlug,
@@ -1091,6 +1099,7 @@ func (s *Service) buildRemoteSessionCards(
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
+			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
 			AccessExpiresIn:        accessExpiresIn,
 			RefreshExpiresAt:       refreshExpiresAt,

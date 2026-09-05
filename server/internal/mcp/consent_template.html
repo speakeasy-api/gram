@@ -116,6 +116,10 @@
                     >
                     regardless of refresh.</span
                   >
+                  {{end}} {{if .IdentityReconnect}}
+                  <span class="text-xs text-muted-foreground"
+                    >Reconnect to enable identity</span
+                  >
                   {{end}} {{else if .Expired}}
                   <span class="text-xs text-default-warning"
                     >Expired — reconnect to continue</span
@@ -160,7 +164,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if not .Connected}}
+                {{end}} {{end}} {{if or (not .Connected) .IdentityReconnect}}
                 <button
                   type="submit"
                   name="action"
@@ -168,7 +172,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button

@@ -220,6 +220,14 @@ actions:
   - target: $.components.schemas.RemoteSessionIssuerDraft.properties.claims_supported
     update:
       nullable: true
+  # scope_override is an operator knob rather than a discovered capability,
+  # but null ("unset") must stay distinct from [] on the wire the same way.
+  - target: $.components.schemas.RemoteSessionIssuer.properties.scope_override
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuerDraft.properties.scope_override
+    update:
+      nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
   - target: $.components.schemas.InfoResponseBody

@@ -67,11 +67,13 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 
-		// Gram behavior flags, not discovered metadata. A draft never proposes
-		// them; the operator opts in on the create form.
-		Oidc:              false,
-		Passthrough:       false,
-		DiscoveryWarnings: warnings,
+		// Gram behavior flags and operator knobs, not discovered metadata. A
+		// draft never proposes them; the operator opts in on the create form.
+		Oidc:                       false,
+		Passthrough:                false,
+		ScopeOverride:              nil,
+		ResourceIndicatorSupported: nil,
+		DiscoveryWarnings:          warnings,
 	}
 }
 
