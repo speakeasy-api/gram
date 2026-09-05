@@ -883,8 +883,8 @@ jobs:
         env:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
-          if [ -n "$ATLAS_TOKEN" ]; then
-            atlas login --token "$ATLAS_TOKEN"
+          if [ -n "${ATLAS_TOKEN:+set}" ]; then
+            atlas login
           fi
 
       - name: Lint PostgreSQL migrations
@@ -996,8 +996,8 @@ jobs:
         env:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
-          if [ -n "$ATLAS_TOKEN" ]; then
-            atlas login --token "$ATLAS_TOKEN"
+          if [ -n "${ATLAS_TOKEN:+set}" ]; then
+            atlas login
           fi
 
       - name: Generate tag
@@ -1177,8 +1177,8 @@ jobs:
         env:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
-          if [ -n "$ATLAS_TOKEN" ]; then
-            atlas login --token "$ATLAS_TOKEN"
+          if [ -n "${ATLAS_TOKEN:+set}" ]; then
+            atlas login
           fi
 
       - name: Run migrations
