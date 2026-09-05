@@ -32,6 +32,8 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   litellm: "LiteLLM",
   copilot: "Copilot",
   "github-copilot": "Copilot",
+  "copilot-cli": "GitHub Copilot CLI",
+  "vscode-copilot": "GitHub Copilot in VS Code",
   gemini: "Gemini",
   glean: "Glean",
   bedrock: "AWS Bedrock",

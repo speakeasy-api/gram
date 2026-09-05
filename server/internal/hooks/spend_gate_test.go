@@ -358,33 +358,46 @@ func TestIngest_SpendGateDeniesCursorPrompt(t *testing.T) {
 
 func TestIngest_SpendGateDeniesCopilotToolCall(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestHooksService(t)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.Email)
-	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
-
-	payload := canonicalIngestPayload("copilot", "tool.requested", "spend-gate-ingest-copilot")
-	rawEventName := "preToolUse"
-	payload.Source.RawEventName = &rawEventName
-	toolName := "bash"
-	toolCallID := "call-spend-copilot-1"
-	payload.Data = &gen.HookIngestData{
-		ToolCall: &gen.HookToolCallData{
-			ID:    &toolCallID,
-			Name:  &toolName,
-			Input: map[string]any{"command": "ls"},
-		},
+	tests := []struct {
+		adapter      string
+		rawEventName string
+	}{
+		{adapter: "copilot", rawEventName: "preToolUse"},
+		{adapter: "copilot-cli", rawEventName: "preToolUse"},
+		{adapter: "vscode-copilot", rawEventName: "PreToolUse"},
 	}
+	for _, tt := range tests {
+		t.Run(tt.adapter, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
 
-	result, err := ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, "deny", result.Decision)
-	require.NotNil(t, result.Message)
-	assert.Contains(t, *result.Message, "Intern hard limit")
-	assert.Contains(t, *result.Message, "/blocks/")
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.Email)
+			seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+			payload := canonicalIngestPayload(tt.adapter, "tool.requested", "spend-gate-ingest-"+tt.adapter)
+			payload.Source.RawEventName = &tt.rawEventName
+			toolName := "bash"
+			toolCallID := "call-spend-" + tt.adapter
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID:    &toolCallID,
+					Name:  &toolName,
+					Input: map[string]any{"command": "ls"},
+				},
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err, tt.adapter)
+			require.NotNil(t, result, tt.adapter)
+			assert.Equal(t, "deny", result.Decision, tt.adapter)
+			require.NotNil(t, result.Message, tt.adapter)
+			assert.Contains(t, *result.Message, "Intern hard limit", tt.adapter)
+			assert.Contains(t, *result.Message, "/blocks/", tt.adapter)
+		})
+	}
 }
 
 func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
@@ -406,7 +419,7 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "allow", result.Decision,
-		"spend enforcement covers claude/codex/cursor/copilot/openclaw; opencode passes through pending a product decision")
+		"spend enforcement covers claude/codex/cursor/copilot-cli/vscode-copilot/openclaw; opencode passes through pending a product decision")
 }
 
 func TestCodex_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
