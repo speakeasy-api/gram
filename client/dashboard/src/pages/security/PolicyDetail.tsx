@@ -12,13 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -161,26 +154,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
 const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -757,7 +735,6 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -787,7 +764,6 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
@@ -865,7 +841,6 @@ function PromptPolicyEditor({
           name: name.trim() || policy.name,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
@@ -888,7 +863,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -917,7 +892,6 @@ function PromptPolicyEditor({
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
       messageTypes: policy?.messageTypes ?? [],
@@ -932,7 +906,6 @@ function PromptPolicyEditor({
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
       policy,
@@ -967,8 +940,6 @@ function PromptPolicyEditor({
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -1016,7 +987,6 @@ function PromptPolicyEditor({
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
           customizedScopeCount={scopeOverrides.size}
@@ -1076,18 +1046,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1097,37 +1063,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -2063,7 +2001,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -2079,7 +2016,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2133,7 +2069,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2390,7 +2325,6 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
   customizedScopeCount,
@@ -2403,7 +2337,6 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   customizedScopeCount: number;
@@ -2416,8 +2349,6 @@ function PromptReview({
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
   return (
     <Stack gap={4}>
@@ -2431,7 +2362,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
