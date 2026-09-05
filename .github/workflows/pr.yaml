@@ -847,6 +847,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    env:
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -870,11 +872,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Setup Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
@@ -883,8 +880,9 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -895,7 +893,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -953,6 +951,8 @@ jobs:
     if: |
       github.event_name != 'merge_group' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
+    env:
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -979,10 +979,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+          install: true
+          install_args: aqua:ariga/atlas
+          cache: true
+          cache_key_prefix: mise-atlas-blacksmith-v1
+          env: false
 
       - name: Generate tag
         id: tag
@@ -996,7 +1000,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -1004,7 +1008,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -1068,6 +1072,7 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 16
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -1156,11 +1161,6 @@ jobs:
 
       - name: Run "go mod tidy"
         run: mise run go:tidy
-
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Run migrations
         run: mise run db:migrate

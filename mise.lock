@@ -35,36 +35,36 @@ url = "https://github.com/chainguard-dev/apko/releases/download/v1.2.31/apko_1.2
 url_api = "https://api.github.com/repos/chainguard-dev/apko/releases/assets/499430053"
 
 [[tools."aqua:ariga/atlas"]]
-version = "1.0.0"
+version = "1.3.0"
 backend = "aqua:ariga/atlas"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64"]
-checksum = "sha256:69a463cf6d51a93abeffbdc906b69f969c12e7a706a6d0a4e388b4ebd713c5f9"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.0.0"
+checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64-musl"]
-checksum = "sha256:69a463cf6d51a93abeffbdc906b69f969c12e7a706a6d0a4e388b4ebd713c5f9"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.0.0"
+checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64"]
-checksum = "sha256:7147245d95af96cd1e90ef5cfd57aa9e9df2a9e7ca5a735ddf0a1230f325cee2"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.0.0"
+checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64-musl"]
-checksum = "sha256:7147245d95af96cd1e90ef5cfd57aa9e9df2a9e7ca5a735ddf0a1230f325cee2"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.0.0"
+checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.macos-arm64"]
-checksum = "sha256:e7fb3098cc46cf8c2a84f5ed57f371f0ed80986d37f0f606ec464518c20518b5"
-url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.0.0"
+checksum = "sha256:47aaf7c295c7569c7eecfcbc53f02de862846ce1fbef16f1bd8ae98b03c3c68f"
+url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.macos-x64"]
-checksum = "sha256:29c140e14d7b359af9cb36a91661a882fd806d4de16867b08b8b948aeba7a507"
-url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.0.0"
+checksum = "sha256:4b4d8621332eabc3e6e7554d799a98ceef6376c4d8bbad6ed7832b49655e3480"
+url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.windows-x64"]
-checksum = "sha256:abf36ade639454afe25f646a09eb5c46629b0b06c640b565496fc5d45e56f8ec"
-url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.0.0.exe"
+checksum = "sha256:19b3bf812be93d1b30d7199c5700af01002cbd606c2aec2394fd618af7e3f7b1"
+url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.3.0.exe"
 
 [[tools.aube]]
 version = "1.38.1"
@@ -343,6 +343,7 @@ checksum = "sha256:1b1630c3ae133448a9445911499ab2d59bd77f860abbd595dbc89da4eb82c
 url = "https://github.com/pnpm/pnpm/releases/download/v11.19.0/pnpm-linux-arm64.tar.gz"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/496485122"
 provenance = "github-attestations"
+provenance_verified = true
 
 [tools."github:pnpm/pnpm"."platforms.linux-arm64-musl"]
 checksum = "sha256:89309036b565a41e28f970a95c45ae2c448f80cc54c77a309f140e11706dd858"
