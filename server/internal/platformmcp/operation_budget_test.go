@@ -17,7 +17,7 @@ func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
 	budgets := OperationBudgets{
 		Catalog: budget, Registration: budget, Handoff: budget, SetupStart: budget,
 		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
-		Plugins: budget, AccessReads: budget, Diagnostics: budget,
+		Plugins: budget, AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget,
 		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget,
 		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
 	}

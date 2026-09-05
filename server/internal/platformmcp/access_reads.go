@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -67,6 +68,7 @@ type AccessRole struct {
 	MemberCount SubjectCount      `json:"member_count"`
 	MCPAccess   MCPConnectSummary `json:"mcp_access"`
 	Reference   string            `json:"reference"`
+	Version     string            `json:"version"`
 }
 
 type ListAccessRolesOutput struct {
@@ -117,6 +119,7 @@ type MCPRoleCoverage struct {
 	Type                string       `json:"type"`
 	MemberCount         SubjectCount `json:"member_count"`
 	Reference           string       `json:"reference"`
+	Version             string       `json:"version"`
 	CanEnterServer      bool         `json:"can_enter_server"`
 	KnownToolAccess     string       `json:"known_tool_access"`
 	AllowedKnownTools   []string     `json:"allowed_known_tools"`
@@ -147,16 +150,18 @@ type AccessReadService struct {
 	budget     OperationBudget
 	references *subjectReferenceCodec
 	now        func() time.Time
+	versionKey []byte
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "build Platform MCP access reference codec", attr.SlogError(err))
 	}
+	versionKey := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
@@ -164,11 +169,12 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		budget:     budget,
 		references: references,
 		now:        time.Now,
+		versionKey: versionKey[:],
 	}
 }
 
 func (s *AccessReadService) valid() bool {
-	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.now != nil
+	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.now != nil && len(s.versionKey) == sha256.Size
 }
 
 func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) (ListAccessRolesOutput, error) {
@@ -192,12 +198,17 @@ func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) 
 		if err != nil {
 			return ListAccessRolesOutput{}, fmt.Errorf("issue access role reference: %w", err)
 		}
+		version, err := accessRoleVersion(s.versionKey, role)
+		if err != nil {
+			return ListAccessRolesOutput{}, fmt.Errorf("version access role: %w", err)
+		}
 		output.Roles = append(output.Roles, AccessRole{
 			Name:        role.Name,
 			Type:        accessRoleType(role),
 			MemberCount: NewSubjectCount(int64(role.MemberCount)),
 			MCPAccess:   summarizeMCPConnect(role.Grants),
 			Reference:   reference,
+			Version:     version,
 		})
 	}
 	return output, nil
@@ -389,11 +400,16 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("issue MCP access role reference: %w", err)
 		}
+		version, err := accessRoleVersion(s.versionKey, role)
+		if err != nil {
+			return GetMCPAccessOutput{}, fmt.Errorf("version MCP access role: %w", err)
+		}
 		output.Roles = append(output.Roles, MCPRoleCoverage{
 			Name:                role.Name,
 			Type:                accessRoleType(role),
 			MemberCount:         NewSubjectCount(int64(role.MemberCount)),
 			Reference:           reference,
+			Version:             version,
 			CanEnterServer:      canEnter,
 			KnownToolAccess:     knownToolAccess(len(allowedTools), len(tools), catalog, truncated),
 			AllowedKnownTools:   allowedTools,

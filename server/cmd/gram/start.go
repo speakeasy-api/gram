@@ -1647,6 +1647,7 @@ func newStartCommand() *cli.Command {
 				GuardianPolicy:          guardianPolicy,
 				RemoteChallengeManager:  remoteChallengeManager,
 				AuditLogger:             auditLogger,
+				AccessRoles:             roleClient,
 				PluginPublisher:         pluginPublisher,
 				TemporalEnv:             temporalEnv,
 				Skills:                  skillsService,
