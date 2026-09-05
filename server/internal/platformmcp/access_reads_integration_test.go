@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,8 +35,16 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 	_, err = service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "o"})
 	require.ErrorIs(t, err, ErrAccessQueryRequired)
 
+	seedAccessRole(t, ctx, conn, principal.OrganizationID, "operators", "Operators")
 	for i := range 5 {
-		seedAccessMember(t, ctx, conn, principal.OrganizationID, fmt.Sprintf("member-%d", i), fmt.Sprintf("operator%d@example.test", i))
+		userID := fmt.Sprintf("member-%d", i)
+		seedAccessMember(t, ctx, conn, principal.OrganizationID, userID, fmt.Sprintf("operator%d@example.test", i))
+		_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + userID, UserID: conv.ToPGText(userID),
+			WorkosMembershipID: conv.ToPGText("membership-" + userID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+			WorkosLastEventID: conv.ToPGTextEmpty(""), WorkosRoleSlug: "operators",
+		})
+		require.NoError(t, err)
 	}
 
 	small, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "operator0"})
@@ -44,10 +53,12 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 	require.Empty(t, small.Members)
 	require.Empty(t, small.ExpiresAt)
 
-	large, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "operator"})
+	large, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "operator", Limit: 2})
 	require.NoError(t, err)
 	require.False(t, large.Suppressed)
-	require.Len(t, large.Members, 5)
+	require.Equal(t, NewSubjectCount(5), large.TotalMatches)
+	require.True(t, large.Truncated)
+	require.Len(t, large.Members, 2)
 	for _, member := range large.Members {
 		require.NotContains(t, member.MaskedIdentity, "example.test")
 		require.NotEmpty(t, member.Reference)
@@ -55,6 +66,27 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 		require.NoError(t, err)
 		require.NotEmpty(t, decoded)
 	}
+
+	roles, err := service.ListRoles(ctx, principal)
+	require.NoError(t, err)
+	var roleReference string
+	for _, candidate := range roles.Roles {
+		if candidate.Name == "Operators" {
+			roleReference = candidate.Reference
+		}
+	}
+	require.NotEmpty(t, roleReference)
+	byRole, err := service.ListMembers(ctx, principal, ListAccessMembersInput{RoleReference: roleReference})
+	require.NoError(t, err)
+	require.Equal(t, NewSubjectCount(5), byRole.TotalMatches)
+	require.Len(t, byRole.Members, 5)
+	for _, member := range byRole.Members {
+		require.Equal(t, []string{"Operators"}, member.Roles)
+	}
+
+	byRoleName, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: strings.ToUpper("Operators")})
+	require.NoError(t, err)
+	require.Equal(t, NewSubjectCount(5), byRoleName.TotalMatches)
 }
 
 func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {

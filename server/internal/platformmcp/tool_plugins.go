@@ -47,7 +47,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Description: "List the plugins in a named project. A plugin is the bundle of MCP servers and skills an administrator shares with people, so this is the level to answer \"what do we ship\" at, rather than adding up individual servers. Each entry reports how much the plugin carries, who receives it, and whether it has been published — that is, whether the people it is shared with have it yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
-		return pluginToolCall(ctx, func(principal Principal) (ListPluginsOutput, error) {
+		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
 			return plugins.ListPlugins(ctx, principal, input)
 		})
 	})
@@ -58,7 +58,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Description: "Get one plugin — the bundle of MCP servers and skills you share with people — and what it carries: its MCP servers, skills, up to 100 current assignments, and an assignment version for safe follow-up edits. Assignment references expire at the returned time; if assignments_truncated is true or assignment_details_complete is false, use the dashboard before editing assignments. The general truncated field applies only to MCP servers and skills. Constraints: name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
-		return pluginToolCall(ctx, func(principal Principal) (GetPluginOutput, error) {
+		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
 			return plugins.GetPlugin(ctx, principal, input)
 		})
 	})
@@ -82,25 +82,6 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		}
 		addTool(reg, manifest, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
 	}
-}
-
-// pluginToolCall runs one plugin call and turns a refusal into a structured
-// error result rather than a transport error, so the reason survives to the
-// model that has to act on it.
-func pluginToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
-	var zero Out
-	principal, err := principalFromToolContext(ctx)
-	if err != nil {
-		return nil, zero, err
-	}
-	output, err := call(principal)
-	if err != nil {
-		if refusal, ok := pluginToolResult(err); ok {
-			return refusal, zero, nil
-		}
-		return nil, zero, err
-	}
-	return nil, output, nil
 }
 
 func pluginToolResult(err error) (*mcp.CallToolResult, bool) {

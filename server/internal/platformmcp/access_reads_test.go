@@ -18,10 +18,10 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 
 	roles := ListAccessRolesOutput{Roles: []AccessRole{{
 		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
-		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
+		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
 		Reference: "opaque-role",
 	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
-	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_tool_rules", "blocked_disposition_rules", "reference", "expires_at"}, decodeKeys(t, roles))
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "reference", "expires_at"}, decodeKeys(t, roles))
 
 	members := ListAccessMembersOutput{
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member"}},
@@ -47,17 +47,6 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	}
 }
 
-func TestAccessMemberFiltersAndMasks(t *testing.T) {
-	t.Parallel()
-
-	roleNames := map[string]string{"role-a": "Operators"}
-	member := &accessgen.AccessMember{ID: "user-internal", PrincipalUrn: "user:user-internal", Name: "Ada Lovelace", Email: "ada@example.test", RoleIds: []string{"role-a"}}
-	require.True(t, matchesAccessMember(member, "ada", roleNames))
-	require.True(t, matchesAccessMember(member, "operators", roleNames))
-	require.False(t, matchesAccessMember(member, "finance", roleNames))
-	require.Equal(t, "a**@e***", maskAccessMember(member))
-}
-
 func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +68,11 @@ func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	require.False(t, summary.BlockedServers)
 	require.Equal(t, 1, summary.BlockedToolRules)
 	require.Equal(t, []string{"destructive"}, summary.BlockedDispositionRules)
+
+	project = uuid.NewString()
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, ProjectID: &project}}}})
+	require.Equal(t, 1, summary.BlockedProjectRules)
+	require.Equal(t, 1, summary.BlockedServerRules)
 }
 
 func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {
@@ -108,6 +102,8 @@ func TestAccessSummaryAndKnownToolCoverageCannotOverclaim(t *testing.T) {
 	require.Equal(t, "everyone", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "public"}))
 	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "disabled"}))
 	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "private", UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "public", UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "future_value"}))
 	require.Equal(t, "by_role", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "private"}))
 
 	require.Equal(t, "all", knownToolAccess(2, 2, "authoritative", false))

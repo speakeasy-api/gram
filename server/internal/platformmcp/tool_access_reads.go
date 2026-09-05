@@ -21,7 +21,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Description: "List the organization's roles and summarize the MCP access each role carries. Member counts are withheld for small groups, and each role is represented by a short-lived opaque reference rather than a role ID or principal.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ListAccessRolesOutput, error) {
-		return accessReadToolCall(ctx, func(principal Principal) (ListAccessRolesOutput, error) {
+		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessRolesOutput, error) {
 			return accessReads.ListRoles(ctx, principal)
 		})
 	})
@@ -32,7 +32,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Description: "Find organization members by an explicit identity query of at least three characters or a role reference. Returns masked identities, role names, and short-lived opaque member references only when at least five people match; smaller result sets are withheld rather than enumerated.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
-		return accessReadToolCall(ctx, func(principal Principal) (ListAccessMembersOutput, error) {
+		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessMembersOutput, error) {
 			return accessReads.ListMembers(ctx, principal, input)
 		})
 	})
@@ -43,7 +43,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Description: "Inspect which roles can enter one exact configured MCP server through its configured endpoint and which known tools or behavior classes they can use. Uses the same authorization resource and selector semantics as that endpoint; dynamic servers may not have an enumerable tool catalog.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPAccessInput) (*mcp.CallToolResult, GetMCPAccessOutput, error) {
-		return accessReadToolCall(ctx, func(principal Principal) (GetMCPAccessOutput, error) {
+		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (GetMCPAccessOutput, error) {
 			return accessReads.GetMCPAccess(ctx, principal, input)
 		})
 	})
@@ -67,22 +67,6 @@ func registerUnavailableAccessReadTools(reg *Registrar) {
 			Annotations: readOnlyAnnotations(),
 		}, ToolMeta{Audiences: externalOnly, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
 	}
-}
-
-func accessReadToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
-	var zero Out
-	principal, err := principalFromToolContext(ctx)
-	if err != nil {
-		return nil, zero, err
-	}
-	output, err := call(principal)
-	if err != nil {
-		if refusal, ok := accessReadToolResult(err); ok {
-			return refusal, zero, nil
-		}
-		return nil, zero, err
-	}
-	return nil, output, nil
 }
 
 func accessReadToolResult(err error) (*mcp.CallToolResult, bool) {

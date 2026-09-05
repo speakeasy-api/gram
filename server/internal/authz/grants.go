@@ -56,6 +56,9 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 // Read-only projections use this when they need to explain another principal's
 // effective access without replacing the request context's acting principal.
 func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
+	if err := validateInput(check); err != nil {
+		return false, err
+	}
 	evaluation, err := evaluateGrantCheck(grants, check)
 	if err != nil {
 		return false, err

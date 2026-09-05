@@ -55,6 +55,8 @@ type MCPConnectSummary struct {
 	ToolRules               int      `json:"tool_rules"`
 	DispositionRules        []string `json:"disposition_rules"`
 	BlockedServers          bool     `json:"blocked_servers"`
+	BlockedProjectRules     int      `json:"blocked_project_rules"`
+	BlockedServerRules      int      `json:"blocked_server_rules"`
 	BlockedToolRules        int      `json:"blocked_tool_rules"`
 	BlockedDispositionRules []string `json:"blocked_disposition_rules"`
 }
@@ -232,59 +234,52 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 		}
 	}
 
-	members, err := s.roles.ListMembers(ctx, principal.OrganizationID)
-	if err != nil {
-		return ListAccessMembersOutput{}, fmt.Errorf("list platform mcp access members: %w", err)
-	}
-	matching := make([]*accessgen.AccessMember, 0, len(members.Members))
-	for _, member := range members.Members {
-		if roleID != "" && !slices.Contains(member.RoleIds, roleID) {
-			continue
-		}
-		if query != "" && !matchesAccessMember(member, query, roleNames) {
-			continue
-		}
-		matching = append(matching, member)
-	}
-
-	count := len(matching)
-	output := ListAccessMembersOutput{
-		Members:      []AccessMember{},
-		TotalMatches: NewSubjectCount(int64(count)),
-		Suppressed:   count > 0 && count < SubjectSuppressionThreshold,
-		Truncated:    false,
-		ExpiresAt:    "",
-	}
-	// Organization-privacy rules do not allow a row-bearing response to reveal
-	// a filtered cohort smaller than five. Return only the suppressed count.
-	if output.Suppressed || count == 0 {
-		return output, nil
-	}
-
 	limit := maxAccessMembers
 	if input.Limit > 0 {
 		limit = min(input.Limit, maxAccessMembers)
 	}
-	if len(matching) > limit {
-		matching = matching[:limit]
-		output.Truncated = true
+	rows, err := platformrepo.New(s.db).SearchPlatformMCPAccessMembers(ctx, platformrepo.SearchPlatformMCPAccessMembersParams{
+		ResultLimit:    int32(limit),
+		OrganizationID: principal.OrganizationID,
+		RoleID:         roleID,
+		Query:          query,
+	})
+	if err != nil {
+		return ListAccessMembersOutput{}, fmt.Errorf("search platform mcp access members: %w", err)
 	}
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].TotalMatches
+	}
+	output := ListAccessMembersOutput{
+		Members:      []AccessMember{},
+		TotalMatches: NewSubjectCount(total),
+		Suppressed:   total > 0 && total < SubjectSuppressionThreshold,
+		Truncated:    total > int64(len(rows)),
+		ExpiresAt:    "",
+	}
+	// Organization-privacy rules do not allow a row-bearing response to reveal
+	// a filtered cohort smaller than five. Return only the suppressed count.
+	if output.Suppressed || total == 0 {
+		return output, nil
+	}
+
 	now := s.now().UTC()
 	output.ExpiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
-	for _, member := range matching {
-		reference, err := s.references.Encode(principal, subjectKindAccessMember, member.ID, now)
+	for _, row := range rows {
+		reference, err := s.references.Encode(principal, subjectKindAccessMember, row.ID, now)
 		if err != nil {
 			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
 		}
-		names := make([]string, 0, len(member.RoleIds))
-		for _, id := range member.RoleIds {
+		names := make([]string, 0, len(row.RoleIds))
+		for _, id := range row.RoleIds {
 			if name := roleNames[id]; name != "" {
 				names = append(names, name)
 			}
 		}
 		slices.Sort(names)
 		output.Members = append(output.Members, AccessMember{
-			MaskedIdentity: maskAccessMember(member),
+			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
 			Roles:          slices.Compact(names),
 			Reference:      reference,
 		})
@@ -475,7 +470,7 @@ func accessRoleType(role *accessgen.Role) string {
 }
 
 func summarizeMCPConnect(grants []*accessgen.RoleGrant) MCPConnectSummary {
-	summary := MCPConnectSummary{AllServers: false, ProjectRules: 0, ServerRules: 0, ToolRules: 0, DispositionRules: []string{}, BlockedServers: false, BlockedToolRules: 0, BlockedDispositionRules: []string{}}
+	summary := MCPConnectSummary{AllServers: false, ProjectRules: 0, ServerRules: 0, ToolRules: 0, DispositionRules: []string{}, BlockedServers: false, BlockedProjectRules: 0, BlockedServerRules: 0, BlockedToolRules: 0, BlockedDispositionRules: []string{}}
 	dispositions := map[string]struct{}{}
 	blockedDispositions := map[string]struct{}{}
 	for _, grant := range grants {
@@ -495,11 +490,19 @@ func summarizeMCPConnect(grants []*accessgen.RoleGrant) MCPConnectSummary {
 			if selector == nil {
 				continue
 			}
-			if selector.ProjectID != nil && !blocked {
-				summary.ProjectRules++
+			if selector.ProjectID != nil {
+				if blocked {
+					summary.BlockedProjectRules++
+				} else {
+					summary.ProjectRules++
+				}
 			}
-			if selector.ResourceID != authz.WildcardResource && !blocked {
-				summary.ServerRules++
+			if selector.ResourceID != authz.WildcardResource {
+				if blocked {
+					summary.BlockedServerRules++
+				} else {
+					summary.ServerRules++
+				}
 			}
 			if selector.Tool != nil {
 				if blocked {
@@ -666,13 +669,17 @@ func accessAuthorizationMode(row platformrepo.GetPlatformMCPInventoryItemRow) st
 	if row.Visibility == "disabled" {
 		return "disabled"
 	}
-	if row.Visibility == "public" {
-		return "public_bypass"
-	}
 	if row.UnproxiedMcpServerID.Valid {
 		return "not_served"
 	}
-	return "rbac"
+	switch row.Visibility {
+	case "public":
+		return "public_bypass"
+	case "private":
+		return "rbac"
+	default:
+		return "not_served"
+	}
 }
 
 func accessSummary(row platformrepo.GetPlatformMCPInventoryItemRow) string {
@@ -708,26 +715,4 @@ func knownToolAccess(allowed, total int, catalog string, truncated bool) string 
 
 func normalizeAccessQuery(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
-}
-
-func matchesAccessMember(member *accessgen.AccessMember, query string, roleNames map[string]string) bool {
-	if strings.Contains(normalizeAccessQuery(member.Name), query) || strings.Contains(normalizeAccessQuery(member.Email), query) {
-		return true
-	}
-	for _, roleID := range member.RoleIds {
-		if strings.Contains(normalizeAccessQuery(roleNames[roleID]), query) {
-			return true
-		}
-	}
-	return false
-}
-
-func maskAccessMember(member *accessgen.AccessMember) string {
-	if member == nil {
-		return ""
-	}
-	if member.Email != "" {
-		return maskSubject(member.Email)
-	}
-	return maskSubject(member.Name)
 }
