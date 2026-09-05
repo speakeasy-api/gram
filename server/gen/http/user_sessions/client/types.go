@@ -820,7 +820,7 @@ type UserSessionResponseBody struct {
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
+	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// Current access-token JTI; used by the revocation path.
 	Jti *string `form:"jti,omitempty" json:"jti,omitempty" xml:"jti,omitempty"`
@@ -855,7 +855,7 @@ type UserSessionResponseBody struct {
 	// for a client registered before the value was recorded;
 	// client_credential_kind separates those cases and is what should be displayed.
 	ClientTokenEndpointAuthMethod *string `form:"client_token_endpoint_auth_method,omitempty" json:"client_token_endpoint_auth_method,omitempty" xml:"client_token_endpoint_auth_method,omitempty"`
-	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	// Subject kind: 'user', 'apikey', 'anonymous', or 'workload'.
 	SubjectType *string `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
