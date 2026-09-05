@@ -47,6 +47,7 @@ vi.mock("./steps", () => ({
   ConnectIdpStep: () => null,
   DirectorySyncStep: () => null,
   CreateMarketplaceStep: () => null,
+  AnthropicEnterpriseStep: () => null,
   DistributeServersStep: () => null,
   InstrumentAgentsStep: () => null,
   AdditionalAgentConfigStep: () => null,
@@ -87,12 +88,12 @@ describe("SetupWizard", () => {
     );
   });
 
-  it("resumes at instrument-agents after the marketplace is published", () => {
+  it("resumes at anthropic-enterprise after the marketplace is published", () => {
     publishStatus.current = { data: { connected: true }, isLoading: false };
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("instrument-agents");
+    expect(resumedStep()).toBe("anthropic-enterprise");
   });
 
   it("resumes at directory-sync when only SSO is configured", () => {

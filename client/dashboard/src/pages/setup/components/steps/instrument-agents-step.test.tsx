@@ -19,12 +19,16 @@ vi.mock("../platform-instrumentation-sheet", () => ({
 afterEach(cleanup);
 
 describe("InstrumentAgentsStep", () => {
-  it("warns that Cowork needs manual setup and opens its instructions", () => {
+  it("leaves Claude Cowork to the Anthropic Enterprise step", () => {
     render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
 
-    expect(screen.getByText("Cowork needs separate setup")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Set it up manually" }));
+    // Radix tabs activate on mousedown, not click.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Manual Setup/ }), {
+      button: 0,
+    });
 
-    expect(screen.getByText("Opened platform: claude-cowork")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Claude Cowork/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
+    expect(screen.getByText("Opened platform: claude")).toBeTruthy();
   });
 });

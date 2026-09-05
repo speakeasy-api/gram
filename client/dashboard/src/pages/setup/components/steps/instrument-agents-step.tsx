@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
-import { AGENT_PLATFORMS } from "../../setup-data";
+import { INSTRUMENT_AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
@@ -9,7 +9,6 @@ import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet"
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -24,20 +23,16 @@ export function InstrumentAgentsStep({
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >(() =>
-    Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
+    Object.fromEntries(
+      INSTRUMENT_AGENT_PLATFORMS.map((p) => [p.id, "not_started"]),
+    ),
   );
   const [activeTab, setActiveTab] = useState("device-agent");
 
-  // Cowork runs in Claude.ai's cloud sandbox, outside the device agent's
-  // reach, so it always needs a separate manual setup step.
-  const openCoworkManualSetup = () => {
-    setActiveTab("manual");
-    setDrawerPlatformId("claude-cowork");
-  };
-  const availablePlatforms = AGENT_PLATFORMS.filter(
+  const availablePlatforms = INSTRUMENT_AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
   );
-  const comingSoonPlatforms = AGENT_PLATFORMS.filter(
+  const comingSoonPlatforms = INSTRUMENT_AGENT_PLATFORMS.filter(
     (p) => p.available === false,
   );
   const completedCount = availablePlatforms.filter(
@@ -74,23 +69,7 @@ export function InstrumentAgentsStep({
           />
         </TabsList>
 
-        <TabsContent value="device-agent" className="space-y-4">
-          <Alert variant="info">
-            <AlertTitle>Cowork needs separate setup</AlertTitle>
-            <AlertDescription>
-              The device agent instruments assistants that run on a developer's
-              machine. Cowork runs in Claude.ai's cloud sandbox, so it isn't
-              covered here.{" "}
-              <button
-                type="button"
-                onClick={openCoworkManualSetup}
-                className="text-foreground underline underline-offset-2"
-              >
-                Set it up manually
-              </button>
-              .
-            </AlertDescription>
-          </Alert>
+        <TabsContent value="device-agent">
           <DeviceAgentSetup />
         </TabsContent>
 

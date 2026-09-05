@@ -272,3 +272,15 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
   ),
 ];
+
+// Claude Cowork runs in Claude.ai's cloud sandbox and is configured from
+// Claude.ai's organization settings, so the device agent can't reach it. It
+// has its own "Set up Anthropic Enterprise" onboarding step instead of sitting
+// with the coding assistants that run on developer machines.
+export const ANTHROPIC_ENTERPRISE_PLATFORM_ID =
+  "claude-cowork" satisfies AgentProviderId;
+
+export const INSTRUMENT_AGENT_PLATFORMS: AgentPlatform[] =
+  AGENT_PLATFORMS.filter(
+    (platform) => platform.id !== ANTHROPIC_ENTERPRISE_PLATFORM_ID,
+  );

@@ -10,6 +10,7 @@ import {
   ConnectIdpStep,
   DirectorySyncStep,
   CreateMarketplaceStep,
+  AnthropicEnterpriseStep,
   DistributeServersStep,
   InstrumentAgentsStep,
   AdditionalAgentConfigStep,
@@ -33,6 +34,11 @@ const CORE_STEPS: Step[] = [
     id: "create-marketplace",
     title: "Create plugin marketplace",
     description: "For distributing servers to your users",
+  },
+  {
+    id: "anthropic-enterprise",
+    title: "Set up Anthropic Enterprise",
+    description: "Connect Claude Cowork through Claude.ai",
   },
   {
     id: "instrument-agents",
@@ -102,10 +108,10 @@ export function SetupWizard(): JSX.Element {
 
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (instrument-agents,
-  // additional-agent-config, confirm-traffic, distribute-servers) have no
-  // server signal — once marketplace is published we land on instrument-agents
-  // and let the user click forward.
+  // marketplace step. Steps after marketplace (anthropic-enterprise,
+  // instrument-agents, additional-agent-config, confirm-traffic,
+  // distribute-servers) have no server signal — once marketplace is published
+  // we land on anthropic-enterprise and let the user click forward.
   // throwOnError: false so a failed resume check degrades to step 0 (as the
   // effect below assumes) instead of throwing to the page error boundary. The
   // QueryClient default only suppresses 401/403, so a 500 here would otherwise
@@ -123,7 +129,7 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = indexOfStep(steps, "instrument-agents");
+      resumeStep = indexOfStep(steps, "anthropic-enterprise");
     } else if (onboardingStatus?.dsyncConfigured) {
       resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
@@ -255,6 +261,13 @@ export function SetupWizard(): JSX.Element {
       case "create-marketplace":
         return (
           <CreateMarketplaceStep
+            onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case "anthropic-enterprise":
+        return (
+          <AnthropicEnterpriseStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />

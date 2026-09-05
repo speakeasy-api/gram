@@ -1,5 +1,6 @@
 import {
   AdditionalAgentConfigStep,
+  AnthropicEnterpriseStep,
   ConfigurePoliciesStep,
   ConfirmTrafficStep,
   ConnectIdpStep,
@@ -50,6 +51,11 @@ export function SetupTaskContent({
       break;
     case "create-marketplace":
       step = <CreateMarketplaceStep onComplete={onComplete} onBack={onBack} />;
+      break;
+    case "anthropic-enterprise":
+      step = (
+        <AnthropicEnterpriseStep onComplete={onComplete} onBack={onBack} />
+      );
       break;
     case "instrument-agents":
       step = <InstrumentAgentsStep onComplete={onComplete} onBack={onBack} />;

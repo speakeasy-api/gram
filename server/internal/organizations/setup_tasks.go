@@ -46,6 +46,7 @@ var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: nil},
 	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil},
 	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil},
+	{Key: "anthropic-enterprise", Title: "Set up Anthropic Enterprise", Description: "Register the marketplace with Claude.ai so Claude Cowork installs the observability plugin.", Prerequisites: []string{"create-marketplace"}},
 	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Gram hook telemetry.", Prerequisites: nil},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil},
 	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}},
