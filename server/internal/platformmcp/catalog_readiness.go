@@ -161,29 +161,57 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 		headers:      headers,
 		unauthorized: atomic.Bool{},
 		tooLarge:     atomic.Bool{},
+		responded:    atomic.Bool{},
+		transient:    atomic.Bool{},
 	}
 	httpClient.Transport = roundTripper
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-readiness", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: 0, DisableStandaloneSSE: true}, nil)
 	if err != nil {
-		return catalogProbeFailure(err, roundTripper)
+		return catalogProbeFailure(err, roundTripper, catalogProbeStageInitialize)
 	}
 	defer func() { _ = session.Close() }()
 	if _, err := session.ListTools(ctx, nil); err != nil {
-		return catalogProbeFailure(err, roundTripper)
+		return catalogProbeFailure(err, roundTripper, catalogProbeStageToolsList)
 	}
 	return ReadinessReady, "tools_list_ok"
 }
 
-func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripper) (ReadinessState, string) {
+type catalogProbeStage string
+
+const (
+	catalogProbeStageInitialize catalogProbeStage = "initialize"
+	catalogProbeStageToolsList  catalogProbeStage = "tools_list"
+)
+
+func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripper, stage catalogProbeStage) (ReadinessState, string) {
+	if roundTripper == nil {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
 	if roundTripper.unauthorized.Load() {
 		return ReadinessUnauthorized, "upstream_authorization_rejected"
 	}
-	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
-		return ReadinessUnsupported, "response_too_large"
+	if roundTripper.transient.Load() {
+		return ReadinessDegraded, "probe_temporarily_unavailable"
 	}
-	return ReadinessUnreachable, "probe_failed"
+	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
+		if stage == catalogProbeStageToolsList {
+			return ReadinessDegraded, "tools_list_response_too_large"
+		}
+		return ReadinessUnsupported, "initialize_response_too_large"
+	}
+	if roundTripper.redirected.Load() {
+		return ReadinessUnsupported, "redirect_rejected"
+	}
+	state, evidence := ClassifyReadinessProbeFailure(err)
+	if evidence == "probe_timeout" || evidence == "probe_unreachable" {
+		return state, evidence
+	}
+	if evidence == "probe_failed" && roundTripper.responded.Load() && !IsReadinessMCPErrorResponse(err) {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
+	return state, evidence
 }
 
 type catalogAuthorizationRoundTripper struct {
@@ -192,6 +220,9 @@ type catalogAuthorizationRoundTripper struct {
 	headers      []remotemcprepo.RemoteMcpServerHeader
 	unauthorized atomic.Bool
 	tooLarge     atomic.Bool
+	responded    atomic.Bool
+	transient    atomic.Bool
+	redirected   atomic.Bool
 }
 
 func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -208,8 +239,15 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 	if err != nil {
 		return nil, fmt.Errorf("send registered Remote MCP readiness request: %w", err)
 	}
+	rt.responded.Store(true)
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		rt.unauthorized.Store(true)
+	}
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+		rt.redirected.Store(true)
+	}
+	if transientCatalogProbeStatus(response.StatusCode) {
+		rt.transient.Store(true)
 	}
 	if response.ContentLength > catalogProbeMaxResponse {
 		rt.tooLarge.Store(true)
@@ -218,6 +256,10 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 	}
 	response.Body = &catalogBoundedReadCloser{ReadCloser: response.Body, remaining: catalogProbeMaxResponse, exceeded: &rt.tooLarge}
 	return response, nil
+}
+
+func transientCatalogProbeStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 type catalogBoundedReadCloser struct {

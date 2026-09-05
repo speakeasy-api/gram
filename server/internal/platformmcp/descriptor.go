@@ -329,12 +329,16 @@ func prepareInputSchema[In any](tool *mcp.Tool) ([]byte, *jsonschema.Resolved) {
 	return encoded, resolved
 }
 
-// wireTypeSchemas overrides schema inference for types whose JSON form does not
-// match their Go shape. Inference reflects on the Go type and cannot see a
-// custom MarshalJSON, so a type that serializes as something other than its
-// struct has to say so here.
+// wireTypeSchemas overrides schema inference for types whose JSON contract is
+// narrower than their Go shape. Inference cannot see a custom MarshalJSON or a
+// named string's closed vocabulary, so those types declare their wire schema
+// here.
 var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 	reflect.TypeFor[SubjectCount](): subjectCountSchema,
+	reflect.TypeFor[SetupCategory](): {
+		Type: "string",
+		Enum: setupCategoryEnumValues(),
+	},
 }
 
 // inferOutputSchema derives the schema the tool advertises for its result,

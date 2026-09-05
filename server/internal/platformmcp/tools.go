@@ -139,9 +139,11 @@ type featureUnavailableResult struct {
 }
 
 type operationBudgetResult struct {
-	Code    string `json:"code"`
-	Reason  string `json:"reason,omitempty"`
-	Message string `json:"message"`
+	Code          string         `json:"code"`
+	Reason        string         `json:"reason,omitempty"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Actions       []RepairAction `json:"actions,omitempty"`
+	Message       string         `json:"message"`
 }
 
 // newServer composes the Platform MCP tools for one deployment. It returns the
@@ -428,9 +430,11 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrCatalogUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "catalog_unavailable", Message: "The reviewed catalogue of MCP servers is temporarily unavailable. Try searching it again shortly; everything else still works."}
 	case errors.Is(err, ErrDirectRemoteRejected):
-		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", Message: "That MCP server URL is unsafe, unsupported, or did not answer a Streamable HTTP check. Use an HTTPS URL with no credentials, query parameters, or fragments."}
+		category := setupCategoryFromError(err)
+		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", SetupCategory: category, Actions: inspectionFailureActions(category), Message: "That MCP server URL is unsafe, unsupported, or did not answer a Streamable HTTP check. Use an HTTPS URL with no credentials, credential-like query parameters, or fragments."}
 	case errors.Is(err, ErrDirectRemoteUnavailable):
-		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", Message: "That MCP server could not be checked safely right now. Try again shortly."}
+		category := setupCategoryFromError(err)
+		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", SetupCategory: category, Actions: inspectionFailureActions(category), Message: "That MCP server could not be checked safely right now. Try again shortly."}
 	case errors.Is(err, ErrLifecycleVisibilityUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP server was not set up through this platform, so it cannot be turned on or off from here. Manage it in the dashboard instead."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
