@@ -1,0 +1,23 @@
+server/cmd/tools/migrations/legacypolicyscope/fold.go
+  s_d32de0b0e2b253::t_edc8cfce1d1508 20,25,77,85,140-149,152,161-178
+server/cmd/tools/migrations/legacypolicyscope/fold_test.go
+  s_d32de0b0e2b253::t_e8315278372a36 34,49,64,83,99,118,134,150,158,170,185,187,196,217,226-259
+server/cmd/tools/migrations/legacypolicyscope/runner.go
+  s_d32de0b0e2b253::t_2271be3f4700d4 66,176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "ed23d21e506287c85268e614c38eea2e806e00be",
+  "prompts": {},
+  "sessions": {
+    "s_d32de0b0e2b253": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c4ca134-6d21-4756-a37e-e1180d485004",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
