@@ -1,10 +1,15 @@
 package platformmcp
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/directory"
 )
 
 // TestListPluginsOutput_ProjectsOnlyAllowlistedFields pins the inventory's
@@ -25,7 +30,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:   false,
 			ServerCount: 3,
 			SkillCount:  1,
-			Audience:    PluginAudience{AllMembers: false, Roles: 2, Users: 4},
+			Assignments: PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
 			Publication: PluginPublicationPublished,
 		}},
 		NextCursor: "opaque",
@@ -35,9 +40,30 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"project_id",
 		"plugins", "id", "name", "slug", "description", "is_default",
 		"server_count", "skill_count",
-		"audience", "all_members", "roles", "users",
+		"assignments", "all_members", "roles", "users",
 		"publication",
 		"next_cursor",
+	}, decodeKeys(t, output))
+}
+
+func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
+	t.Parallel()
+
+	count := NewSubjectCount(8)
+	output := ListPluginAssignmentsOutput{
+		ProjectID: "00000000-0000-0000-0000-000000000001",
+		Assignments: []PluginAssignmentOption{{
+			Kind:        "role",
+			DisplayName: "Engineering",
+			MemberCount: &count,
+			Reference:   "opaque",
+		}},
+		ReferencesExpireAt: "2026-09-04T12:10:00Z",
+		Truncated:          false,
+	}
+
+	require.ElementsMatch(t, []string{
+		"project_id", "assignments", "kind", "display_name", "member_count", "reference", "references_expire_at", "truncated",
 	}, decodeKeys(t, output))
 }
 
@@ -55,7 +81,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:   true,
 			ServerCount: 1,
 			SkillCount:  1,
-			Audience:    PluginAudience{AllMembers: true},
+			Assignments: PluginAssignmentSummary{AllMembers: true},
 			Publication: PluginPublicationUnpublished,
 		},
 		Servers: []PluginServer{{
@@ -69,17 +95,29 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			Name:          "triage",
 			FollowsLatest: true,
 		}},
-		Truncated: false,
+		AssignmentVersion: "opaque-version",
+		Assignments: []PluginAssignmentOption{{
+			Kind:        "everyone",
+			DisplayName: "Everyone",
+			Reference:   "opaque-reference",
+		}},
+		AssignmentDetailsComplete: true,
+		AssignmentsTruncated:      false,
+		ReferencesExpireAt:        "2026-09-04T12:10:00Z",
+		Truncated:                 false,
 	}
 
 	require.ElementsMatch(t, []string{
 		"project_id",
 		"plugin", "id", "name", "slug", "is_default",
 		"server_count", "skill_count",
-		"audience", "all_members", "roles", "users",
+		"assignments", "all_members", "roles", "users",
 		"publication",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
+		"assignment_version",
+		"assignments", "kind", "display_name", "reference",
+		"assignment_details_complete", "assignments_truncated", "references_expire_at",
 		"truncated",
 	}, decodeKeys(t, output))
 }
@@ -87,6 +125,88 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 // TestMatchesTargetNameRefusesPartialMatches pins what an exact target means.
 // A prefix or substring match is what turns "the marketing plugin" into
 // someone else's plugin, so only an id, a slug, or a whole name matches.
+func TestPluginAssignmentReferenceIsEncryptedAndBound(t *testing.T) {
+	t.Parallel()
+
+	codec, err := newSubjectReferenceCodec("key-material")
+	require.NoError(t, err)
+	principal := testReferencePrincipal()
+	projectID := "00000000-0000-0000-0000-000000000001"
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	principalURN := "role:organization:00000000-0000-0000-0000-0000000000a1"
+
+	reference, err := codec.EncodeScoped(principal, subjectKindPluginAssignment, projectID, principalURN, now)
+	require.NoError(t, err)
+	raw, err := base64.RawURLEncoding.DecodeString(reference)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), principalURN)
+	require.NotContains(t, string(raw), principal.OrganizationID)
+
+	resolved, err := codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, projectID, now)
+	require.NoError(t, err)
+	require.Equal(t, principalURN, resolved)
+
+	otherOrganization := principal
+	otherOrganization.OrganizationID = "org-2"
+	_, err = codec.DecodeScoped(reference, otherOrganization, subjectKindPluginAssignment, projectID, now)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, "00000000-0000-0000-0000-000000000002", now)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	_, err = codec.DecodeScoped(reference, principal, subjectKindPluginAssignment, projectID, now.Add(SubjectReferenceTTL))
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+}
+
+func TestPluginAssignmentVersionCoversPluginAndCanonicalAssignmentSet(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	assignments := []string{"role:global:00000000-0000-0000-0000-0000000000b2", "*"}
+	version := pluginAssignmentVersion(key, projectID, pluginID, assignments)
+
+	require.Equal(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*", assignments[0], "*"}))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*"}))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, uuid.New(), assignments))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments))
+}
+
+func TestCurrentPluginAssignmentsCanonicalizesAndHidesUnreviewedAssignments(t *testing.T) {
+	t.Parallel()
+
+	groupID := uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
+	available := []resolvedPluginAssignment{
+		{option: PluginAssignmentOption{Kind: "everyone", DisplayName: "Everyone", Reference: "everyone-ref"}, principalURN: "*"},
+		{option: PluginAssignmentOption{Kind: "directory_group", DisplayName: "Engineering", Reference: "group-ref"}, principalURN: directory.GroupPrincipal(groupID)},
+	}
+	current, complete := currentPluginAssignments(available, []string{"user:private-user-id", "*", "directory_group:00000000-0000-0000-0000-0000000000B2"})
+
+	require.False(t, complete)
+	require.Equal(t, []PluginAssignmentOption{
+		{Kind: "everyone", DisplayName: "Everyone", Reference: "everyone-ref"},
+		{Kind: "directory_group", DisplayName: "Engineering", Reference: "group-ref"},
+	}, publicAssignmentOptions(current))
+	encoded, err := json.Marshal(publicAssignmentOptions(current))
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-user-id")
+	require.NotContains(t, string(encoded), "principal")
+}
+
+func TestPluginAssignmentVersionCanonicalizesDirectoryPrincipals(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	canonical := directory.GroupPrincipal(uuid.MustParse("00000000-0000-0000-0000-0000000000b2"))
+	legacyCase := "directory_group:00000000-0000-0000-0000-0000000000B2"
+
+	require.Equal(t,
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{legacyCase}),
+	)
+}
+
 func TestMatchesTargetNameRefusesPartialMatches(t *testing.T) {
 	t.Parallel()
 
