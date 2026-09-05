@@ -57,7 +57,7 @@ function marketplaceStatusCopy(
   if (result.marketplace_update_deferred) {
     return "A marketplace exists, but it was not updated yet because this organization is not cleared for the latest observability hooks. Existing marketplace installs keep the previous credential until the marketplace is republished.";
   }
-  return "This project has no published marketplace. Use the key below for existing installs, or download a ZIP for a new package.";
+  return "This project has no published marketplace. Use the key above for existing installs, or download a ZIP for a new package.";
 }
 
 function previousKeyFateCopy(
