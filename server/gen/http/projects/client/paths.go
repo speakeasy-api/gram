@@ -17,6 +17,11 @@ func CreateProjectProjectsPath() string {
 	return "/rpc/projects.create"
 }
 
+// UpdateProjectProjectsPath returns the URL path to the projects service updateProject HTTP endpoint.
+func UpdateProjectProjectsPath() string {
+	return "/rpc/projects.update"
+}
+
 // ListProjectsProjectsPath returns the URL path to the projects service listProjects HTTP endpoint.
 func ListProjectsProjectsPath() string {
 	return "/rpc/projects.list"

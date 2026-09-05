@@ -153,7 +153,7 @@ func UsageCommands() []string {
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
-		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
+		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
@@ -2166,6 +2166,11 @@ func ParseEndpoint(
 		projectsCreateProjectBodyFlag         = projectsCreateProjectFlags.String("body", "REQUIRED", "")
 		projectsCreateProjectApikeyTokenFlag  = projectsCreateProjectFlags.String("apikey-token", "", "")
 		projectsCreateProjectSessionTokenFlag = projectsCreateProjectFlags.String("session-token", "", "")
+
+		projectsUpdateProjectFlags                = flag.NewFlagSet("update-project", flag.ExitOnError)
+		projectsUpdateProjectBodyFlag             = projectsUpdateProjectFlags.String("body", "REQUIRED", "")
+		projectsUpdateProjectSessionTokenFlag     = projectsUpdateProjectFlags.String("session-token", "", "")
+		projectsUpdateProjectProjectSlugInputFlag = projectsUpdateProjectFlags.String("project-slug-input", "", "")
 
 		projectsListProjectsFlags              = flag.NewFlagSet("list-projects", flag.ExitOnError)
 		projectsListProjectsOrganizationIDFlag = projectsListProjectsFlags.String("organization-id", "REQUIRED", "")
@@ -4366,6 +4371,7 @@ func ParseEndpoint(
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
 	projectsCreateProjectFlags.Usage = projectsCreateProjectUsage
+	projectsUpdateProjectFlags.Usage = projectsUpdateProjectUsage
 	projectsListProjectsFlags.Usage = projectsListProjectsUsage
 	projectsSetLogoFlags.Usage = projectsSetLogoUsage
 	projectsListAllowedOriginsFlags.Usage = projectsListAllowedOriginsUsage
@@ -6216,6 +6222,9 @@ func ParseEndpoint(
 
 			case "create-project":
 				epf = projectsCreateProjectFlags
+
+			case "update-project":
+				epf = projectsUpdateProjectFlags
 
 			case "list-projects":
 				epf = projectsListProjectsFlags
@@ -8561,6 +8570,9 @@ func ParseEndpoint(
 			case "create-project":
 				endpoint = c.CreateProject()
 				data, err = projectsc.BuildCreateProjectPayload(*projectsCreateProjectBodyFlag, *projectsCreateProjectApikeyTokenFlag, *projectsCreateProjectSessionTokenFlag)
+			case "update-project":
+				endpoint = c.UpdateProject()
+				data, err = projectsc.BuildUpdateProjectPayload(*projectsUpdateProjectBodyFlag, *projectsUpdateProjectSessionTokenFlag, *projectsUpdateProjectProjectSlugInputFlag)
 			case "list-projects":
 				endpoint = c.ListProjects()
 				data, err = projectsc.BuildListProjectsPayload(*projectsListProjectsOrganizationIDFlag, *projectsListProjectsApikeyTokenFlag, *projectsListProjectsSessionTokenFlag)
@@ -18524,6 +18536,7 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-project: Get project details by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-project: Create a new project.`)
+	fmt.Fprintln(os.Stderr, `    update-project: Update the display name of the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-projects: List all projects for an organization.`)
 	fmt.Fprintln(os.Stderr, `    set-logo: Uploads a logo for a project.`)
 	fmt.Fprintln(os.Stderr, `    list-allowed-origins: List allowed origins for a project.`)
@@ -18576,6 +18589,28 @@ func projectsCreateProjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects create-project --body '{\n      \"name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func projectsUpdateProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects update-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update the display name of the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-project --body '{\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func projectsListProjectsUsage() {

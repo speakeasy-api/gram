@@ -416,6 +416,7 @@ trackedFiles:
   src/funcs/projectsRead.ts: {}
   src/funcs/projectsSetLogo.ts: {}
   src/funcs/projectsSetOrganizationWhitelist.ts: {}
+  src/funcs/projectsUpdate.ts: {}
   src/funcs/projectsUpsertAllowedOrigin.ts: {}
   src/funcs/remoteMcpCreateServer.ts: {}
   src/funcs/remoteMcpCreateServerAndMcpServer.ts: {}
@@ -1544,6 +1545,8 @@ trackedFiles:
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
   src/models/components/updatepluginserverform.ts: {}
+  src/models/components/updateprojectform.ts: {}
+  src/models/components/updateprojectresult.ts: {}
   src/models/components/updateprompttemplateform.ts: {}
   src/models/components/updateprompttemplateresult.ts: {}
   src/models/components/updateremotesessionclientform.ts: {}
@@ -2190,6 +2193,7 @@ trackedFiles:
   src/models/operations/updatepackage.ts: {}
   src/models/operations/updateplugin.ts: {}
   src/models/operations/updatepluginserver.ts: {}
+  src/models/operations/updateproject.ts: {}
   src/models/operations/updateremotemcpserver.ts: {}
   src/models/operations/updateremotemcpserverheader.ts: {}
   src/models/operations/updateremotesessionclient.ts: {}
@@ -3074,6 +3078,7 @@ trackedFiles:
   src/react-query/updatePackage.ts: {}
   src/react-query/updatePlugin.ts: {}
   src/react-query/updatePluginServer.ts: {}
+  src/react-query/updateProject.ts: {}
   src/react-query/updateRemoteMcpServer.ts: {}
   src/react-query/updateRemoteMcpServerHeader.ts: {}
   src/react-query/updateRemoteSessionClient.ts: {}
@@ -10202,6 +10207,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateProject:
+    speakeasy-default-update-project:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"project": {"created_at": "2024-03-31T16:30:34.626Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2026-08-10T16:42:18.645Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateRemoteMcpServer:
     speakeasy-default-update-remote-mcp-server:
       requestBody:

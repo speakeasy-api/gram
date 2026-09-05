@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -38,6 +40,8 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const projectNameMaxLength = 40
 
 type Service struct {
 	tracer               trace.Tracer
@@ -260,6 +264,68 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	}
 
 	return project, nil
+}
+
+func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectPayload) (*gen.UpdateProjectResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	name := strings.TrimSpace(payload.Name)
+	if name == "" || strings.ContainsRune(name, '\x00') || utf8.RuneCountInString(name) > projectNameMaxLength {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	pr := s.repo.WithTx(dbtx)
+	existingRow, err := pr.GetProjectByIDForUpdate(ctx, *authCtx.ProjectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+	updatedRow, err := pr.UpdateProject(ctx, repo.UpdateProjectParams{
+		ProjectID: *authCtx.ProjectID,
+		Name:      name,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+
+	existing := toProject(existingRow)
+	updated := toProject(updatedRow)
+	if err := s.audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
+		OrganizationID:        updatedRow.OrganizationID,
+		ProjectID:             updatedRow.ID,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		ProjectName:           updatedRow.Name,
+		ProjectSlug:           updatedRow.Slug,
+		ProjectSnapshotBefore: existing,
+		ProjectSnapshotAfter:  updated,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project update audit log").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving project").LogError(ctx, s.logger)
+	}
+
+	return &gen.UpdateProjectResult{Project: updated}, nil
 }
 
 func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPayload) (res *gen.ListProjectsResult, err error) {

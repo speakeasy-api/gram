@@ -4,6 +4,7 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
+import { ProjectNameSection } from "./ProjectNameSection";
 
 export default function Settings(): JSX.Element {
   const organization = useOrganization();
@@ -15,6 +16,8 @@ export default function Settings(): JSX.Element {
       title="Project Settings"
       description="Manage your project configuration and perform administrative actions."
     >
+      <ProjectNameSection />
+
       <ModelProviderKeysSection />
 
       <SettingsDangerZone />

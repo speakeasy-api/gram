@@ -149,6 +149,32 @@ func (q *Queries) GetProjectByIDAndOrganizationID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getProjectByIDForUpdate = `-- name: GetProjectByIDForUpdate :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDForUpdate, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectBySlug = `-- name: GetProjectBySlug :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -412,6 +438,38 @@ type SetOrganizationWhitelistParams struct {
 func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.OrganizationID)
 	return err
+}
+
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects
+SET name = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateProjectParams struct {
+	Name      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const uploadProjectLogo = `-- name: UploadProjectLogo :one

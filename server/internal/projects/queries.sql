@@ -10,6 +10,14 @@ INSERT INTO projects (
 )
 RETURNING *;
 
+-- name: UpdateProject :one
+UPDATE projects
+SET name = @name,
+    updated_at = clock_timestamp()
+WHERE id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: ListProjectsByOrganization :many
 SELECT *
 FROM projects
@@ -47,6 +55,13 @@ SELECT *
 FROM projects
 WHERE id = @id
   AND deleted IS FALSE;
+
+-- name: GetProjectByIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
 
 -- name: GetProjectByIDAndOrganizationID :one
 SELECT *
