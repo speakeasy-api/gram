@@ -1,4 +1,4 @@
-h1:TuCj3KjRfAfJmSonve6uhSIZtL2tZyiMwly2WWJLZVw=
+h1:gsmifpyGQc5PHs8Y7b7kbcdK011XfZ7ksyB1WQR5CIE=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -104,3 +104,5 @@ h1:TuCj3KjRfAfJmSonve6uhSIZtL2tZyiMwly2WWJLZVw=
 20260902193935_openclaw-usage-rows.sql h1:EqmJwX/4Tf1aQVEvIT2viHC3vWV0/iKonGRY8RXP2qc=
 20260904141320_tenant-reporting-dimensions.sql h1:mPYeUlsGTFGV/rJg3SdOP/CUI3gkbMJc/j6Z/OJFO64=
 20260904165434_mcp-bandwidth-meter-readings.sql h1:aQJUsNzu7EHoldJZ7IZt+yiiqO9Lz5QihNjYvcY2Oxw=
+20260904182658_create-marts-access.sql h1:YcUpEkjmoVAEVCAULa6HpFEDHIJpTUOmuzBv8K3oc0w=
+20260905160800_create-marts-views.sql h1:GV1fiS1s0sH1ntU7M/oUt/npQTKeEyIqBtbLc+i8wcc=
