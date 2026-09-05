@@ -64,7 +64,7 @@ services:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
       - "${CLICKHOUSE_NATIVE_PORT}:9440"
     environment:
-      CLICKHOUSE_DB: default
+      CLICKHOUSE_DB: gram
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

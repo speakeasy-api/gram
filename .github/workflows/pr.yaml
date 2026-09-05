@@ -759,6 +759,7 @@ jobs:
       clickhouse:
         image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
+          CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -784,7 +785,7 @@ jobs:
 
       - name: Run ClickHouse migrations with golang-migrate
         env:
-          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+          CH_URL: clickhouse://127.0.0.1:9000?database=gram&username=gram&password=gram&secure=false&x-multi-statement=true
         run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
 
   lint-migrations:
@@ -901,9 +902,11 @@ jobs:
       - name: Lint ClickHouse migrations
         uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/
+          config: file://atlas.hcl
+          env: clickhouse
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -1022,9 +1025,11 @@ jobs:
       - name: Push ClickHouse migrations
         uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/
+          config: file://atlas.hcl
+          env: clickhouse
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:

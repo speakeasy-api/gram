@@ -21,7 +21,7 @@ CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
 
 CREATE USER IF NOT EXISTS marts_definer HOST NONE;
 
-GRANT SELECT ON default.attribute_metrics_summaries TO marts_definer;
+GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 
 GRANT SELECT ON marts.* TO marts_reader;
 
@@ -50,7 +50,7 @@ SELECT
         countIfMerge(total_tool_calls),
         uniqExactIfMerge(unique_tool_calls)
     )) AS tool_calls
-FROM default.attribute_metrics_summaries
+FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
 GROUP BY usage_date, surface, account_kind
@@ -77,7 +77,7 @@ SELECT
     toInt64(sumIfMerge(cache_creation_input_tokens)) AS cache_creation_tokens,
     toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens)) AS llm_tokens,
     toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens)) AS managed_tokens
-FROM default.attribute_metrics_summaries
+FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
   AND model != ''
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
@@ -115,7 +115,7 @@ SELECT
         countIfMerge(total_tool_calls),
         uniqExactIfMerge(unique_tool_calls)
     )) AS tool_calls
-FROM default.attribute_metrics_summaries
+FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
 GROUP BY usage_date, employee_function
