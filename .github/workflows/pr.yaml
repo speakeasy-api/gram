@@ -848,6 +848,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
+    env:
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -880,14 +882,6 @@ jobs:
           env: false
 
       # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
-      - name: Login to Atlas
-        env:
-          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
-        run: |
-          if [ -n "${ATLAS_TOKEN:+set}" ]; then
-            atlas login
-          fi
-
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
@@ -960,6 +954,8 @@ jobs:
     if: |
       github.event_name != 'merge_group' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
+    env:
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -990,18 +986,10 @@ jobs:
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
-          install_args: atlas
+          install_args: aqua:ariga/atlas
           cache: true
           cache_key_prefix: mise-atlas-blacksmith-v1
           env: false
-
-      - name: Login to Atlas
-        env:
-          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
-        run: |
-          if [ -n "${ATLAS_TOKEN:+set}" ]; then
-            atlas login
-          fi
 
       - name: Generate tag
         id: tag
@@ -1089,6 +1077,7 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 16
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -1177,14 +1166,6 @@ jobs:
 
       - name: Run "go mod tidy"
         run: mise run go:tidy
-
-      - name: Login to Atlas
-        env:
-          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
-        run: |
-          if [ -n "${ATLAS_TOKEN:+set}" ]; then
-            atlas login
-          fi
 
       - name: Run migrations
         run: mise run db:migrate
