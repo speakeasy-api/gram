@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   RotateObservabilityCredentialDialog,
@@ -84,9 +90,7 @@ describe("RotateObservabilityCredentialDialog", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Rotate credential" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
 
     expect(await screen.findByText(rotated.key!)).toBeDefined();
     expect(
@@ -105,7 +109,9 @@ describe("RotateObservabilityCredentialDialog", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "I have saved the key" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "I have saved the key" }),
+    );
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -130,12 +136,10 @@ describe("RotateObservabilityCredentialDialog", () => {
 
     fireEvent.click(
       screen.getByRole("radio", {
-        name: "Revoke the previous key immediately",
+        name: /Revoke the previous key immediately/,
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Rotate credential" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
 
     await waitFor(() => {
       expect(state.fetch).toHaveBeenCalledWith(

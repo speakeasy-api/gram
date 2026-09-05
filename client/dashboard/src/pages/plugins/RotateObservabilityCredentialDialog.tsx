@@ -106,9 +106,8 @@ export function RotateObservabilityCredentialDialog({
   const [fate, setFate] = useState<PreviousKeyFate>("grace");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [result, setResult] = useState<RotateObservabilityCredentialResult | null>(
-    null,
-  );
+  const [result, setResult] =
+    useState<RotateObservabilityCredentialResult | null>(null);
 
   const reset = () => {
     setFate("grace");
@@ -253,6 +252,7 @@ export function RotateObservabilityCredentialDialog({
                   id="observability-fate-grace"
                   value="grace"
                   className="mt-0.5"
+                  aria-label="Keep the previous key valid for 7 days"
                 />
                 <div className="min-w-0">
                   <Label
@@ -275,6 +275,7 @@ export function RotateObservabilityCredentialDialog({
                   id="observability-fate-revoke"
                   value="revoke_immediately"
                   className="mt-0.5"
+                  aria-label="Revoke the previous key immediately"
                 />
                 <div className="min-w-0">
                   <Label

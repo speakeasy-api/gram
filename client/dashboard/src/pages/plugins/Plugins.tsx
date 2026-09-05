@@ -599,68 +599,68 @@ function ObservabilityPluginCard({
             <DropdownMenuTrigger asChild>
               <PluginInstallButton size="sm" />
             </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={!installTarget}
-              onClick={() => {
-                // Defer until after the dropdown has fully closed to avoid a
-                // Radix focus-trap/body-lock conflict between the closing
-                // menu and the opening sheet (same pattern as MCPDetails.tsx).
-                setTimeout(() => setIsInstallSheetOpen(true), 0);
-              }}
-            >
-              <div className="flex flex-col">
-                <span>GitHub installation (preferred)</span>
-                {!installTarget && (
-                  <span className="text-muted-foreground text-xs">
-                    Requires marketplace setup
-                  </span>
-                )}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("claude");
-              }}
-            >
-              Download as zip — Claude
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("cursor");
-              }}
-            >
-              Download as zip — Cursor
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("codex");
-              }}
-            >
-              Download as zip — Codex
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("opencode");
-              }}
-            >
-              Download as zip — OpenCode
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("openclaw");
-              }}
-            >
-              Download as zip — OpenClaw
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={!installTarget}
+                onClick={() => {
+                  // Defer until after the dropdown has fully closed to avoid a
+                  // Radix focus-trap/body-lock conflict between the closing
+                  // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                  setTimeout(() => setIsInstallSheetOpen(true), 0);
+                }}
+              >
+                <div className="flex flex-col">
+                  <span>GitHub installation (preferred)</span>
+                  {!installTarget && (
+                    <span className="text-muted-foreground text-xs">
+                      Requires marketplace setup
+                    </span>
+                  )}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("claude");
+                }}
+              >
+                Download as zip — Claude
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("cursor");
+                }}
+              >
+                Download as zip — Cursor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("codex");
+                }}
+              >
+                Download as zip — Codex
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("opencode");
+                }}
+              >
+                Download as zip — OpenCode
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("openclaw");
+                }}
+              >
+                Download as zip — OpenClaw
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
