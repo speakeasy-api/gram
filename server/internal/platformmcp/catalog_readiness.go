@@ -192,6 +192,9 @@ func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripp
 	if roundTripper.unauthorized.Load() {
 		return ReadinessUnauthorized, "upstream_authorization_rejected"
 	}
+	if roundTripper.transient.Load() {
+		return ReadinessDegraded, "probe_temporarily_unavailable"
+	}
 	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
 		if stage == catalogProbeStageToolsList {
 			return ReadinessDegraded, "tools_list_response_too_large"
@@ -204,9 +207,6 @@ func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripp
 	state, evidence := ClassifyReadinessProbeFailure(err)
 	if evidence == "probe_timeout" || evidence == "probe_unreachable" {
 		return state, evidence
-	}
-	if roundTripper.transient.Load() {
-		return ReadinessDegraded, "probe_temporarily_unavailable"
 	}
 	if evidence == "probe_failed" && roundTripper.responded.Load() && !IsReadinessMCPErrorResponse(err) {
 		return ReadinessUnsupported, "invalid_mcp_response"
@@ -259,7 +259,7 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 }
 
 func transientCatalogProbeStatus(status int) bool {
-	return status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 type catalogBoundedReadCloser struct {

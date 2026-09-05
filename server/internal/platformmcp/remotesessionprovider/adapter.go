@@ -296,6 +296,9 @@ func normalizedProbeFailure(err error, authRT *authorizationRoundTripper, stage 
 	if authRT.authorizationRejected.Load() {
 		return platformmcp.ReadinessUnauthorized, "provider_authorization_rejected"
 	}
+	if authRT.transientResponse.Load() {
+		return platformmcp.ReadinessDegraded, "probe_temporarily_unavailable"
+	}
 	if authRT.responseTooLarge.Load() || errors.Is(err, errResponseTooLarge) {
 		if stage == probeStageToolsList {
 			return platformmcp.ReadinessDegraded, "tools_list_response_too_large"
@@ -308,9 +311,6 @@ func normalizedProbeFailure(err error, authRT *authorizationRoundTripper, stage 
 	state, evidence := platformmcp.ClassifyReadinessProbeFailure(err)
 	if evidence == "probe_timeout" || evidence == "probe_unreachable" {
 		return state, evidence
-	}
-	if authRT.transientResponse.Load() {
-		return platformmcp.ReadinessDegraded, "probe_temporarily_unavailable"
 	}
 	if evidence == "probe_failed" && authRT.responseReceived.Load() && !platformmcp.IsReadinessMCPErrorResponse(err) {
 		return platformmcp.ReadinessUnsupported, "invalid_mcp_response"
@@ -382,7 +382,7 @@ func (rt *authorizationRoundTripper) RoundTrip(request *http.Request) (*http.Res
 }
 
 func transientProbeStatus(status int) bool {
-	return status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 type boundedReadCloser struct {

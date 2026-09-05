@@ -100,7 +100,11 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 		return DirectRemoteInspection{}, sanitizedSetupFailure(err)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return directRemoteInspection(finalURL, nil, "authentication_required", directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget), true), nil
+		oauthDiscovery, err := directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget)
+		if err != nil {
+			return DirectRemoteInspection{}, sanitizedSetupFailure(err)
+		}
+		return directRemoteInspection(finalURL, nil, "authentication_required", oauthDiscovery, true), nil
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices || initialize.Result == nil {
 		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
@@ -120,7 +124,11 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 		return DirectRemoteInspection{}, sanitizedSetupFailure(err)
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return directRemoteInspection(finalURL, nil, "authentication_required", directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget), true), nil
+		oauthDiscovery, err := directRemoteOAuthDiscovery(probeCtx, s.policy, client, finalURL, budget)
+		if err != nil {
+			return DirectRemoteInspection{}, sanitizedSetupFailure(err)
+		}
+		return directRemoteInspection(finalURL, nil, "authentication_required", oauthDiscovery, true), nil
 	}
 	if status < http.StatusOK || status >= http.StatusMultipleChoices || tools.Result == nil {
 		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
@@ -303,13 +311,23 @@ func directRemoteNotification(ctx context.Context, client directRemoteHTTPClient
 	return finalURL, resp.StatusCode, nil
 }
 
-// directRemoteOAuthDiscovery returns only the safe discovery category. Metadata
-// URLs are derived from the canonical resource or a discovered issuer, rechecked
-// with Guardian before egress, and charged to the inspection response budget.
-func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string, budget *directRemoteResponseBudget) string {
+// directRemoteOAuthDiscovery returns a safe discovery category or a sanitized
+// temporary failure. Metadata URLs are derived from the canonical resource or a
+// discovered issuer, rechecked with Guardian before egress, and charged to the
+// inspection response budget.
+func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string, budget *directRemoteResponseBudget) (string, error) {
 	available := false
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL, budget)
+		if transientDirectRemoteMetadataStatus(status) {
+			err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+		}
+		if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
+			if available {
+				return "available", nil
+			}
+			return "", err
+		}
 		if err != nil || status != http.StatusOK {
 			continue
 		}
@@ -327,20 +345,33 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 			}
 			for _, authorizationMetadataURL := range directRemoteAuthorizationServerMetadataURLs(issuer) {
 				authorizationMetadata, status, err := directRemoteGetJSON(ctx, policy, client, authorizationMetadataURL, budget)
+				if transientDirectRemoteMetadataStatus(status) {
+					err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+				}
+				if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
+					if available {
+						return "available", nil
+					}
+					return "", err
+				}
 				if err != nil || status != http.StatusOK {
 					continue
 				}
 				if endpoint, _ := authorizationMetadata["registration_endpoint"].(string); endpoint != "" {
-					return "available_dcr"
+					return "available_dcr", nil
 				}
 				available = true
 			}
 		}
 	}
 	if available {
-		return "available"
+		return "available", nil
 	}
-	return "incomplete"
+	return "incomplete", nil
+}
+
+func transientDirectRemoteMetadataStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 func directRemoteProtectedResourceMetadataURLs(resourceURL string) []string {
@@ -374,8 +405,11 @@ func directRemoteAuthorizationServerMetadataURLs(issuer string) []string {
 }
 
 func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, rawURL string, budget *directRemoteResponseBudget) (map[string]any, int, error) {
-	if policy == nil || client == nil || budget == nil || budget.remaining <= 0 {
+	if policy == nil || client == nil || budget == nil {
 		return nil, 0, ErrDirectRemoteUnavailable
+	}
+	if budget.remaining <= 0 {
+		return nil, 0, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
 	canonicalURL, err := canonicalDirectRemoteURL(rawURL)
 	if err != nil {

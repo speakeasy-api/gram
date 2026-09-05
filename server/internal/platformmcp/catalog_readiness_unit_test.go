@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,6 +29,24 @@ func TestCatalogProbeFailureDistinguishesResponseSizeByStage(t *testing.T) {
 			require.Equal(t, test.wantEvidence, evidence)
 		})
 	}
+}
+
+func TestCatalogProbeFailureKeepsTransientPrecedenceOverResponseSize(t *testing.T) {
+	t.Parallel()
+
+	roundTripper := &catalogAuthorizationRoundTripper{}
+	roundTripper.transient.Store(true)
+	roundTripper.tooLarge.Store(true)
+	state, evidence := catalogProbeFailure(errCatalogProbeResponseTooLarge, roundTripper, catalogProbeStageInitialize)
+	require.Equal(t, ReadinessDegraded, state)
+	require.Equal(t, "probe_temporarily_unavailable", evidence)
+}
+
+func TestTransientCatalogProbeStatusIncludesRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, transientCatalogProbeStatus(http.StatusRequestTimeout))
+	require.False(t, transientCatalogProbeStatus(http.StatusBadRequest))
 }
 
 func TestCatalogProbeFailurePrecedenceAndRedirect(t *testing.T) {

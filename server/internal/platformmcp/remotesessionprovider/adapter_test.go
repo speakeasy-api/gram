@@ -122,6 +122,24 @@ func TestNormalizedProbeFailureDistinguishesResponseSizeByStage(t *testing.T) {
 	}
 }
 
+func TestNormalizedProbeFailureKeepsTransientPrecedenceOverResponseSize(t *testing.T) {
+	t.Parallel()
+
+	roundTripper := &authorizationRoundTripper{}
+	roundTripper.transientResponse.Store(true)
+	roundTripper.responseTooLarge.Store(true)
+	state, evidence := normalizedProbeFailure(errResponseTooLarge, roundTripper, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessDegraded, state)
+	require.Equal(t, "probe_temporarily_unavailable", evidence)
+}
+
+func TestTransientProbeStatusIncludesRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, transientProbeStatus(http.StatusRequestTimeout))
+	require.False(t, transientProbeStatus(http.StatusBadRequest))
+}
+
 func TestNormalizedProbeFailureKeepsAuthorizationRejectionPrecedence(t *testing.T) {
 	t.Parallel()
 
