@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.116.0
+
+### Minor Changes
+
+- 3b59a94: Add agent-safe runtime scope metadata and independent agent management capabilities to authorization APIs and custom roles.
+- 7df2aa5: Let users choose provider-hosted or Gram-hosted OAuth metadata and safely switch existing configurations after reviewing live discovery results.
+- b2975df: Restore the Wizard/Board switcher on organization setup, bringing back the linear setup wizard at /setup/wizard alongside the board.
+- 16760a4: Add project-scoped risk finding data exports that deliver new, non-excluded findings as privacy-safe OTLP log events without exposing matched content.
+
+### Patch Changes
+
+- de720fa: Keep Dashboard SDK product-feature contracts aligned with the standalone Admin API extraction.
+- 7ef5eb3: Show gated features on preview environments when a flag is missing from the dev PostHog project, while still honoring flags that are explicitly turned off.
+- 825df72: Removed the legacy session-aware `/register` compatibility flow. Stale links now redirect directly to `/sign-up`.
+- 27dada0: Restore the Cowork manual setup callout in organization onboarding.
+- 27dada0: Improve organization setup task ownership, support escalation, completion persistence, traffic verification, and responsive layout.
+
 ## 0.115.0
 
 ### Minor Changes
