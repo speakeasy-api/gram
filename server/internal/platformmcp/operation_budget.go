@@ -33,6 +33,11 @@ const (
 )
 
 const (
+	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
+	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+)
+
+const (
 	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
 	// bound documentation search. Retrieval is in-process and cheap, so these
 	// exist to stop a loop from spending the caller's context on repeated
@@ -59,6 +64,11 @@ const (
 	// write rate by alternating between mutation tools.
 	RiskMutationsPerConnectionPerMinute   = 5
 	RiskMutationsPerOrganizationPerMinute = 50
+
+	// PluginAssignmentMutationsPer* bound the access-affecting replacement of one
+	// plugin's complete assignment set on an independent allowance.
+	PluginAssignmentMutationsPerConnectionPerMinute   = 5
+	PluginAssignmentMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -211,6 +221,7 @@ type OperationBudgets struct {
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.
 	RiskMutations OperationBudget
+
 	// DrilldownVolume meters what the drill-downs return rather than how often
 	// they are called: rows and spans against one bucket, metric queries
 	// against another, both per connection over DrilldownVolumeWindow.

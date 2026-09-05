@@ -16,7 +16,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/directory"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -246,6 +248,12 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	now                  func() time.Time
+
+	mutationFlags    feature.Provider
+	organizations    OrganizationSlugResolver
+	audit            *audit.Logger
+	mutationBudget   OperationBudget
+	mutationReceipts *PluginAssignmentMutationReceiptStore
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -269,6 +277,11 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences: references,
 		assignmentVersionKey: versionKey,
 		now:                  time.Now,
+		mutationFlags:        nil,
+		organizations:        nil,
+		audit:                nil,
+		mutationBudget:       OperationBudget{},
+		mutationReceipts:     nil,
 	}
 }
 

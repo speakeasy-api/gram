@@ -19,6 +19,17 @@ type pluginRefusalResult struct {
 // admitting a second name for the same capability would make the assistant
 // choose between two tools that answer the same question.
 func registerPluginTools(reg *Registrar, plugins *PluginsService) {
+	setDescription := "Replace the complete assignment set of one exact plugin when assignment changes are enabled for its project. First read the plugin and current assignments. If this capability is available, explain the complete replacement and publication state, ask the user to confirm it, then call this with confirmed: true. Constraints: pass the assignment version from get_plugin, only opaque assignment references from get_plugin or list_plugin_assignments, and a stable idempotency key. An empty set removes every assignment and reaches nobody. This changes who can discover an already-published package; it does not publish package bytes. If the project is not enabled, this returns feature_unavailable without changing anything."
+	addTool(reg, &mcp.Tool{
+		Name:        operationSetPluginAssignments,
+		Title:       "Set Plugin Assignments",
+		Description: setDescription,
+	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
+		return pluginToolCall(ctx, func(principal Principal) (SetPluginAssignmentsOutput, error) {
+			return plugins.SetPluginAssignments(ctx, principal, input)
+		})
+	})
+
 	addTool(reg, &mcp.Tool{
 		Name:        "list_plugin_assignments",
 		Title:       "List Plugin Assignments",
@@ -58,17 +69,18 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		name        string
 		title       string
 		description string
+		readOnly    bool
 	}{
-		{"list_plugin_assignments", "List Plugin Assignments", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet."},
-		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet."},
-		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet."},
+		{operationSetPluginAssignments, "Set Plugin Assignments", "Replace the complete assignment set of one exact plugin. This is not switched on for your organization yet.", false},
+		{"list_plugin_assignments", "List Plugin Assignments", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet.", true},
+		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet.", true},
+		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet.", true},
 	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
+		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
+		if tool.readOnly {
+			manifest.Annotations = readOnlyAnnotations()
+		}
+		addTool(reg, manifest, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("plugins"))
 	}
 }
 
@@ -103,6 +115,10 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrPluginCursorInvalid):
 		result = pluginRefusalResult{Code: "invalid_request", Message: "That page marker does not belong to this project. Start the list again from the beginning."}
 	default:
+		if mutation, ok := errors.AsType[*PluginAssignmentMutationError](err); ok {
+			result = pluginRefusalResult{Code: mutation.Code, Message: mutation.Message}
+			break
+		}
 		if budgetResult, ok := operationBudgetToolResult(err); ok {
 			return budgetResult, true
 		}
