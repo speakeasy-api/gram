@@ -1,5 +1,24 @@
 # server
 
+## 2.2.0
+
+### Minor Changes
+
+- 3b59a94: Add agent-safe runtime scope metadata and independent agent management capabilities to authorization APIs and custom roles.
+- eda3ac0: Expose synchronized organization and project dimensions in ClickHouse so internal reporting can group tenant activity by current slugs, account lifecycle, trial state, and integration flags.
+- 3823b3b: Advertise provider-hosted OAuth authorization server issuers for existing external OAuth configurations while retaining compatibility with metadata-backed configurations.
+- 35c8572: Add issuer discovery and create, update, and clear operations for issuer-backed external OAuth configurations.
+- 16760a4: Add project-scoped risk finding data exports that deliver new, non-excluded findings as privacy-safe OTLP log events without exposing matched content.
+
+### Patch Changes
+
+- 14adecd: Store imported AI provider chat messages and titles that contain NUL bytes by dropping the byte, instead of failing the compliance sync on that window.
+- 8b94bdb: Name the `name` and `arguments` keys in the execute_tool description, gateway instructions, and missing-name error so clients stop guessing a `tool` key.
+- 4f5364c: Serve the hooks@0.3.29 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 7720707: Add privacy-safe Platform MCP reads for plugin assignments and assignment versions.
+- 6c065f9: Classify Platform MCP setup failures with privacy-safe categories and actionable next steps.
+- 27dada0: Notify setup task assignees by email and allow assigned owners to verify onboarding traffic.
+
 ## 2.1.0
 
 ### Minor Changes
