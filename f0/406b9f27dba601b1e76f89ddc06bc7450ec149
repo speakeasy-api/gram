@@ -1,0 +1,14 @@
+server/internal/plugins/assignments/command.go
+  h_9630b74bdac540 248-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f0406b9f27dba601b1e76f89ddc06bc7450ec149",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
