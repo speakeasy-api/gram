@@ -339,6 +339,18 @@ func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
 // Schema inference panics at process boot, so a tool input the nil-dependency
 // server never registers can crash-loop production while CI stays green. The
 // jsonschema tag is a description; a "word=" prefix is rejected outright.
+func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[FindMCPOutput]("find_mcp")
+	mcps := schema.Properties["mcps"]
+	require.NotNil(t, mcps)
+	require.NotNil(t, mcps.Items)
+	backendKind := mcps.Items.Properties["backend_kind"]
+	require.NotNil(t, backendKind)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+}
+
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	t.Parallel()
 
