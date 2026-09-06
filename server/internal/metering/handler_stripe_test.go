@@ -165,6 +165,31 @@ func TestMeterReadingStripeExporterAcknowledgesCatalogMiss(t *testing.T) {
 	require.Equal(t, map[string]int64{"ineligible": 1}, stripeExportReadingOutcomes(t, reader))
 }
 
+func TestMeterReadingStripeExporterHardExcludesRiskMeters(t *testing.T) {
+	t.Parallel()
+
+	client := &captureV2MeterEventClient{inputs: nil, err: errors.New("must not be called")}
+	meterProvider, reader := newStripeExporterMetricReader(t)
+	exporter := metering.NewMeterReadingStripeExporter(
+		testenv.NewLogger(t),
+		meterProvider,
+		nil,
+		client,
+		metering.StripeCatalogFunc(func(metering.Definition) (string, error) {
+			return "misconfigured-risk-meter", nil
+		}),
+		true,
+	)
+	reading := new(meteringv1.MeterReading)
+	reading.SetKind(meteringv1.MeterReading_KIND_USAGE)
+	reading.SetMeterId(string(metering.MeterRiskGitleaksRealtime))
+	reading.SetMeterVersion(1)
+
+	require.NoError(t, exporter.Handle(t.Context(), reading, gcp.MessageMetadata{}))
+	require.Empty(t, client.inputs)
+	require.Equal(t, map[string]int64{"ineligible": 1}, stripeExportReadingOutcomes(t, reader))
+}
+
 func TestMeterReadingStripeExporterNacksCatalogError(t *testing.T) {
 	t.Parallel()
 
