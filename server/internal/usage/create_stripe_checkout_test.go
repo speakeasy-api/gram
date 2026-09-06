@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -1613,21 +1614,60 @@ func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.
 	holder := testenv.BeginTx(t, t.Context(), ti.service.db)
 	require.NoError(t, repo.New(holder).LockBillingMetadataOrganization(t.Context(), ti.orgID))
 
-	ctx, cancel := context.WithTimeout(ti.adminContext(t), time.Second)
-	defer cancel()
-	_, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.ErrorContains(t, err, "lock billing metadata organization")
+	ctx, cancel := context.WithCancel(ti.adminContext(t))
+	done := make(chan struct{})
+	var checkoutErr error
+	go func() {
+		defer close(done)
+		_, checkoutErr = ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
 
-	_, err = repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "Checkout must not insert before acquiring the organization lock")
-	_, _, checkouts := ti.stripe.snapshot()
+	// The deadline guards the test; cancellation follows an observed lock wait.
+	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancelProbe()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		blocked, err := testrepo.New(ti.db).IsQueryBlockedOnLockFixture(probeCtx, "%LockBillingMetadataOrganization%")
+		require.NoError(t, err)
+		if blocked {
+			break
+		}
+		select {
+		case <-done:
+			require.FailNow(t, "Checkout returned before waiting for the billing metadata organization lock", "%v", checkoutErr)
+		case <-probeCtx.Done():
+			require.FailNow(t, "Checkout did not reach the billing metadata organization lock", "%v", probeCtx.Err())
+		case <-poll.C:
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-probeCtx.Done():
+		require.FailNow(t, "Checkout did not return after lock cancellation", "%v", probeCtx.Err())
+	}
+	require.ErrorIs(t, checkoutErr, context.Canceled)
+	require.ErrorContains(t, checkoutErr, "lock billing metadata organization")
+
+	_, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "Checkout must not insert billing metadata before acquiring the organization lock")
+	uniqueCustomers, customers, checkouts := ti.stripe.snapshot()
+	require.Equal(t, 1, uniqueCustomers, "idempotent Stripe customer creation intentionally precedes the billing metadata lock")
+	require.Len(t, customers, 1)
+	require.Equal(t, "customer:"+ti.orgID, customers[0].IdempotencyKey)
 	require.Empty(t, checkouts)
 
 	require.NoError(t, holder.Rollback(t.Context()))
 	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
 	require.NoError(t, err)
 	require.NotEmpty(t, checkoutURL)
+	uniqueCustomers, _, _ = ti.stripe.snapshot()
+	require.Equal(t, 1, uniqueCustomers, "retry must reuse the Stripe customer created before cancellation")
 }
 
 func TestCreateStripeCheckoutPersistsIntentWhenCheckoutFails(t *testing.T) {
