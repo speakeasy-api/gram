@@ -87,6 +87,61 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-evaluation
+    name: gram-metering-v1-risk-evaluation
+    spec:
+      definition: |
+        edition = "2024";
+        message RiskEvaluation {
+          enum Detector {
+            option features.enum_type = OPEN;
+            DETECTOR_UNSPECIFIED = 0;
+            DETECTOR_GITLEAKS = 1;
+            DETECTOR_PRESIDIO = 2;
+            DETECTOR_PROMPT_INJECTION = 3;
+            DETECTOR_PROMPT_POLICY = 4;
+            DETECTOR_CUSTOM_RULES = 5;
+          }
+          enum ExecutionMode {
+            option features.enum_type = OPEN;
+            EXECUTION_MODE_UNSPECIFIED = 0;
+            EXECUTION_MODE_REALTIME = 1;
+            EXECUTION_MODE_BATCH = 2;
+            EXECUTION_MODE_SHADOW = 3;
+          }
+          enum Outcome {
+            option features.enum_type = OPEN;
+            OUTCOME_UNSPECIFIED = 0;
+            OUTCOME_COMPLETED = 1;
+            OUTCOME_FAILED = 2;
+            OUTCOME_CANCELLED = 3;
+            OUTCOME_SKIPPED = 4;
+          }
+          string id = 1;
+          string evaluation_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          string policy_id = 5;
+          int64 policy_version = 6;
+          string operation_id = 7;
+          Detector detector = 8;
+          ExecutionMode execution_mode = 9;
+          Outcome outcome = 10;
+          string occurred_at = 11;
+          string produced_at = 12;
+          int64 stokens = 13;
+          string measurement_method = 14;
+          string model = 15;
+          string provider_request_id = 16;
+          int64 prompt_tokens = 17;
+          int64 completion_tokens = 18;
+          double cost_usd = 19;
+          bool measurement_error = 20;
+          string record_kind = 21;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -1132,6 +1187,24 @@ pubsub:
         name: gram-metering-v1-meter-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-evaluation-ch-writer
+      topic_proto_message: gram-metering-v1-risk-evaluation
+    name: gram-metering-v1-risk-evaluation-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-metering-v1-risk-evaluation-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 2678400s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-risk-evaluation
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -1513,6 +1586,23 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 2678400s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-evaluation
+    name: gram-metering-v1-risk-evaluation
+    spec:
+      messageRetentionDuration: 2678400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-metering-v1-risk-evaluation
+  - labels:
+      dlq_for: gram-metering-v1-risk-evaluation-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-evaluation-ch-writer
+    name: gram-metering-v1-risk-evaluation-ch-writer-dlq
     spec:
       messageRetentionDuration: 2678400s
   - labels:

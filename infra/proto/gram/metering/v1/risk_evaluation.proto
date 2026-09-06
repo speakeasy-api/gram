@@ -1,0 +1,76 @@
+edition = "2024";
+
+package gram.metering.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1";
+
+// RiskEvaluation records one terminal physical attempt of a logical detector
+// evaluation. It contains measurement metadata only and never scanned content.
+message RiskEvaluation {
+  enum Detector {
+    option features.enum_type = OPEN;
+    DETECTOR_UNSPECIFIED = 0;
+    DETECTOR_GITLEAKS = 1;
+    DETECTOR_PRESIDIO = 2;
+    DETECTOR_PROMPT_INJECTION = 3;
+    DETECTOR_PROMPT_POLICY = 4;
+    DETECTOR_CUSTOM_RULES = 5;
+  }
+
+  enum ExecutionMode {
+    option features.enum_type = OPEN;
+    EXECUTION_MODE_UNSPECIFIED = 0;
+    EXECUTION_MODE_REALTIME = 1;
+    EXECUTION_MODE_BATCH = 2;
+    EXECUTION_MODE_SHADOW = 3;
+  }
+
+  enum Outcome {
+    option features.enum_type = OPEN;
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_COMPLETED = 1;
+    OUTCOME_FAILED = 2;
+    OUTCOME_CANCELLED = 3;
+    OUTCOME_SKIPPED = 4;
+  }
+
+  // Id uniquely identifies this physical attempt and remains stable on redelivery.
+  string id = 1;
+
+  // EvaluationId deterministically identifies the logical detector evaluation.
+  string evaluation_id = 2;
+  string organization_id = 3;
+  string project_id = 4;
+  string policy_id = 5;
+  int64 policy_version = 6;
+  string operation_id = 7;
+  Detector detector = 8;
+  ExecutionMode execution_mode = 9;
+  Outcome outcome = 10;
+
+  // OccurredAt and ProducedAt are UTC RFC3339Nano timestamps for attempt start
+  // and completion respectively.
+  string occurred_at = 11;
+  string produced_at = 12;
+
+  // Explicit scalar presence preserves unknown workload separately from known zero.
+  int64 stokens = 13;
+  string measurement_method = 14;
+  string model = 15;
+  string provider_request_id = 16;
+  int64 prompt_tokens = 17;
+  int64 completion_tokens = 18;
+  double cost_usd = 19;
+  bool measurement_error = 20;
+
+  // RecordKind is scan for detector completion or inference for a physical provider request.
+  string record_kind = 21;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 2678400 /* 31 days */
+    }
+  };
+}

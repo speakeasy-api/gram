@@ -29,6 +29,8 @@ const (
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
 	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
 	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
+	// GramMeteringV1RiskEvaluation publishes to gram-metering-v1-risk-evaluation.
+	GramMeteringV1RiskEvaluation Topic = "gram.metering.v1.RiskEvaluation"
 	// GramOtelV1InboundLogRecord publishes to gram-otel-v1-inbound-log-record.
 	GramOtelV1InboundLogRecord Topic = "gram.otel.v1.InboundLogRecord"
 	// GramOtelV1InboundMetric publishes to gram-otel-v1-inbound-metric.
@@ -70,6 +72,7 @@ func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
 		GramMeteringV1MeterReading,
+		GramMeteringV1RiskEvaluation,
 		GramOtelV1InboundLogRecord,
 		GramOtelV1InboundMetric,
 		GramOtelV1InboundSpan,
@@ -97,6 +100,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramAuthzV1Challenge, true
 	case GramMeteringV1MeterReading:
 		return GramMeteringV1MeterReading, true
+	case GramMeteringV1RiskEvaluation:
+		return GramMeteringV1RiskEvaluation, true
 	case GramOtelV1InboundLogRecord:
 		return GramOtelV1InboundLogRecord, true
 	case GramOtelV1InboundMetric:
@@ -146,6 +151,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
 	case GramMeteringV1MeterReading:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
+	case GramMeteringV1RiskEvaluation:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.RiskEvaluation{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundLogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundLogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundMetric:
