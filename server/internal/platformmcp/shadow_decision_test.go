@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
@@ -19,9 +20,15 @@ func TestShadowDecisionRequiresConfirmationAndExplicitAllowAudience(t *testing.T
 	require.Equal(t, "confirmation_required", decisionErr.Code)
 
 	service := &ShadowDecisionService{}
+	_, err = service.Decide(t.Context(), Principal{UserID: "user", OrganizationID: "organization"}, DecideShadowMCPAccessInput{
+		ProjectID: "project", TargetReference: "target", Decision: "allow", Rationale: "approved", ExpectedVersion: "version", IdempotencyKey: "key", Confirmed: true,
+	})
+	require.ErrorAs(t, err, &decisionErr)
+	require.Equal(t, "invalid_request", decisionErr.Code)
+
 	_, err = service.Decide(t.Context(), Principal{UserID: "user", OrganizationID: "organization"}, DecideShadowMCPAccessInput{Confirmed: true})
 	require.ErrorAs(t, err, &decisionErr)
-	require.Equal(t, "feature_unavailable", decisionErr.Code)
+	require.Equal(t, "invalid_request", decisionErr.Code)
 }
 
 func TestNormalizeShadowAudienceReferencesIsCanonical(t *testing.T) {
@@ -50,6 +57,22 @@ func TestShadowDecisionVersionChangesWithLockedState(t *testing.T) {
 	state.Status = "requested"
 	state.LatestDecisionID = uuid.New()
 	require.False(t, codec.Match(version, state))
+
+	_, err = codec.Encode(mcpapproval.DecisionVersionState{RequestID: uuid.Nil})
+	require.ErrorIs(t, err, ErrShadowInventoryUnavailable)
+}
+
+func TestUnavailableShadowDecisionToolReturnsStructuredRefusal(t *testing.T) {
+	t.Parallel()
+
+	result, output, err := unavailableShadowDecisionTool(t.Context(), nil, DecideShadowMCPAccessInput{})
+	require.NoError(t, err)
+	require.Equal(t, DecideShadowMCPAccessOutput{}, output)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"feature_unavailable","feature":"shadow_mcp_decisions","message":"Shadow MCP access decisions are not enabled or are temporarily unavailable."}`, text.Text)
 }
 
 func TestShadowDecisionReceiptIsClosed(t *testing.T) {

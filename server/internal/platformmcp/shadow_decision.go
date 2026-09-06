@@ -97,9 +97,6 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 	if !input.Confirmed {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionError("confirmation_required", "Confirm the exact Shadow MCP decision and audiences before applying it.", ErrShadowDecisionInvalid)
 	}
-	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
-		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
-	}
 	input.ProjectID = strings.TrimSpace(input.ProjectID)
 	input.TargetReference = strings.TrimSpace(input.TargetReference)
 	input.Decision = strings.TrimSpace(input.Decision)
@@ -122,6 +119,9 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 	if input.Decision == "deny" && len(references) != 0 {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Deny does not accept audience references.")
 	}
+	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
+		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
+	}
 	project, err := s.shadow.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, "")
 	if err != nil {
 		return DecideShadowMCPAccessOutput{}, mapShadowDecisionProjectError(err)
@@ -134,6 +134,9 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		targetKind, targetKey, err := s.shadow.ResolveTargetReference(principal, project.ID.String(), input.TargetReference)
 		if err != nil {
 			return ShadowDecisionReceiptResult{}, shadowDecisionNotFound()
+		}
+		if targetKind == shadowTargetKindStdioCommand {
+			return ShadowDecisionReceiptResult{}, shadowDecisionInvalid("Shadow MCP local-command targets cannot be enforced by this tool.")
 		}
 		requestID, err := s.core.ResolveDecisionTarget(ctx, principal.OrganizationID, project.ID, targetKind, targetKey)
 		if err != nil {

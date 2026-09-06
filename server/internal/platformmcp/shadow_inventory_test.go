@@ -63,7 +63,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	require.NoError(t, err)
 	service := &ShadowInventoryService{
 		projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row}}, target: row},
-		reviews: stubShadowReview{summary: mcpapproval.PlatformReviewSummary{Status: status, EvidenceCollected: true, EvidenceGaps: []string{}, IdentityKind: "remote", PackagePublication: "unknown", RepositoryState: "found", AdvisoryLookup: "complete", KnownAdvisories: 2, AuthorityState: "declared", CapabilitySource: "server", DeclaredToolCount: 3, RiskyDeclarationCount: 1, ResearchStatus: "completed", ResearchCoverage: "moderate", CitationCount: 2, TrustedCitationCount: 1}},
+		reviews: stubShadowReview{summary: mcpapproval.PlatformReviewSummary{Status: status, EvidenceCollected: true, EvidenceGaps: []string{}, IdentityKind: "remote", PackagePublication: "unknown", RepositoryState: "found", AdvisoryLookup: "complete", KnownAdvisories: 2, AuthorityState: "declared", CapabilitySource: "server", DeclaredToolCount: 3, RiskyDeclarationCount: 1, ResearchStatus: "completed", ResearchCoverage: "moderate", CitationCount: 2, TrustedCitationCount: 1, DecisionVersionState: mcpapproval.DecisionVersionState{RequestID: uuid.New()}}},
 		flags:   flags, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, versions: versions,
 		now: func() time.Time { return time.Date(6, 9, 6, 12, 0, 0, 0, time.UTC) },
 	}

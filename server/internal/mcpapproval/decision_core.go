@@ -84,7 +84,19 @@ func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input Deci
 	} else if len(granted) == 0 {
 		granted = []string{authz.AllUsersPrincipal().String()}
 	}
+	for i, principalURN := range granted {
+		if principalURN == urn.PrincipalWildcard {
+			granted[i] = authz.AllUsersPrincipal().String()
+		}
+	}
+
 	queries := repo.New(s.db).WithTx(tx)
+	// Every transaction that can change a standing decision takes the project
+	// enforcement lock before a request row lock. Policy URL edits use the same
+	// order, preventing a decision/edit race from deadlocking on reversed locks.
+	if err := queries.LockProjectEnforcementState(ctx, input.ProjectID.String()); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking project enforcement state").LogError(ctx, s.logger)
+	}
 	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: input.RequestID, ProjectID: input.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, err, "approval request not found")

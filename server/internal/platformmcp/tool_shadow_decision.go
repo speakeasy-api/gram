@@ -33,7 +33,11 @@ func registerShadowDecisionTool(reg *Registrar, service *ShadowDecisionService) 
 }
 
 func unavailableShadowDecisionTool(_ context.Context, _ *mcp.CallToolRequest, _ DecideShadowMCPAccessInput) (*mcp.CallToolResult, DecideShadowMCPAccessOutput, error) {
-	return nil, DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
+	result, ok := shadowDecisionToolResult(shadowDecisionUnavailable(nil))
+	if !ok {
+		return nil, DecideShadowMCPAccessOutput{}, ErrShadowDecisionUnavailable
+	}
+	return result, DecideShadowMCPAccessOutput{}, nil
 }
 
 func shadowDecisionToolResult(err error) (*mcp.CallToolResult, bool) {

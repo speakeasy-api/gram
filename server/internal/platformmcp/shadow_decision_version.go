@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 )
 
@@ -22,7 +24,7 @@ func newShadowDecisionVersionCodec(keyMaterial string) (*shadowDecisionVersionCo
 }
 
 func (c *shadowDecisionVersionCodec) Encode(state mcpapproval.DecisionVersionState) (string, error) {
-	if c == nil || len(c.key) != sha256.Size || state.RequestID.String() == "" {
+	if c == nil || len(c.key) != sha256.Size || state.RequestID == uuid.Nil {
 		return "", ErrShadowInventoryUnavailable
 	}
 	payload, err := json.Marshal(state)
