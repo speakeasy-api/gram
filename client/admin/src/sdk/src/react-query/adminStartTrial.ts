@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminStartTrial } from "../funcs/adminAdminStartTrial.js";
+import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AdminAdminStartTrialMutationVariables = {
+export type AdminStartTrialMutationVariables = {
   request: StartTrialRequestBody;
   options?: RequestOptions;
 };
 
-export type AdminAdminStartTrialMutationData = AdminOrganization;
+export type AdminStartTrialMutationData = AdminOrganization;
 
-export type AdminAdminStartTrialMutationError =
+export type AdminStartTrialMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,43 +52,43 @@ export type AdminAdminStartTrialMutationError =
  * @remarks
  * Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.
  */
-export function useAdminAdminStartTrialMutation(
+export function useAdminStartTrialMutation(
   options?: MutationHookOptions<
-    AdminAdminStartTrialMutationData,
-    AdminAdminStartTrialMutationError,
-    AdminAdminStartTrialMutationVariables
+    AdminStartTrialMutationData,
+    AdminStartTrialMutationError,
+    AdminStartTrialMutationVariables
   >,
 ): UseMutationResult<
-  AdminAdminStartTrialMutationData,
-  AdminAdminStartTrialMutationError,
-  AdminAdminStartTrialMutationVariables
+  AdminStartTrialMutationData,
+  AdminStartTrialMutationError,
+  AdminStartTrialMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAdminAdminStartTrialMutation(client, options),
+    ...buildAdminStartTrialMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAdminAdminStartTrial(): MutationKey {
-  return ["@gram/admin-client", "admin", "adminStartTrial"];
+export function mutationKeyAdminStartTrial(): MutationKey {
+  return ["@gram/admin-client", "admin", "startTrial"];
 }
 
-export function buildAdminAdminStartTrialMutation(
+export function buildAdminStartTrialMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AdminAdminStartTrialMutationVariables,
-  ) => Promise<AdminAdminStartTrialMutationData>;
+    variables: AdminStartTrialMutationVariables,
+  ) => Promise<AdminStartTrialMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAdminAdminStartTrial(),
-    mutationFn: function adminAdminStartTrialMutationFn({
+    mutationKey: mutationKeyAdminStartTrial(),
+    mutationFn: function adminStartTrialMutationFn({
       request,
       options,
-    }): Promise<AdminAdminStartTrialMutationData> {
+    }): Promise<AdminStartTrialMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -101,7 +101,7 @@ export function buildAdminAdminStartTrialMutation(
           ),
         },
       };
-      return unwrapAsync(adminAdminStartTrial(
+      return unwrapAsync(adminStartTrial(
         client$,
         request,
         mergedOptions,

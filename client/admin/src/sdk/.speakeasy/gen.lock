@@ -27,7 +27,6 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/adminAdminStartTrial.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
@@ -55,6 +54,7 @@ trackedFiles:
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
+  src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
   src/hooks/hooks.ts: {}
@@ -130,7 +130,6 @@ trackedFiles:
   src/models/operations/adminlistorganizations.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
-  src/react-query/adminAdminStartTrial.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
@@ -171,6 +170,7 @@ trackedFiles:
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
   src/react-query/index.ts: {}

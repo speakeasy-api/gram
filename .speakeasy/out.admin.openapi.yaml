@@ -2668,6 +2668,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: startTrial
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.
  */
-export function adminAdminStartTrial(
+export function adminStartTrial(
   client: GramCore,
   request: StartTrialRequestBody,
   options?: RequestOptions,
