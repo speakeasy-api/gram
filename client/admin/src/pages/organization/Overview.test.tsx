@@ -1261,9 +1261,7 @@ describe("Overview", () => {
     });
 
     await screen.findByRole("heading", { name: "Enterprise trial" });
-    expect(
-      within(panelNamed("Details")).getByText("No trial"),
-    ).toBeTruthy();
+    expect(within(panelNamed("Details")).getByText("No trial")).toBeTruthy();
     expect(
       within(panelNamed("Enterprise trial")).getByText("No trial"),
     ).toBeTruthy();

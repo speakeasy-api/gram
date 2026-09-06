@@ -1836,7 +1836,7 @@ describe("the keyboard when a dialog closes", () => {
     );
   }
 
-	it.each(["disable", "re-enable", "re-arm", "start"] as const)(
+  it.each(["disable", "re-enable", "re-arm", "start"] as const)(
     "uses the caller fallback after a successful %s replaces its opener",
     async (action) => {
       const cases = {
