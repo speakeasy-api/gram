@@ -1059,6 +1059,19 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
+				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
+			}
+			if authCtx.ProjectID == nil {
+				// Organization-wide keys gain execution context only after project
+				// access is authorized. Copy the context so sibling calls cannot
+				// inherit this request's project binding.
+				projectAuth := *authCtx
+				projectAuth.ProjectID = &toolset.ProjectID
+				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
+			}
+		}
 	}
 
 	// Decode the raw body first to check for batch requests
