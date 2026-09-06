@@ -48,11 +48,13 @@ function OrgApiKeysInner() {
   const projectSelectionValid =
     projectId === "organization-wide" ||
     organization.projects.some((project) => project.id === projectId);
-  const projectLabel = (id?: string) =>
-    id
-      ? (organization.projects.find((project) => project.id === id)?.name ??
-        "Unavailable project")
-      : "Organization-wide";
+  const projectLabel = (id?: string) => {
+    if (!id) return "Organization-wide";
+    return (
+      organization.projects.find((project) => project.id === id)?.name ??
+      "Unavailable project"
+    );
+  };
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -160,7 +162,7 @@ function OrgApiKeysInner() {
     },
     {
       key: "scopes",
-      header: "Permission scopes",
+      header: "Scopes",
       width: "1fr",
       render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
     },
@@ -317,44 +319,43 @@ function OrgApiKeysInner() {
                 autoCorrect="off"
               />
 
-              <div className="space-y-2">
-                <Label htmlFor="key-project">Project binding (optional)</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger
-                    id="key-project"
-                    aria-describedby="key-project-help"
-                    className="w-full"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="organization-wide">
-                      Organization-wide (no project)
-                    </SelectItem>
-                    {organization.projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
+              <AnyField
+                label="Project"
+                hint="Restrict this key to a project without changing its scope."
+                error={
+                  !projectSelectionValid &&
+                  "This project is no longer available. Select a project or Organization-wide."
+                }
+                render={(props) => (
+                  <Select value={projectId} onValueChange={setProjectId}>
+                    <SelectTrigger
+                      {...props}
+                      aria-invalid={!projectSelectionValid}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="organization-wide">
+                        Organization-wide
                       </SelectItem>
-                    ))}
-                    {!projectSelectionValid && (
-                      <SelectItem value={projectId} disabled>
-                        Unavailable project
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Text
-                  id="key-project-help"
-                  variant="body"
-                  className="text-muted-foreground"
-                >
-                  Bind this key to one project, or leave it organization-wide.
-                  Permission scopes below determine what the key can do.
-                </Text>
-              </div>
+                      {organization.projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                      {!projectSelectionValid && (
+                        <SelectItem value={projectId} disabled>
+                          Unavailable project
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
 
               <AnyField
-                label="Permission scope"
+                label="Scope"
                 optionality="hidden"
                 render={() => {
                   return (

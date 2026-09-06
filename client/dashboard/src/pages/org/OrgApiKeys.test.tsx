@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     ],
   },
   mutate: vi.fn(),
+  pending: false,
   onCreated: async (_key: object) => {},
   keys: [] as object[],
   admin: true,
@@ -53,7 +54,7 @@ vi.mock("@gram/client/react-query/createAPIKey", () => ({
     onSuccess: (key: object) => Promise<void>;
   }) => {
     mocks.onCreated = options.onSuccess;
-    return { mutate: mocks.mutate, isPending: false };
+    return { mutate: mocks.mutate, isPending: mocks.pending };
   },
 }));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
@@ -69,6 +70,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 beforeEach(() => {
   mocks.mutate.mockClear();
+  mocks.pending = false;
   mocks.keys = [];
   mocks.admin = true;
   mocks.organization = {
@@ -96,9 +98,7 @@ async function selectProject(
   user: ReturnType<typeof userEvent.setup>,
   name: string,
 ) {
-  await user.click(
-    screen.getByRole("combobox", { name: "Project binding (optional)" }),
-  );
+  await user.click(screen.getByRole("combobox", { name: "Project" }));
   await user.click(screen.getByRole("option", { name }));
 }
 
@@ -156,7 +156,7 @@ describe("API key project binding", () => {
     render(<OrgApiKeys />);
     const user = await openForm();
     await selectProject(user, "Test project");
-    await selectProject(user, "Organization-wide (no project)");
+    await selectProject(user, "Organization-wide");
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.projectId,
@@ -201,6 +201,51 @@ describe("API key project binding", () => {
     ).toBe(true);
     fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
     expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox", { name: "Project" }).textContent).toBe(
+      "Unavailable project",
+    );
+    expect(
+      screen.getByText(
+        "This project is no longer available. Select a project or Organization-wide.",
+      ),
+    ).toBeTruthy();
+    await selectProject(user, "Organization-wide");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.projectId,
+    ).toBeUndefined();
+  });
+
+  it("blocks duplicate submissions while creation is pending", async () => {
+    const view = render(<OrgApiKeys />);
+    await openForm();
+    mocks.pending = true;
+    view.rerender(<OrgApiKeys />);
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it("does not show an old organization's delayed creation result", async () => {
+    const view = render(<OrgApiKeys />);
+    const user = await openForm();
+    await selectProject(user, "Test project");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    const oldOnCreated = mocks.onCreated;
+    mocks.organization = { id: "org_other", projects: [] };
+    view.rerender(<OrgApiKeys />);
+    await openForm();
+    await act(() =>
+      oldOnCreated({
+        id: "old_key",
+        name: "Old key",
+        key: "synthetic-old-secret",
+        projectId: "11111111-1111-4111-8111-111111111111",
+      }),
+    );
+    expect(screen.queryByText("synthetic-old-secret")).toBeNull();
+    expect(screen.getByRole("combobox").textContent).toContain(
+      "Organization-wide",
+    );
   });
 
   it("shows binding separately from permission scopes in the list", () => {

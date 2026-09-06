@@ -3,18 +3,20 @@ package keys_test
 import (
 	"bytes"
 	"encoding/json"
-	httpkeys "github.com/speakeasy-api/gram/server/gen/http/keys/server"
-	goahttp "goa.design/goa/v3/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
+	httpkeys "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/stretchr/testify/require"
 )
 
 func TestKeysService_CreateKey_ProjectBinding(t *testing.T) {
@@ -34,12 +36,14 @@ func TestKeysService_CreateKey_ProjectBinding(t *testing.T) {
 				OrganizationID: authCtx.ActiveOrganizationID, Name: "Selected project", Slug: "selected-project",
 			})
 			require.NoError(t, err)
-			ctx = authztest.WithAdminGrants(ctx)
+			grants := []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)}
 			var selected *string
 			if scoped {
 				id := project.ID.String()
 				selected = &id
+				grants = append(grants, authz.NewGrant(authz.ScopeProjectRead, id))
 			}
+			ctx = authztest.WithExactGrants(t, ctx, grants...)
 			body := map[string]any{"name": name, "scopes": []string{"producer"}}
 			if selected != nil {
 				body["project_id"] = *selected
@@ -66,7 +70,7 @@ func TestKeysService_CreateKey_ProjectBinding(t *testing.T) {
 
 func TestKeysService_CreateKey_RejectsInvalidProjectBinding(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"malformed", "unknown", "other-organization", "deleted", "no-project-grant", "no-admin-grant"} {
+	for _, kind := range []string{"malformed", "unknown", "other-organization", "deleted", "no-project-grant", "wrong-project-grant", "no-admin-grant", "wrong-organization-grant"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestKeysService(t)
@@ -83,10 +87,27 @@ func TestKeysService_CreateKey_RejectsInvalidProjectBinding(t *testing.T) {
 			case "other-organization":
 				authCtx.ActiveOrganizationID = "org_other_test"
 			case "deleted":
-				_, err := ti.conn.Exec(ctx, "UPDATE projects SET deleted_at = now() WHERE id = $1", authCtx.ProjectID)
+				_, err := projectrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
 				require.NoError(t, err)
 			case "no-project-grant":
 				ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+				want = oops.CodeForbidden
+			case "wrong-project-grant":
+				project, err := projectrepo.New(ti.conn).CreateProject(ctx, projectrepo.CreateProjectParams{
+					OrganizationID: authCtx.ActiveOrganizationID, Name: "Selected project", Slug: "selected-project",
+				})
+				require.NoError(t, err)
+				ctx = authztest.WithExactGrants(t, ctx,
+					authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+					authz.NewGrant(authz.ScopeProjectRead, projectID),
+				)
+				projectID = project.ID.String()
+				want = oops.CodeForbidden
+			case "wrong-organization-grant":
+				ctx = authztest.WithExactGrants(t, ctx,
+					authz.NewGrant(authz.ScopeOrgAdmin, "org_other_test"),
+					authz.NewGrant(authz.ScopeProjectRead, projectID),
+				)
 				want = oops.CodeForbidden
 			case "no-admin-grant":
 				ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)})
@@ -97,9 +118,9 @@ func TestKeysService_CreateKey_RejectsInvalidProjectBinding(t *testing.T) {
 			var oe *oops.ShareableError
 			require.ErrorAs(t, err, &oe)
 			require.Equal(t, want, oe.Code)
-			var count int
-			require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM api_keys").Scan(&count))
-			require.Zero(t, count)
+			stored, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+			require.NoError(t, err)
+			require.Empty(t, stored)
 		})
 	}
 }
