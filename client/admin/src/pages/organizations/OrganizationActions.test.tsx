@@ -1436,6 +1436,24 @@ describe("the start trial dialog", () => {
     });
   });
 
+  it("counts from the UTC day of submit when the dialog sat overnight", async () => {
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+    // Already the 30th. Pressing it again would clear the date and fall
+    // back to the day-count field, which is not what this case is about.
+    expect(endDateTrigger().textContent).toBe(rendered(START_DEFAULT));
+
+    // The clock moves; the dialog does not re-render. Submit must still
+    // count from the new UTC day, not from the morning the dialog opened.
+    vi.setSystemTime(new Date("2026-01-17T00:00:01Z"));
+    await submitStart();
+
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: NONE_ORG.id,
+      days: 13,
+    });
+  });
+
   it("counts from today even when an expired trial still carries an old end", async () => {
     await renderMenu(EXPIRED_ORG);
     await openStartDialog("Restart trial");

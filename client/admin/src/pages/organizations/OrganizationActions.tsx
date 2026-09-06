@@ -93,7 +93,14 @@ function boundsHint({ min, max }: DayBounds): string {
   return `Enter a whole number of days between ${min} and ${max}.`;
 }
 
-type DayRange = { anchor: number; earliest: number; latest: number };
+type DayRange = {
+  anchor: number;
+  earliest: number;
+  latest: number;
+  // Start counts from the UTC day of submit. Extend counts from the trial's
+  // current end, which does not move if the dialog sits overnight.
+  fromToday?: boolean;
+};
 
 // The days the server would accept, as the calendar's own range. `undefined`
 // where the record carries no end date to add days to.
@@ -113,6 +120,19 @@ function startTrialRange(): DayRange {
     anchor,
     earliest: anchor + MIN_TRIAL_START_DAYS,
     latest: anchor + MAX_TRIAL_START_DAYS,
+    fromToday: true,
+  };
+}
+
+function liveRange(range: DayRange): DayRange {
+  if (!range.fromToday) return range;
+  const anchor = utcTodayDay();
+  if (anchor === range.anchor) return range;
+  return {
+    ...range,
+    anchor,
+    earliest: anchor + (range.earliest - range.anchor),
+    latest: anchor + (range.latest - range.anchor),
   };
 }
 
@@ -745,19 +765,31 @@ export function TrialDaysDialog({
   const fieldID = useId();
   const messageID = useId();
 
-  const hint = range
-    ? `Pick a date between ${fmtDateShort(dayISO(range.earliest))} and ${fmtDateShort(dayISO(range.latest))}.`
+  // Start counts from UTC today at submit. Recompute here and again in
+  // submit: a dialog that sits across midnight must not keep the open-time
+  // anchor, and submit must not use a render that happened before the day
+  // rolled.
+  const activeRange = range ? liveRange(range) : undefined;
+
+  const hint = activeRange
+    ? `Pick a date between ${fmtDateShort(dayISO(activeRange.earliest))} and ${fmtDateShort(dayISO(activeRange.latest))}.`
     : boundsHint(bounds);
 
   // What the picked date is worth as the request the server takes. NaN where
   // nothing is picked, so the guard below refuses it rather than sending it.
-  const picked = endsOn && range ? dayOf(endsOn) - range.anchor : Number.NaN;
+  const picked =
+    endsOn && activeRange ? dayOf(endsOn) - activeRange.anchor : Number.NaN;
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     // A disabled day is not an enforced value: the calendar can still be left
     // holding nothing, and the day count has no calendar at all.
-    const parsed = range ? picked : Number(days);
+    const currentRange = range ? liveRange(range) : undefined;
+    const parsed = currentRange
+      ? endsOn
+        ? dayOf(endsOn) - currentRange.anchor
+        : Number.NaN
+      : Number(days);
     // The endpoint's own bounds, refused here so a request that cannot succeed
     // never leaves the browser. A whole number, because the interval the
     // server works in is a count of days.
@@ -803,9 +835,9 @@ export function TrialDaysDialog({
 
           <div className="my-4 flex items-center gap-2">
             <label htmlFor={fieldID} className="text-sm">
-              {range ? "Ends on" : "Days"}
+              {activeRange ? "Ends on" : "Days"}
             </label>
-            {range ? (
+            {activeRange ? (
               <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -835,11 +867,11 @@ export function TrialDaysDialog({
                     autoFocus
                     selected={endsOn}
                     defaultMonth={endsOn}
-                    startMonth={calendarDate(range.earliest)}
-                    endMonth={calendarDate(range.latest)}
+                    startMonth={calendarDate(activeRange.earliest)}
+                    endMonth={calendarDate(activeRange.latest)}
                     disabled={{
-                      before: calendarDate(range.earliest),
-                      after: calendarDate(range.latest),
+                      before: calendarDate(activeRange.earliest),
+                      after: calendarDate(activeRange.latest),
                     }}
                     onSelect={(date) => {
                       setEndsOn(date);
@@ -871,7 +903,7 @@ export function TrialDaysDialog({
 
           {/* The operator picks a date and the request sends a count, so the
               dialog says the date that count reaches. */}
-          {range && endsOn && (
+          {activeRange && endsOn && (
             <p className="text-muted-foreground text-sm">
               The trial will end on {fmtDateShort(dayISO(dayOf(endsOn)))},{" "}
               {dayCount(picked)} later than it does now.
