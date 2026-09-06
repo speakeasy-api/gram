@@ -10,6 +10,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 )
@@ -24,17 +25,32 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 	// keeping DB work constant in the number of messages. It re-loads and
 	// compiles the rules internally, so we hand it the resolved ids directly.
 	scanMessages := make([]customruleanalyzer.ScanMessage, 0, len(messages))
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, msg := range messages {
 		view := batchMessageView(msg)
 		toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
 		for _, t := range view.Tools {
 			toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
 		}
+		chatMessageID, contentPartID := msg.anchorIDStrings()
+		chatID, partID := "", ""
+		if chatMessageID != nil {
+			chatID = *chatMessageID
+		}
+		if contentPartID != nil {
+			partID = *contentPartID
+		}
 
+		evaluation := scanners.EvaluationForAnalysis(
+			args.OrganizationID, args.ProjectID.String(), requestID.String(),
+			chatID, partID, args.RiskPolicyID.String(), args.PolicyVersion,
+			riskmeter.DetectorCustomRules, riskmeter.ModeBatch, occurredAt,
+		)
 		scanMessages = append(scanMessages, customruleanalyzer.ScanMessage{
-			Content:   view.Content,
-			Kind:      view.Type,
-			ToolCalls: toolCalls,
+			Content:    view.Content,
+			Kind:       view.Type,
+			ToolCalls:  toolCalls,
+			Evaluation: &evaluation,
 		})
 	}
 

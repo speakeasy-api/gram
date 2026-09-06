@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+import anyio
 import structlog
 from asyncer import asyncify
+from gram.metering.v1.risk_evaluation_pb2 import RiskEvaluation
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
@@ -14,6 +16,11 @@ from opentelemetry import trace
 
 from pystreams import attr
 from pystreams.risk import metrics
+from pystreams.risk.evaluation import (
+    Evaluation,
+    RiskEvaluationRecorder,
+    shadow_operation_id,
+)
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
@@ -54,10 +61,12 @@ class PresidioHandler:
         logger: structlog.stdlib.BoundLogger,
         publisher: FindingPublisher,
         scanner: Scanner,
+        evaluation_recorder: RiskEvaluationRecorder,
     ):
         self.logger = logger
         self.publisher = publisher
         self._scanner = scanner
+        self._evaluation_recorder = evaluation_recorder
 
     async def handle(
         self,
@@ -93,6 +102,22 @@ class PresidioHandler:
             # clock, so it includes any wait for a free scan slot / pool worker,
             # which under load (not the scan itself) can dominate per-message ACK
             # latency.
+            evaluation = Evaluation(
+                organization_id=message.organization_id,
+                project_id=message.project_id,
+                operation_id=shadow_operation_id(
+                    request_id=message.request_id,
+                    chat_message_id=message.chat_message_id,
+                    content_part_id=message.content_part_id,
+                    policy_id=message.risk_policy_id,
+                    policy_version=message.risk_policy_version,
+                ),
+                detector=RiskEvaluation.DETECTOR_PRESIDIO,
+                execution_mode=RiskEvaluation.EXECUTION_MODE_SHADOW,
+                policy_id=message.risk_policy_id,
+                policy_version=message.risk_policy_version,
+            )
+            attempt = self._evaluation_recorder.start(evaluation)
             try:
                 scan_started = time.perf_counter()
                 detections = await self._scanner.scan(
@@ -100,30 +125,20 @@ class PresidioHandler:
                 )
                 scan_ms = (time.perf_counter() - scan_started) * 1000
             except ScanSlotTimeout:
-                # The scan never started: the pool was backlogged for the whole
-                # slot budget and the content was never touched. Unlike the
-                # swallowed failures below this is not a property of the
-                # message, so re-raising to nack is safe (nothing scanned,
-                # nothing published — redelivery duplicates no work) and
-                # correct: the subscription's retry policy backs the message
-                # off (10s..600s) and it lands back here once capacity clears,
-                # instead of being silently dropped unscanned. No log line:
-                # backlog requeues fire in bursts, and the ``requeued`` outcome
-                # recorded in the ``finally`` already carries the signal.
+                # Queue admission expired before Presidio touched the content.
+                # Preserve the nack/redelivery behavior and record no volume.
                 outcome = metrics.OUTCOME_REQUEUED
+                await attempt.finish(
+                    RiskEvaluation.OUTCOME_SKIPPED, include_volume=False
+                )
                 raise
             except Exception as exc:
                 # This is best-effort shadow processing, and the PresidioAnalyzer
                 # subscription declares no dead-letter policy. Letting a scan
-                # failure escape would nack the message, and any input that
-                # deterministically trips the analyzer would then redeliver and
-                # fail again for the full retention window (30 days) — one bad
-                # message poisoning the subscription. Swallow it (so the message is
-                # acked) and log instead. Cancellation derives from BaseException,
-                # not Exception, so graceful shutdown still propagates. Only the
-                # exception *type* is logged: an error string or traceback could
-                # echo the scanned content, which this handler never emits (see the
-                # detection log below).
+                # failure escape would poison the subscription via redelivery.
+                with anyio.CancelScope(shield=True):
+                    await attempt.measure([message.content])
+                    await attempt.finish(RiskEvaluation.OUTCOME_FAILED)
                 self.logger.warning(
                     "presidio scan failed",
                     request_id=message.request_id,
@@ -133,6 +148,15 @@ class PresidioHandler:
                     delivery_attempt=meta.delivery_attempt,
                 )
                 return
+            except BaseException:
+                await attempt.finish(RiskEvaluation.OUTCOME_CANCELLED)
+                raise
+            else:
+                # Detector completion is independent of downstream finding
+                # publication, and includes clean scans.
+                with anyio.CancelScope(shield=True):
+                    await attempt.measure([message.content])
+                    await attempt.finish(RiskEvaluation.OUTCOME_COMPLETED)
 
             if not detections:
                 outcome = metrics.OUTCOME_CLEAN

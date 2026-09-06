@@ -21,6 +21,7 @@ dependencies = [
   "redis>=6.4.0",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
+  "tiktoken>=0.14.0",
   "uvicorn>=0.51.0",
 ]
 

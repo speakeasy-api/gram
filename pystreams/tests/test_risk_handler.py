@@ -3,12 +3,20 @@ import uuid
 
 import pytest
 import structlog
+import tiktoken
+from gram.metering.v1 import risk_evaluation_pb2
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
 from pystreams.risk import handler as handler_mod
 from pystreams.risk import metrics
+from pystreams.risk.evaluation import (
+    Evaluation,
+    RiskEvaluationRecorder,
+    evaluation_id,
+    operation_id,
+)
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
@@ -16,6 +24,8 @@ from pystreams.risk.scanner import (
     ScanSlotTimeout,
     _AsyncCloseable,
 )
+
+_ENCODING = tiktoken.get_encoding("o200k_base")
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -91,22 +101,63 @@ class FakePublisher:
         return _FakeResult(f"id-{len(self.published)}")
 
 
+class FakeRiskPublisher:
+    def __init__(self):
+        self.published: list[risk_evaluation_pb2.RiskEvaluation] = []
+
+    def publish(self, message: risk_evaluation_pb2.RiskEvaluation) -> _FakeResult:
+        self.published.append(message)
+        return _FakeResult(f"risk-{len(self.published)}")
+
+
+def _recorder(
+    publisher: FakeRiskPublisher | None = None,
+) -> RiskEvaluationRecorder:
+    return RiskEvaluationRecorder(
+        structlog.get_logger(), publisher or FakeRiskPublisher(), encoding=_ENCODING
+    )
+
+
 def _meta(delivery_attempt: int = 1) -> MessageMetadata:
     return MessageMetadata(id="m-1", attributes={}, delivery_attempt=delivery_attempt)
 
 
 def _handler(
-    scanner: FakeScanner, publisher: FakePublisher | None = None
+    scanner: FakeScanner,
+    publisher: FakePublisher | None = None,
+    evaluation_publisher: FakeRiskPublisher | None = None,
 ) -> PresidioHandler:
     return PresidioHandler(
         structlog.get_logger(),
         publisher or FakePublisher(),
         scanner,
+        _recorder(evaluation_publisher),
     )
 
 
 def _message(content: str, **kwargs) -> presidio_analysis_pb2.PresidioAnalysis:
     return presidio_analysis_pb2.PresidioAnalysis(content=content, **kwargs)
+
+
+def test_risk_identity_matches_go_golden_vectors():
+    operation = operation_id("content", "chat-1", "part-1", "policy-1", "7")
+    assert operation == (
+        "riskop:v1:4020859cf0c39659aaa2344133079078b04f664477bbf5fb59110c02848a1485"
+    )
+    assert (
+        evaluation_id(
+            Evaluation(
+                organization_id="org-1",
+                project_id="proj-1",
+                operation_id=operation,
+                detector=risk_evaluation_pb2.RiskEvaluation.DETECTOR_PRESIDIO,
+                execution_mode=risk_evaluation_pb2.RiskEvaluation.EXECUTION_MODE_SHADOW,
+                policy_id="policy-1",
+                policy_version=7,
+            )
+        )
+        == "13532e25-5911-5594-bd18-8e0c7dfc0919"
+    )
 
 
 async def test_publishes_a_finding_per_detection():
@@ -370,6 +421,97 @@ async def test_unset_score_threshold_defaults():
     assert scanner.score_thresholds == [DEFAULT_SCORE_THRESHOLD]
 
 
+async def test_clean_scan_publishes_known_volume_without_content():
+    content = "ordinary <|endoftext|> content"
+    evaluation_publisher = FakeRiskPublisher()
+    handler = _handler(FakeScanner(), evaluation_publisher=evaluation_publisher)
+    message = _message(
+        content,
+        request_id="req-1",
+        chat_message_id="chat-1",
+        content_part_id="part-1",
+        organization_id="org-1",
+        project_id="proj-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    await handler.handle(message, _meta())
+
+    (event,) = evaluation_publisher.published
+    expected = len(
+        tiktoken.get_encoding("o200k_base").encode(
+            content, allowed_special=set(), disallowed_special=()
+        )
+    )
+    assert event.outcome == risk_evaluation_pb2.RiskEvaluation.OUTCOME_COMPLETED
+    assert event.record_kind == "scan"
+    assert event.stokens == expected
+    assert event.HasField("stokens")
+    assert event.measurement_method == "tiktoken_o200k_base"
+    assert content not in repr(event)
+
+
+async def test_tokenization_failure_keeps_volume_unknown_and_scans(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "ordinary <|endoftext|> content"
+    scanner = FakeScanner()
+    evaluation_publisher = FakeRiskPublisher()
+    recorder = _recorder(evaluation_publisher)
+
+    class BrokenEncoding:
+        def encode(self, content: str, **_kwargs) -> list[int]:
+            raise RuntimeError(content)
+
+    monkeypatch.setattr(recorder, "_encoding", BrokenEncoding())
+    handler = PresidioHandler(
+        structlog.get_logger(), FakePublisher(), scanner, recorder
+    )
+
+    with capture_logs() as logs:
+        await handler.handle(
+            _message(
+                secret,
+                request_id="req-1",
+                organization_id="org-1",
+                project_id="proj-1",
+            ),
+            _meta(),
+        )
+
+    assert scanner.calls == [(secret, None)]
+    (event,) = evaluation_publisher.published
+    assert event.outcome == risk_evaluation_pb2.RiskEvaluation.OUTCOME_COMPLETED
+    assert event.measurement_error
+    assert not event.HasField("stokens")
+    assert secret not in repr(event)
+    assert secret not in repr(logs)
+
+
+async def test_redelivery_reuses_logical_identity_with_new_attempt_id():
+    evaluation_publisher = FakeRiskPublisher()
+    handler = _handler(FakeScanner(), evaluation_publisher=evaluation_publisher)
+    message = _message(
+        "clean",
+        request_id="first-transport-request",
+        chat_message_id="chat-1",
+        content_part_id="part-1",
+        organization_id="org-1",
+        project_id="proj-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    await handler.handle(message, _meta(delivery_attempt=1))
+    await handler.handle(message, _meta(delivery_attempt=2))
+
+    first, retry = evaluation_publisher.published
+    assert first.evaluation_id == retry.evaluation_id
+    assert first.operation_id == retry.operation_id
+    assert first.id != retry.id
+
+
 async def test_scan_failure_is_swallowed_and_logged():
     secret = "my ssn is 123-45-6789"
     # The error carries the content to prove it isn't logged.
@@ -399,23 +541,20 @@ async def test_scan_failure_is_swallowed_and_logged():
 async def test_slot_timeout_is_reraised_for_redelivery():
     scanner = FakeScanner(error=ScanSlotTimeout("scan queued for 60s"))
     publisher = FakePublisher()
-    handler = _handler(scanner, publisher)
+    evaluation_publisher = FakeRiskPublisher()
+    handler = _handler(scanner, publisher, evaluation_publisher)
     msg = _message("my ssn is 123-45-6789", request_id="req-1")
 
     # A slot timeout means the content was never scanned: unlike other scan
-    # failures it must propagate, so the message nacks and Pub/Sub redelivers
-    # it (with the subscription's retry backoff) once capacity clears, instead
-    # of being acked away unscanned.
+    # failures it must propagate so Pub/Sub can redeliver it.
     with capture_logs() as logs, pytest.raises(ScanSlotTimeout):
         await handler.handle(msg, _meta(delivery_attempt=4))
 
-    # Nothing was scanned, so nothing is published — redelivery duplicates no
-    # findings.
     assert publisher.published == []
-    # Deliberately silent: requeues fire in bursts under backlog, and the
-    # ``requeued`` outcome on process_duration already carries the signal, so
-    # the handler emits no per-message log line (it must not be mislabeled as
-    # a "presidio scan failed" swallow either).
+    (event,) = evaluation_publisher.published
+    assert event.outcome == risk_evaluation_pb2.RiskEvaluation.OUTCOME_SKIPPED
+    assert not event.HasField("stokens")
+    assert not event.measurement_error
     assert logs == []
 
 
@@ -451,7 +590,9 @@ class _BoomPublisher:
 async def test_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
-    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+    handler = PresidioHandler(
+        structlog.get_logger(), _BoomPublisher(), scanner, _recorder()
+    )
 
     # A publish failure must not propagate either: nacking would redeliver and
     # re-publish any findings that already landed, duplicating them.
@@ -481,7 +622,9 @@ class _SyncBoomPublisher:
 async def test_sync_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
-    handler = PresidioHandler(structlog.get_logger(), _SyncBoomPublisher(), scanner)
+    handler = PresidioHandler(
+        structlog.get_logger(), _SyncBoomPublisher(), scanner, _recorder()
+    )
 
     # A synchronous publish failure must be treated like an async one: logged as a
     # publish failure and skipped, never escaping to nack/redeliver the message
@@ -555,7 +698,9 @@ async def test_records_error_outcome_when_all_publishes_fail(recorded_durations)
     # Detections found, but every publish fails: nothing landed, so this must not
     # inflate the "detected" bucket — it is recorded as an error outcome.
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
-    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+    handler = PresidioHandler(
+        structlog.get_logger(), _BoomPublisher(), scanner, _recorder()
+    )
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 

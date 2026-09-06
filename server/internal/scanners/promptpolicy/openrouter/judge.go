@@ -4,6 +4,7 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,11 +17,13 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -77,23 +80,25 @@ Output ONLY the JSON object, no prose or markdown fences.`
 // custom-rule suggestion path: strict JSON schema, low temperature, hard
 // timeout, OpenRouter object completion.
 type Judge struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *judgeMetrics
-	client  openrouter.CompletionClient
-	limiter *ratelimit.Limiter
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	metrics  *judgeMetrics
+	client   openrouter.CompletionClient
+	limiter  *ratelimit.Limiter
+	recorder *riskmeter.Recorder
 }
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns (nil, nil), so callers can wire it unconditionally.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter, recorder *riskmeter.Recorder) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
-		metrics: newJudgeMetrics(meterProvider, logger),
-		client:  client,
-		limiter: limiter,
+		logger:   logger,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
+		metrics:  newJudgeMetrics(meterProvider, logger),
+		client:   client,
+		limiter:  limiter,
+		recorder: recorder,
 	}
 }
 
@@ -102,7 +107,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
-	if j == nil || j.client == nil {
+	if j == nil {
 		return nil, nil
 	}
 	// Skip only when there is nothing to judge. An empty body is NOT enough:
@@ -110,6 +115,10 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	// tool-scoped policy ("flag any call to MCP server X") can match, so
 	// HasContent keeps those events in scope.
 	if strings.TrimSpace(in.Prompt) == "" || !in.Message.HasContent() {
+		return nil, nil
+	}
+	if j.client == nil {
+		j.record(ctx, nil, riskmeter.OutcomeSkipped)
 		return nil, nil
 	}
 
@@ -135,6 +144,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		)
 	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
+		j.record(ctx, nil, riskmeter.OutcomeSkipped)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
@@ -144,6 +154,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 
 	start := time.Now()
 	callResult, err := j.call(ctx, in)
+	j.record(ctx, callResult.fragments, riskOutcome(err))
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
@@ -182,6 +193,7 @@ type judgeCallResult struct {
 	promptTokens     int
 	completionTokens int
 	totalTokens      int
+	fragments        []string
 }
 
 func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResult, error) {
@@ -203,7 +215,8 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		model = defaultJudgeModel
 	}
 
-	judgePrompt := BuildJudgePrompt(in)
+	messagePayload := judgemessage.RenderPayload(in.Message)
+	judgePrompt := buildJudgePrompt(in.Prompt, messagePayload)
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
@@ -226,15 +239,26 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		Reasoning:              nil,
 		DisableResponseHealing: false,
 	})
+	var result judgeCallResult
+	result.fragments = messageFragments(messagePayload)
 	if err != nil {
-		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)
+		return result, fmt.Errorf("openrouter object completion: %w", err)
 	}
-	if response == nil || response.Message == nil {
-		return judgeCallResult{}, fmt.Errorf("empty completion response")
+	if response == nil {
+		return result, fmt.Errorf("empty completion response")
+	}
+	result.promptTokens = response.Usage.PromptTokens
+	result.completionTokens = response.Usage.CompletionTokens
+	result.totalTokens = response.Usage.TotalTokens
+	if response.Usage.Cost != nil {
+		result.costUSD = *response.Usage.Cost
+	}
+	if response.Message == nil {
+		return result, fmt.Errorf("empty completion response")
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return judgeCallResult{}, fmt.Errorf("empty completion content")
+		return result, fmt.Errorf("empty completion content")
 	}
 
 	var verdict struct {
@@ -243,7 +267,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return judgeCallResult{}, fmt.Errorf("parse judge response: %w", err)
+		return result, fmt.Errorf("parse judge response: %w", err)
 	}
 	// Clamp confidence and cap rationale length in code - the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
@@ -253,19 +277,10 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	if utf8.RuneCountInString(rationale) > maxRationaleLen {
 		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
-	costUSD := 0.0
-	if response.Usage.Cost != nil {
-		costUSD = *response.Usage.Cost
-	}
-	return judgeCallResult{
-		matched:          verdict.Matched,
-		confidence:       max(0, min(1, verdict.Confidence)),
-		rationale:        rationale,
-		costUSD:          costUSD,
-		promptTokens:     response.Usage.PromptTokens,
-		completionTokens: response.Usage.CompletionTokens,
-		totalTokens:      response.Usage.TotalTokens,
-	}, nil
+	result.matched = verdict.Matched
+	result.confidence = max(0, min(1, verdict.Confidence))
+	result.rationale = rationale
+	return result, nil
 }
 
 // VerdictSchema is the judge's structured-output JSON schema. Deliberately no
@@ -299,22 +314,63 @@ type judgePromptPayload struct {
 	Message judgemessage.Payload `json:"message"`
 }
 
+func buildJudgePrompt(policy string, messagePayload judgemessage.Payload) string {
+	payload := judgePromptPayload{
+		Policy:  policy,
+		Message: messagePayload,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return messagePayload.Body
+	}
+	return string(b)
+}
+
 // BuildJudgePrompt renders the policy plus the message under evaluation as the
 // JSON user turn the judge reads. Bodies are truncated by judgemessage so an
 // oversized payload cannot blow the model's context window. Exported so
 // server/cmd/riskjudgebench drives the exact production user prompt.
 func BuildJudgePrompt(in promptpolicy.Input) string {
-	payload := judgePromptPayload{
-		Policy:  in.Prompt,
-		Message: judgemessage.RenderPayload(in.Message),
+	return buildJudgePrompt(in.Prompt, judgemessage.RenderPayload(in.Message))
+}
+
+func messageFragments(payload judgemessage.Payload) []string {
+	fragments := make([]string, 0, 1+len(payload.ToolCalls)*4)
+	appendTool := func(tool *judgemessage.ToolPayload) {
+		if tool == nil {
+			return
+		}
+		for _, value := range []string{tool.MCPServer, tool.MCPFunction, tool.Name} {
+			if value != "" {
+				fragments = append(fragments, value)
+			}
+		}
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		// Unreachable: payload is composed solely of strings, bools, slices, and
-		// pointers to string structs, none of which json.Marshal can fail on. Fall
-		// back to the raw body so a future change that breaks marshaling can't
-		// silently drop the message under evaluation entirely.
-		return in.Message.Body
+	if len(payload.ToolCalls) > 0 {
+		for _, call := range payload.ToolCalls {
+			appendTool(call.Tool)
+			fragments = append(fragments, call.Arguments)
+		}
+		return fragments
 	}
-	return string(b)
+	appendTool(payload.Tool)
+	return append(fragments, payload.Body)
+}
+
+func riskOutcome(err error) meteringv1.RiskEvaluation_Outcome {
+	if err == nil {
+		return riskmeter.OutcomeCompleted
+	}
+	if errors.Is(err, context.Canceled) {
+		return riskmeter.OutcomeCancelled
+	}
+	return riskmeter.OutcomeFailed
+}
+
+func (j *Judge) record(ctx context.Context, fragments []string, outcome meteringv1.RiskEvaluation_Outcome) {
+	evaluation, ok := riskmeter.EvaluationFromContext(ctx)
+	if !ok {
+		return
+	}
+	_ = j.recorder.Record(ctx, evaluation, fragments, outcome, nil)
 }

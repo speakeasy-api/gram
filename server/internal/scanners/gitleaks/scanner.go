@@ -23,6 +23,7 @@ import (
 	"github.com/zricethezav/gitleaks/v8/report"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -155,12 +156,13 @@ type Scanner struct {
 	// has not been created yet; a non-nil slot is a warm, reusable detector.
 	// Its capacity caps both the live detector count and Scan concurrency.
 	detectors chan *detect.Detector
+	recorder  *riskmeter.Recorder
 }
 
 // NewScanner creates a new Scanner with a warm detector set sized to NumCPU.
-func NewScanner() *Scanner {
+func NewScanner(recorder *riskmeter.Recorder) *Scanner {
 	n := runtime.NumCPU()
-	s := &Scanner{detectors: make(chan *detect.Detector, n)}
+	s := &Scanner{detectors: make(chan *detect.Detector, n), recorder: recorder}
 	for range n {
 		s.detectors <- nil
 	}
@@ -229,17 +231,24 @@ func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding,
 	}
 	defer func() { s.detectors <- d }()
 
-	return convertFindings(content, d.DetectString(content)), nil
+	findings := convertFindings(content, d.DetectString(content))
+	if evaluation, ok := riskmeter.EvaluationFromContext(ctx); ok {
+		_ = s.recorder.Record(ctx, evaluation, []string{content}, riskmeter.OutcomeCompleted, nil)
+	}
+	return findings, nil
 }
-
-func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, contents []string, evaluations []riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(runtime.NumCPU())
 
 	findings := make([][]scanners.Finding, len(contents))
 	for i, content := range contents {
 		g.Go(func() error {
-			f, err := s.Scan(ctx, content)
+			scanCtx := ctx
+			if i < len(evaluations) && evaluations[i].OperationID != "" {
+				scanCtx = riskmeter.WithEvaluation(ctx, evaluations[i])
+			}
+			f, err := s.Scan(scanCtx, content)
 			if err != nil {
 				return fmt.Errorf("scan content: %w", err)
 			}

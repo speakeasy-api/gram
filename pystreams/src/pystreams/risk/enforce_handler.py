@@ -22,12 +22,19 @@ import uuid
 from datetime import UTC, datetime
 from typing import Final
 
+import anyio
 import structlog
+from gram.metering.v1.risk_evaluation_pb2 import RiskEvaluation
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from opentelemetry import metrics
 
 from pystreams.risk import maskdisplay
+from pystreams.risk.evaluation import (
+    Evaluation,
+    RiskEvaluationRecorder,
+    realtime_operation_id,
+)
 from pystreams.risk.fingerprint import Fingerprinter, encode_fingerprint
 from pystreams.risk.replywriter import ReplyWriter, parse_reply_urn
 from pystreams.risk.scanner import (
@@ -126,12 +133,14 @@ class PresidioEnforceHandler:
         writer: ReplyWriter,
         scanner: Scanner,
         fingerprinter: Fingerprinter,
+        evaluation_recorder: RiskEvaluationRecorder,
         max_request_age_seconds: float = DEFAULT_MAX_REQUEST_AGE_SECONDS,
     ) -> None:
         self._logger = logger
         self._writer = writer
         self._scanner = scanner
         self._fingerprinter = fingerprinter
+        self._evaluation_recorder = evaluation_recorder
         # abs(age) > NaN/inf is always false, defeating the freshness window.
         if not math.isfinite(max_request_age_seconds) or max_request_age_seconds <= 0:
             max_request_age_seconds = DEFAULT_MAX_REQUEST_AGE_SECONDS
@@ -193,20 +202,44 @@ class PresidioEnforceHandler:
                 score_threshold = message.score_threshold
             else:
                 score_threshold = DEFAULT_SCORE_THRESHOLD
+            evaluation = Evaluation(
+                organization_id=message.organization_id,
+                project_id=message.project_id,
+                operation_id=realtime_operation_id(message.request_id),
+                detector=RiskEvaluation.DETECTOR_PRESIDIO,
+                execution_mode=RiskEvaluation.EXECUTION_MODE_REALTIME,
+                policy_id=message.risk_policy_id,
+                policy_version=message.risk_policy_version,
+            )
+            attempt = self._evaluation_recorder.start(evaluation)
             try:
                 detections = await self._scanner.scan(
                     message.content, requested, score_threshold
                 )
             except ScanSlotTimeout:
-                # Requeueing cannot rescue an inline scan: reply ERROR now so
-                # the waiter applies its failure mode without burning the deadline.
+                # Inline requests are ACKed after an error reply, unlike the
+                # shadow lane's nack. Both represent an admission skip with no
+                # scanner volume.
+                await attempt.finish(
+                    RiskEvaluation.OUTCOME_SKIPPED, include_volume=False
+                )
                 status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
                 reason = "presidio scan slot timeout"
             except Exception as exc:
+                with anyio.CancelScope(shield=True):
+                    await attempt.measure([message.content])
+                    await attempt.finish(RiskEvaluation.OUTCOME_FAILED)
                 # Only the exception type: an error string can echo the
                 # scanned content, which never leaves this handler.
                 status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
                 reason = "presidio scan failed: " + type(exc).__name__
+            except BaseException:
+                await attempt.finish(RiskEvaluation.OUTCOME_CANCELLED)
+                raise
+            else:
+                with anyio.CancelScope(shield=True):
+                    await attempt.measure([message.content])
+                    await attempt.finish(RiskEvaluation.OUTCOME_COMPLETED)
 
         findings: list[enforcement_reply_pb2.EnforcementFinding] = []
         if status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK:

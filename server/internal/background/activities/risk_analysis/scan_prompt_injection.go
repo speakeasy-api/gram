@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -18,15 +19,30 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	out := make([][]scanners.Finding, len(messages))
 	judgeMessages := make([]judgemessage.Message, len(messages))
 	judgeUserIDs := make([]string, len(messages))
+	evaluations := make([]riskmeter.Evaluation, len(messages))
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
 	for i := range messages {
 		judgeMessages[i] = batchJudgeMessage(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
+		chatMessageID, contentPartID := messages[i].anchorIDStrings()
+		chatID, partID := "", ""
+		if chatMessageID != nil {
+			chatID = *chatMessageID
+		}
+		if contentPartID != nil {
+			partID = *contentPartID
+		}
+		evaluations[i] = scanners.EvaluationForAnalysis(
+			args.OrganizationID, args.ProjectID.String(), requestID.String(),
+			chatID, partID, args.RiskPolicyID.String(), args.PolicyVersion,
+			riskmeter.DetectorPromptInjection, riskmeter.ModeBatch, occurredAt,
+		)
 	}
 	if err := a.publishPromptInjectionScanRequests(ctx, args, requestID, messages); err != nil {
 		return nil, err
 	}
 
-	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages)
+	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages, evaluations)
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 		return out, nil

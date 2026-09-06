@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
@@ -93,11 +94,13 @@ type Publishers struct {
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
-	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
-	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
-	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
-	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
-	Outbox                  topics.Publisher
+	// RiskEvaluations publishes raw detector completion and inference attempts.
+	RiskEvaluations gcp.Publisher[*meteringv1.RiskEvaluation]
+	TelemetryLogs   gcp.Publisher[*telemetryv1.LogRecord]
+	OTELLogs        gcp.Publisher[*otelv1.InboundLogRecord]
+	OTELMetrics     gcp.Publisher[*otelv1.InboundMetric]
+	OTELSpans       gcp.Publisher[*otelv1.InboundSpan]
+	Outbox          topics.Publisher
 }
 
 type expiredTrialDemoter interface {
@@ -255,18 +258,20 @@ func NewActivities(
 	if chConn != nil && !disableRiskRetroReconcile {
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
+	riskRecorder := riskmeter.NewRecorder(logger, publishers.RiskEvaluations)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
 		meterProvider,
+		riskRecorder,
 		db,
 		assetStorage,
 		piiScanner,
 		piScanner,
 		shadowMCPClient,
 		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
+		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter, riskRecorder).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,

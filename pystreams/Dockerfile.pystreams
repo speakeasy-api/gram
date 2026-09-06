@@ -53,6 +53,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pystreams/pyproject.toml,target=pystreams/pyproject.toml \
     uv sync --frozen --no-install-workspace --no-dev --package pystreams
 
+# Canonical tokenization must work without runtime network access.
+ENV TIKTOKEN_CACHE_DIR=/app/tiktoken-cache
+RUN /app/.venv/bin/python -c "import tiktoken; tiktoken.get_encoding('o200k_base')"
+
 # Layer 2: bring in the workspace sources and install pystreams + gram-infra.
 # With all member sources present, `--locked` asserts the lockfile is current.
 # `--no-editable` installs both members as real wheels so the final image needs
@@ -76,6 +80,8 @@ FROM gcr.io/distroless/cc-debian12:nonroot@sha256:fccdbb0a547c14e23fcf4ce8ad62ca
 # no source tree (the venv is --no-editable) and no build tooling.
 COPY --from=builder /python /python
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/tiktoken-cache /app/tiktoken-cache
+ENV TIKTOKEN_CACHE_DIR=/app/tiktoken-cache
 
 # numpy (pulled in transitively via presidio-analyzer -> spacy -> thinc) ships
 # manylinux wheels whose C extensions dynamically link libz.so.1. The manylinux

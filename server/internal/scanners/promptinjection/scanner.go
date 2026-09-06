@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -40,6 +41,9 @@ type Request struct {
 	// (empty string = unattributed). Rides on the judge's completion
 	// telemetry so scanning volume attributes to whose traffic was analyzed.
 	UserIDs []string
+	// Evaluations is parallel to Messages and carries one logical identity per
+	// actual judge evaluation.
+	Evaluations []riskmeter.Evaluation
 }
 
 type Result struct {
@@ -102,7 +106,17 @@ func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID
 		return nil, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	evaluations := []riskmeter.Evaluation(nil)
+	if evaluation, ok := riskmeter.EvaluationFromContext(ctx); ok {
+		evaluations = []riskmeter.Evaluation{evaluation}
+	}
+	results, err := s.classifier(ctx, Request{
+		Messages:    []judgemessage.Message{msg},
+		OrgID:       orgID,
+		ProjectID:   projectID,
+		UserIDs:     []string{userID},
+		Evaluations: evaluations,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("pi judge classify: %w", err)
 	}
@@ -119,7 +133,7 @@ func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID
 	return nil, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, evaluations []riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
 	if len(msgs) != len(texts) {
 		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
@@ -128,7 +142,7 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 		return out, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
+	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs, Evaluations: evaluations})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
 			attr.SlogError(err),

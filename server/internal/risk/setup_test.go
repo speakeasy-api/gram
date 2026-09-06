@@ -61,7 +61,7 @@ func testPresetLibrary(t *testing.T) *presetlib.Library {
 
 func newTestCustomRuleAnalyzer(t *testing.T, conn riskrepo.DBTX) *customruleanalyzer.Scanner {
 	t.Helper()
-	scanner, err := customruleanalyzer.NewScanner(conn)
+	scanner, err := customruleanalyzer.NewScanner(conn, nil)
 	require.NoError(t, err)
 
 	return scanner

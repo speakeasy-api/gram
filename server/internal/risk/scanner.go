@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -34,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"math"
@@ -243,9 +246,10 @@ func NewScanner(
 	piScanner *promptinjection.Scanner,
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
+	recorder *riskmeter.Recorder,
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
-	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, nil)
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, recorder, nil)
 }
 
 // NewScannerWithEnforcementDispatcher creates a scanner with Pub/Sub enforcement enabled when flagged.
@@ -259,10 +263,11 @@ func NewScannerWithEnforcementDispatcher(
 	piScanner *promptinjection.Scanner,
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
+	recorder *riskmeter.Recorder,
 	celEng *celenv.Engine,
 	dispatcher EnforcementDispatcher,
 ) (*Scanner, error) {
-	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcher)
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, recorder, dispatcher)
 }
 
 func newScanner(
@@ -276,13 +281,14 @@ func newScanner(
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	recorder *riskmeter.Recorder,
 	dispatcher EnforcementDispatcher,
 ) (*Scanner, error) {
 	if piScanner == nil {
 		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 
-	gitleaksScanner := gitleaks.NewScanner()
+	gitleaksScanner := gitleaks.NewScanner(recorder)
 	if err := gitleaksScanner.Prime(); err != nil {
 		return nil, fmt.Errorf("prime gitleaks scanner: %w", err)
 	}
@@ -428,10 +434,11 @@ func (s *Scanner) ScanForEnforcement(
 		warnWinner       atomic.Pointer[ScanResult] // challenge; kept only if no hard deny matches
 		matchErr         = errors.New("risk policy enforcing match")
 	)
+	invocationID := uuid.NewString()
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn, pubsubFindings)
+			result, scanErr := s.scanPolicy(gctx, p, invocationID, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn, pubsubFindings)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -588,7 +595,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, invocationID, userID, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -628,7 +635,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
 			return nil, nil
 		}
-		return s.scanPromptPolicy(ctx, policy, userID, text, messageType, toolName, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, invocationID, userID, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -652,7 +659,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	// applied above via the policy's scope_exempt.
 	var customFindings []scanners.Finding
 	if len(policy.CustomRuleIds) > 0 {
-		customFindings, err = s.scanCustomRules(ctx, policy, view)
+		evaluation := realtimeEvaluation(policy, invocationID, riskmeter.DetectorCustomRules)
+		customFindings, err = s.scanCustomRules(riskmeter.WithEvaluation(ctx, evaluation), policy, view)
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
 			// fail-open bypass); drop its findings and keep scanning.
@@ -689,7 +697,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourceGitleaks:
 			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
 			if pubsubFindings == nil {
-				gitleaksFindings, err = s.scanGitleaks(ctx, text)
+				evaluation := realtimeEvaluation(policy, invocationID, riskmeter.DetectorGitleaks)
+				gitleaksFindings, err = s.scanGitleaks(riskmeter.WithEvaluation(ctx, evaluation), text)
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 				}
@@ -719,12 +728,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				if s.piiScanner == nil {
 					continue
 				}
+				evaluation := realtimeEvaluation(policy, invocationID, riskmeter.DetectorPresidio)
 				batchResults, analyzeErr := s.piiScanner.AnalyzeBatch(
 					ctx,
 					[]string{text},
 					policy.PresidioEntities,
 					ra.PresidioScoreThresholdFromConfig(policy.AnalyzerConfig),
 					func() {},
+					evaluation,
 				)
 				if analyzeErr != nil {
 					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
@@ -775,7 +786,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
+			evaluation := realtimeEvaluation(policy, invocationID, riskmeter.DetectorPromptInjection)
+			findings, err := s.piScanner.Scan(riskmeter.WithEvaluation(ctx, evaluation), text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
 				return failWithHeldSentinel(fmt.Errorf("prompt injection scan: %w", err))
 			}
@@ -839,7 +851,7 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, invocationID, userID, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
@@ -853,7 +865,8 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		findings = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
+		evaluation := realtimeEvaluation(policy, invocationID, riskmeter.DetectorPromptPolicy)
+		findings = s.promptPolicy.Scan(riskmeter.WithEvaluation(ctx, evaluation), policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
 	} else {
 		findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
 	}
@@ -1054,6 +1067,22 @@ func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectI
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
+func realtimeEvaluation(policy repo.RiskPolicy, invocationID string, detector meteringv1.RiskEvaluation_Detector) riskmeter.Evaluation {
+	return riskmeter.Evaluation{
+		OrganizationID: policy.OrganizationID,
+		ProjectID:      policy.ProjectID.String(),
+		OperationID: riskmeter.OperationID(
+			"realtime_invocation", invocationID, policy.ID.String(),
+			strconv.FormatInt(policy.Version, 10),
+		),
+		Detector:      detector,
+		ExecutionMode: riskmeter.ModeRealtime,
+		PolicyID:      policy.ID.String(),
+		PolicyVersion: policy.Version,
+		OccurredAt:    time.Now().UTC(),
+	}
+}
+
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {
 	if len(policy.CustomRuleIds) == 0 {
 		return []scanners.Finding{}, nil
@@ -1070,6 +1099,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		Content:       view.Content,
 		Kind:          view.Type,
 		ToolCalls:     toolCalls,
+		Evaluation:    nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan custom detection rules: %w", err)

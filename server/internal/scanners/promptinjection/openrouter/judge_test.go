@@ -8,21 +8,26 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func newEngine(t *testing.T, client openrouter.CompletionClient) *Engine {
 	t.Helper()
-	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), nil)
 }
 
 func req(texts ...string) promptinjection.Request {
@@ -37,7 +42,7 @@ func req(texts ...string) promptinjection.Request {
 			ToolCalls:   nil,
 		}
 	}
-	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj", UserIDs: nil}
+	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj", UserIDs: nil, Evaluations: nil}
 }
 
 // TestClassifyBillsInternalKeyAndAttributesScannedUser pins the PI judge's
@@ -95,6 +100,90 @@ func TestClassifySafeVerdict(t *testing.T) {
 	require.Len(t, out, 1)
 	require.Equal(t, "SAFE", out[0].Label)
 	require.Zero(t, out[0].Score, "a SAFE verdict carries no confidence score")
+}
+
+func TestClassifyRecordsCompletedTruncatedContent(t *testing.T) {
+	t.Parallel()
+
+	publisher := &captureRiskPublisher{}
+	recorder := riskmeter.NewRecorder(testenv.NewLogger(t), publisher)
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"is_attack":false,"confidence":0.8,"rationale":"benign"}`
+	}}
+	c := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), recorder)
+	body := strings.Repeat("detector visible ", 2000)
+	ctx := riskmeter.WithEvaluation(t.Context(), riskmeter.Evaluation{
+		OrganizationID: "org-a",
+		ProjectID:      "11111111-1111-1111-1111-111111111111",
+		OperationID:    "pi-truncated-content",
+		Detector:       riskmeter.DetectorPromptInjection,
+		ExecutionMode:  riskmeter.ModeRealtime,
+		PolicyID:       "",
+		PolicyVersion:  0,
+		OccurredAt:     time.Now().UTC(),
+	})
+
+	out, err := c.Classify(ctx, req(body))
+
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelSafe, out[0].Label)
+	events := publisher.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, riskmeter.RecordKindScan, events[0].GetRecordKind())
+	require.Equal(t, riskmeter.OutcomeCompleted, events[0].GetOutcome())
+	rendered := judgemessage.RenderPayload(req(body).Messages[0])
+	expected, err := stokens.NewCodec().Count(t.Context(), rendered.Body)
+	require.NoError(t, err)
+	require.Equal(t, int64(expected), events[0].GetStokens())
+	require.False(t, events[0].HasPromptTokens(), "provider accounting belongs to the inference record")
+	require.False(t, events[0].HasCostUsd(), "unknown cost must remain absent")
+
+	_, err = c.Classify(t.Context(), req("benchmark without risk metadata"))
+	require.NoError(t, err)
+	require.Len(t, publisher.Events(), 1, "contexts without evaluation metadata must not emit risk records")
+}
+
+func TestClassifyUsesPerMessageEvaluationIdentity(t *testing.T) {
+	t.Parallel()
+
+	publisher := &captureRiskPublisher{}
+	recorder := riskmeter.NewRecorder(testenv.NewLogger(t), publisher)
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"is_attack":false,"confidence":0.8,"rationale":"benign"}`
+	}}
+	c := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), recorder)
+	in := req("first", "second")
+	started := time.Now().UTC()
+	in.Evaluations = []riskmeter.Evaluation{
+		{
+			OrganizationID: "org-a",
+			ProjectID:      "11111111-1111-1111-1111-111111111111",
+			OperationID:    "pi-first",
+			Detector:       riskmeter.DetectorPromptInjection,
+			ExecutionMode:  riskmeter.ModeBatch,
+			PolicyID:       "",
+			PolicyVersion:  0,
+			OccurredAt:     started,
+		},
+		{
+			OrganizationID: "org-a",
+			ProjectID:      "11111111-1111-1111-1111-111111111111",
+			OperationID:    "pi-second",
+			Detector:       riskmeter.DetectorPromptInjection,
+			ExecutionMode:  riskmeter.ModeBatch,
+			PolicyID:       "",
+			PolicyVersion:  0,
+			OccurredAt:     started,
+		},
+	}
+
+	out, err := c.Classify(t.Context(), in)
+
+	require.NoError(t, err)
+	require.Len(t, out, 2)
+	events := publisher.Events()
+	require.Len(t, events, 2)
+	require.ElementsMatch(t, []string{"pi-first", "pi-second"}, []string{events[0].GetOperationId(), events[1].GetOperationId()})
 }
 
 func TestClassifyFailsOpenOnClientError(t *testing.T) {
@@ -266,6 +355,28 @@ func (c *fakeCompletionClient) GetCompletionStream(_ context.Context, _ openrout
 
 func (c *fakeCompletionClient) CreateEmbeddings(_ context.Context, _ string, _ string, _ []string, _ ...openrouter.EmbeddingOption) ([][]float32, error) {
 	return nil, errors.New("not implemented")
+}
+
+type captureRiskPublisher struct {
+	mu     sync.Mutex
+	events []*meteringv1.RiskEvaluation
+}
+
+func (p *captureRiskPublisher) Publish(_ context.Context, event *meteringv1.RiskEvaluation, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, event)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (p *captureRiskPublisher) Stop(context.Context) error {
+	return nil
+}
+
+func (p *captureRiskPublisher) Events() []*meteringv1.RiskEvaluation {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]*meteringv1.RiskEvaluation(nil), p.events...)
 }
 
 func (c *fakeCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {

@@ -164,16 +164,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	provisioner := openrouter.NewDevelopment(apiKey)
-	client := openrouter.NewUnifiedClient(
-		logger,
-		guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()),
-		provisioner,
-		&openrouter.PlatformKeyResolver{Provisioner: provisioner},
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	client := openrouter.NewUnifiedClient(logger, guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()), provisioner, &openrouter.PlatformKeyResolver{Provisioner: provisioner}, nil, nil, nil, nil, nil)
 
 	results := runBench(client, set, models, *runs, *concurrency, *timeout, reasoning)
 

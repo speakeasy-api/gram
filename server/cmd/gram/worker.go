@@ -47,6 +47,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
+	riskmeterinference "github.com/speakeasy-api/gram/server/internal/riskmeter/inference"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -627,16 +629,8 @@ func newWorkerCommand() *cli.Command {
 			)
 			telemetryLogger.AddObserver(spendUsageTrigger)
 
-			completionsClient := openrouter.NewUnifiedClient(
-				logger,
-				guardianPolicy,
-				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
-				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
-				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
-				telemetryLogger,
-			)
+			riskRecorder := riskmeter.NewRecorder(logger, publishers.RiskEvaluations)
+			completionsClient := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, encryptionClient, openRouter), captureStrategy, chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, telemetryLogger, riskmeterinference.NewObserver(riskRecorder))
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
@@ -717,13 +711,13 @@ func newWorkerCommand() *cli.Command {
 
 			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger, riskRecorder)
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient)), riskRecorder).Classify)
 
-			customRuleScanner, err := customruleanalyzer.NewScanner(db)
+			customRuleScanner, err := customruleanalyzer.NewScanner(db, riskRecorder)
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}

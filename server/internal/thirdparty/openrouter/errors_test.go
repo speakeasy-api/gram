@@ -321,16 +321,7 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardianPolicy,
-		&mockProvisioner{apiKey: "test-api-key"},
-		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
-		&mockMessageCaptureStrategy{},
-		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
-		&mockTelemetryLogger{},
-	)
+	client := NewUnifiedClient(testenv.NewLogger(t), guardianPolicy, &mockProvisioner{apiKey: "test-api-key"}, &PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}}, &mockMessageCaptureStrategy{}, &mockUsageTrackingStrategy{}, &mockChatTitleGenerator{}, &mockTelemetryLogger{}, nil)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 	return client
 }

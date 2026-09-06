@@ -153,6 +153,7 @@ func main() {
 		nil, // usage tracking   (nil-guarded)
 		nil, // chat title gen   (nil-guarded)
 		nil, // telemetry logger (nil-guarded)
+		nil,
 	)
 	_ = metricnoop.NewMeterProvider() // (ppopenrouter.New would need this; we call the client directly)
 

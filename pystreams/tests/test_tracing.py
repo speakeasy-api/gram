@@ -1,5 +1,6 @@
 import pytest
 import structlog
+from gram.metering.v1 import risk_evaluation_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
@@ -14,6 +15,7 @@ from opentelemetry.trace import StatusCode
 
 from pystreams import attr
 from pystreams.deps import tracing
+from pystreams.risk.evaluation import build_risk_evaluation_recorder
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.scanner import Detection, _AsyncCloseable
 
@@ -131,6 +133,16 @@ class _UnusedPublisher:
         raise AssertionError("no findings expected on the clean path")
 
 
+class _Published:
+    async def get(self) -> str:
+        return "risk-event"
+
+
+class _RiskPublisher:
+    def publish(self, message: risk_evaluation_pb2.RiskEvaluation) -> _Published:
+        return _Published()
+
+
 async def test_presidio_handler_stamps_content_size_on_delivery_span(
     exporter: InMemorySpanExporter,
 ):
@@ -138,7 +150,10 @@ async def test_presidio_handler_stamps_content_size_on_delivery_span(
     # so its content-size attribute must land on that delivery span — the exact
     # per-message value trace analytics correlates against duration.
     handler = PresidioHandler(
-        structlog.get_logger(), _UnusedPublisher(), _CleanScanner()
+        structlog.get_logger(),
+        _UnusedPublisher(),
+        _CleanScanner(),
+        await build_risk_evaluation_recorder(structlog.get_logger(), _RiskPublisher()),
     )
     wrapped = tracing.traced(
         handler.handle,

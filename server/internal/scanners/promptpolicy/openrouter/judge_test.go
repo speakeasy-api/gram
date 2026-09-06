@@ -15,9 +15,12 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -192,11 +195,116 @@ func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
 	require.Equal(t, 168, verdict.TotalTokens)
 }
 
+func TestJudgeRecordsFailedScanForInvalidVerdict(t *testing.T) {
+	t.Parallel()
+
+	publisher := &captureRiskPublisher{}
+	recorder := riskmeter.NewRecorder(testenv.NewLogger(t), publisher)
+	client := &successfulCompletionClient{body: "not json", usage: openrouter.Usage{}}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), recorder)
+	ctx := riskmeter.WithEvaluation(t.Context(), riskmeter.Evaluation{
+		OrganizationID: "org-a",
+		ProjectID:      "11111111-1111-1111-1111-111111111111",
+		OperationID:    "policy-invalid-verdict",
+		Detector:       riskmeter.DetectorPromptPolicy,
+		ExecutionMode:  riskmeter.ModeRealtime,
+		PolicyID:       "policy-a",
+		PolicyVersion:  1,
+		OccurredAt:     time.Now().UTC(),
+	})
+
+	verdict, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "11111111-1111-1111-1111-111111111111",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "detector-visible content"),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.Error(t, err)
+	require.Nil(t, verdict)
+	events := publisher.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, riskmeter.RecordKindScan, events[0].GetRecordKind())
+	require.Equal(t, riskmeter.OutcomeFailed, events[0].GetOutcome())
+	require.True(t, events[0].HasStokens())
+	require.Positive(t, events[0].GetStokens())
+	require.False(t, events[0].HasPromptTokens(), "provider accounting belongs to the inference record")
+	require.False(t, events[0].HasCostUsd(), "unknown cost must remain absent")
+}
+
+func TestJudgeRecordsSkipWhenClientMissing(t *testing.T) {
+	t.Parallel()
+
+	publisher := &captureRiskPublisher{}
+	recorder := riskmeter.NewRecorder(testenv.NewLogger(t), publisher)
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, testJudgeLimiter(t), recorder)
+	ctx := riskmeter.WithEvaluation(t.Context(), riskmeter.Evaluation{
+		OrganizationID: "org-a",
+		ProjectID:      "11111111-1111-1111-1111-111111111111",
+		OperationID:    "policy-missing-client",
+		Detector:       riskmeter.DetectorPromptPolicy,
+		ExecutionMode:  riskmeter.ModeBatch,
+		PolicyID:       "policy-a",
+		PolicyVersion:  1,
+		OccurredAt:     time.Now().UTC(),
+	})
+
+	verdict, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "11111111-1111-1111-1111-111111111111",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "content"),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, verdict)
+	events := publisher.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, riskmeter.OutcomeSkipped, events[0].GetOutcome())
+	require.False(t, events[0].HasStokens(), "a missing client did not scan content")
+}
+
+func TestJudgeRecordsCancelledScan(t *testing.T) {
+	t.Parallel()
+
+	publisher := &captureRiskPublisher{}
+	recorder := riskmeter.NewRecorder(testenv.NewLogger(t), publisher)
+	client := &countingCompletionClient{err: context.Canceled}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), recorder)
+	ctx := riskmeter.WithEvaluation(t.Context(), riskmeter.Evaluation{
+		OrganizationID: "org-a",
+		ProjectID:      "11111111-1111-1111-1111-111111111111",
+		OperationID:    "policy-cancelled",
+		Detector:       riskmeter.DetectorPromptPolicy,
+		ExecutionMode:  riskmeter.ModeRealtime,
+		PolicyID:       "policy-a",
+		PolicyVersion:  1,
+		OccurredAt:     time.Now().UTC(),
+	})
+
+	verdict, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "11111111-1111-1111-1111-111111111111",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "content"),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, verdict)
+	events := publisher.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, riskmeter.OutcomeCancelled, events[0].GetOutcome())
+	require.True(t, events[0].HasStokens())
+}
+
 // newTestJudge builds a Judge with a Redis-backed judge limiter on its own
 // logical DB, isolated per test.
 func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
 	t.Helper()
-	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), nil)
 }
 
 // drainLimiter exhausts the model token bucket so the next Evaluate is
@@ -248,10 +356,14 @@ func TestJudgeBillsInternalKeyAsRiskAnalysis(t *testing.T) {
 // so tests can assert a throttled Evaluate never reaches the LLM.
 type countingCompletionClient struct {
 	calls atomic.Int64
+	err   error
 }
 
 func (c *countingCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -306,6 +418,28 @@ func (c *successfulCompletionClient) GetCompletionStream(_ context.Context, _ op
 
 func (c *successfulCompletionClient) CreateEmbeddings(_ context.Context, _ string, _ string, _ []string, _ ...openrouter.EmbeddingOption) ([][]float32, error) {
 	return nil, errors.New("not implemented")
+}
+
+type captureRiskPublisher struct {
+	mu     sync.Mutex
+	events []*meteringv1.RiskEvaluation
+}
+
+func (p *captureRiskPublisher) Publish(_ context.Context, event *meteringv1.RiskEvaluation, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, event)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (p *captureRiskPublisher) Stop(context.Context) error {
+	return nil
+}
+
+func (p *captureRiskPublisher) Events() []*meteringv1.RiskEvaluation {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]*meteringv1.RiskEvaluation(nil), p.events...)
 }
 
 func TestBuildJudgePromptMCPToolCall(t *testing.T) {

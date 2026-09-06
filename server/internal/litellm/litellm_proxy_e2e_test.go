@@ -290,13 +290,13 @@ func TestLiteLLMProxyE2E(t *testing.T) { //nolint:paralleltest // Scenarios inte
 func newProxyHarness(t *testing.T) *proxyHarness {
 	t.Helper()
 	ctx, instance := newRealTestServiceWithScannerFactory(t, func(conn *pgxpool.Pool) risk.RiskScanner {
-		customRules, err := customruleanalyzer.NewScanner(conn)
+		customRules, err := customruleanalyzer.NewScanner(conn, nil)
 		require.NoError(t, err)
 		celEngine, err := riskcelenv.New()
 		require.NoError(t, err)
 		scanner, err := risk.NewScanner(
 			testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn,
-			customRules, nil, nil, nil, &feature.InMemory{}, celEngine,
+			customRules, nil, nil, nil, &feature.InMemory{}, nil, celEngine,
 		)
 		require.NoError(t, err)
 		return scanner
@@ -787,14 +787,14 @@ func (h *proxyHarness) timeoutAndResend() {
 
 func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	h.t.Helper()
-	customRules, err := customruleanalyzer.NewScanner(h.conn)
+	customRules, err := customruleanalyzer.NewScanner(h.conn, nil)
 	require.NoError(h.t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(h.t, err)
 	flags := &feature.InMemory{}
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, nil)
 	analyze, err := riskanalysis.NewAnalyzeBatch(
-		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), h.conn,
+		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), nil, h.conn,
 		nil, &riskanalysis.StubPIIScanner{}, nil, shadowMCPClient, noMCPProvenance{}, nil, flags,
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),

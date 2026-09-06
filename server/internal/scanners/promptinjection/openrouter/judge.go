@@ -4,6 +4,7 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -18,11 +19,13 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -103,6 +106,7 @@ type Engine struct {
 	metrics     *metrics
 	client      gramopenrouter.CompletionClient
 	limiter     *ratelimit.Limiter
+	recorder    *riskmeter.Recorder
 	model       string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
@@ -119,7 +123,7 @@ var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnava
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter, recorder *riskmeter.Recorder) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
@@ -128,6 +132,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		metrics:     newMetrics(meterProvider, logger),
 		client:      client,
 		limiter:     limiter,
+		recorder:    recorder,
 		model:       defaultModel,
 		temperature: defaultTemperature,
 		schema: or.ChatJSONSchemaConfig{
@@ -172,12 +177,31 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 			attr.SlogProjectID(req.ProjectID),
 		)
 	}
+	if len(req.Evaluations) != 0 && len(req.Evaluations) != n {
+		c.logger.WarnContext(ctx, "pi judge evaluations not parallel to messages; unmatched messages use context metadata",
+			attr.SlogOrganizationID(req.OrgID),
+			attr.SlogProjectID(req.ProjectID),
+		)
+	}
+
+	results := make([]promptinjection.Result, n)
+	if c.client == nil {
+		for i, msg := range req.Messages {
+			if !msg.HasContent() {
+				results[i] = safeResult
+				continue
+			}
+			messageCtx := messageEvaluationContext(ctx, req.Evaluations, i)
+			c.record(messageCtx, nil, riskmeter.OutcomeSkipped)
+			results[i] = unavailableResult
+		}
+		return results, nil
+	}
 
 	// The rate-limit bucket is identical for every message in the batch, so
 	// resolve the spending key once rather than per message.
 	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.logger, c.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, c.model)
 
-	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for i := range req.Messages {
@@ -196,11 +220,12 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		if i < len(req.UserIDs) {
 			userID = req.UserIDs[i]
 		}
-		go func(i int, msg judgemessage.Message, userID string) {
+		messageCtx := messageEvaluationContext(ctx, req.Evaluations, i)
+		go func(i int, msg judgemessage.Message, userID string, messageCtx context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, userID, bucket)
-		}(i, msg, userID)
+			results[i] = c.classifyOne(messageCtx, req, msg, userID, bucket)
+		}(i, msg, userID, messageCtx)
 	}
 	wg.Wait()
 	return results, nil
@@ -225,14 +250,17 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		)
 	case !res.Allowed:
 		c.metrics.RecordRateLimited(ctx, req.OrgID)
+		c.record(ctx, nil, riskmeter.OutcomeSkipped)
 		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
 			attr.SlogOrganizationID(req.OrgID),
 		)
 		return unavailableResult
 	}
 
+	messagePayload := judgemessage.RenderPayload(msg)
 	start := time.Now()
-	verdict, err := c.call(ctx, req, msg, userID)
+	verdict, err := c.call(ctx, req, messagePayload, userID)
+	c.record(ctx, messageFragments(messagePayload), riskOutcome(err))
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), outcome, time.Since(start))
 	if err != nil {
@@ -254,6 +282,13 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		attr.SlogOrganizationID(req.OrgID),
 	)
 	return promptinjection.Result{Label: promptinjection.LabelInjection, Score: verdict.Confidence, Rationale: verdict.Rationale}
+}
+
+func messageEvaluationContext(ctx context.Context, evaluations []riskmeter.Evaluation, index int) context.Context {
+	if index >= len(evaluations) {
+		return ctx
+	}
+	return riskmeter.WithEvaluation(ctx, evaluations[index])
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
@@ -288,12 +323,12 @@ func cachedSystemMessage() or.ChatMessages {
 	})
 }
 
-func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) (judgeVerdict, error) {
-	payload, err := json.Marshal(judgePayload{Message: judgemessage.RenderPayload(msg)})
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, messagePayload judgemessage.Payload, userID string) (judgeVerdict, error) {
+	payload, err := json.Marshal(judgePayload{Message: messagePayload})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
 		// raw body so a marshaling regression can't silently drop the event.
-		payload = []byte(msg.Body)
+		payload = []byte(messagePayload.Body)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
@@ -386,4 +421,45 @@ func labelFor(isAttack bool, err error) string {
 		return promptinjection.LabelInjection
 	}
 	return promptinjection.LabelSafe
+}
+
+func messageFragments(payload judgemessage.Payload) []string {
+	fragments := make([]string, 0, 1+len(payload.ToolCalls)*4)
+	appendTool := func(tool *judgemessage.ToolPayload) {
+		if tool == nil {
+			return
+		}
+		for _, value := range []string{tool.MCPServer, tool.MCPFunction, tool.Name} {
+			if value != "" {
+				fragments = append(fragments, value)
+			}
+		}
+	}
+	if len(payload.ToolCalls) > 0 {
+		for _, call := range payload.ToolCalls {
+			appendTool(call.Tool)
+			fragments = append(fragments, call.Arguments)
+		}
+		return fragments
+	}
+	appendTool(payload.Tool)
+	return append(fragments, payload.Body)
+}
+
+func riskOutcome(err error) meteringv1.RiskEvaluation_Outcome {
+	if err == nil {
+		return riskmeter.OutcomeCompleted
+	}
+	if errors.Is(err, context.Canceled) {
+		return riskmeter.OutcomeCancelled
+	}
+	return riskmeter.OutcomeFailed
+}
+
+func (c *Engine) record(ctx context.Context, fragments []string, outcome meteringv1.RiskEvaluation_Outcome) {
+	evaluation, ok := riskmeter.EvaluationFromContext(ctx)
+	if !ok {
+		return
+	}
+	_ = c.recorder.Record(ctx, evaluation, fragments, outcome, nil)
 }

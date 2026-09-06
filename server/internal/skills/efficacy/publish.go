@@ -143,7 +143,7 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		scores:                scores,
 		judge:                 judge,
 		signaler:              signaler,
-		recommendationScanner: gitleaks.NewScanner(),
+		recommendationScanner: gitleaks.NewScanner(nil),
 		evaluationTimeout:     publishEvaluationTimeout,
 	}
 }

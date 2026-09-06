@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -78,7 +79,7 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 	return results, nil
 }
 
-func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func(), _ ...riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	l.callCount.Add(1)
 	cur := l.inflight.Add(1)
 	defer l.inflight.Add(-1)
@@ -220,6 +221,7 @@ func newScannerWithPIEngine(t *testing.T, ti *testInstance, flags *feature.InMem
 		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
 		nil,
 		flags,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -245,6 +247,7 @@ func newScannerWithDispatcher(t *testing.T, ti *testInstance, pii risk_analysis.
 		nil,
 		nil,
 		flags,
+		nil,
 		testCELEngine(t),
 		dispatcher,
 	)
@@ -347,6 +350,7 @@ func TestScanner_PubsubKeepsPromptInjectionLocal(t *testing.T) {
 		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
 		nil,
 		pubsubEnforcementFlags(ctx),
+		nil,
 		testCELEngine(t),
 		dispatcher,
 	)
@@ -433,6 +437,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -466,6 +471,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -505,6 +511,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -576,6 +583,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -655,6 +663,7 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -713,6 +722,7 @@ func TestScanner_OutOfScopeQuarantineDoesNotDelayBlock(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -739,6 +749,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -874,7 +885,7 @@ type deadLetterPIIScanner struct {
 	alsoRealFinding bool
 }
 
-func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func(), _ ...riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
 	for i := range texts {
 		out[i] = []scanners.Finding{{
@@ -928,6 +939,7 @@ func newDeadLetterScanner(t *testing.T, ti *testInstance, pii *deadLetterPIIScan
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -1016,7 +1028,7 @@ type deadLetterThenErrorPIIScanner struct {
 	err   error
 }
 
-func (d *deadLetterThenErrorPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (d *deadLetterThenErrorPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func(), _ ...riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	if d.calls.Add(1) > 1 {
 		if d.err != nil {
 			return nil, d.err
@@ -1070,6 +1082,7 @@ func TestScanner_PresidioDeadLetterSurvivesLaterSourceError(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -1114,6 +1127,7 @@ func TestScanner_PresidioDeadLetterDiscardedOnDeadline(t *testing.T) {
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
+		nil,
 		nil,
 		nil,
 		nil,

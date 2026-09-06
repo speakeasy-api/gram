@@ -129,6 +129,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
+	riskmeterinference "github.com/speakeasy-api/gram/server/internal/riskmeter/inference"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -974,16 +976,8 @@ func newStartCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
 
-			completionsClient := openrouter.NewUnifiedClient(
-				logger,
-				guardianPolicy,
-				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
-				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
-				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
-				telemLogger,
-			)
+			riskRecorder := riskmeter.NewRecorder(logger, publishers.RiskEvaluations)
+			completionsClient := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, encryptionClient, openRouter), captureStrategy, chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, telemLogger, riskmeterinference.NewObserver(riskRecorder))
 
 			memorySvc := memory.NewMemoryService(
 				logger,
@@ -1328,15 +1322,15 @@ func newStartCommand() *cli.Command {
 			// so the runtime hook scanner can flag/redact PII inputs too.
 			var hookPIIScanner risk_analysis.PIIScanner
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger, riskRecorder)
 			}
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
+			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter, riskRecorder).Classify)
 
-			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
+			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter, riskRecorder).Evaluate
 			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
 			celEngine, err := celenv.New()
 			if err != nil {
@@ -1346,11 +1340,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("load built-in exclusion library: %w", err)
 			}
-			customRulesScanner, err := customruleanalyzer.NewScanner(db)
+			customRulesScanner, err := customruleanalyzer.NewScanner(db, riskRecorder)
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, riskRecorder, celEngine, enforcementDispatcher)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1807,10 +1801,10 @@ func newStartCommand() *cli.Command {
 				group.Go(func() {
 					var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 					if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger, riskRecorder)
 					}
 
-					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient)), riskRecorder).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:            guardianPolicy,

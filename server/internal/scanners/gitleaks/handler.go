@@ -9,6 +9,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -26,11 +27,11 @@ type Handler struct {
 // NewHandler builds a gitleaks subscription handler. Its Scanner reuses a warm
 // detector across messages (the subscriber processes one message per Handle,
 // so it materializes a single detector), avoiding per-message rule compilation.
-func NewHandler(logger *slog.Logger, findingsPub gcp.Publisher[*riskv1.Finding]) *Handler {
+func NewHandler(logger *slog.Logger, findingsPub gcp.Publisher[*riskv1.Finding], recorder *riskmeter.Recorder) *Handler {
 	return &Handler{
 		logger:      logger.With(attr.SlogComponent("gitleaks-analyzer")),
 		findingsPub: findingsPub,
-		scanner:     NewScanner(),
+		scanner:     NewScanner(recorder),
 	}
 }
 
@@ -44,6 +45,13 @@ func NewHandler(logger *slog.Logger, findingsPub gcp.Publisher[*riskv1.Finding])
 // instead of duplicating ClickHouse rows — and the reveal metadata (surface
 // et al.) is stamped uniformly.
 func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.MessageMetadata) error {
+	evaluation := scanners.EvaluationForAnalysis(
+		m.GetOrganizationId(), m.GetProjectId(), m.GetRequestId(),
+		m.GetChatMessageId(), m.GetContentPartId(),
+		m.GetRiskPolicyId(), m.GetRiskPolicyVersion(),
+		riskmeter.DetectorGitleaks, riskmeter.ModeShadow, m.GetCreatedAt(),
+	)
+	ctx = riskmeter.WithEvaluation(ctx, evaluation)
 	findings, err := h.scanner.Scan(ctx, m.GetContent())
 	if err != nil {
 		return fmt.Errorf("gitleaks scan failed: %w", err)

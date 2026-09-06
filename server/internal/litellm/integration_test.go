@@ -907,7 +907,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	require.Len(t, fetched.Policies, 1)
 	require.Equal(t, []string{message.Assistant}, fetched.Policies[0].MessageTypes)
 
-	customRules, err := customruleanalyzer.NewScanner(ti.conn)
+	customRules, err := customruleanalyzer.NewScanner(ti.conn, nil)
 	require.NoError(t, err)
 	celEngine, err := riskcelenv.New()
 	require.NoError(t, err)
@@ -918,6 +918,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		ti.conn,
 		nil,
 		&riskanalysis.StubPIIScanner{},

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -55,6 +56,7 @@ func NewEnforceHandler(
 	meterProvider metric.MeterProvider,
 	writer requestreply.ReplyBroker[*riskv1.EnforcementReply],
 	fingerprint FingerprintFinding,
+	recorder *riskmeter.Recorder,
 	cfg EnforceHandlerConfig,
 ) (*EnforceHandler, error) {
 	if writer == nil {
@@ -73,7 +75,7 @@ func NewEnforceHandler(
 	return &EnforceHandler{
 		logger:        logger.With(attr.SlogComponent("gitleaks-enforcer")),
 		writer:        writer,
-		scanner:       NewScanner(),
+		scanner:       NewScanner(recorder),
 		fingerprint:   fingerprint,
 		metrics:       metrics,
 		consumerID:    uuid.NewString(),
@@ -120,6 +122,12 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
 		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), enforcereply.MaxContentBytes)
 	} else {
+		evaluation := scanners.EvaluationForAnalysis(
+			m.GetOrganizationId(), m.GetProjectId(), m.GetRequestId(),
+			"", "", "", 0,
+			riskmeter.DetectorGitleaks, riskmeter.ModeRealtime, m.GetCreatedAt(),
+		)
+		ctx = riskmeter.WithEvaluation(ctx, evaluation)
 		var scanErr error
 		findings, scanErr = h.scanner.Scan(ctx, m.GetContent())
 		if scanErr != nil {

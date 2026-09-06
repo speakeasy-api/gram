@@ -96,7 +96,7 @@ func EvalPromptGuardrail(
 	}
 
 	judgeFanout(
-		ctx, judge, orgID, projectID, prompt, cfg, built, inScope,
+		ctx, judge, orgID, projectID, prompt, cfg, built, inScope, nil,
 		func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()

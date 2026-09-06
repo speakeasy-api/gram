@@ -561,6 +561,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
+		nil,
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
 	)
 	if err != nil {

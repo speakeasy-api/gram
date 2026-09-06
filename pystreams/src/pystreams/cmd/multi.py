@@ -8,6 +8,7 @@ import anyio
 import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
+from gram.metering.v1 import risk_evaluation_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import (
     finding_pb2,
@@ -31,6 +32,7 @@ from pystreams.deps.scanner import build_presidio_scanner
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
 from pystreams.risk.enforce_handler import PresidioEnforceHandler
+from pystreams.risk.evaluation import build_risk_evaluation_recorder
 from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.replywriter import ReplyWriter
@@ -131,6 +133,12 @@ async def multi(
             findings_publisher = await pubsub_publisher_for_message_async(
                 broker, finding_pb2.Finding
             )
+            risk_evaluation_publisher = await pubsub_publisher_for_message_async(
+                broker, risk_evaluation_pb2.RiskEvaluation
+            )
+            evaluation_recorder = await build_risk_evaluation_recorder(
+                logger, risk_evaluation_publisher
+            )
 
             # The enforcement lane registers only when both Redis and the
             # pepper keyring are configured; validated before the scan pool
@@ -190,7 +198,10 @@ async def multi(
                 activate_blocking_detection(logger=logger)
 
             presidio_handler = PresidioHandler(
-                logger, findings_publisher, presidio_scanner
+                logger,
+                findings_publisher,
+                presidio_scanner,
+                evaluation_recorder,
             )
 
             enforce_handler = None
@@ -200,6 +211,7 @@ async def multi(
                     ReplyWriter(enforce_redis),
                     presidio_scanner,
                     enforce_fingerprinter,
+                    evaluation_recorder,
                 )
 
             # The scanner is an async context manager: leaving the block

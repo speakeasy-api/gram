@@ -11,6 +11,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -18,9 +19,26 @@ import (
 // lives with the caller (scanStandardPolicy), which fails the activity on a
 // publish error while tolerating this scan's partial results.
 func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, scoreThreshold float64, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
+	evaluations := make([]riskmeter.Evaluation, len(messages))
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	for i, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
+		chatID, partID := "", ""
+		if chatMessageID != nil {
+			chatID = *chatMessageID
+		}
+		if contentPartID != nil {
+			partID = *contentPartID
+		}
+		evaluations[i] = scanners.EvaluationForAnalysis(
+			args.OrganizationID, args.ProjectID.String(), "",
+			chatID, partID, args.RiskPolicyID.String(), args.PolicyVersion,
+			riskmeter.DetectorPresidio, riskmeter.ModeBatch, occurredAt,
+		)
+	}
 	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, scoreThreshold, func() {
 		activity.RecordHeartbeat(ctx, SourcePresidio)
-	})
+	}, evaluations...)
 	if results == nil {
 		results = make([][]scanners.Finding, len(messages))
 	}

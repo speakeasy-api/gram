@@ -1256,6 +1256,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	riskEvaluations, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.RiskEvaluation{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("create pubsub publisher for risk evaluations: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "riskEvaluations", pub: riskEvaluations})
+
 	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
 		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
 	)
@@ -1338,6 +1346,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
+		RiskEvaluations:         riskEvaluations,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,

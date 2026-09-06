@@ -36,6 +36,58 @@ type TelemetryLogger interface {
 	Log(ctx context.Context, params telemetry.LogParams)
 }
 
+// CompletionAttemptObserver observes one physical non-streaming provider request.
+type CompletionAttemptObserver interface {
+	ObserveCompletionAttempt(ctx context.Context, attempt CompletionAttempt) error
+}
+
+// CompletionAttemptStatus describes the provider-neutral result of one request.
+type CompletionAttemptStatus string
+
+const (
+	// CompletionAttemptSucceeded indicates that the provider returned a usable completion.
+	CompletionAttemptSucceeded CompletionAttemptStatus = "succeeded"
+
+	// CompletionAttemptFailed indicates that the request failed or returned no completion.
+	CompletionAttemptFailed CompletionAttemptStatus = "failed"
+
+	// CompletionAttemptCancelled indicates that the request context was cancelled.
+	CompletionAttemptCancelled CompletionAttemptStatus = "cancelled"
+)
+
+// CompletionAttempt captures provider-reported accounting for one physical request.
+type CompletionAttempt struct {
+	// StartedAt is when the physical request began.
+	StartedAt time.Time
+
+	// CompletedAt is when the physical request returned.
+	CompletedAt time.Time
+
+	// RequestedModel is the effective model sent to the provider.
+	RequestedModel string
+
+	// ReturnedModel is the model reported by the provider, when present.
+	ReturnedModel string
+
+	// ProviderRequestID is the provider's physical request identity.
+	ProviderRequestID string
+
+	// PromptTokens is nil when the provider did not report prompt usage.
+	PromptTokens *int64
+
+	// CompletionTokens is nil when the provider did not report completion usage.
+	CompletionTokens *int64
+
+	// CostUSD is nil when the provider did not report request cost.
+	CostUSD *float64
+
+	// Status is the terminal result of the physical request.
+	Status CompletionAttemptStatus
+
+	// Err is the request error, when one occurred.
+	Err error
+}
+
 const (
 	DefaultChatModel = "anthropic/claude-opus-5"
 
@@ -47,14 +99,15 @@ const (
 // ChatClient is the single HTTP client for all OpenRouter communication.
 // It applies pluggable strategies for message capture and usage tracking.
 type ChatClient struct {
-	logger                 *slog.Logger
-	httpClient             *guardian.HTTPClient
-	provisioner            Provisioner
-	keyResolver            KeyResolver
-	messageCaptureStrategy MessageCaptureStrategy
-	usageTrackingStrategy  UsageTrackingStrategy
-	chatTitleGenerator     ChatTitleGenerator
-	telemetryLogger        TelemetryLogger
+	logger                    *slog.Logger
+	httpClient                *guardian.HTTPClient
+	provisioner               Provisioner
+	keyResolver               KeyResolver
+	messageCaptureStrategy    MessageCaptureStrategy
+	usageTrackingStrategy     UsageTrackingStrategy
+	chatTitleGenerator        ChatTitleGenerator
+	telemetryLogger           TelemetryLogger
+	completionAttemptObserver CompletionAttemptObserver
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
@@ -67,16 +120,18 @@ func NewUnifiedClient(
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	telemetryLogger TelemetryLogger,
+	completionAttemptObserver CompletionAttemptObserver,
 ) *ChatClient {
 	return &ChatClient{
-		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             guardianPolicy.PooledClient(),
-		provisioner:            provisioner,
-		keyResolver:            keyResolver,
-		messageCaptureStrategy: captureStrategy,
-		usageTrackingStrategy:  trackingStrategy,
-		chatTitleGenerator:     chatTitleGenerator,
-		telemetryLogger:        telemetryLogger,
+		logger:                    logger.With(attr.SlogComponent("openrouter_completions")),
+		httpClient:                guardianPolicy.PooledClient(),
+		provisioner:               provisioner,
+		keyResolver:               keyResolver,
+		messageCaptureStrategy:    captureStrategy,
+		usageTrackingStrategy:     trackingStrategy,
+		chatTitleGenerator:        chatTitleGenerator,
+		telemetryLogger:           telemetryLogger,
+		completionAttemptObserver: completionAttemptObserver,
 	}
 }
 
@@ -389,8 +444,39 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		body     []byte
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		attemptStarted := time.Now().UTC()
 		var err error
 		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
+		attemptCompleted := time.Now().UTC()
+		if c.completionAttemptObserver != nil {
+			status := CompletionAttemptSucceeded
+			if err != nil || len(chatResp.Choices) == 0 {
+				status = CompletionAttemptFailed
+				if ctx.Err() != nil {
+					status = CompletionAttemptCancelled
+				}
+			}
+			observation := CompletionAttempt{
+				StartedAt:         attemptStarted,
+				CompletedAt:       attemptCompleted,
+				RequestedModel:    reqBody.Model,
+				ReturnedModel:     chatResp.Model,
+				ProviderRequestID: chatResp.ID,
+				PromptTokens:      nil,
+				CompletionTokens:  nil,
+				CostUSD:           nil,
+				Status:            status,
+				Err:               err,
+			}
+			if chatResp.Usage != nil {
+				observation.PromptTokens = new(int64(chatResp.Usage.PromptTokens))
+				observation.CompletionTokens = new(int64(chatResp.Usage.CompletionTokens))
+				observation.CostUSD = chatResp.Usage.Cost
+			}
+			if observeErr := c.completionAttemptObserver.ObserveCompletionAttempt(ctx, observation); observeErr != nil {
+				c.logger.ErrorContext(ctx, "observe openrouter completion attempt", attr.SlogError(observeErr))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}

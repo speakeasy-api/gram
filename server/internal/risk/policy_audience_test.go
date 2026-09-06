@@ -187,6 +187,7 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -229,6 +230,7 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -277,6 +279,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
 		nil,
 		nil,
 		nil,

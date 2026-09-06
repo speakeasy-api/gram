@@ -258,7 +258,7 @@ func NewService(
 		approvalIntake:               approvalIntake,
 		piiScanner:                   piiScanner,
 		piScanner:                    piScanner,
-		gitleaksScanner:              gitleaks.NewScanner(),
+		gitleaksScanner:              gitleaks.NewScanner(nil),
 		flags:                        flags,
 		celEng:                       celEng,
 		builtinPresets:               builtinPresets,
