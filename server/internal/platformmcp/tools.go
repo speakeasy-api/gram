@@ -215,12 +215,14 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerOrganizationEventTools(reg, postgresReader)
 		}
+		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
 		registerUnavailableRecentToolCallTools(reg)
 		registerUnavailableOrganizationEventTools(reg)
+		registerUnavailableShadowInventoryTools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

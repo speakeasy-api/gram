@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -104,9 +105,10 @@ type platformMCPConfig struct {
 	// LogsEnabled is the same product-feature gate the dashboard Event Feed
 	// uses. Nil, or a false result for the caller's organization, withholds
 	// live organization-event reads.
-	LogsEnabled platformmcp.FeatureChecker
-
-	LocalFixture *platformMCPLocalFixtureConfig
+	LogsEnabled     platformmcp.FeatureChecker
+	ShadowInventory *access.Service
+	ShadowReview    *mcpapproval.Service
+	LocalFixture    *platformMCPLocalFixtureConfig
 }
 
 var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
@@ -697,6 +699,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	if shadowErr == nil {
+		platformReader.WithShadowInventory(shadowInventory)
+	}
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)

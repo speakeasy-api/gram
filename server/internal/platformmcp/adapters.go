@@ -296,6 +296,7 @@ type PostgresReader struct {
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
 	eventFeed           *EventFeedReadService
+	shadowInventory     *ShadowInventoryService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -311,7 +312,15 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
 		eventFeed:           nil,
+		shadowInventory:     nil,
 	}
+}
+
+func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *PostgresReader {
+	if r != nil && service != nil && service.valid() {
+		r.shadowInventory = service
+	}
+	return r
 }
 
 func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {

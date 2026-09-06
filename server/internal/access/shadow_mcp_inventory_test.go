@@ -186,6 +186,29 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *
 	require.Empty(t, github.AllowedPolicyIds)
 }
 
+func TestService_ListShadowMCPInventory_DelegatesToReadSeam(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Parity MCP")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	handlerResult, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: authCtx.ProjectID.String(),
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	readResult, err := ti.service.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Limit:          10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, handlerResult, readResult)
+}
+
 func TestService_ListShadowMCPInventory_CursorPagination(t *testing.T) {
 	t.Parallel()
 
@@ -324,6 +347,52 @@ func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
 	require.Equal(t, 1, server.ObservedUseCount)
 	require.Equal(t, 1, server.UserCount)
 	require.Equal(t, []string{"alex@example.com"}, server.TopUsers)
+}
+
+func TestService_ReadShadowMCPInventoryTarget_ObservedURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Exact Target MCP")
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerURL:  "https://github.example.com/mcp?ignored=true",
+		ServerName: "Exact Target MCP",
+		UserEmail:  "reader@example.com",
+		ObservedAt: time.Now().UTC(),
+	})
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://github.example.com/mcp", server.CanonicalServerURL)
+	require.Equal(t, 1, server.ObservedUseCount)
+}
+
+func TestService_ReadShadowMCPInventoryTarget_RequestOnlyStdio(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	request := seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx -y exact-package", "requested")
+
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindStdioCommand,
+		TargetKey:      "npx -y exact-package",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "npx -y exact-package", server.CanonicalServerURL)
+	require.Equal(t, shadowMCPTargetKindStdioCommand, *server.TargetKind)
+	require.NotNil(t, server.ApprovalRequest)
+	require.Equal(t, request.ID.String(), server.ApprovalRequest.ID)
 }
 
 func TestService_UpdateShadowMCPInventoryServerName_TrimsAndSavesOverride(t *testing.T) {

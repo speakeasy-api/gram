@@ -119,6 +119,22 @@ func formatTimeValue(ts time.Time) string {
 	return ts.UTC().Format(time.RFC3339)
 }
 
+// ShadowMCPInventoryReadInput identifies a project-scoped inventory page for a trusted internal caller.
+type ShadowMCPInventoryReadInput struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Limit          int
+	Cursor         *string
+}
+
+// ShadowMCPInventoryTargetInput identifies one exact project-scoped inventory target for a trusted internal caller.
+type ShadowMCPInventoryTargetInput struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetKey      string
+}
+
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
@@ -129,20 +145,37 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
-	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
+
+	return s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Limit:          payload.Limit,
+		Cursor:         payload.Cursor,
+	})
+}
+
+// ReadShadowMCPInventory composes an inventory page after validating its organization and project boundary.
+func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInventoryReadInput) (*gen.ListShadowMCPInventoryResult, error) {
+	if strings.TrimSpace(input.OrganizationID) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
+	}
+	if input.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id is required").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, input.OrganizationID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
-	limit, err := shadowMCPInventoryLimit(payload.Limit)
+	limit, err := shadowMCPInventoryLimit(input.Limit)
 	if err != nil {
 		return nil, err
 	}
 
 	chRepo := telemetryrepo.New(s.chConn)
 	inventoryRows, err := chRepo.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
-		GramProjectID: projectID.String(),
+		GramProjectID: input.ProjectID.String(),
 		Limit:         limit + shadowMCPInventoryPageLookaheadSize,
-		Cursor:        pointerStringValue(payload.Cursor),
+		Cursor:        pointerStringValue(input.Cursor),
 	})
 	if err != nil {
 		if errors.Is(err, telemetryrepo.ErrInvalidShadowMCPInventoryURLCursor) {
@@ -164,7 +197,7 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	usageByURL := map[string]telemetryrepo.ShadowMCPInventoryUsageRow{}
 	if len(inventoryRows) > 0 {
 		usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-			GramProjectID:       projectID.String(),
+			GramProjectID:       input.ProjectID.String(),
 			CanonicalServerURLs: shadowMCPInventoryCanonicalURLs(inventoryRows),
 			Limit:               shadowMCPInventoryUsageTraceLimit,
 			OrganizationID:      "",
@@ -183,8 +216,8 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	// that traffic has never shown appear once, on the first page, ahead of
 	// the cursor-paginated observed set. Later pages are purely observed.
 	var requestOnly []mcpapprovalrepo.ListApprovalRequestTargetsRow
-	if payload.Cursor == nil {
-		requestOnly, err = s.shadowMCPRequestOnlyTargets(ctx, chRepo, projectID)
+	if input.Cursor == nil {
+		requestOnly, err = s.shadowMCPRequestOnlyTargets(ctx, chRepo, input.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +232,7 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		policyURLs = append(policyURLs, request.TargetKey)
 	}
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, policyURLs)
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, policyURLs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
@@ -355,8 +388,7 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, err
 	}
 
-	chRepo := telemetryrepo.New(s.chConn)
-	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, chRepo, projectID.String(), payload.ServerSlug)
+	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), payload.ServerSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
@@ -366,26 +398,102 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return s.shadowMCPServerFromApprovalRequest(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
 	}
 
-	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		GramProjectID:       projectID.String(),
-		CanonicalServerURLs: []string{inventoryRow.CanonicalServerURL},
-		Limit:               shadowMCPInventoryUsageTraceLimit,
-		OrganizationID:      "",
-		UserKeys:            nil,
-		From:                nil,
-		To:                  nil,
+	return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      projectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      inventoryRow.CanonicalServerURL,
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
-	}
-	usageByURL := shadowMCPInventoryUsageByURL(usageRows)
+}
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, []string{inventoryRow.CanonicalServerURL})
+// ReadShadowMCPInventoryTarget composes one exact observed or request-only inventory target.
+func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
+	if strings.TrimSpace(input.OrganizationID) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
+	}
+	if input.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id is required").LogError(ctx, s.logger)
+	}
+	if strings.TrimSpace(input.TargetKey) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target key is required").LogError(ctx, s.logger)
+	}
+	if input.TargetKind != shadowMCPTargetKindServerURL && input.TargetKind != shadowMCPTargetKindStdioCommand {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported target kind").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, input.OrganizationID, input.ProjectID); err != nil {
+		return nil, err
+	}
+
+	if input.TargetKind == shadowMCPTargetKindServerURL {
+		chRepo := telemetryrepo.New(s.chConn)
+		inventoryRow, err := chRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
+			GramProjectID:      input.ProjectID.String(),
+			CanonicalServerURL: input.TargetKey,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url").LogError(ctx, s.logger)
+		}
+		if inventoryRow != nil {
+			usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
+				GramProjectID:       input.ProjectID.String(),
+				CanonicalServerURLs: []string{input.TargetKey},
+				Limit:               shadowMCPInventoryUsageTraceLimit,
+				OrganizationID:      "",
+				UserKeys:            nil,
+				From:                nil,
+				To:                  nil,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
+			}
+
+			policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, []string{input.TargetKey})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
+			}
+			usageByURL := shadowMCPInventoryUsageByURL(usageRows)
+			return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[input.TargetKey], policyState.forURL(input.TargetKey), shadowMCPTargetKindServerURL), nil
+		}
+	}
+
+	request, err := s.shadowMCPApprovalRequestTarget(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, []string{input.TargetKey})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
+	return buildShadowMCPRequestOnlyServer(request, policyState), nil
+}
 
-	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL), shadowMCPTargetKindServerURL), nil
+func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (mcpapprovalrepo.ListApprovalRequestTargetsRow, error) {
+	repo := mcpapprovalrepo.New(s.db)
+	request, err := repo.GetApprovalRequestByTarget(ctx, mcpapprovalrepo.GetApprovalRequestByTargetParams{
+		ProjectID:  input.ProjectID,
+		TargetKind: input.TargetKind,
+		TargetKey:  input.TargetKey,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory target not found").LogError(ctx, s.logger)
+	case err != nil:
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "get shadow mcp approval request by target").LogError(ctx, s.logger)
+	case request.OrganizationID != input.OrganizationID:
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, nil, "approval request organization mismatch").LogError(ctx, s.logger)
+	}
+
+	targets, err := repo.ListApprovalRequestTargets(ctx, input.ProjectID)
+	if err != nil {
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "list shadow mcp approval request targets").LogError(ctx, s.logger)
+	}
+	for _, target := range targets {
+		if target.TargetKind == input.TargetKind && target.TargetKey == input.TargetKey {
+			return target, nil
+		}
+	}
+
+	return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory target not found").LogError(ctx, s.logger)
 }
 
 // shadowMCPServerFromApprovalRequest resolves a server page slug against the
@@ -404,37 +512,12 @@ func (s *Service) shadowMCPServerFromApprovalRequest(ctx context.Context, organi
 			continue
 		}
 
-		policyState, err := s.shadowMCPInventoryPolicyState(ctx, organizationID, projectID, []string{request.TargetKey})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
-		}
-
-		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
-		row := telemetryrepo.ShadowMCPInventoryURLRow{
-			CanonicalServerURL: request.TargetKey,
-			URLHost:            inventoryURL.URLHost,
-			ServerName:         "",
-			ServerNameOverride: "",
-			// This branch is reached only when telemetry has never observed
-			// the server, so it has no first/last seen: the zero times render
-			// as the established never-observed sentinel rather than passing
-			// the request's own timeline off as observations. The request
-			// timeline lives on the approval request itself.
-			FirstSeen:          time.Time{},
-			LastSeen:           time.Time{},
-			LastCalledUnixNano: 0,
-			UpdatedAt:          request.UpdatedAt.Time,
-		}
-		usage := telemetryrepo.ShadowMCPInventoryUsageRow{
-			CanonicalServerURL: request.TargetKey,
-			ServerName:         "",
-			FirstCalled:        nil,
-			LastCalled:         nil,
-			CallCount:          0,
-			UserCount:          0,
-			TopUsers:           []string{},
-		}
-		return buildShadowMCPInventoryServer(row, usage, policyState.forURL(request.TargetKey), shadowMCPTargetKindServerURL), nil
+		return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      request.TargetKey,
+		})
 	}
 
 	return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)

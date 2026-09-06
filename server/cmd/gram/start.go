@@ -1407,7 +1407,8 @@ func newStartCommand() *cli.Command {
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc))
+			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc)
+			access.Attach(mux, accessService)
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage, telemLogger, growthEmitter))
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
 			assistants.Attach(mux, assistantsSvc)
@@ -1700,6 +1701,8 @@ func newStartCommand() *cli.Command {
 				RecentToolCalls:         telemetryrepo.New(chDB),
 				EventFeed:               otelchrepo.New(chDB),
 				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
+				ShadowInventory:         accessService,
+				ShadowReview:            mcpApprovalService,
 				SessionCapture:          platformmcp.FeatureChecker(sessionCaptureEnabled),
 				SessionPortability:      platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:            platformFixture,
