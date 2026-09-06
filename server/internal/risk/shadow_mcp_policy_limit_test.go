@@ -158,6 +158,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_CarriesDispositionAndBlocklist(t 
 		nil,
 		nil,
 		nil,
+		nil,
 		testCELEngine(t),
 	)
 	require.NoError(t, err)
@@ -189,6 +190,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_BlockAllDisposition(t *testing.T)
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
 		nil,
 		nil,
 		nil,

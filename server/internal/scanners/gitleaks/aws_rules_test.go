@@ -25,7 +25,7 @@ const (
 
 func ruleSet(t *testing.T, content string) map[string]bool {
 	t.Helper()
-	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
+	findings, err := gitleaks.NewScanner(nil).Scan(context.Background(), content)
 	require.NoError(t, err)
 	out := map[string]bool{}
 	for _, f := range findings {
@@ -41,7 +41,7 @@ func TestExtendedConfig_MatchIsValueNotLabel(t *testing.T) {
 	t.Parallel()
 
 	content := `{ "SessionToken": "` + fakeToken + `" }`
-	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
+	findings, err := gitleaks.NewScanner(nil).Scan(context.Background(), content)
 	require.NoError(t, err)
 
 	var tok *scanners.Finding
@@ -127,7 +127,7 @@ func TestExtendedConfig_HashNextToIDNotDetected(t *testing.T) {
 func TestExtendedConfig_ConstructsCleanly(t *testing.T) {
 	t.Parallel()
 	require.NotPanics(t, func() {
-		require.NoError(t, gitleaks.NewScanner().Prime())
+		require.NoError(t, gitleaks.NewScanner(nil).Prime())
 	})
 }
 

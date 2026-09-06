@@ -45,6 +45,7 @@ func newTestEnforceHandler(t *testing.T, meterProvider metric.MeterProvider, wri
 			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
+		nil,
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: maxRequestAge},
 	)
 	require.NoError(t, err)

@@ -45,7 +45,7 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, nil)
 
 	// The access key id anchors detection but is not itself reported (it is an
 	// identifier, not a secret); the secret access key is the reported finding.
@@ -83,7 +83,7 @@ func TestHandle_PublishesGitleaksFindingForContentPart(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, nil)
 
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
 	req := newRequest(content)
@@ -102,7 +102,7 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, nil)
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
@@ -114,7 +114,7 @@ func TestHandle_StampsContentSurface(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, nil)
 
 	content := `SecretAccessKey: ` + fakeSecret
 	require.NoError(t, h.Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
@@ -139,8 +139,8 @@ func TestHandle_RedeliveryKeepsDeterministicIDs(t *testing.T) {
 	secondPub, secondPublished := capturingPub(t)
 
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
-	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), firstPub).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
-	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), secondPub).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), firstPub, nil).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), secondPub, nil).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
 
 	require.NotEmpty(t, *firstPublished)
 	require.Len(t, *secondPublished, len(*firstPublished))

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -66,6 +67,13 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 	scanner := h.stubScanner
 	if engine == scanners.AsyncScanEngineReal {
 		scanner = h.realScanner
+		evaluation := scanners.EvaluationForAnalysis(
+			m.GetOrganizationId(), m.GetProjectId(), m.GetRequestId(),
+			m.GetChatMessageId(), m.GetContentPartId(),
+			m.GetRiskPolicyId(), m.GetRiskPolicyVersion(),
+			riskmeter.DetectorPromptPolicy, riskmeter.ModeShadow, m.GetCreatedAt(),
+		)
+		ctx = riskmeter.WithEvaluation(ctx, evaluation)
 	}
 
 	findings := scanner.Scan(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))

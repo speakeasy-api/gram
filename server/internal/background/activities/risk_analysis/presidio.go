@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -116,7 +117,7 @@ type PIIScanner interface {
 	// Permanent per-message failures surface as a single Finding with
 	// DeadLetterReason populated rather than as an error; the returned
 	// error is non-nil only on outer-ctx cancellation.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]scanners.Finding, error)
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func(), evaluations ...riskmeter.Evaluation) ([][]scanners.Finding, error)
 }
 
 // DefaultPresidioScoreThreshold is the minimum recognizer confidence applied
@@ -302,10 +303,15 @@ type PresidioClient struct {
 	attemptFailures      metric.Int64Counter
 	deadLetters          metric.Int64Counter
 	truncations          metric.Int64Counter
+	recorder             *riskmeter.Recorder
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
-func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
+func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, recorders ...*riskmeter.Recorder) *PresidioClient {
+	var recorder *riskmeter.Recorder
+	if len(recorders) > 0 {
+		recorder = recorders[0]
+	}
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
 
 	requestDuration, _ := meter.Float64Histogram(
@@ -377,6 +383,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		throttleWaitDuration: throttleWaitDuration,
 		attemptFailures:      attemptFailures,
 		deadLetters:          deadLetters,
+		recorder:             recorder,
 		truncations:          truncations,
 	}
 }
@@ -390,7 +397,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 // Returns a non-nil error only on outer-ctx cancellation. Per-message
 // failures surface as DeadLetterReason sentinels so the rest of the batch
 // can still write.
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]scanners.Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func(), evaluations ...riskmeter.Evaluation) (_ [][]scanners.Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -438,7 +445,11 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	var wg sync.WaitGroup
 	for i, text := range texts {
 		wg.Go(func() {
-			finding, dl := p.analyzeOne(ctx, i, text, entities, scoreThreshold, onProgress)
+			scanCtx := ctx
+			if i < len(evaluations) && evaluations[i].OperationID != "" {
+				scanCtx = riskmeter.WithEvaluation(ctx, evaluations[i])
+			}
+			finding, dl := p.analyzeOne(scanCtx, i, text, entities, scoreThreshold, onProgress)
 			results[i] = finding
 			if dl {
 				deadLetters.Add(1)
@@ -458,7 +469,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 // analyzeOne runs the retry loop for a single text. Returns the per-text
 // findings slice (real findings, or a single dead-letter sentinel) and a
 // boolean indicating whether the result was a dead letter.
-func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, bool) {
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) (findings []scanners.Finding, deadLetter bool) {
 	if onProgress != nil {
 		onProgress()
 	}
@@ -482,6 +493,18 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		if p.truncations != nil {
 			p.truncations.Add(ctx, 1)
 		}
+	}
+	if evaluation, ok := riskmeter.EvaluationFromContext(ctx); ok {
+		defer func() {
+			outcome := riskmeter.OutcomeCompleted
+			switch {
+			case ctx.Err() != nil:
+				outcome = riskmeter.OutcomeCancelled
+			case deadLetter:
+				outcome = riskmeter.OutcomeFailed
+			}
+			_ = p.recorder.Record(ctx, evaluation, []string{text}, outcome, nil)
+		}()
 	}
 
 	var lastErr error
@@ -859,6 +882,6 @@ func isCancelErr(err error) bool {
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func(), _ ...riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	return make([][]scanners.Finding, len(texts)), nil
 }

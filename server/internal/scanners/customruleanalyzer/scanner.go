@@ -2,6 +2,7 @@ package customruleanalyzer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
@@ -23,6 +25,7 @@ type ScanRequest struct {
 	Content       string
 	Kind          string
 	ToolCalls     []ScanToolCall
+	Evaluation    *riskmeter.Evaluation
 }
 
 // ScanToolCall is one tool invocation carried in the message.
@@ -42,23 +45,25 @@ type ScanBatchRequest struct {
 
 // ScanMessage is a single message within a batch: the CEL input to evaluate.
 type ScanMessage struct {
-	Content   string
-	Kind      string
-	ToolCalls []ScanToolCall
+	Content    string
+	Kind       string
+	ToolCalls  []ScanToolCall
+	Evaluation *riskmeter.Evaluation
 }
 
 type Scanner struct {
-	db   repo.DBTX
-	eval *evaluator
+	db       repo.DBTX
+	eval     *evaluator
+	recorder *riskmeter.Recorder
 }
 
-func NewScanner(db repo.DBTX) (*Scanner, error) {
+func NewScanner(db repo.DBTX, recorder *riskmeter.Recorder) (*Scanner, error) {
 	eval, err := newEvaluator(evaluatorCacheSize)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Scanner{db: db, eval: eval}, nil
+	return &Scanner{db: db, eval: eval, recorder: recorder}, nil
 }
 
 func (s *Scanner) Scan(ctx context.Context, req ScanRequest) ([]scanners.Finding, error) {
@@ -71,10 +76,15 @@ func (s *Scanner) Scan(ctx context.Context, req ScanRequest) ([]scanners.Finding
 		return []scanners.Finding{}, nil
 	}
 
-	return s.evaluate(rules, celMessageFromMessage(ScanMessage{
-		Content:   req.Content,
-		Kind:      req.Kind,
-		ToolCalls: req.ToolCalls,
+	scanCtx := ctx
+	if req.Evaluation != nil {
+		scanCtx = riskmeter.WithEvaluation(ctx, *req.Evaluation)
+	}
+	return s.evaluate(scanCtx, rules, celMessageFromMessage(ScanMessage{
+		Content:    req.Content,
+		Kind:       req.Kind,
+		ToolCalls:  req.ToolCalls,
+		Evaluation: req.Evaluation,
 	}))
 }
 
@@ -103,7 +113,11 @@ func (s *Scanner) ScanBatch(ctx context.Context, req ScanBatchRequest) ([][]scan
 	}
 
 	for i, m := range req.Messages {
-		findings, err := s.evaluate(rules, celMessageFromMessage(m))
+		scanCtx := ctx
+		if m.Evaluation != nil {
+			scanCtx = riskmeter.WithEvaluation(ctx, *m.Evaluation)
+		}
+		findings, err := s.evaluate(scanCtx, rules, celMessageFromMessage(m))
 		if err != nil {
 			return nil, err
 		}
@@ -116,13 +130,39 @@ func (s *Scanner) ScanBatch(ctx context.Context, req ScanBatchRequest) ([][]scan
 // evaluate runs each rule's detection expression against a single CEL message
 // and collects the matched spans as findings. It is shared by Scan and
 // ScanBatch so both produce identical findings; only rule loading differs.
-func (s *Scanner) evaluate(rules []customrules.Rule, msg celenv.Message) ([]scanners.Finding, error) {
-	findings := []scanners.Finding{}
+func (s *Scanner) evaluate(ctx context.Context, rules []customrules.Rule, msg celenv.Message) (findings []scanners.Finding, retErr error) {
+	fragments := make([]string, 0, 1+2*len(msg.Tools))
+	fragments = append(fragments, msg.Content)
+	for _, tool := range msg.Tools {
+		fragments = append(fragments, tool.Name, tool.Args)
+	}
+
+	attempted := false
+	defer func() {
+		if !attempted {
+			return
+		}
+		evaluation, ok := riskmeter.EvaluationFromContext(ctx)
+		if !ok || evaluation.OperationID == "" {
+			return
+		}
+		outcome := riskmeter.OutcomeCompleted
+		switch {
+		case errors.Is(retErr, context.Canceled), errors.Is(retErr, context.DeadlineExceeded):
+			outcome = riskmeter.OutcomeCancelled
+		case retErr != nil:
+			outcome = riskmeter.OutcomeFailed
+		}
+		_ = s.recorder.Record(ctx, evaluation, fragments, outcome, nil)
+	}()
+
+	findings = []scanners.Finding{}
 	for _, rule := range rules {
 		expr := rule.EffectiveDetectionExpr()
 		if expr == "" {
 			continue
 		}
+		attempted = true
 
 		spans, matched, err := s.eval.execute(expr, msg)
 		if err != nil {
@@ -133,19 +173,19 @@ func (s *Scanner) evaluate(rules []customrules.Rule, msg celenv.Message) ([]scan
 			continue
 		}
 
-		for _, s := range spans {
+		for _, span := range spans {
 			findings = append(findings, scanners.Finding{
 				RuleID:       scanners.GuardRuleID(rule.RuleID),
 				Description:  rule.DisplayDescription(),
-				Match:        s.Value,
-				StartPos:     s.Start,
-				EndPos:       s.End,
+				Match:        span.Value,
+				StartPos:     span.Start,
+				EndPos:       span.End,
 				Tags:         []string{},
 				Source:       Source,
 				Confidence:   1.0,
-				SpanGroupKey: s.ToolCallID,
-				Field:        s.Target,
-				Path:         s.Path,
+				SpanGroupKey: span.ToolCallID,
+				Field:        span.Target,
+				Path:         span.Path,
 
 				// The span's ToolCallID is the tool NAME (per-name grouping
 				// key), not a recorded call id, so it must never be published

@@ -17,6 +17,7 @@ func scanReq(p seededProject, content string, ruleIDs ...string) customruleanaly
 		Content:       content,
 		Kind:          "user_message",
 		ToolCalls:     nil,
+		Evaluation:    nil,
 	}
 }
 
@@ -108,6 +109,7 @@ func TestScan_ToolCallRuleMatches(t *testing.T) {
 		Content:       "",
 		Kind:          "tool_request",
 		ToolCalls:     []customruleanalyzer.ScanToolCall{{Name: "mcp__fs__delete_file", Arguments: "{}"}},
+		Evaluation:    nil,
 	}
 
 	findings, err := scanner.Scan(t.Context(), req)
@@ -141,6 +143,7 @@ func TestScan_ToolArgsGetPopulatesPath(t *testing.T) {
 		Content:       "",
 		Kind:          "tool_request",
 		ToolCalls:     []customruleanalyzer.ScanToolCall{{Name: "shell:run_bash_command", Arguments: `{"command":"DROP TABLE users"}`}},
+		Evaluation:    nil,
 	}
 
 	findings, err := scanner.Scan(t.Context(), req)
@@ -237,9 +240,9 @@ func TestScanBatch_IndexAlignedFindings(t *testing.T) {
 		ProjectID:     p.projectID,
 		CustomRuleIDs: []string{"custom.secret"},
 		Messages: []customruleanalyzer.ScanMessage{
-			{Content: "here is a secret value", Kind: "user_message"},
-			{Content: "totally benign message", Kind: "user_message"},
-			{Content: "secret then another secret", Kind: "user_message"},
+			{Content: "here is a secret value", Kind: "user_message", ToolCalls: nil, Evaluation: nil},
+			{Content: "totally benign message", Kind: "user_message", ToolCalls: nil, Evaluation: nil},
+			{Content: "secret then another secret", Kind: "user_message", ToolCalls: nil, Evaluation: nil},
 		},
 	})
 	require.NoError(t, err)
@@ -287,8 +290,8 @@ func TestScanBatch_NoRulesSelectedReturnsPerMessageEmpty(t *testing.T) {
 		ProjectID:     p.projectID,
 		CustomRuleIDs: nil,
 		Messages: []customruleanalyzer.ScanMessage{
-			{Content: "here is a secret value", Kind: "user_message"},
-			{Content: "another secret", Kind: "user_message"},
+			{Content: "here is a secret value", Kind: "user_message", ToolCalls: nil, Evaluation: nil},
+			{Content: "another secret", Kind: "user_message", ToolCalls: nil, Evaluation: nil},
 		},
 	})
 	require.NoError(t, err)

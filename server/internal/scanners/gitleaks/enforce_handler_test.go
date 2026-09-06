@@ -46,7 +46,7 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
 	require.NotEmpty(t, reply.GetFindings())
 
-	rawFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	rawFindings, err := gitleaks.NewScanner(nil).Scan(t.Context(), content)
 	require.NoError(t, err)
 	expectedFingerprints := make(map[string]string, len(rawFindings))
 	for _, finding := range rawFindings {

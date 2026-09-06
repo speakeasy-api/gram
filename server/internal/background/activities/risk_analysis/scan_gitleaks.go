@@ -9,6 +9,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -17,7 +18,25 @@ func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, 
 		return nil, err
 	}
 
-	findings, err := a.gitleaksScanner.ScanBatch(ctx, contents)
+	evaluations := make([]riskmeter.Evaluation, len(messages))
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	for i, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
+		chatID, partID := "", ""
+		if chatMessageID != nil {
+			chatID = *chatMessageID
+		}
+		if contentPartID != nil {
+			partID = *contentPartID
+		}
+		evaluations[i] = scanners.EvaluationForAnalysis(
+			args.OrganizationID, args.ProjectID.String(), requestID.String(),
+			chatID, partID,
+			args.RiskPolicyID.String(), args.PolicyVersion,
+			riskmeter.DetectorGitleaks, riskmeter.ModeBatch, occurredAt,
+		)
+	}
+	findings, err := a.gitleaksScanner.ScanBatch(ctx, contents, evaluations)
 	if err != nil {
 		return [][]scanners.Finding{}, fmt.Errorf("scan gitleaks batch: %w", err)
 	}

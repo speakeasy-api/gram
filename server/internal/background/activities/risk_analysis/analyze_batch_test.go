@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -97,7 +98,7 @@ func mustCELEngine(t *testing.T) *celenv.Engine {
 
 func mustCustomRuleScanner(t *testing.T, db riskrepo.DBTX) *customruleanalyzer.Scanner {
 	t.Helper()
-	s, err := customruleanalyzer.NewScanner(db)
+	s, err := customruleanalyzer.NewScanner(db, nil)
 	require.NoError(t, err)
 	return s
 }
@@ -178,7 +179,7 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -220,12 +221,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),
+		nil,
 	)
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		piiScanner,
@@ -310,6 +313,7 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
@@ -380,6 +384,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		assetStorage,
 		&risk_analysis.StubPIIScanner{},
@@ -463,6 +468,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
@@ -541,6 +547,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
@@ -653,6 +660,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
@@ -760,6 +768,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
@@ -929,7 +938,7 @@ type deletingPIIScanner struct {
 	policyID  uuid.UUID
 }
 
-func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func(), _ ...riskmeter.Evaluation) ([][]scanners.Finding, error) {
 	if err := riskrepo.New(s.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{
 		ID:        s.policyID,
 		ProjectID: s.projectID,
@@ -955,6 +964,7 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&deletingPIIScanner{conn: conn, projectID: td.projectID, policyID: td.policyID},
@@ -1060,6 +1070,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		infra.NewPresidioClient(t),
@@ -1588,6 +1599,7 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		assetStorage,
 		&risk_analysis.StubPIIScanner{},

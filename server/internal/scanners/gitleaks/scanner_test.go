@@ -12,7 +12,7 @@ import (
 
 func TestPrime(t *testing.T) {
 	t.Parallel()
-	s := gitleaks.NewScanner()
+	s := gitleaks.NewScanner(nil)
 	// Prime materializes a detector up front; a successful call means the
 	// first scan is warm and any init failure surfaces here at startup.
 	require.NoError(t, s.Prime())
@@ -26,7 +26,7 @@ func TestPrime(t *testing.T) {
 
 func TestScan_NoSecrets(t *testing.T) {
 	t.Parallel()
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), "hello world, this is a normal message")
+	findings, err := gitleaks.NewScanner(nil).Scan(t.Context(), "hello world, this is a normal message")
 	require.NoError(t, err)
 	assert.Empty(t, findings)
 }
@@ -37,7 +37,7 @@ func TestScan_DetectsAWSKey(t *testing.T) {
 	// secret access key is the flagged finding. ("EXAMPLE" values are globally
 	// allowlisted by gitleaks, so the fixtures avoid them.)
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	findings, err := gitleaks.NewScanner(nil).Scan(t.Context(), content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, findings, "expected at least one finding for AWS credentials")
 	for _, f := range findings {
@@ -51,14 +51,14 @@ func TestScan_DetectsAWSKey(t *testing.T) {
 func TestScan_DetectsGitHubToken(t *testing.T) {
 	t.Parallel()
 	content := `export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab`
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	findings, err := gitleaks.NewScanner(nil).Scan(t.Context(), content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, findings, "expected at least one finding for GitHub token")
 }
 
 func TestScan_EmptyContent(t *testing.T) {
 	t.Parallel()
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), "")
+	findings, err := gitleaks.NewScanner(nil).Scan(t.Context(), "")
 	require.NoError(t, err)
 	assert.Empty(t, findings)
 }
@@ -104,7 +104,7 @@ GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz`,
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			findings, err := gitleaks.NewScanner().Scan(t.Context(), tc.content)
+			findings, err := gitleaks.NewScanner(nil).Scan(t.Context(), tc.content)
 			require.NoError(t, err)
 
 			// For each finding, verify we can extract the correct match using byte positions

@@ -718,6 +718,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 		nil, // usage tracking   (nil-guarded)
 		nil, // chat title gen   (nil-guarded)
 		nil, // telemetry logger (nil-guarded)
+		nil,
 	)
 }
 

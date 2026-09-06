@@ -11,6 +11,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -60,12 +61,19 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		toolCalls = append(toolCalls, ScanToolCall{Name: tc.GetName(), Arguments: tc.GetArguments()})
 	}
 
+	evaluation := scanners.EvaluationForAnalysis(
+		m.GetOrganizationId(), m.GetProjectId(), m.GetRequestId(),
+		m.GetChatMessageId(), m.GetContentPartId(),
+		m.GetRiskPolicyId(), m.GetRiskPolicyVersion(),
+		riskmeter.DetectorCustomRules, riskmeter.ModeShadow, m.GetCreatedAt(),
+	)
 	findings, err := h.scanner.Scan(ctx, ScanRequest{
 		ProjectID:     projectID,
 		CustomRuleIDs: m.GetCustomRuleIds(),
 		Content:       m.GetContent(),
 		Kind:          m.GetKind(),
 		ToolCalls:     toolCalls,
+		Evaluation:    &evaluation,
 	})
 	var loadErr *loadError
 	switch {

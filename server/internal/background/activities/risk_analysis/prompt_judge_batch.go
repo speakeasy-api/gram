@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
@@ -53,6 +54,7 @@ func judgeFanout(
 	cfg promptpolicy.Config,
 	msgs []batchMessage,
 	indices []int,
+	evaluations []riskmeter.Evaluation,
 	apply func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration),
 	onChunk func(end int),
 ) {
@@ -64,8 +66,12 @@ func judgeFanout(
 			go func(pos int) {
 				defer wg.Done()
 				idx := indices[pos]
+				callCtx := ctx
+				if idx < len(evaluations) && evaluations[idx].OperationID != "" {
+					callCtx = riskmeter.WithEvaluation(ctx, evaluations[idx])
+				}
 				started := time.Now()
-				verdict, err := judge(ctx, promptpolicy.Input{
+				verdict, err := judge(callCtx, promptpolicy.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					UserID:    msgs[idx].UserID,
@@ -116,10 +122,28 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return nil, err
 	}
 
+	evaluations := make([]riskmeter.Evaluation, len(messages))
+	occurredAt := time.Now().UTC().Format(time.RFC3339Nano)
+	requestID := batchScanRequestID(args, "prompt_policy")
+	for i, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
+		chatID, partID := "", ""
+		if chatMessageID != nil {
+			chatID = *chatMessageID
+		}
+		if contentPartID != nil {
+			partID = *contentPartID
+		}
+		evaluations[i] = scanners.EvaluationForAnalysis(
+			args.OrganizationID, args.ProjectID.String(), requestID.String(),
+			chatID, partID, args.RiskPolicyID.String(), args.PolicyVersion,
+			riskmeter.DetectorPromptPolicy, riskmeter.ModeBatch, occurredAt,
+		)
+	}
 	judgeFanout(
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
-		messages, indices,
+		messages, indices, evaluations,
 		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
 			findings := promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
 			setEventMatch(findings, messages[idx])

@@ -252,6 +252,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		telemetryLogger,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -401,6 +402,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		telemetryLogger,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -528,6 +530,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 		trackingStrategy,
 		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -623,6 +626,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 		trackingStrategy,
 		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -732,6 +736,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		telemetryService,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -831,6 +836,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	client.httpClient = &http.Client{
 		Transport: &testTransport{server: server},
@@ -909,6 +915,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -993,6 +1000,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				trackingStrategy,
 				titleGenerator,
 				telemetryService,
+				nil,
 			)
 
 			// Create test request
@@ -1064,6 +1072,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		trackingStrategy,
 		titleGenerator,
 		telemetryService,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -1229,6 +1238,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -1276,6 +1286,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -1341,6 +1352,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -1470,6 +1482,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		telemetryService,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -1586,6 +1599,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		trackingStrategy,
 		titleGenerator,
 		telemetryService,
+		nil,
 	)
 
 	// Override the HTTP client to use the test server
@@ -1708,6 +1722,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
@@ -1766,6 +1781,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
+		nil,
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 

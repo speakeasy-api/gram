@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -71,6 +72,7 @@ func NewAnalyzeBatch(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	recorder *riskmeter.Recorder,
 	db *pgxpool.Pool,
 	assetStorage contentPartAssetReader,
 	piiScanner PIIScanner,
@@ -114,7 +116,7 @@ func NewAnalyzeBatch(
 		metrics:                metrics,
 		db:                     db,
 		assetStorage:           assetStorage,
-		gitleaksScanner:        gitleaks.NewScanner(),
+		gitleaksScanner:        gitleaks.NewScanner(recorder),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
 		shadowMCPScanner: shadowmcpscan.NewScanner(

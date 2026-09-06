@@ -57,6 +57,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/riskmeter"
+	riskmeterchrepo "github.com/speakeasy-api/gram/server/internal/riskmeter/chrepo"
+	riskmeterconsumer "github.com/speakeasy-api/gram/server/internal/riskmeter/consumer"
+	riskmeterinference "github.com/speakeasy-api/gram/server/internal/riskmeter/inference"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -367,16 +371,6 @@ func newStreamsCommand() *cli.Command {
 				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
 			}
 
-			completionsClient := openrouter.NewUnifiedClient(
-				logger,
-				guardianPolicy,
-				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
-				nil,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
-				nil,
-				nil,
-			)
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
@@ -384,13 +378,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub gcp.Publisher[*riskv1.Finding]
-				logPub      gcp.Publisher[*otelv1.LogRecord]
-				metricPub   gcp.Publisher[*otelv1.Metric]
-				spanPub     gcp.Publisher[*otelv1.Span]
+				findingsPub        gcp.Publisher[*riskv1.Finding]
+				riskEvaluationsPub gcp.Publisher[*meteringv1.RiskEvaluation]
+				logPub             gcp.Publisher[*otelv1.LogRecord]
+				metricPub          gcp.Publisher[*otelv1.Metric]
+				spanPub            gcp.Publisher[*otelv1.Span]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, riskEvaluationsPub, logPub, metricPub, spanPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -413,7 +408,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
 
-			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			riskEvaluationsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.RiskEvaluation{})
+			if err != nil {
+				return fmt.Errorf("create pubsub publisher for risk evaluations: %w", err)
+			}
+			riskRecorder := riskmeter.NewRecorder(logger, riskEvaluationsPub)
+			completionsClient := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, encryptionClient, openRouter), nil, chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, nil, riskmeterinference.NewObserver(riskRecorder))
+
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
@@ -422,22 +424,23 @@ func newStreamsCommand() *cli.Command {
 					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
+				riskRecorder,
 				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
 			)
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
+			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter, riskRecorder).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
-			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
+			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter, riskRecorder).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
 			// publishes any matches into the shared Finding topic.
-			scanner, err := customruleanalyzer.NewScanner(replicaDB)
+			scanner, err := customruleanalyzer.NewScanner(replicaDB, riskRecorder)
 			if err != nil {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
@@ -572,6 +575,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceiveBatchWithResult(rg, &meteringv1.RiskEvaluation{}, &meteringv1.RiskEvaluationCHWriter{}, riskmeterconsumer.NewRiskEvaluationCHWriter(logger, meterProvider, riskmeterchrepo.New(chConn), meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(

@@ -7,6 +7,8 @@ from typing import cast
 import fakeredis.aioredis
 import pytest
 import structlog
+import tiktoken
+from gram.metering.v1 import risk_evaluation_pb2
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 
@@ -17,6 +19,7 @@ from pystreams.risk.enforce_handler import (
     MalformedEnforcementRequest,
     PresidioEnforceHandler,
 )
+from pystreams.risk.evaluation import RiskEvaluationRecorder
 from pystreams.risk.fingerprint import (
     Fingerprinter,
     FingerprintKeyringError,
@@ -28,6 +31,8 @@ from pystreams.risk.replywriter import (
     inbox_key,
 )
 from pystreams.risk.scanner import Detection, ScanSlotTimeout
+
+_ENCODING = tiktoken.get_encoding("o200k_base")
 
 # Keyring shared with the Go golden-vector run (see the fingerprint parity test).
 _KEYRING = json.dumps(
@@ -74,6 +79,28 @@ class FakeScanner:
         return None
 
 
+class _Published:
+    async def get(self) -> str:
+        return "risk-event"
+
+
+class FakeRiskPublisher:
+    def __init__(self) -> None:
+        self.published: list[risk_evaluation_pb2.RiskEvaluation] = []
+
+    def publish(self, message: risk_evaluation_pb2.RiskEvaluation) -> _Published:
+        self.published.append(message)
+        return _Published()
+
+
+def _recorder(
+    publisher: FakeRiskPublisher | None = None,
+) -> RiskEvaluationRecorder:
+    return RiskEvaluationRecorder(
+        structlog.get_logger(), publisher or FakeRiskPublisher(), encoding=_ENCODING
+    )
+
+
 def _message(
     *,
     content: str = "email jane.doe@example.com",
@@ -100,13 +127,16 @@ def _meta(reply_urn: str = _REPLY_URN) -> MessageMetadata:
 
 
 def _handler(
-    scanner: FakeScanner, client: fakeredis.aioredis.FakeRedis
+    scanner: FakeScanner,
+    client: fakeredis.aioredis.FakeRedis,
+    evaluation_publisher: FakeRiskPublisher | None = None,
 ) -> PresidioEnforceHandler:
     return PresidioEnforceHandler(
         structlog.get_logger(),
         ReplyWriter(client),
         scanner,
         parse_pepper_keyring(_KEYRING),
+        _recorder(evaluation_publisher),
     )
 
 
@@ -154,6 +184,7 @@ def test_maskdisplay_tiers():
 
 async def test_handler_writes_ok_reply_with_safe_findings():
     client = fakeredis.aioredis.FakeRedis()
+    evaluation_publisher = FakeRiskPublisher()
     scanner = FakeScanner(
         detections=[
             Detection(
@@ -165,7 +196,7 @@ async def test_handler_writes_ok_reply_with_safe_findings():
             )
         ]
     )
-    await _handler(scanner, client).handle(_message(), _meta())
+    await _handler(scanner, client, evaluation_publisher).handle(_message(), _meta())
 
     # TTL is set alongside the push; -1 (no expiry) must fail. Checked before
     # reading, since popping the only element deletes the key.
@@ -181,6 +212,16 @@ async def test_handler_writes_ok_reply_with_safe_findings():
     assert finding.masked_preview == "***@example.com"
     assert "jane.doe" not in finding.masked_preview
     assert finding.fingerprint == "OtttmK1tiaZmS8oK2PAT-n3vNa4iic0SQh6RpOY5_yo"
+
+    (event,) = evaluation_publisher.published
+    assert (
+        event.execution_mode
+        == risk_evaluation_pb2.RiskEvaluation.EXECUTION_MODE_REALTIME
+    )
+    assert event.outcome == risk_evaluation_pb2.RiskEvaluation.OUTCOME_COMPLETED
+    assert event.HasField("stokens")
+    assert event.stokens > 0
+    assert _message().content not in repr(event)
 
 
 class FailingWriter:
@@ -201,6 +242,7 @@ async def test_handler_acks_request_when_reply_write_fails():
         cast(ReplyWriter, writer),
         FakeScanner(),
         parse_pepper_keyring(_KEYRING),
+        _recorder(),
     )
     await handler.handle(_message(), _meta())
     assert writer.called
@@ -236,6 +278,7 @@ async def test_handler_replies_error_when_fingerprinting_fails():
         ReplyWriter(client),
         scanner,
         cast(Fingerprinter, FailingFingerprinter()),
+        _recorder(),
     )
     await handler.handle(_message(), _meta())
     reply = await _read_reply(client)
@@ -264,6 +307,7 @@ def test_handler_rejects_non_finite_max_request_age():
             ReplyWriter(fakeredis.aioredis.FakeRedis()),
             FakeScanner(),
             parse_pepper_keyring(_KEYRING),
+            _recorder(),
             max_request_age_seconds=bad,
         )
         assert (
@@ -334,10 +378,14 @@ async def test_handler_replies_error_on_scan_failure_without_content():
 
 async def test_handler_replies_error_on_scan_slot_timeout():
     client = fakeredis.aioredis.FakeRedis()
+    evaluation_publisher = FakeRiskPublisher()
     scanner = FakeScanner(error=ScanSlotTimeout("pool saturated"))
-    await _handler(scanner, client).handle(_message(), _meta())
+    await _handler(scanner, client, evaluation_publisher).handle(_message(), _meta())
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
+    (event,) = evaluation_publisher.published
+    assert event.outcome == risk_evaluation_pb2.RiskEvaluation.OUTCOME_SKIPPED
+    assert not event.HasField("stokens")
 
 
 async def test_handler_drops_far_future_request_without_reply():

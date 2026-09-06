@@ -68,7 +68,7 @@ func (c *blockingCheckoutCtx) cancel() {
 func TestScanCancelWhileWaiting(t *testing.T) {
 	t.Parallel()
 
-	s := NewScanner()
+	s := NewScanner(nil)
 
 	// Drain every slot so the warm set is empty; the next checkout must block.
 	held := make([]*detect.Detector, 0, cap(s.detectors))

@@ -36,7 +36,7 @@ func TestConcurrentScan(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			_, err := gitleaks.NewScanner().Scan(t.Context(), messages[idx%len(messages)])
+			_, err := gitleaks.NewScanner(nil).Scan(t.Context(), messages[idx%len(messages)])
 			errs[idx] = err
 		}(i)
 	}

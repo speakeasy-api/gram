@@ -134,6 +134,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		nil,
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
