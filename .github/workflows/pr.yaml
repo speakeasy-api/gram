@@ -847,8 +847,6 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
-    env:
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -891,6 +889,7 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
         uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
@@ -901,9 +900,12 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Check migration state is clean
         shell: bash
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           failed=0
 
@@ -951,8 +953,6 @@ jobs:
     if: |
       github.event_name != 'merge_group' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
-    env:
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     permissions:
       contents: read
       pull-requests: write
@@ -1001,6 +1001,8 @@ jobs:
 
       - name: Push PostgreSQL migrations
         uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -1009,6 +1011,8 @@ jobs:
 
       - name: Push ClickHouse migrations
         uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -1072,7 +1076,6 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 16
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -1163,11 +1166,17 @@ jobs:
         run: mise run go:tidy
 
       - name: Run migrations
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:migrate
       - name: Diff database with schema
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:diff out-of-sync
 
       - name: Check for dirty files
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
