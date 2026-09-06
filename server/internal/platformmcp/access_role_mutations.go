@@ -189,7 +189,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	result, err := decodeAccessRoleMutationReceipt(receipt.ResultPayload)
+	result, err := decodeAccessRoleMutationReceipt(operationCreateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
@@ -278,7 +278,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
 	}
-	result, err := decodeAccessRoleMutationReceipt(receipt.ResultPayload)
+	result, err := decodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
 	}

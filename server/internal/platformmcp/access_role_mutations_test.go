@@ -96,24 +96,32 @@ func TestAccessRoleReceiptRejectsUnknownOrUnsafePayloads(t *testing.T) {
 		MCPAccess:      MCPConnectSummary{DispositionRules: []string{}, BlockedDispositionRules: []string{}},
 		ResultCategory: "created", Reconciliation: "pending",
 	}
-	payload, err := encodeAccessRoleMutationReceipt(result)
+	payload, err := encodeAccessRoleMutationReceipt(operationCreateMCPAccessRole, result)
 	require.NoError(t, err)
-	require.True(t, validAccessRoleMutationReceiptPayload(payload))
+	require.True(t, validAccessRoleMutationReceiptPayload(operationCreateMCPAccessRole, payload))
+	require.False(t, validAccessRoleMutationReceiptPayload(operationUpdateMCPAccessRole, payload))
+
+	_, err = encodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, result)
+	require.Error(t, err)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(payload, &decoded))
 	decoded["principal_urn"] = "role:organization:hidden"
 	unsafe, err := json.Marshal(decoded)
 	require.NoError(t, err)
-	require.False(t, validAccessRoleMutationReceiptPayload(unsafe))
+	require.False(t, validAccessRoleMutationReceiptPayload(operationCreateMCPAccessRole, unsafe))
 
 	result.Reconciliation = "scheduled"
-	require.False(t, validAccessRoleMutationReceiptResult(result))
+	require.False(t, validAccessRoleMutationReceiptResult(operationCreateMCPAccessRole, result))
 
 	result.Reconciliation = "pending"
 	result.Name = "Support (EU)"
 	result.MCPAccess = MCPConnectSummary{ServerRules: maxAccessRoleMutationRules * 4, DispositionRules: []string{"future_annotation"}, BlockedDispositionRules: []string{}}
-	require.True(t, validAccessRoleMutationReceiptResult(result), "receipt validation must accept legitimate pre-existing dashboard role state")
+	require.True(t, validAccessRoleMutationReceiptResult(operationCreateMCPAccessRole, result), "receipt validation must accept legitimate pre-existing dashboard role state")
+
+	result.ResultCategory = "updated"
+	require.True(t, validAccessRoleMutationReceiptResult(operationUpdateMCPAccessRole, result))
+	require.False(t, validAccessRoleMutationReceiptResult(operationCreateMCPAccessRole, result))
 }
 
 func TestAccessRoleRemovalDoesNotRequireCurrentCatalog(t *testing.T) {

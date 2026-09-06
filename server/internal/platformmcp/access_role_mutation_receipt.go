@@ -63,11 +63,15 @@ func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal 
 		Invalid: func(cause error) error {
 			return &AccessRoleMutationError{Code: "invalid_request", Message: "The access role mutation caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrAccessRoleMutationInvalid, cause)}
 		},
-		Conflict:       accessRoleMutationConflict,
-		Unavailable:    accessRoleMutationUnavailable,
-		ValidateReplay: validAccessRoleMutationReceiptPayload,
-		EncodeResult:   encodeAccessRoleMutationReceipt,
-		Mutate:         mutate,
+		Conflict:    accessRoleMutationConflict,
+		Unavailable: accessRoleMutationUnavailable,
+		ValidateReplay: func(payload []byte) bool {
+			return validAccessRoleMutationReceiptPayload(operation, payload)
+		},
+		EncodeResult: func(result AccessRoleMutationReceiptResult) ([]byte, error) {
+			return encodeAccessRoleMutationReceipt(operation, result)
+		},
+		Mutate: mutate,
 	})
 }
 
@@ -87,8 +91,8 @@ func accessRoleMutationOperation(operation string) bool {
 	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole
 }
 
-func encodeAccessRoleMutationReceipt(result AccessRoleMutationReceiptResult) ([]byte, error) {
-	if !validAccessRoleMutationReceiptResult(result) {
+func encodeAccessRoleMutationReceipt(operation string, result AccessRoleMutationReceiptResult) ([]byte, error) {
+	if !validAccessRoleMutationReceiptResult(operation, result) {
 		return nil, accessRoleMutationUnavailable(errors.New("unsafe access role mutation receipt result"))
 	}
 	payload, err := json.Marshal(result)
@@ -101,9 +105,9 @@ func encodeAccessRoleMutationReceipt(result AccessRoleMutationReceiptResult) ([]
 	return payload, nil
 }
 
-func decodeAccessRoleMutationReceipt(payload []byte) (AccessRoleMutationReceiptResult, error) {
+func decodeAccessRoleMutationReceipt(operation string, payload []byte) (AccessRoleMutationReceiptResult, error) {
 	var result AccessRoleMutationReceiptResult
-	if !validAccessRoleMutationReceiptPayload(payload) {
+	if !validAccessRoleMutationReceiptPayload(operation, payload) {
 		return result, accessRoleMutationUnavailable(errors.New("invalid access role mutation replay payload"))
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
@@ -114,24 +118,33 @@ func decodeAccessRoleMutationReceipt(payload []byte) (AccessRoleMutationReceiptR
 	return result, nil
 }
 
-func validAccessRoleMutationReceiptPayload(payload []byte) bool {
+func validAccessRoleMutationReceiptPayload(operation string, payload []byte) bool {
 	if len(payload) == 0 || len(payload) > maxAccessRoleMutationReceiptPayloadBytes {
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	var result AccessRoleMutationReceiptResult
-	if decoder.Decode(&result) != nil || !validAccessRoleMutationReceiptResult(result) {
+	if decoder.Decode(&result) != nil || !validAccessRoleMutationReceiptResult(operation, result) {
 		return false
 	}
 	return decoder.Decode(&struct{}{}) == io.EOF
 }
 
-func validAccessRoleMutationReceiptResult(result AccessRoleMutationReceiptResult) bool {
+func validAccessRoleMutationReceiptResult(operation string, result AccessRoleMutationReceiptResult) bool {
 	if uuid.Validate(result.RoleID) != nil || result.RoleSlug == "" || strings.TrimSpace(result.Name) == "" || !validAccessRoleVersion(result.Version) {
 		return false
 	}
-	if result.ResultCategory != "created" && result.ResultCategory != "updated" {
+	expectedCategory := ""
+	switch operation {
+	case operationCreateMCPAccessRole:
+		expectedCategory = "created"
+	case operationUpdateMCPAccessRole:
+		expectedCategory = "updated"
+	default:
+		return false
+	}
+	if result.ResultCategory != expectedCategory {
 		return false
 	}
 	return result.Reconciliation == "complete" || result.Reconciliation == "pending"

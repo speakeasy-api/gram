@@ -35,7 +35,10 @@ var ErrRoleNotFound = errors.New("role not found")
 
 var validRoleNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _-]+$`)
 
-const workOSSyncAttempts = 3
+const (
+	workOSSyncAttempts = 3
+	workOSSyncTimeout  = 10 * time.Second
+)
 
 type RoleProvider interface {
 	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*workos.Role, error)
@@ -1124,13 +1127,16 @@ func (r *RoleManager) ReconcileRoleIdentity(ctx context.Context, workosOrgID, sl
 	}})
 }
 
-// runWorkOSSyncs starts best-effort WorkOS writes after the local transaction commits.
+// runWorkOSSyncs starts best-effort WorkOS writes after the local transaction
+// commits. It detaches request cancellation but bounds the entire batch so a
+// stalled provider cannot retain background work indefinitely.
 func (r *RoleManager) runWorkOSSyncs(ctx context.Context, syncs []workosSync) {
 	if len(syncs) == 0 {
 		return
 	}
-	syncCtx := context.WithoutCancel(ctx)
+	syncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workOSSyncTimeout)
 	go func() {
+		defer cancel()
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				r.logger.ErrorContext(syncCtx, "workos sync panic", attr.SlogError(fmt.Errorf("%v", recovered)))

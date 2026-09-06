@@ -34,6 +34,12 @@ func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
 	budgets.Plugins.Connection = allowOperationLimiter{}
 	budgets.Plugins.Organization = nil
 	require.False(t, budgets.Valid())
+	budgets.Plugins = budget
+	budgets.AccessRoleMutations.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessRoleMutations.Connection = allowOperationLimiter{}
+	budgets.AccessRoleMutations.Organization = nil
+	require.False(t, budgets.Valid())
 }
 
 func TestOperationBudgetChargesConnectionBeforeOrganization(t *testing.T) {
