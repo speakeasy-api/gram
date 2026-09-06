@@ -20,20 +20,39 @@ import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useOrganization } from "@/contexts/Auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys(): JSX.Element {
+  const organization = useOrganization();
   // The key fetching request returns a forbidden error without the org:admin
   // scope; the outer RequireScope gates rendering (and the data hook) on that
   // scope.
   return (
     <RequireScope scope="org:admin" level="page">
-      <OrgApiKeysInner />
+      <OrgApiKeysInner key={organization.id} />
     </RequireScope>
   );
 }
 
 function OrgApiKeysInner() {
+  const organization = useOrganization();
+  const [projectId, setProjectId] = useState("organization-wide");
+  const projectSelectionValid =
+    projectId === "organization-wide" ||
+    organization.projects.some((project) => project.id === projectId);
+  const projectLabel = (id?: string) =>
+    id
+      ? (organization.projects.find((project) => project.id === id)?.name ??
+        "Unavailable project")
+      : "Organization-wide";
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -72,6 +91,7 @@ function OrgApiKeysInner() {
 
   const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!projectSelectionValid || createKeyMutation.isPending) return;
     const formEl = e.currentTarget;
     const formData = new FormData(formEl);
     const newKeyName = formData.get("name");
@@ -85,6 +105,8 @@ function OrgApiKeysInner() {
         request: {
           createKeyForm: {
             name: newKeyName,
+            projectId:
+              projectId === "organization-wide" ? undefined : projectId,
             scopes: [scope],
           },
         },
@@ -120,6 +142,7 @@ function OrgApiKeysInner() {
     setIsCreateDialogOpen(false);
     setNewlyCreatedKey(null);
     setIsCopied(false);
+    setProjectId("organization-wide");
   };
 
   const apiKeyColumns: Column<Key>[] = [
@@ -137,9 +160,17 @@ function OrgApiKeysInner() {
     },
     {
       key: "scopes",
-      header: "Scopes",
+      header: "Permission scopes",
       width: "1fr",
       render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
+    },
+    {
+      key: "projectId",
+      header: "Project binding",
+      width: "1fr",
+      render: (key: Key) => (
+        <Text variant="body">{projectLabel(key.projectId)}</Text>
+      ),
     },
     {
       key: "createdAt",
@@ -249,6 +280,9 @@ function OrgApiKeysInner() {
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
+              <Text variant="body">
+                Project binding: {projectLabel(newlyCreatedKey.projectId)}
+              </Text>
               <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
@@ -283,8 +317,44 @@ function OrgApiKeysInner() {
                 autoCorrect="off"
               />
 
+              <div className="space-y-2">
+                <Label htmlFor="key-project">Project binding (optional)</Label>
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger
+                    id="key-project"
+                    aria-describedby="key-project-help"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="organization-wide">
+                      Organization-wide (no project)
+                    </SelectItem>
+                    {organization.projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                    {!projectSelectionValid && (
+                      <SelectItem value={projectId} disabled>
+                        Unavailable project
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Text
+                  id="key-project-help"
+                  variant="body"
+                  className="text-muted-foreground"
+                >
+                  Bind this key to one project, or leave it organization-wide.
+                  Permission scopes below determine what the key can do.
+                </Text>
+              </div>
+
               <AnyField
-                label="Scope"
+                label="Permission scope"
                 optionality="hidden"
                 render={() => {
                   return (
@@ -339,7 +409,12 @@ function OrgApiKeysInner() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createKeyMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={
+                    createKeyMutation.isPending || !projectSelectionValid
+                  }
+                >
                   Create
                 </Button>
               </div>
