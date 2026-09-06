@@ -42,6 +42,7 @@ func newApp() *cli.App {
 			newWorkerCommand(),
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),
+			newRenderPlatformMCPCommand(),
 			newStreamsCommand(),
 			newDemoSeedCommand(),
 			newVersionCommand(),

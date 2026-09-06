@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/email/loopsync"
+	"github.com/speakeasy-api/gram/server/internal/email/loops"
 )
 
 const (
@@ -23,7 +23,7 @@ func TestManifestMatchesApplicationTemplateContract(t *testing.T) {
 
 	_, filename, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	manifest, err := loopsync.LoadManifest(filepath.Join(filepath.Dir(filename), "manifest.json"))
+	manifest, err := loops.LoadManifest(filepath.Join(filepath.Dir(filename), "manifest.json"))
 	require.NoError(t, err)
 	require.Len(t, manifest.Templates, len(email.RegisteredTemplates))
 

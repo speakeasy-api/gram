@@ -41,6 +41,10 @@ type Client struct {
 	// reportSessionMoved endpoint.
 	ReportSessionMovedDoer goahttp.Doer
 
+	// ReportAIScan Doer is the HTTP client used to make requests to the
+	// reportAIScan endpoint.
+	ReportAIScanDoer goahttp.Doer
+
 	// CreateSessionHandoff Doer is the HTTP client used to make requests to the
 	// createSessionHandoff endpoint.
 	CreateSessionHandoffDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 		UpdateConfigurationDoer:  doer,
 		GetSessionMetaDoer:       doer,
 		ReportSessionMovedDoer:   doer,
+		ReportAIScanDoer:         doer,
 		CreateSessionHandoffDoer: doer,
 		RestoreResponseBody:      restoreBody,
 		scheme:                   scheme,
@@ -219,6 +224,30 @@ func (c *Client) ReportSessionMoved() goa.Endpoint {
 		resp, err := c.ReportSessionMovedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "reportSessionMoved", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReportAIScan returns an endpoint that makes HTTP requests to the agent
+// service reportAIScan server.
+func (c *Client) ReportAIScan() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReportAIScanRequest(c.encoder)
+		decodeResponse = DecodeReportAIScanResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportAIScanRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReportAIScanDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "reportAIScan", err)
 		}
 		return decodeResponse(resp)
 	}

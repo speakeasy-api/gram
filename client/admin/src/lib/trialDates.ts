@@ -12,25 +12,23 @@ const MS_PER_MINUTE = 60_000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
+function epochDay(year: number, month: number, date: number): number {
+  return Date.UTC(year, month, date) / MS_PER_DAY;
+}
+
 // The UTC day an instant falls on. `undefined` for an absent or unparseable
 // field, which is the same answer `fmtDateShort` gives it.
 export function trialEndDay(iso?: string): number | undefined {
   if (!iso) return undefined;
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return undefined;
-  return (
-    Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()) /
-    MS_PER_DAY
-  );
+  return epochDay(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
 }
 
 // The day a picked date stands for. A calendar's dates are local midnight, so
 // the day is in the local fields and reading the UTC ones would move it.
 export function dayOf(picked: Date): number {
-  return (
-    Date.UTC(picked.getFullYear(), picked.getMonth(), picked.getDate()) /
-    MS_PER_DAY
-  );
+  return epochDay(picked.getFullYear(), picked.getMonth(), picked.getDate());
 }
 
 // The reverse, for handing a day back to the calendar to select or to bound
@@ -49,10 +47,7 @@ export function dayISO(day: number): string {
 // end date to add days to can still offer a calendar whose days agree with
 // `fmtDateShort`.
 export function utcTodayDay(now: Date = new Date()): number {
-  return (
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) /
-    MS_PER_DAY
-  );
+  return epochDay(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 }
 
 function quantity(value: number, unit: "day" | "hour" | "minute"): string {

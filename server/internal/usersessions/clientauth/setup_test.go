@@ -173,7 +173,7 @@ func newVerifier(t *testing.T) *clientauth.Verifier {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), clientauth.MaxReplayHold)
+	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), clientauth.DefaultMaxReplayHold)
 	require.NoError(t, err)
 
 	verifier, err := clientauth.NewVerifier(newKeyResolver(t, client), guard)
@@ -185,15 +185,15 @@ func newVerifier(t *testing.T) *clientauth.Verifier {
 func expectationFor(t *testing.T, s *signer) clientauth.Expectation {
 	t.Helper()
 
-	return clientauth.Expectation{
-		ClientID:     testClientID,
-		KeySource:    s.source(t),
-		ReplayIssuer: t.Name(),
-		Audiences: clientauth.Audiences{
+	return clientauth.ClientExpectation(
+		testClientID,
+		s.source(t),
+		t.Name(),
+		clientauth.Audiences{
 			Issuer:   testIssuer,
 			Endpoint: testTokenURL,
 		},
-	}
+	)
 }
 
 // assertionFor wraps a raw assertion in a well-formed Assertion.

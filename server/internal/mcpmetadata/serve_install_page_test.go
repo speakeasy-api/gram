@@ -1461,11 +1461,12 @@ func TestServeInstallPage_McpServer_TunneledPublic_NoOAuthSteps(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: *authCtx.ProjectID,
-		Name:      "Public Tunneled MCP Server",
-		KeyHash:   "test-key-hash",
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "Public Tunneled MCP Server",
+		KeyHash:            "test-key-hash",
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -1502,11 +1503,12 @@ func TestServeInstallPage_McpServer_TunneledPrivate_ShowsOAuthSteps(t *testing.T
 	require.NotNil(t, authCtx.ProjectID)
 
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: *authCtx.ProjectID,
-		Name:      "Private Tunneled MCP Server",
-		KeyHash:   "test-key-hash",
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "Private Tunneled MCP Server",
+		KeyHash:            "test-key-hash",
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -1595,17 +1597,12 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
+	// The toolset's own flag stays false: the wrapper's visibility is what
+	// must open the page.
 	endpointSlug := "bridge-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
 		name:         "Bridged Server",
-		visibility:   mcpservers.VisibilityPrivate, // intentionally private to confirm toolset.McpIsPublic wins
+		visibility:   mcpservers.VisibilityPublic,
 		endpointSlug: endpointSlug,
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
@@ -1617,11 +1614,63 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
-	// Toolset is public, so even though the mcp_server is private the install page renders.
+	// The wrapper is public, so the install page renders even though the
+	// toolset's own McpIsPublic flag is false.
 	require.Equal(t, http.StatusOK, rr.Code,
-		"toolset.McpIsPublic should drive the gate when the mcp_server bridges to a toolset")
+		"wrapper visibility should drive the gate when the mcp_server bridges to a toolset")
 	body := rr.Body.String()
 	assert.Contains(t, body, endpointSlug, "rendered page should reference the mcp_endpoint slug as the install URL")
+}
+
+// TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates is the
+// private counterpart of the bridge test: a private wrapper over a toolset
+// whose legacy McpIsPublic flag is true must NOT serve anonymously — the
+// wrapper's visibility is authoritative for wrapper-resolved installs.
+func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Toolset Gate",
+		Slug:                   "toolset-gate-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Toolset behind a private mcp_server wrapper"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("toolset-gate-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	endpointSlug := "gate-endpoint-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:         "Gated Server",
+		visibility:   mcpservers.VisibilityPrivate,
+		endpointSlug: endpointSlug,
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusFound, rr.Code,
+		"a private wrapper must gate the install page even when the toolset's legacy public flag is set")
+	assert.Contains(t, rr.Header().Get("Location"), "/login")
 }
 
 // TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata confirms
@@ -1948,4 +1997,52 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+}
+
+// A live endpoint whose backend server is disabled renders the not-found page
+// rather than a 500: the address is authoritative and terminal (AIS-633).
+func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "disabled-install-" + uuid.New().String()[:8]
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		name:         "Disabled Server",
+		visibility:   mcpservers.VisibilityDisabled,
+		endpointSlug: mcpSlug,
+	})
+
+	// A public legacy toolset shares the slug; a wrongly-falling-through
+	// legacy lookup would render it instead of the not-found page.
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Shadowing Legacy Toolset",
+		Slug:                   "legacy-" + mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("must not shadow the disabled wrapper"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.NotContains(t, rr.Body.String(), "Shadowing Legacy Toolset")
 }

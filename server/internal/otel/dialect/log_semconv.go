@@ -13,11 +13,11 @@ type SemconvLog struct{}
 func (SemconvLog) AppliesTo(*otelv1.InboundLogRecord) bool { return true }
 
 func (SemconvLog) InputContent(record *otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
-	return semconvLogContent[genaiconv.InputMessages](record, "gen_ai.input.messages")
+	return semconvLogContent[genaiconv.InputMessages](record, semconvInputMessagesKey)
 }
 
 func (SemconvLog) OutputContent(record *otelv1.InboundLogRecord) (string, genaiconv.OutputMessages, error) {
-	return semconvLogContent[genaiconv.OutputMessages](record, "gen_ai.output.messages")
+	return semconvLogContent[genaiconv.OutputMessages](record, semconvOutputMessagesKey)
 }
 
 func (SemconvLog) SessionID(record *otelv1.InboundLogRecord) (string, string, error) {
@@ -26,12 +26,12 @@ func (SemconvLog) SessionID(record *otelv1.InboundLogRecord) (string, string, er
 }
 
 func (SemconvLog) ExternalUserEmail(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.email")
+	key, value := getOneLogAttr(record, userEmailKey)
 	return key, value, nil
 }
 
 func (SemconvLog) ExternalUserID(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.id")
+	key, value := getOneLogAttr(record, semconvUserIDKey)
 	return key, value, nil
 }
 

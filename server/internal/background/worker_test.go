@@ -36,7 +36,7 @@ func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 		}
 
 		assert.Subset(c, ids, []string{
-			outboxGCScheduleID,
+			killswitchMaintenanceScheduleID,
 			assistantReaperScheduleID,
 			chatAnalysisSweepScheduleID,
 			aiUsagePollerCoordinatorScheduleID,

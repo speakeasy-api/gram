@@ -8,8 +8,11 @@ export type McpActivityStatus = "never" | "stale";
 
 // The MCP server target types the activity endpoint reports. Hosted toolset and
 // remote MCP servers both attribute as "hosted_mcp_server"; tunnelled servers as
-// "tunneled_mcp_server".
-export type McpActivityTargetType = "hosted_mcp_server" | "tunneled_mcp_server";
+// "tunneled_mcp_server"; gateways as "meta_mcp_server", keyed by their id.
+export type McpActivityTargetType =
+  | "hosted_mcp_server"
+  | "tunneled_mcp_server"
+  | "meta_mcp_server";
 
 // A hosted toolset and a tunnelled/remote MCP server can share a slug, so the
 // identifier alone is ambiguous. Compose the target type with the identifier so
@@ -54,7 +57,8 @@ export function indexMcpActivity(
 
 /**
  * Look up a listing item's activity by its target type and identifier (toolset
- * slug for hosted servers, MCP server slug for tunnelled/remote servers).
+ * slug for hosted servers, MCP server slug for tunnelled/remote servers, meta
+ * MCP server id for gateways).
  */
 export function lookupMcpActivity(
   index: Map<string, McpServerActivity>,

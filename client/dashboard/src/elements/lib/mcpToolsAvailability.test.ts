@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  composerContextToolsEmptyMessage,
+  composerMcpServersPresence,
+  CONTEXT_TOOLS_EMPTY_MESSAGE,
+  CONTEXT_TOOLS_LOAD_FAILED_MESSAGE,
   mcpToolsAvailability,
+  mcpToolsListPending,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
   mcpToolsWelcomeSubtitle,
+  NO_CONTEXT_SERVERS_MESSAGE,
   NO_MCP_TOOLS_MESSAGE,
 } from "./mcpToolsAvailability";
 
@@ -58,6 +64,64 @@ describe("mcpToolsAvailability", () => {
     expect(mcpToolsSendBlocked(true, false, { list_issues: {} }, null)).toBe(
       false,
     );
+  });
+});
+
+describe("composerMcpServersPresence", () => {
+  it("treats omitted mcp and mcps as unknown", () => {
+    expect(composerMcpServersPresence(undefined, undefined)).toBe("unknown");
+  });
+
+  it("treats an explicit empty mcps list as none", () => {
+    expect(composerMcpServersPresence(undefined, [])).toBe("none");
+  });
+
+  it("treats a url or non-empty list as some", () => {
+    expect(
+      composerMcpServersPresence("https://gram.test/mcp/a", undefined),
+    ).toBe("some");
+    expect(composerMcpServersPresence(undefined, [{ url: "/mcp/a" }])).toBe(
+      "some",
+    );
+  });
+});
+
+describe("composerContextToolsEmptyMessage", () => {
+  it("stays on loading while host config or tools/list is unknown", () => {
+    expect(
+      composerContextToolsEmptyMessage(false, undefined, null, "unknown"),
+    ).toBe("Loading tools…");
+    expect(
+      composerContextToolsEmptyMessage(true, undefined, null, "some"),
+    ).toBe("Loading tools…");
+    expect(
+      composerContextToolsEmptyMessage(false, undefined, null, "some"),
+    ).toBe("Loading tools…");
+  });
+
+  it("explains a settled empty tools/list", () => {
+    expect(composerContextToolsEmptyMessage(false, {}, null, "some")).toBe(
+      CONTEXT_TOOLS_EMPTY_MESSAGE,
+    );
+  });
+
+  it("explains a failed tools/list", () => {
+    expect(
+      composerContextToolsEmptyMessage(
+        false,
+        undefined,
+        new Error("401"),
+        "some",
+      ),
+    ).toBe(CONTEXT_TOOLS_LOAD_FAILED_MESSAGE);
+  });
+
+  it("explains when no servers are attached", () => {
+    expect(
+      composerContextToolsEmptyMessage(false, undefined, null, "none"),
+    ).toBe(NO_CONTEXT_SERVERS_MESSAGE);
+    expect(mcpToolsListPending(false, undefined, null, false)).toBe(false);
+    expect(mcpToolsListPending(true, undefined, null, false)).toBe(false);
   });
 });
 

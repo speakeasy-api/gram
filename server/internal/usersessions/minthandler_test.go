@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -158,4 +160,144 @@ func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 
 	return linked
+}
+
+func TestMintUserSessionForMetaMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	meta, issuerID := createIssuerGatedMintMetaServer(t, ctx, ti, "mint-gateway")
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, meta.ID.String()),
+	)
+
+	metaID := meta.ID.String()
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      nil,
+		MetaMcpServerID:  &metaID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, got.AccessToken)
+
+	// The audience is the issuer URN, which is what
+	// NewResolvedMcpEndpointFromMetaMcpServer validates the bearer against.
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewUserSessionIssuer(issuerID).String(),
+	)
+	require.NoError(t, err)
+	require.Contains(t, claims.Issuer, "/mcp/mint-gateway-endpoint")
+}
+
+func TestMintUserSessionForMetaMcpServerRequiresMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	meta, _ := createIssuerGatedMintMetaServer(t, ctx, ti, "mint-gateway-denied")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// A grant restricted to some other resource must not mint for the gateway:
+	// the bearer would otherwise hand its holder runtime access.
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, uuid.New().String()),
+	)
+
+	metaID := meta.ID.String()
+	_, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      nil,
+		MetaMcpServerID:  &metaID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestMintUserSessionForMetaMcpServerWithoutAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "mint-gateway-noaddr-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	// No mcp_endpoints row: the issuer claim has no address to name, so the
+	// mint refuses rather than emitting a token pointing nowhere.
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "mint-gateway-noaddr",
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, meta.ID.String()),
+	)
+
+	metaID := meta.ID.String()
+	_, err = ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      nil,
+		MetaMcpServerID:  &metaID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func createIssuerGatedMintMetaServer(t *testing.T, ctx context.Context, ti *testInstance, slug string) (metamcprepo.MetaMcpServer, uuid.UUID) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 slug + "-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                slug,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: uuid.NullUUID{UUID: meta.ID, Valid: true},
+		Slug:            slug + "-endpoint",
+	})
+	require.NoError(t, err)
+
+	return meta, issuerID
 }

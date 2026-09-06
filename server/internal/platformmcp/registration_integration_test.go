@@ -2,7 +2,9 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -987,15 +989,15 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 
 	return Principal{
-			UserID:         userID,
-			OrganizationID: organizationID,
-			ConnectionID:   connectionID.String(),
-			Generation:     generation.String(),
-		}, ResolvedProject{
-			ID:   projectRow.ID,
-			Name: projectRow.Name,
-			Slug: projectRow.Slug,
-		}
+		UserID:         userID,
+		OrganizationID: organizationID,
+		ConnectionID:   connectionID.String(),
+		Generation:     generation.String(),
+	}, ResolvedProject{
+		ID:   projectRow.ID,
+		Name: projectRow.Name,
+		Slug: projectRow.Slug,
+	}
 }
 
 func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
@@ -1040,6 +1042,59 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 // The assistant issues a handoff with no connection and the dashboard, which
 // authenticates under its own session, redeems it. This is the whole point of
 // the connection-less surfaces: neither step can key on a connection.
+func TestRiskMutationReceiptReplayConflictAndRollback(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_mutation_receipt")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store := NewRiskMutationReceiptStore(conn)
+	request := RiskMutationReceiptRequest{Operation: operationCreateRiskPolicy, IdempotencyKey: "risk-create-key", Input: map[string]any{"name": "normalized", "enabled": true}}
+	calls := 0
+
+	result := CreateRiskPolicyReceiptResult{Project: RiskMutationReceiptProject{ID: project.ID.String(), Slug: project.Slug}, Policy: RiskPolicyReceiptSummary{ID: "11111111-1111-4111-8111-111111111111", PolicyType: "standard", Enabled: true, Action: "flag"}, Version: "opaque", MatchedExisting: false, ResultCategory: "created"}
+	first, err := store.Execute(ctx, principal, project, request, func(_ context.Context, _ pgx.Tx) (RiskMutationReceiptResult, error) {
+		calls++
+		return result, nil
+	})
+	require.NoError(t, err)
+	require.False(t, first.Replayed)
+	expectedPayload, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedPayload), string(first.ResultPayload))
+
+	replayed, err := store.Execute(ctx, principal, project, request, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) {
+		calls++
+		return nil, errors.New("replay must not execute callback")
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, first.ID, replayed.ID)
+	require.Equal(t, 1, calls)
+
+	changed := request
+	changed.Input = map[string]any{"name": "different", "enabled": true}
+	_, err = store.Execute(ctx, principal, project, changed, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) { return nil, nil })
+	require.ErrorIs(t, err, ErrRiskMutationConflict)
+
+	failed := RiskMutationReceiptRequest{Operation: operationCreateRiskExclusion, IdempotencyKey: "rollback-key", Input: map[string]any{"match_type": "source", "match_value": "gitleaks"}}
+	_, err = store.Execute(ctx, principal, project, failed, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if _, err := projectsrepo.New(tx).UploadProjectLogo(ctx, projectsrepo.UploadProjectLogoParams{LogoAssetID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, ProjectID: project.ID}); err != nil {
+			return nil, fmt.Errorf("set rollback sentinel project logo: %w", err)
+		}
+		// The callback represents domain + audit work in the shared transaction;
+		// this injected audit failure must roll back the domain row and receipt.
+		return nil, errors.New("injected audit failure")
+	})
+	require.ErrorContains(t, err, "injected audit failure")
+	_, err = platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID, Operation: failed.Operation, IdempotencyKey: failed.IdempotencyKey})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	rolledBack, err := projectsrepo.New(conn).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: project.ID, OrganizationID: principal.OrganizationID})
+	require.NoError(t, err)
+	require.False(t, rolledBack.LogoAssetID.Valid)
+}
+
 func TestSetupHandoffRoundTripsWithoutAConnection(t *testing.T) {
 	t.Parallel()
 

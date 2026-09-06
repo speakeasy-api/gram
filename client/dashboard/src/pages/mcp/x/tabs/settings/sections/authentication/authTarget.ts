@@ -1,9 +1,12 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -17,6 +20,8 @@ import { useMemo } from "react";
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
+  /** Project owning the target; scopes permission gates to it. */
+  projectId: string;
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
@@ -27,6 +32,10 @@ export type AuthTarget = {
   /** Link a freshly created issuer to the target (first add). Absent for
    * targets that always have an issuer (mcp servers). */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
+  /** True when the target's issuer may bind several upstream providers
+   * (gateways front many members). Remote/tunneled servers have exactly one
+   * upstream and must not offer additional attachments. */
+  multipleProviders?: boolean;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
@@ -35,6 +44,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
+      projectId: mcpServer.projectId,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       invalidate: async (queryClient: QueryClient) => {
@@ -54,6 +64,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   return useMemo(
     () => ({
       slug: toolset.slug,
+      projectId: toolset.projectId,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
@@ -71,5 +82,38 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       },
     }),
     [client, toolset],
+  );
+}
+
+export function useMetaMcpAuthTarget(
+  metaMcpServer: MetaMcpServer,
+  slugSeed: string,
+): AuthTarget {
+  const client = useSdkClient();
+
+  return useMemo(
+    () => ({
+      slug: slugSeed,
+      projectId: metaMcpServer.projectId,
+      userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      multipleProviders: true,
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        // update is a full-record replace, so the name rides along.
+        await client.metaMcp.update({
+          updateMetaMcpServerForm: {
+            id: metaMcpServer.id,
+            name: metaMcpServer.name,
+            userSessionIssuerId,
+          },
+        });
+      },
+      invalidate: async (queryClient: QueryClient) => {
+        await Promise.all([
+          invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
+          invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+        ]);
+      },
+    }),
+    [client, metaMcpServer, slugSeed],
   );
 }

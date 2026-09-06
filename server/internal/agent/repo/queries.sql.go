@@ -566,6 +566,52 @@ func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDev
 	return err
 }
 
+const upsertDeviceAgentEnvironmentSync = `-- name: UpsertDeviceAgentEnvironmentSync :exec
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+`
+
+type UpsertDeviceAgentEnvironmentSyncParams struct {
+	OrganizationID string
+	Email          string
+	Environment    string
+	Hostname       pgtype.Text
+}
+
+// Best-effort record that an agent polled from a box that is not somebody's
+// laptop — a cloud sandbox, a container, a shared server. Sibling of
+// UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+// an MDM device's assigned-user email against THAT one, so a cloud session
+// polling under a real person's address would otherwise mark their laptop
+// covered whether or not the laptop runs the agent.
+//
+// Only called when the agent declared a non-laptop environment. A laptop, and
+// every agent predating the header, still writes the sibling.
+//
+// The guard mirrors the device sibling's rather than the plain heartbeat
+// throttle, because hostname is mutable and a ~60s poll cadence keeps
+// last_seen_at almost always fresh — a changed hostname could otherwise go
+// unrecorded for a whole session.
+// Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+// expression index that is this table's dedup key. Matching the readers'
+// LOWER() comparison is what stops one identity from holding two rows.
+func (q *Queries) UpsertDeviceAgentEnvironmentSync(ctx context.Context, arg UpsertDeviceAgentEnvironmentSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentEnvironmentSync,
+		arg.OrganizationID,
+		arg.Email,
+		arg.Environment,
+		arg.Hostname,
+	)
+	return err
+}
+
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec
 INSERT INTO device_agent_syncs (organization_id, email)
 VALUES ($1, $2)

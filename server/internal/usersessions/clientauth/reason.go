@@ -35,8 +35,15 @@ const (
 	// verify under the resolved key.
 	ReasonSignatureInvalid Reason = "assertion_signature_invalid"
 
-	// ReasonSubjectMismatch reports iss and sub that are not both the client_id
-	// the request is authenticating, as RFC 7523 §3 requires.
+	// ReasonSubjectMismatch reports an iss or sub that is missing, or not
+	// the value required of it.
+	//
+	// UnverifiedClientID requires only that the two be present and equal,
+	// having no expectation to compare them against yet. Verify checks each
+	// against the expectation: for a client assertion both must be the
+	// client_id being authenticated, as RFC 7523 §3 requires; for a workload
+	// assertion iss must be the trusted issuer and sub the admitted external
+	// subject.
 	ReasonSubjectMismatch Reason = "assertion_subject_mismatch"
 
 	// ReasonAudienceMismatch reports an aud naming neither this endpoint's issuer
@@ -73,11 +80,13 @@ const (
 	// or an outage would suspend replay protection exactly when it matters.
 	ReasonReplayStoreUnavailable Reason = "assertion_replay_store_unavailable"
 
-	// ReasonVerifierMisconfigured reports an Expectation the caller assembled
-	// without a client identity, a replay issuer, or any accepted audience.
-	// It is a server wiring fault, never a client error, and has its own
-	// label so it is not mistaken for the client-shaped failure each of
-	// those omissions would otherwise produce.
+	// ReasonVerifierMisconfigured reports an Expectation the caller
+	// assembled without an issuer or subject to match, without a replay
+	// scope, or without any accepted audience — or one whose assertions
+	// could outlive what the replay guard remembers. It is a server wiring
+	// fault, never a client error, and has its own label so it is not
+	// mistaken for the client-shaped failure each of those would otherwise
+	// produce.
 	ReasonVerifierMisconfigured Reason = "assertion_verifier_misconfigured"
 )
 

@@ -319,6 +319,44 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithoutOAut
 	require.Empty(t, w.Body.String())
 }
 
+func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerOnlyToolsetBackendOnCustomDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-pr-cd-"+uuid.NewString()[:8]+".example.com")
+	upstreamIssuer := "https://issuer.example.com/Tenant/CaseSensitive"
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:                      "xmcp-pr-cd",
+		IsPublic:                  true,
+		AuthorizationServerIssuer: &upstreamIssuer,
+	})
+	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
+
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedResource := "https://" + domain.Domain + "/x/mcp/" + slug
+	require.Equal(t, expectedResource, metadata["resource"])
+
+	authServers, ok := metadata["authorization_servers"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{upstreamIssuer}, authServers)
+}
+
 func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
 	t.Parallel()
 
@@ -377,7 +415,9 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExterna
 
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "http://0.0.0.0/x/mcp/"+slug, metadata["resource"])
+	resourceURL := "http://0.0.0.0/x/mcp/" + slug
+	require.Equal(t, resourceURL, metadata["resource"])
+	require.Equal(t, []any{resourceURL}, metadata["authorization_servers"])
 }
 
 // TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend

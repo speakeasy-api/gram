@@ -15,14 +15,14 @@ func TestToolsetsService_RemoveOAuthServer_ExternalOAuthAuditLog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Detach External OAuth Toolset")
 	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
 		SessionToken: nil,
 		ApikeyToken:  nil,
 		Slug:         toolset.Slug,
 		ExternalOauthServer: &types.ExternalOAuthServerForm{
-			Slug: types.Slug("detach-external-oauth"),
+			Slug: externalOAuthSlug("detach-external-oauth"),
 			Metadata: map[string]any{
 				"issuer":         "https://example.com",
 				"token_endpoint": "https://example.com/token",

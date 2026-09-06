@@ -31,14 +31,35 @@ func TestBuildSkillInsightsQueryRestrictsTelemetryToMappedSessions(t *testing.T)
 
 	now := time.Now().UTC()
 	query, _, err := buildSkillInsightsQuery(QuerySkillInsightsParams{
-		OrganizationID:  "test-organization",
-		ProjectID:       "00000000-0000-0000-0000-000000000001",
-		SkillIDs:        []string{"00000000-0000-0000-0000-000000000002"},
-		SkillVersionIDs: nil,
-		From:            now.Add(-24 * time.Hour),
-		To:              now,
-		IntervalSeconds: int64(time.Hour.Seconds()),
+		OrganizationID:      "test-organization",
+		ProjectID:           "00000000-0000-0000-0000-000000000001",
+		SkillIDs:            []string{"00000000-0000-0000-0000-000000000002"},
+		SkillVersionIDs:     nil,
+		From:                now.Add(-24 * time.Hour),
+		To:                  now,
+		IntervalSeconds:     int64(time.Hour.Seconds()),
+		IncludeSessionUsage: true,
 	})
 	require.NoError(t, err)
 	require.Contains(t, query, "chat_id IN (SELECT DISTINCT session_id FROM skill_session_versions")
+}
+
+func TestBuildSkillInsightsQueryWithoutSessionUsageSkipsRawTelemetry(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	query, _, err := buildSkillInsightsQuery(QuerySkillInsightsParams{
+		OrganizationID:      "test-organization",
+		ProjectID:           "00000000-0000-0000-0000-000000000001",
+		SkillIDs:            []string{"00000000-0000-0000-0000-000000000002"},
+		SkillVersionIDs:     nil,
+		From:                now.Add(-24 * time.Hour),
+		To:                  now,
+		IntervalSeconds:     int64(time.Hour.Seconds()),
+		IncludeSessionUsage: false,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, query, "telemetry_logs")
+	require.NotContains(t, query, "sessions AS")
+	require.Contains(t, query, "toFloat64(0) AS total_session_cost")
 }

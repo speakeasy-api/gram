@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -283,6 +284,36 @@ func createGcpIamCredential(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NotNil(t, cred)
 
 	return cred.ID
+}
+
+// gramProjectServiceAccount builds a service account address inside the same
+// project the stub resolver reports as Gram's own, which is what the
+// impersonation screening refuses. Derived from the stub's constant so these
+// tests cannot drift from it.
+func gramProjectServiceAccount(name string) string {
+	_, domain, _ := strings.Cut(gcpauth.StubResolverPrincipal, "@")
+	return name + "@" + domain
+}
+
+// createGcpIamCredentialDirect writes a credential straight through the repo,
+// so tests can build rows the credential API refuses to produce.
+func createGcpIamCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string, gcpParams extcredrepo.CreateGcpIamCredentialParams) string {
+	t.Helper()
+
+	q := extcredrepo.New(ti.conn)
+
+	ec, err := q.CreateExternalCredential(ctx, extcredrepo.CreateExternalCredentialParams{
+		OrganizationID: conv.ToPGText(ti.orgID),
+		Provider:       "gcp_iam",
+		Name:           name,
+	})
+	require.NoError(t, err)
+
+	gcpParams.ExternalCredentialID = ec.ID
+	_, err = q.CreateGcpIamCredential(ctx, gcpParams)
+	require.NoError(t, err)
+
+	return ec.ID.String()
 }
 
 // createGcpKmsKey is a fixture: a gcp_kms external key backed by the given

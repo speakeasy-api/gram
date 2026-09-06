@@ -41,6 +41,7 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt        pgtype.Timestamptz
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
+	JsonWebKeySetID         uuid.NullUUID
 	Scope                   []string
 	Audience                pgtype.Text
 	ClientIDMetadataUri     pgtype.Text
@@ -73,6 +74,7 @@ type RemoteSessionIssuer struct {
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
+	TunneledMcpServerID               uuid.NullUUID
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
 	ClientSetupDocumentationUrl       pgtype.Text

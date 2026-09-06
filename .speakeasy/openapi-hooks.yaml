@@ -720,11 +720,6 @@ components:
         - raw_sha256
         - content
   securitySchemes:
-    admin_auth_header_Authorization:
-      type: apiKey
-      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
-      name: Authorization
-      in: header
     apikey_header_Authorization:
       type: apiKey
       description: key based auth.
@@ -754,6 +749,8 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: killswitches
+    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
@@ -770,8 +767,6 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories
@@ -782,6 +777,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: dataExports
+    description: Manage project-scoped data export destinations and routes.
   - name: deployments
     description: Manages deployments of tools from upstream sources.
   - name: deviceIntegrations
@@ -796,14 +793,14 @@ tags:
     description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
-  - name: collections
-    description: MCP collection operations
   - name: functions
     description: Endpoints for working with functions.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: identity
+    description: Resolves the identifiers Gram records activity under into a single identity.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
@@ -830,8 +827,6 @@ tags:
     description: Organization membership, invitations, and directory.
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
-  - name: otelForwarding
-    description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
   - name: adminAssets
@@ -840,6 +835,8 @@ tags:
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformKillswitches
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp

@@ -28,11 +28,8 @@ type Endpoints struct {
 	SetPluginAssignments        goa.Endpoint
 	ListAudiences               goa.Endpoint
 	DownloadPluginPackage       goa.Endpoint
-	DownloadPlatformMCPPlugin   goa.Endpoint
 	DownloadObservabilityPlugin goa.Endpoint
 	DownloadCodexInstallScript  goa.Endpoint
-	GetPlatformMCPPackageStatus goa.Endpoint
-	RepairPlatformMCPPackage    goa.Endpoint
 	GetPublishStatus            goa.Endpoint
 	PublishPlugins              goa.Endpoint
 	GetMarketplaceSettings      goa.Endpoint
@@ -44,15 +41,6 @@ type Endpoints struct {
 type DownloadPluginPackageResponseData struct {
 	// Result is the method result.
 	Result *DownloadPluginPackageResult
-	// Body streams the HTTP response body.
-	Body io.ReadCloser
-}
-
-// DownloadPlatformMCPPluginResponseData holds both the result and the HTTP
-// response body reader of the "downloadPlatformMCPPlugin" method.
-type DownloadPlatformMCPPluginResponseData struct {
-	// Result is the method result.
-	Result *DownloadPlatformMCPPluginResult
 	// Body streams the HTTP response body.
 	Body io.ReadCloser
 }
@@ -91,11 +79,8 @@ func NewEndpoints(s Service) *Endpoints {
 		SetPluginAssignments:        NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
 		ListAudiences:               NewListAudiencesEndpoint(s, a.APIKeyAuth),
 		DownloadPluginPackage:       NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
-		DownloadPlatformMCPPlugin:   NewDownloadPlatformMCPPluginEndpoint(s, a.APIKeyAuth),
 		DownloadObservabilityPlugin: NewDownloadObservabilityPluginEndpoint(s, a.APIKeyAuth),
 		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptEndpoint(s, a.APIKeyAuth),
-		GetPlatformMCPPackageStatus: NewGetPlatformMCPPackageStatusEndpoint(s, a.APIKeyAuth),
-		RepairPlatformMCPPackage:    NewRepairPlatformMCPPackageEndpoint(s, a.APIKeyAuth),
 		GetPublishStatus:            NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
 		PublishPlugins:              NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 		GetMarketplaceSettings:      NewGetMarketplaceSettingsEndpoint(s, a.APIKeyAuth),
@@ -116,11 +101,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.ListAudiences = m(e.ListAudiences)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
-	e.DownloadPlatformMCPPlugin = m(e.DownloadPlatformMCPPlugin)
 	e.DownloadObservabilityPlugin = m(e.DownloadObservabilityPlugin)
 	e.DownloadCodexInstallScript = m(e.DownloadCodexInstallScript)
-	e.GetPlatformMCPPackageStatus = m(e.GetPlatformMCPPackageStatus)
-	e.RepairPlatformMCPPackage = m(e.RepairPlatformMCPPackage)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
 	e.GetMarketplaceSettings = m(e.GetMarketplaceSettings)
@@ -516,45 +498,6 @@ func NewDownloadPluginPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
-// NewDownloadPlatformMCPPluginEndpoint returns an endpoint function that calls
-// the method "downloadPlatformMCPPlugin" of service "plugins".
-func NewDownloadPlatformMCPPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DownloadPlatformMCPPluginPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			return nil, err
-		}
-		res, body, err := s.DownloadPlatformMCPPlugin(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		return &DownloadPlatformMCPPluginResponseData{Result: res, Body: body}, nil
-	}
-}
-
 // NewDownloadObservabilityPluginEndpoint returns an endpoint function that
 // calls the method "downloadObservabilityPlugin" of service "plugins".
 func NewDownloadObservabilityPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -630,64 +573,6 @@ func NewDownloadCodexInstallScriptEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return &DownloadCodexInstallScriptResponseData{Result: res, Body: body}, nil
-	}
-}
-
-// NewGetPlatformMCPPackageStatusEndpoint returns an endpoint function that
-// calls the method "getPlatformMCPPackageStatus" of service "plugins".
-func NewGetPlatformMCPPackageStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetPlatformMCPPackageStatusPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetPlatformMCPPackageStatus(ctx, p)
-	}
-}
-
-// NewRepairPlatformMCPPackageEndpoint returns an endpoint function that calls
-// the method "repairPlatformMCPPackage" of service "plugins".
-func NewRepairPlatformMCPPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RepairPlatformMCPPackagePayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.RepairPlatformMCPPackage(ctx, p)
 	}
 }
 

@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { buildLoginRedirectURL } from "@/lib/utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { useRoutes } from "@/routes";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
@@ -142,6 +143,7 @@ function BlockBody({ id }: { id: string | undefined }) {
               ? `Blocked by policy “${block.policyName}”`
               : "Blocked by a Speakeasy spend rule"}
             {block.toolName ? ` · tool ${block.toolName}` : ""}
+            {block.provider ? ` · via ${formatPlatform(block.provider)}` : ""}
           </Text>
         </Stack>
       </Stack>

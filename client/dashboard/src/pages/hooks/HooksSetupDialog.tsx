@@ -18,6 +18,7 @@ import {
   ACTIVE_AGENT_PROVIDER_IDS,
   agentProvidersForSurface,
 } from "@/components/agent-providers/agent-providers";
+import { CopilotInstallContent } from "../plugins/InstallInstructionsDialog";
 
 function ClaudeInstallContent({
   marketplaceUrl,
@@ -548,6 +549,7 @@ export function HooksSetupDialog({
               pluginName={publishStatus?.codexObservabilityPlugin}
             />
           )}
+          {selected === "copilot" && <CopilotInstallContent />}
         </div>
       </Dialog.Content>
     </Dialog>

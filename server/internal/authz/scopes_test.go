@@ -54,6 +54,23 @@ func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
 	}
 }
 
+func TestAgentManagementScopesAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	managementScopes := []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer}
+	for _, granted := range managementScopes {
+		grants := []Grant{NewGrant(granted, "agent_123")}
+		for _, checked := range managementScopes {
+			require.Equal(t, granted == checked, GrantsSatisfy(grants, Check{Scope: checked, ResourceID: "agent_123"}),
+				"grant %q checking %q", granted, checked)
+		}
+	}
+
+	for _, checked := range managementScopes {
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "agent_123")}, Check{Scope: checked, ResourceID: "agent_123"}))
+	}
+}
+
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	t.Parallel()
 

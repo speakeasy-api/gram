@@ -91,8 +91,7 @@ func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, or
 				return info, nil
 			}
 		} else {
-			var notFound *serviceerror.NotFound
-			if !errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
 				return nil, fmt.Errorf("describe workflow execution: %w", err)
 			}
 		}
@@ -247,8 +246,7 @@ func (c *CustomDomainRegistrationClient) TerminateCustomDomainRegistration(ctx c
 	for _, id := range ids {
 		err := c.TemporalEnv.Client().TerminateWorkflow(terminateCtx, id, "", reason)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				continue
 			}
 			errs = append(errs, fmt.Errorf("terminate custom domain registration workflow %s: %w", id, err))
@@ -454,8 +452,7 @@ func waitForCurrentCustomDomainReconcileRun(ctx context.Context, run client.Work
 	if err == nil {
 		return nil
 	}
-	var continueAsNewErr *workflow.ContinueAsNewError
-	if errors.As(err, &continueAsNewErr) {
+	if _, ok := errors.AsType[*workflow.ContinueAsNewError](err); ok {
 		return nil
 	}
 	return fmt.Errorf("get current custom domain reconcile run: %w", err)

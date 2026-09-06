@@ -49,6 +49,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
+	cleanupGateway(t, gw)
 
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()
@@ -163,6 +164,7 @@ func TestTunnelRouteSurvivesCurrentGatewayDisconnect(t *testing.T) {
 
 		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
 		require.NoError(t, err)
+		cleanupGateway(t, gw)
 
 		publicServer := httptest.NewServer(gw.PublicHandler())
 		t.Cleanup(publicServer.Close)
@@ -226,6 +228,7 @@ func TestTunnelConsumerSessionSticksToAgent(t *testing.T) {
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
+	cleanupGateway(t, gw)
 
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	t.Cleanup(publicServer.Close)
@@ -279,6 +282,7 @@ func TestTunnelRevoke(t *testing.T) {
 	routes := route.NewRouteTable()
 	gw, err := gateway.New(gateway.Config{ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
 	require.NoError(t, err)
+	cleanupGateway(t, gw)
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()
 	forwardServer := httptest.NewServer(gw.ForwardHandler())
@@ -303,6 +307,67 @@ func TestTunnelRevoke(t *testing.T) {
 	candidates, err := routes.Candidates(ctx, tunnelID)
 	require.NoError(t, err)
 	require.Empty(t, candidates)
+}
+
+func TestTunnelRevokeDeletesAllGatewayOwners(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := t.Context()
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(mcp.Close)
+
+	const (
+		tunnelID     = "tunnel-revoke-multi-owner"
+		forwardToken = "forward-token"
+	)
+	plaintext, _, err := wire.NewKey()
+	require.NoError(t, err)
+	routes := newSnapshotStore()
+	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
+
+	startGateway := func() (*gateway.Gateway, context.CancelFunc) {
+		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		require.NoError(t, err)
+		publicServer := httptest.NewServer(gw.PublicHandler())
+		t.Cleanup(publicServer.Close)
+		forwardServer := httptest.NewServer(gw.ForwardHandler())
+		t.Cleanup(forwardServer.Close)
+		gw.SetAdvertiseAddr(forwardServer.Listener.Addr().String())
+		cleanupGateway(t, gw)
+
+		ag, err := agent.New(agent.Config{
+			GatewayURL:     "ws" + strings.TrimPrefix(publicServer.URL, "http") + "/connect",
+			APIKey:         plaintext,
+			LocalMCPURL:    mcp.URL,
+			ServiceVersion: "0.1.0",
+			MaxBackoff:     200 * time.Millisecond,
+		}, logger)
+		require.NoError(t, err)
+		agentCtx, stopAgent := context.WithCancel(ctx)
+		t.Cleanup(stopAgent)
+		go func() { _ = ag.Run(agentCtx) }()
+		return gw, stopAgent
+	}
+
+	first, _ := startGateway()
+	second, stopSecond := startGateway()
+	requireEventually(t, 5*time.Second, func() bool {
+		candidates, _ := routes.Candidates(ctx, tunnelID)
+		return len(candidates) == 2 && first.ActiveSessions() == 1 && second.ActiveSessions() == 1 &&
+			len(routes.connections(tunnelID)) == 2
+	})
+
+	require.Equal(t, 1, first.RevokeTunnel(ctx, tunnelID))
+	stopSecond()
+	requireEventually(t, 5*time.Second, func() bool { return second.ActiveSessions() == 0 })
+	second.Drain(ctx)
+	candidates, err := routes.Candidates(ctx, tunnelID)
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+	require.Empty(t, routes.connections(tunnelID))
 }
 
 func forwardThroughRoute(t *testing.T, ctx context.Context, routes route.Store, tunnelID, forwardToken, path string) (int, string) {
@@ -352,6 +417,18 @@ func responseAgentLabel(body string) string {
 func requireEventually(t *testing.T, d time.Duration, cond func() bool) {
 	t.Helper()
 	require.Eventually(t, cond, d, 20*time.Millisecond)
+}
+
+func cleanupGateway(t *testing.T, gw *gateway.Gateway) {
+	t.Helper()
+	t.Cleanup(func() {
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 5*time.Second)
+		gw.Drain(drainCtx)
+		cancelDrain()
+		closeSessionsCtx, cancelCloseSessions := context.WithTimeout(context.Background(), 5*time.Second)
+		gw.CloseSessions(closeSessionsCtx)
+		cancelCloseSessions()
+	})
 }
 
 type snapshotStore struct {
@@ -450,6 +527,7 @@ func TestTunnelGatewayShedsConnectsAtSessionCap(t *testing.T) {
 		logger,
 	)
 	require.NoError(t, err)
+	cleanupGateway(t, gw)
 
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	defer publicServer.Close()

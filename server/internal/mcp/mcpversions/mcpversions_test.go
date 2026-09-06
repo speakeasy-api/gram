@@ -44,6 +44,7 @@ func TestSupportedSetsAreKnownAndOrdered(t *testing.T) {
 	for _, supported := range [][]string{
 		mcpversions.SupportedHostedToolset(),
 		mcpversions.SupportedPlatformToolset(),
+		mcpversions.SupportedMetaServer(),
 	} {
 		require.NotEmpty(t, supported)
 		require.True(t, slices.IsSorted(supported), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
@@ -72,6 +73,7 @@ func TestSupportedSetsExclude20260728(t *testing.T) {
 
 	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
+	require.NotContains(t, mcpversions.SupportedMetaServer(), mcpversions.Version20260728)
 }
 
 func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
@@ -247,4 +249,18 @@ func TestSanitizePreservesUnknownButWellFormedValues(t *testing.T) {
 	// The raw value is the diagnostic payload — Sanitize bounds it, it does
 	// not restrict it to known revisions the way Clamp does.
 	require.Equal(t, "1999-12-31", mcpversions.Sanitize("1999-12-31"))
+}
+
+// TestSupportedMetaServerSpansFloorToCeiling pins the meta surface's range
+// to the hosted surface's: same installed base, same 2025-11-25 ceiling
+// until the 2026-07-28 integration completes everywhere at once.
+func TestSupportedMetaServerSpansFloorToCeiling(t *testing.T) {
+	t.Parallel()
+
+	set := mcpversions.SupportedMetaServer()
+	require.Equal(t, mcpversions.Version20241105, set[0])
+	require.Equal(t, mcpversions.Version20251125, set[len(set)-1])
+
+	mcpversions.SupportedMetaServer()[0] = "mutated"
+	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedMetaServer()[0], "SupportedMetaServer must not hand out a mutable view of package state")
 }

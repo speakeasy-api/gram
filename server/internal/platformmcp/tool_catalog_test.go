@@ -54,7 +54,40 @@ func TestCandidateInspectionReturnsSafeDirectRemoteErrors(t *testing.T) {
 
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	require.JSONEq(t, `{"code":"feature_unavailable","reason":"remote_inspection_unavailable","message":"That MCP server could not be checked safely right now. Try again shortly."}`, refusal.Payload)
+	require.JSONEq(t, `{"code":"feature_unavailable","reason":"remote_inspection_unavailable","setup_category":"temporarily_unavailable","actions":[{"kind":"retry_inspection","label":"Check this MCP server again shortly"}],"message":"That MCP server could not be checked safely right now. Try again shortly."}`, refusal.Payload)
+	require.NotContains(t, refusal.Payload, "unsafe network detail")
+}
+
+func TestCandidateInspectionReturnsOAuthSetupCategoryAndActions(t *testing.T) {
+	t.Parallel()
+
+	server := newTestMCPServer()
+	registrar := newRegistrar(server)
+	registerCandidateInspectionTool(
+		registrar,
+		nil,
+		&testDirectRemoteInspector{inspection: DirectRemoteInspection{
+			CanonicalURL:           "https://remote.example.test/mcp",
+			Transport:              "streamable-http",
+			Authentication:         "authentication_required",
+			OAuthDiscovery:         "available",
+			Trust:                  "user_supplied_unreviewed",
+			RequiresDashboardSetup: true,
+		}},
+		&testRegistrationGate{enabled: true},
+		allowBudget(),
+	)
+
+	result, err := catalogInspectionDescriptor(t, registrar).Invoke(
+		ContextWithPrincipal(t.Context(), registrationServicePrincipal()),
+		json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`),
+	)
+
+	require.NoError(t, err)
+	inspection, ok := result.(CandidateInspection)
+	require.True(t, ok)
+	require.Equal(t, SetupCategoryDynamicRegistrationUnsupported, inspection.SetupCategory)
+	require.Equal(t, []RepairAction{{Kind: "continue_registration", Label: "Choose a project and add this MCP server before finishing its sign-in setup"}}, inspection.Actions)
 }
 
 func fmtDirectRemoteInspectionError() error {

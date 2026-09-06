@@ -38,13 +38,14 @@ type SkillEfficacyScore struct {
 }
 
 type QuerySkillInsightsParams struct {
-	OrganizationID  string
-	ProjectID       string
-	SkillIDs        []string
-	SkillVersionIDs []string
-	From            time.Time
-	To              time.Time
-	IntervalSeconds int64
+	OrganizationID      string
+	ProjectID           string
+	SkillIDs            []string
+	SkillVersionIDs     []string
+	From                time.Time
+	To                  time.Time
+	IntervalSeconds     int64
+	IncludeSessionUsage bool
 }
 
 type ListSkillEfficacyScoreSessionsParams struct {
@@ -473,8 +474,8 @@ func skillInsightScores() squirrel.SelectBuilder {
 		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
 }
 
-func skillInsightResult(intervalSeconds int64) squirrel.SelectBuilder {
-	return sq.Select(
+func skillInsightResult(intervalSeconds int64, includeSessionUsage bool) squirrel.SelectBuilder {
+	result := sq.Select(
 		"m.skill_id AS skill_id",
 		"m.skill_version_id AS skill_version_id",
 	).
@@ -482,23 +483,33 @@ func skillInsightResult(intervalSeconds int64) squirrel.SelectBuilder {
 		Columns(
 			"sum(m.activation_count) AS activation_count",
 			"count() AS activated_sessions",
-			"sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost",
-			"sum(ifNull(e.score_count, 0)) AS scored_sessions",
-			"sum(ifNull(e.score_sum, 0)) AS score_sum",
-			"sum(ifNull(e.turns_sum, 0)) AS estimated_turns_saved_sum",
-			"sum(ifNull(e.turns_count, 0)) AS estimated_turns_samples",
-			"sum(ifNull(e.minutes_sum, 0)) AS estimated_minutes_saved_sum",
-			"sum(ifNull(e.minutes_count, 0)) AS estimated_minutes_samples",
-			"sum(ifNull(e.confidence_low, 0)) AS roi_confidence_low",
-			"sum(ifNull(e.confidence_med, 0)) AS roi_confidence_med",
-			"sum(ifNull(e.confidence_high, 0)) AS roi_confidence_high",
-			"sum(ifNull(e.ignored_count, 0)) AS ignored_count",
-			"sum(ifNull(e.misapplied_count, 0)) AS misapplied_count",
-			"sum(ifNull(e.partially_followed_count, 0)) AS partially_followed_count",
-			"sum(ifNull(e.harmful_count, 0)) AS harmful_count",
-		).
-		From("mappings m").
-		LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface").
+		)
+	if includeSessionUsage {
+		result = result.Column("sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost")
+	} else {
+		result = result.Column("toFloat64(0) AS total_session_cost")
+	}
+
+	result = result.Columns(
+		"sum(ifNull(e.score_count, 0)) AS scored_sessions",
+		"sum(ifNull(e.score_sum, 0)) AS score_sum",
+		"sum(ifNull(e.turns_sum, 0)) AS estimated_turns_saved_sum",
+		"sum(ifNull(e.turns_count, 0)) AS estimated_turns_samples",
+		"sum(ifNull(e.minutes_sum, 0)) AS estimated_minutes_saved_sum",
+		"sum(ifNull(e.minutes_count, 0)) AS estimated_minutes_samples",
+		"sum(ifNull(e.confidence_low, 0)) AS roi_confidence_low",
+		"sum(ifNull(e.confidence_med, 0)) AS roi_confidence_med",
+		"sum(ifNull(e.confidence_high, 0)) AS roi_confidence_high",
+		"sum(ifNull(e.ignored_count, 0)) AS ignored_count",
+		"sum(ifNull(e.misapplied_count, 0)) AS misapplied_count",
+		"sum(ifNull(e.partially_followed_count, 0)) AS partially_followed_count",
+		"sum(ifNull(e.harmful_count, 0)) AS harmful_count",
+	).
+		From("mappings m")
+	if includeSessionUsage {
+		result = result.LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface")
+	}
+	return result.
 		LeftJoin("scores e ON e.project_id = m.project_id AND e.session_id = m.session_id AND e.surface = m.surface AND e.skill_id = m.skill_id AND e.skill_version_id = m.skill_version_id").
 		GroupBy("m.skill_id", "m.skill_version_id", "bucket_time_unix_nano").
 		OrderBy("bucket_time_unix_nano ASC", "m.skill_id ASC", "m.skill_version_id ASC")
@@ -507,7 +518,6 @@ func skillInsightResult(intervalSeconds int64) squirrel.SelectBuilder {
 func buildSkillInsightsQuery(arg QuerySkillInsightsParams) (string, []any, error) {
 	mappingRows := skillInsightMappingRows(arg)
 	mappings := skillInsightMappings(mappingRows)
-	sessions := skillInsightSessionUsage(arg, mappingRows)
 
 	scoreEventSQL, scoreEventArgs, err := deduplicatedSkillEfficacyScores(skillEfficacyScoreScope{
 		organizationID:  arg.OrganizationID,
@@ -519,13 +529,18 @@ func buildSkillInsightsQuery(arg QuerySkillInsightsParams) (string, []any, error
 		return "", nil, err
 	}
 
-	query, args, err := skillInsightResult(arg.IntervalSeconds).
-		PrefixExpr(squirrel.ConcatExpr(
-			"WITH mappings AS (", mappings,
-			"), sessions AS (", sessions,
-			"), score_events AS (", squirrel.Expr(scoreEventSQL, scoreEventArgs...),
-			"), scores AS (", skillInsightScores(), ")",
-		)).
+	withParts := []any{"WITH mappings AS (", mappings}
+	if arg.IncludeSessionUsage {
+		withParts = append(withParts, "), sessions AS (", skillInsightSessionUsage(arg, mappingRows))
+	}
+	withParts = append(
+		withParts,
+		"), score_events AS (", squirrel.Expr(scoreEventSQL, scoreEventArgs...),
+		"), scores AS (", skillInsightScores(), ")",
+	)
+
+	query, args, err := skillInsightResult(arg.IntervalSeconds, arg.IncludeSessionUsage).
+		PrefixExpr(squirrel.ConcatExpr(withParts...)).
 		ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building skill insights query: %w", err)

@@ -11,7 +11,7 @@ import {
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useSlugs } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
+const PROJECT_SLUG_PLACEHOLDER = "{{GRAM_PROJECT_SLUG}}";
 const MARKETPLACE_URL_PLACEHOLDER = "{{GRAM_MARKETPLACE_URL}}";
 const REPO_URL_PLACEHOLDER = "{{GRAM_REPO_URL}}";
 const REPO_NAME_PLACEHOLDER = "{{GRAM_REPO_NAME}}";
@@ -139,6 +140,7 @@ export function PlatformInstrumentationSheet({
   const { data: publishStatus } = usePublishStatus();
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { orgSlug = "" } = useSlugs();
+  const projectSlug = useProjectSlugForRequests();
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
@@ -435,6 +437,7 @@ export function PlatformInstrumentationSheet({
               const needsKey = !!step.requiresApiKey;
               const substitutions: Array<[string, string]> = [
                 [API_KEY_PLACEHOLDER, platformKey ?? ""],
+                [PROJECT_SLUG_PLACEHOLDER, projectSlug],
                 [MARKETPLACE_URL_PLACEHOLDER, marketplaceUrl],
                 [REPO_URL_PLACEHOLDER, repoUrl],
                 [REPO_NAME_PLACEHOLDER, repoName],

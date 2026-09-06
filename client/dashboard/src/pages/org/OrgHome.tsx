@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { MemberFacepile } from "@/components/member-facepile";
@@ -985,9 +986,14 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
               <ActionIconTile action={log.action} />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <Text small className="truncate leading-snug">
-                  <span className="text-foreground font-medium">
+                  <IdentityLink
+                    identifier={
+                      log.actorType === "user" ? { userId: log.actorId } : null
+                    }
+                    className="text-foreground font-medium"
+                  >
                     {getActorLabel(log)}
-                  </span>{" "}
+                  </IdentityLink>{" "}
                   <span className="text-muted-foreground">
                     {renderVerb(log)}
                   </span>

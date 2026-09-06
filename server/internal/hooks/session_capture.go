@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -33,8 +34,7 @@ var ErrChatNotFound = errors.New("chat not found")
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
@@ -375,15 +375,26 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, err
 	}
 
+	write := chat.MessageWrite{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
-			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String)
+			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, write, msgParams.MessageID.String)
 			if writeErr != nil {
 				return 0, fmt.Errorf("write correlated chat message: %w", writeErr)
 			}
 			return n, nil
 		}
-		n, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+		n, writeErr := s.writer.Write(ctx, projectID, []chat.MessageWrite{write})
 		if writeErr != nil {
 			return 0, fmt.Errorf("write chat message: %w", writeErr)
 		}
@@ -396,8 +407,11 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return n > 0, nil
 	}
 
-	// If this is not a foreign key violation (chat doesn't exist), fail.
-	if !isForeignKeyViolation(err) {
+	// A missing chat now fails the writer's tenant preflight before PostgreSQL
+	// can raise its foreign-key error. Try the same project-scoped upsert for
+	// either signal: it creates a missing chat but rejects an existing chat
+	// owned by another project.
+	if !isForeignKeyViolation(err) && !errors.Is(err, chat.ErrChatNotInProject) {
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
@@ -413,7 +427,7 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+		return false, fmt.Errorf("upsert claude code session after missing chat: %w", upsertErr)
 	}
 
 	n, err = writeMessage()
@@ -534,8 +548,18 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	if err != nil {
 		return false, fmt.Errorf("upsert claude code session: %w", err)
 	}
-	params := []chatRepo.CreateChatMessageParams{msgParams}
-	n, err := s.writer.WriteInTx(ctx, tx, params)
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
+	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
 	}
@@ -543,7 +567,7 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		return false, fmt.Errorf("commit uncorrelated agent prompt: %w", err)
 	}
 	if n > 0 {
-		s.writer.NotifyStoredRows(ctx, projectID, params)
+		s.writer.NotifyStoredRows(ctx, projectID, writes)
 	}
 	return n > 0, nil
 }
@@ -589,6 +613,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	s.logConversationTelemetry(ctx, payload, metadata, projectID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -677,6 +702,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -730,6 +756,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

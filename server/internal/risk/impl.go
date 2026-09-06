@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
@@ -96,6 +97,7 @@ type Service struct {
 	db                           *pgxpool.Pool
 	repo                         *repo.Queries
 	policies                     *policycore.Core
+	exclusions                   *exclusioncore.Core
 	auth                         *auth.Auth
 	authz                        *authz.Engine
 	signaler                     RiskAnalysisSignaler
@@ -163,6 +165,7 @@ func NewObserver(
 		db:                           db,
 		repo:                         repo.New(db),
 		policies:                     policycore.New(db),
+		exclusions:                   exclusioncore.New(db),
 		auth:                         nil,
 		authz:                        nil,
 		signaler:                     signaler,
@@ -233,6 +236,12 @@ func NewService(
 			ReconcileURLs:    policycore.ReconcilePolicyURLs(reconcileShadowMCPPolicyURLs),
 			Signaler:         signaler,
 			CacheInvalidator: policyCacheInvalidator,
+		}),
+		exclusions: exclusioncore.New(db, exclusioncore.MutationDependencies{
+			Transactor:  db,
+			Auditor:     exclusionMutationAuditor{logger: auditLogger},
+			AfterCommit: newExclusionAfterCommit(logger, reconciler),
+			Redactor:    exclusioncore.NewRedactor(jwtSecret),
 		}),
 		auth:                         auth.New(logger, db, sessions, authzEngine),
 		authz:                        authzEngine,
@@ -1013,6 +1022,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		BlockedURLsSet:       payload.ShadowMcpBlockedUrls != nil,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   payload.SupersedeDecisions != nil && *payload.SupersedeDecisions,
+		ValidateLocked:       nil,
 		Actor: policycore.Actor{
 			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			DisplayName: authCtx.Email,
@@ -1056,6 +1066,9 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	q := repo.New(dbtx)
+	if err := q.LockRiskExclusionMutations(ctx, authCtx.ProjectID.String()); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock risk exclusion mutations").LogError(ctx, s.logger)
+	}
 	if err := q.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
@@ -2599,8 +2612,7 @@ func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionSco
 	}
 	out, err := policycore.ValidateDetectionScopes(eng, inputs)
 	if err != nil {
-		var validationErr *policycore.ValidationError
-		if errors.As(err, &validationErr) {
+		if validationErr, ok := errors.AsType[*policycore.ValidationError](err); ok {
 			return nil, oops.E(oops.CodeInvalid, validationErr.Cause, "%s", validationErr.Message)
 		}
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
@@ -2873,7 +2885,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		"type": "object",
 		"properties": map[string]any{
 			"match_type":     map[string]any{"type": "string", "enum": []string{"exact", "regex", "rule_id", "source", "entity_type"}},
-			"match_value":    map[string]any{"type": "string", "minLength": 1, "maxLength": exclusionRegexMaxLength},
+			"match_value":    map[string]any{"type": "string", "minLength": 1, "maxLength": exclusioncore.RegexMaxLength},
 			"rule_id_filter": map[string]any{"type": "string", "maxLength": 200},
 			"source_filter":  map[string]any{"type": "string", "maxLength": 200},
 		},

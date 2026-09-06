@@ -280,11 +280,9 @@ export function HeadersSection({
     undefined,
     { enabled: suggestionsEnabled && remoteMcpServerId !== "" },
   );
-  const { data: catalogData } = useListMCPCatalog(
-    undefined,
-    undefined,
-    suggestionsEnabled,
-  );
+  const { data: catalogData } = useListMCPCatalog(undefined, undefined, {
+    enabled: suggestionsEnabled,
+  });
   const suggestedHeaders = useMemo(() => {
     if (!remoteMcpServer?.url || !catalogData?.servers) return [];
     return catalogHeadersForRemoteUrl(

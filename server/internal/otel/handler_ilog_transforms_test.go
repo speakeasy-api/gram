@@ -157,7 +157,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
 
-	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published})
+	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
 	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
 }

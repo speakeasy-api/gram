@@ -38,10 +38,28 @@ vi.mock("react-router", () => ({
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+  // The user column links to the identity page, which reads the slugs off the
+  // location to scope that link.
+  useLocation: () => ({ pathname: "/acme/projects/default/shadow-mcp" }),
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
 }));
 
 vi.mock("@/routes", () => ({
   useRoutes: mocks.useRoutes,
+  useOrgRoutes: () => ({}),
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -417,9 +435,12 @@ describe("ShadowMCPServerDetail", () => {
       isLoading: false,
     });
     mocks.useNavigate.mockReturnValue(mocks.navigate);
+    // The user column opens the project-level identity page.
     mocks.useRoutes.mockReturnValue({
-      employees: {
-        detail: { href: (userSlug: string) => `/employees/${userSlug}` },
+      identities: {
+        detail: {
+          overview: { href: (urn: string) => `/identities/${urn}/overview` },
+        },
       },
     });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
@@ -512,7 +533,7 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
     fireEvent.click(emailRow!);
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/employees/alex%40example.com",
+      "/identities/email%3Aalex%40example.com/overview",
     );
 
     const noEmailRow = screen.getByText("sam@example.com").closest("tr");

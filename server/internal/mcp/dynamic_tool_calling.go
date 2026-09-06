@@ -70,7 +70,7 @@ func buildDynamicSessionTools(
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
-	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema. Do not call a tool without first describing it to get the input schema."
+	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
 	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
 	if len(availableTags) > 0 {
@@ -186,51 +186,9 @@ func handleSearchToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").LogError(ctx, logger)
 	}
 
-	// Build a map of tools by name for quick lookup
-	toolsByName := make(map[string]*types.Tool)
-	for _, tool := range toolset.Tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
-		baseTool, err := conv.ToBaseTool(tool)
-		if err != nil {
-			continue
-		}
-		toolsByName[baseTool.Name] = tool
-	}
-
-	// construct full tool entries with similarity scores
-	results := make([]*toolListEntry, 0, len(searchResults))
-	for _, searchResult := range searchResults {
-		tool, exists := toolsByName[searchResult.ToolName]
-		if !exists {
-			continue
-		}
-
-		toolEntry, err := conv.ToToolListEntry(tool)
-		if err != nil {
-			continue
-		}
-		if toolEntry.Name == "" {
-			continue
-		}
-
-		// Add similarity score and tags to meta
-		meta := toolEntry.Meta
-		if meta == nil {
-			meta = make(map[string]any)
-		}
-		meta["similarity_score"] = searchResult.SimilarityScore
-		meta["tags"] = searchResult.Tags
-
-		results = append(results, &toolListEntry{
-			Name:        toolEntry.Name,
-			Description: toolEntry.Description,
-			Meta:        meta,
-			InputSchema: nil, // Intentional don't return to keep token usage down
-			Annotations: nil,
-		})
+	results, err := buildToolSearchResultEntries(toolset.Tools, searchResults)
+	if err != nil {
+		return nil, err
 	}
 
 	payload, err := json.Marshal(toolsListResultTools{Tools: results})
@@ -257,12 +215,61 @@ func handleSearchToolsCall(
 			IsError:           false,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").LogError(ctx, logger)
 	}
 
 	return response, nil
+}
+
+func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.ToolSearchResult) ([]*toolListEntry, error) {
+	toolsByURN := make(map[string]*types.Tool, len(tools))
+	for _, tool := range tools {
+		if conv.IsProxyTool(tool) {
+			return nil, fmt.Errorf("search tools with external mcp proxy: %s", tool.ExternalMcpToolDefinition.Name)
+		}
+
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
+		toolsByURN[baseTool.ToolUrn] = tool
+	}
+
+	results := make([]*toolListEntry, 0, len(searchResults))
+	for _, searchResult := range searchResults {
+		tool, exists := toolsByURN[searchResult.ToolURN]
+		if !exists {
+			continue
+		}
+
+		toolEntry, err := conv.ToToolListEntry(tool)
+		if err != nil {
+			continue
+		}
+		if toolEntry.Name == "" {
+			continue
+		}
+
+		meta := toolEntry.Meta
+		if meta == nil {
+			meta = make(map[string]any)
+		}
+		meta["similarity_score"] = searchResult.SimilarityScore
+		meta["tags"] = searchResult.Tags
+
+		results = append(results, &toolListEntry{
+			Name:        toolEntry.Name,
+			Description: toolEntry.Description,
+			Meta:        meta,
+			InputSchema: nil,
+			Annotations: nil,
+		})
+	}
+
+	return results, nil
 }
 
 func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporalEnv *temporal.Environment) error {
@@ -373,6 +380,7 @@ func handleDescribeToolsCall(
 			IsError:           false,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").LogError(ctx, logger)

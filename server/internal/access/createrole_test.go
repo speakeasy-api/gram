@@ -70,6 +70,10 @@ func TestService_CreateRole(t *testing.T) {
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+			{Scope: string(authz.ScopeAgentRead), Selectors: nil},
+			{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
+			{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
+			{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
@@ -82,13 +86,21 @@ func TestService_CreateRole(t *testing.T) {
 	require.Equal(t, 2, role.MemberCount)
 	require.NotEmpty(t, role.CreatedAt)
 	require.NotEmpty(t, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.Len(t, role.Grants, 6)
 	roundtrip, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: role.ID})
 	require.NoError(t, err)
 	require.Equal(t, role.ID, roundtrip.ID)
+	require.Len(t, roundtrip.Grants, 6)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+role.ID))
-	require.Len(t, grants, 3)
+	require.Len(t, grants, 7)
+	scopes := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		scopes = append(scopes, grant.Scope)
+	}
+	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
+		require.Contains(t, scopes, string(scope))
+	}
 }
 
 func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {

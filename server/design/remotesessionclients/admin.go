@@ -90,9 +90,10 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 	})
 	Attribute("client_id", String, "client_id supplied by the caller, e.g. from Dynamic Client Registration.")
 	Attribute("client_secret", String, "Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.")
-	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
-		Enum("client_secret_basic", "client_secret_post", "none")
-	})
+	// Shares tokenEndpointAuthMethodEnum with the project-scoped forms rather
+	// than repeating the values: AIM-156 adds private_key_jwt to this enum, and
+	// a second copy is a second place to forget.
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})

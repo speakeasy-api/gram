@@ -23,6 +23,7 @@ var AdminKey = Type("AdminOpenRouterKey", func() {
 	Attribute("key_type", String, "Which upstream key this row provisions: 'chat' pays for customer-facing completions, 'internal' pays for platform-initiated LLM usage.")
 	Attribute("monthly_credits", Int64, "Monthly credit ceiling last mirrored from OpenRouter.")
 	Attribute("disabled", Boolean, "Whether the key is locked down (refused locally and disabled upstream).")
+	Attribute("disable_causes", ArrayOf(String), "Administrative view of every reason currently disabling the key. Values are open-ended for forward compatibility.")
 	Attribute("created_at", String, "When the key row was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the key row was last updated.", func() { Format(FormatDateTime) })
 })

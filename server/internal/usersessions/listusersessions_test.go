@@ -608,3 +608,41 @@ func TestListUserSessions_UnboundSessionReportsNoCredentialFields(t *testing.T) 
 	require.Nil(t, got.Items[0].ClientCredentialKind)
 	require.Nil(t, got.Items[0].ClientTokenEndpointAuthMethod)
 }
+
+func TestListUserSessions_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "list-sess-sibling")
+
+	listed, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	for _, item := range listed.Items {
+		require.NotEqual(t, sp.sessionID.String(), item.ID)
+	}
+
+	issuerID := sp.issuerID.String()
+	filtered, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SubjectUrn:          nil,
+		UserSessionIssuerID: &issuerID,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, filtered.Items)
+}

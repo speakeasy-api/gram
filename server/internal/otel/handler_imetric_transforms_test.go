@@ -6,6 +6,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	oteldialect "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func TestMetricTransformHandlerAppliesOnlyResourceEnrichments(t *testing.T) {
 	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
 	handler.enrichers = []MetricEnricher{stubMetricEnricher{
 		name: "bounded-resource",
-		enrich: func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
+		enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			return []attribute.KeyValue{attribute.String("deployment.environment.name", "test")}, nil
 		},
 	}}
@@ -65,6 +66,40 @@ func TestMetricTransformHandlerAppliesOnlyResourceEnrichments(t *testing.T) {
 	require.Len(t, published.GetResource().GetAttributes(), 2)
 	require.Equal(t, "deployment.environment.name", published.GetResource().GetAttributes()[1].GetKey())
 	require.Len(t, published.GetGauge().GetDataPoints()[0].GetAttributes(), 1, "resource enrichment must not create a new data point dimension")
+}
+
+func TestMetricTransformHandlerPassesSelectedDialectToEnrichers(t *testing.T) {
+	t.Parallel()
+
+	inbound := transformTestInboundMetric()
+	inbound.SetName("claude_code.token.usage")
+	point := inbound.GetGauge().GetDataPoints()[0]
+	attributes := append(point.GetAttributes(), (&otelv1.InboundMetric_KeyValue_builder{
+		Key:   new("session.id"),
+		Value: (&otelv1.InboundMetric_AnyValue_builder{StringValue: new("session-id")}).Build(),
+	}).Build())
+	point.SetAttributes(attributes)
+
+	publisher := gcp.NewMockPublisher[*otelv1.Metric]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once()
+	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	var dialectKey, dialectValue string
+	var dialectErr error
+	handler.enrichers = []MetricEnricher{stubMetricEnricher{
+		name: "capture-dialect",
+		enrich: func(_ context.Context, _ *otelv1.InboundMetric, metricDialect oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
+			dialectKey, dialectValue, dialectErr = metricDialect.SessionID(point)
+			return nil, nil
+		},
+	}}
+
+	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
+
+	require.NoError(t, err)
+	publisher.AssertExpectations(t)
+	require.NoError(t, dialectErr)
+	require.Equal(t, "session.id", dialectKey)
+	require.Equal(t, "session-id", dialectValue)
 }
 
 func transformTestInboundMetric() *otelv1.InboundMetric {
@@ -102,11 +137,11 @@ func transformTestInboundMetric() *otelv1.InboundMetric {
 
 type stubMetricEnricher struct {
 	name   string
-	enrich func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error)
+	enrich func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error)
 }
 
 func (e stubMetricEnricher) Name() string { return e.name }
 
-func (e stubMetricEnricher) Enrich(ctx context.Context, item *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
-	return e.enrich(ctx, item)
+func (e stubMetricEnricher) Enrich(ctx context.Context, item *otelv1.InboundMetric, metricDialect oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
+	return e.enrich(ctx, item, metricDialect)
 }

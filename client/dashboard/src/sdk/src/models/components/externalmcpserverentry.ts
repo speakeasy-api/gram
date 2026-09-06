@@ -37,17 +37,13 @@ export type ExternalMCPServerEntry = {
    */
   isReadOnly: boolean;
   /**
-   * ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+   * ID of the attached MCP server backing this server
    */
   mcpServerId?: string | undefined;
   /**
    * Opaque metadata from the registry
    */
   meta?: any | undefined;
-  /**
-   * ID of the internal collection registry this server came from
-   */
-  organizationMcpCollectionRegistryId?: string | undefined;
   /**
    * Published packages that run this server, when the registry declares any
    */
@@ -81,7 +77,7 @@ export type ExternalMCPServerEntry = {
    */
   toolCount: number;
   /**
-   * ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+   * ID of the attached toolset backing this server
    */
   toolsetId?: string | undefined;
   /**
@@ -101,7 +97,6 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     is_read_only: z.boolean(),
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
-    organization_mcp_collection_registry_id: z.optional(z.string()),
     packages: z.optional(z.array(ExternalMCPPackage$inboundSchema)),
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
@@ -118,8 +113,6 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
       "icon_url": "iconUrl",
       "is_read_only": "isReadOnly",
       "mcp_server_id": "mcpServerId",
-      "organization_mcp_collection_registry_id":
-        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
       "supports_dcr": "supportsDcr",

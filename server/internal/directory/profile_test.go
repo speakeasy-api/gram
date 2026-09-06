@@ -11,14 +11,12 @@ import (
 func TestUserProfileAttributes(t *testing.T) {
 	t.Parallel()
 
-	profile := directory.UserProfile{RawAttributes: map[string]any{
-		"department_name":  "Engineering",
-		"job_title":        nil,
-		"employee_type":    42,
-		"division_name":    "Platform",
-		"cost_center_name": "Research",
-		"custom_thing":     "not projected",
-	}}
+	profile := directory.UserProfile{
+		DepartmentName: "Engineering",
+		DivisionName:   "Platform",
+		CostCenterName: "Research",
+		RawAttributes:  map[string]any{"custom_thing": "not projected"},
+	}
 
 	require.Equal(t, directory.UserAttributes{
 		DepartmentName: "Engineering",

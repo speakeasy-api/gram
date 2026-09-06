@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -61,7 +63,37 @@ func servePublicHTTP(
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(body))
+	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
+}
+
+// eofOnCloseBody stands in for the request body net/http hands a handler.
+// Closing a server request body that the handler left unconsumed returns
+// io.EOF (see (*body).Close in net/http/transfer.go, which sets sawEOF without
+// clearing err), but httptest.NewRequest wraps a plain reader in io.NopCloser,
+// whose Close returns nil. Tests that care what a handler does with that EOF
+// have to supply it themselves.
+type eofOnCloseBody struct {
+	io.Reader
+}
+
+func (eofOnCloseBody) Close() error { return io.EOF }
+
+// servePublicHTTPWithBody is servePublicHTTP over a caller-supplied body, for
+// tests that need control over what Read and Close return.
+func servePublicHTTPWithBody(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	mcpSlug string,
+	body io.ReadCloser,
+	contentLength int64,
+	authToken string,
+	extraHeaders map[string]string,
+) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, body)
+	req.ContentLength = contentLength
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
@@ -465,6 +497,70 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "batch requests are not supported")
 }
 
+// A body that is not valid JSON is a JSON-RPC parse error (-32700), not an
+// invalid request (-32600).
+func TestServePublic_MalformedBodyIsParseError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-parse-error")
+
+	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte("{not valid json"), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to decode request body")
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeParseError, shareable.Code)
+	require.Equal(t, oops.MCPCodeParseError, shareable.Code.MCPCode())
+}
+
+// Valid JSON of the wrong shape (a type error, not a syntax error) stays an
+// invalid request (-32600), not a parse error (-32700).
+func TestServePublic_WrongTypeBodyIsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-type-error")
+
+	unauthCtx := context.Background()
+	// `method` is a number where a string is expected: syntactically valid JSON,
+	// so json.Unmarshal returns a type error, not a syntax error.
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte(`{"jsonrpc":"2.0","id":1,"method":123}`), "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Equal(t, oops.MCPCodeInvalidRequest, shareable.Code.MCPCode())
+}
+
+// requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
+// cacheable result. The members are read as pointers so an absent member fails
+// rather than decoding to a zero that happens to match the expected TTL.
+func requireCacheHints(t *testing.T, rawResult json.RawMessage, wantScope string) {
+	t.Helper()
+
+	var hints struct {
+		TTLMs      *int    `json:"ttlMs"`
+		CacheScope *string `json:"cacheScope"`
+	}
+	require.NoError(t, json.Unmarshal(rawResult, &hints))
+	require.NotNil(t, hints.TTLMs, "result carries no ttlMs")
+	require.NotNil(t, hints.CacheScope, "result carries no cacheScope")
+	require.Zero(t, *hints.TTLMs)
+	require.Equal(t, wantScope, *hints.CacheScope)
+}
+
 // servePublicToolsRequest issues a POST to /mcp/{slug} with an optional raw
 // query string (e.g. "tags=alpha,beta") and returns the recorder. Unlike
 // servePublicHTTP it threads a query string onto the URL so ?tags= filtering
@@ -705,6 +801,59 @@ func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
 	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
 	require.Contains(t, resp.Error.Message, "not found")
+}
+
+// Nothing stops a tool variation from renaming one tool onto another's name,
+// which leaves two tools answering to it. Resolving by first match would
+// dispatch an arbitrary one of them, so the call is refused instead.
+func TestServePublic_ToolsCall_AmbiguousToolName_Rejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "ambiguous-"+uuid.New().String()[:8])
+	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alpha_tool", "beta_tool", "gamma_tool")
+
+	variationsRepo := variations_repo.New(ti.conn)
+	group, err := variationsRepo.InitGlobalToolVariationsGroup(ctx, variations_repo.InitGlobalToolVariationsGroupParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        "default-group",
+		Description: conv.ToPGText("default group"),
+	})
+	require.NoError(t, err)
+
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["alpha_tool"],
+		SrcToolName: "alpha_tool",
+		Name:        conv.ToPGText("beta_tool"),
+	})
+	require.NoError(t, err)
+
+	w := servePublicToolsRequest(t, ctx, ti, toolset.McpSlug.String, "", makeToolsCallBody("beta_tool"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.Contains(t, resp.Error.Message, "ambiguous tool name")
+
+	// The guard is name-scoped, not a toolset-wide lockout: gamma_tool still
+	// resolves and fails later, in execution against its unconfigured server.
+	w = servePublicToolsRequest(t, ctx, ti, toolset.McpSlug.String, "", makeToolsCallBody("gamma_tool"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.NotContains(t, resp.Error.Message, "ambiguous tool name")
+	require.NotContains(t, resp.Error.Message, "not found")
 }
 
 // makeInitializeBodyWithVersion mirrors makeInitializeBody with a

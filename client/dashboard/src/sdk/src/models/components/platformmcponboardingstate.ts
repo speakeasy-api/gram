@@ -187,7 +187,7 @@ export type PlatformMCPOnboardingState = {
    */
   distributionToolSucceeded: boolean;
   /**
-   * Whether the active organization currently passes the Platform MCP capability and rollout gates.
+   * Whether the active organization currently has the Platform MCP product feature enabled.
    */
   enabled: boolean;
   /**

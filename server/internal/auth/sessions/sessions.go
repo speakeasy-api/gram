@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -106,14 +108,23 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
-	if err != nil {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
 	}
 
 	validatedSupportAdmin := false
 	if session.SupportOrganizationID != "" {
 		user, userErr := s.userRepo.GetUser(ctx, session.UserID)
-		if userErr != nil || !validSupportSession(session, user.Admin, time.Now()) {
+		if errors.Is(userErr, pgx.ErrNoRows) {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		if userErr != nil {
+			return ctx, oops.E(oops.CodeUnexpected, userErr, "error checking support session user").LogError(ctx, s.logger)
+		}
+		if !validSupportSession(session, user.Admin, time.Now()) {
 			return ctx, oops.C(oops.CodeUnauthorized)
 		}
 		validatedSupportAdmin = true
@@ -151,7 +162,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		if err := s.refreshSession(ctx, session); err != nil {
 			return ctx, err
 		}
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+		ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 		return ctx, nil
 	}
 
@@ -195,10 +206,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, err
 	}
 
+	ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 	if validatedSupportAdmin {
-		ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
-	} else {
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+		validatedAuthCtx, _ := contextvalues.GetAuthContext(ctx)
+		ctx = contextvalues.WithValidatedSupportSession(ctx, validatedAuthCtx)
 	}
 
 	return ctx, nil
@@ -220,15 +231,22 @@ func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, 
 	return s.Authenticate(ctx, "")
 }
 
-// IsPlatformAdmin reads the authoritative users.admin value directly from the
-// database. Support authorization must not rely on the identity cache because
-// an administrator may have been revoked after that cache was populated.
+// IsPlatformAdmin reads the authoritative users.admin and deletion state
+// directly from the database. Break-glass authorization must not rely on the
+// identity cache because an administrator may have been revoked after that cache was populated.
 func (s *Manager) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
 	user, err := s.userRepo.GetUser(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("get user for platform admin check: %w", err)
 	}
-	return user.Admin, nil
+	return isCurrentPlatformAdmin(user.Admin, user.DeletedAt.Valid), nil
+}
+
+func isCurrentPlatformAdmin(admin, deleted bool) bool {
+	return admin && !deleted
 }
 
 func (s *Manager) Billing() billing.Repository {

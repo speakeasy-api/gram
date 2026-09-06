@@ -13,7 +13,9 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -53,7 +55,8 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
-  "/talk-to-us",
+  "/guide",
+  "/trial-ended",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -84,6 +87,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
+  const trialNow = useTrialNow(session?.trial);
   const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
@@ -126,7 +130,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     ? encodeURIComponent(location.pathname + location.search + location.hash)
     : undefined;
 
-  if (error || !session || !session.session) {
+  if (isGramSessionUnauthorizedError(error) || !session || !session.session) {
     if (portableRedirect) {
       return <Navigate to={`/login?redirect=${portableRedirect}`} replace />;
     }
@@ -152,14 +156,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // Past this point the upgrade gate has to render, or the redirect below
-    // sends the user to a route that bounces them straight back to it.
-    if (!isPath(location.pathname, "/talk-to-us")) {
-      // An org that never trialed (or is still mid-trial) falls through to the
-      // cold-signup gate.
-      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-        return <Navigate to="/talk-to-us" replace />;
+    const trialLifecycle = getTrialLifecycleFromDates(session.trial, trialNow);
+
+    if (trialLifecycle === "expired") {
+      if (!isPath(location.pathname, "/trial-ended")) {
+        return <Navigate to="/trial-ended" replace />;
       }
+    } else {
       return <BookDemo />;
     }
   }
@@ -195,25 +198,21 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   const pathParts = location.pathname.split("/").filter(Boolean);
 
-  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
-  // If the second segment is a known project slug (and not "projects" or an org-level route),
-  // redirect to the new URL structure.
-  // Derived from org route structure so new org routes are automatically excluded from project slug redirects
+  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to
+  // /:orgSlug/projects/:projectSlug/... while preserving exact org routes.
   const ORG_ROUTE_PATHS = ["projects", ...orgRoutePaths];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
-  // Redirect if: (1) it's a project slug and not an org route, OR
-  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
-  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
+  const orgRelativePath = pathParts.slice(1).join("/");
+  const isExactOrgRoutePath = ORG_ROUTE_PATHS.includes(orgRelativePath);
   if (
     !isSlugExempt &&
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
     pathParts[1] !== "projects" &&
     isProjectSlug &&
-    (!isOrgRoutePath || pathParts.length >= 3)
+    !isExactOrgRoutePath
   ) {
     const rest = pathParts.slice(2).join("/");
     const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;

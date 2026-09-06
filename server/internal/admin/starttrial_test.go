@@ -104,6 +104,29 @@ func TestStartTrial_RestartsAnExpiredTrialFromNow(t *testing.T) {
 	require.Equal(t, "running", *detail.TrialState)
 }
 
+func TestStartTrial_PromotesAnExpiredNonEnterpriseTrialToEnterprise(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, _ := newRearmService(t)
+	orgID := "org_start_expired_free"
+	seedOrgReadyForTrial(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{
+		orgID:  orgID,
+		tier:   "free",
+		endsAt: time.Now().UTC().Add(-24 * time.Hour),
+	})
+
+	res, err := svc.StartTrial(ctx, &gen.StartTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", res.AccountType)
+
+	trial, err := trialsRepo.New(conn).GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", trial.Tier)
+	require.False(t, trial.ConvertedAt.Valid)
+	require.False(t, trial.DemotedAt.Valid)
+}
+
 func TestStartTrial_RevivesDisabledKeysOnAnExpiredTrial(t *testing.T) {
 	t.Parallel()
 

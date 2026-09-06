@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
@@ -1047,6 +1049,10 @@ function LogsToolsTraceRow({
         tabIndex={0}
         onClick={onToggle}
         onKeyDown={(e) => {
+          // The row holds focusable children (the identity link): a key press
+          // aimed at one of those must act on it alone rather than also
+          // toggling the row it bubbles through.
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") onToggle();
         }}
         className="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left"
@@ -1102,9 +1108,12 @@ function LogsToolsTraceRow({
             accountType={trace.accountType}
             className="shrink-0"
           />
-          <span className="text-muted-foreground min-w-0 truncate">
+          <IdentityLink
+            identifier={identityRefForKind(trace.userKind, trace.userKey)}
+            className="text-muted-foreground min-w-0 truncate"
+          >
             {userLabel || "—"}
-          </span>
+          </IdentityLink>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

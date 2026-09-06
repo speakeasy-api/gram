@@ -3,7 +3,10 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import {
+  getTrialLifecycleFromDates,
+  type TrialLifecycle,
+} from "@/lib/trial-status";
 
 /**
  * Which surface is asking, which decides what makes an organization eligible.
@@ -17,7 +20,9 @@ export type PaygCheckoutEligibility = "active-trial" | "gated";
 
 /**
  * Whether this viewer may start a self-serve checkout, plus the organization
- * the single-flight lock belongs to.
+ * the single-flight lock belongs to and the trial lifecycle the answer was
+ * derived from — returned so callers that also branch on the trial read the
+ * same clock instead of deriving their own.
  *
  * Reads the session from context on every surface. `AuthProvider` returns the
  * lockout pages above `SessionContext.Provider`, so a gated caller supplies the
@@ -26,6 +31,7 @@ export type PaygCheckoutEligibility = "active-trial" | "gated";
 export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
   eligible: boolean;
   activeOrganizationId: string;
+  trialLifecycle: TrialLifecycle;
 } {
   const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
@@ -34,18 +40,18 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
   // the lifecycle below reads a clock that re-renders on the trial's own
   // boundaries instead of whenever a parent happens to re-render.
   const now = useTrialNow(trial);
+  const trialLifecycle = getTrialLifecycleFromDates(trial, now);
 
   // A gated organization is one the dashboard has walled off, so the trial is
   // beside the point: never trialed and trial expired both belong here. An
   // organization that is not walled off keeps the booking-only gate it had.
   const eligibleForSurface =
-    eligibility === "gated"
-      ? !whitelisted
-      : getTrialLifecycleFromDates(trial, now) === "active";
+    eligibility === "gated" ? !whitelisted : trialLifecycle === "active";
 
   return {
     eligible:
       flag.status === "enabled" && hasScope("org:admin") && eligibleForSurface,
     activeOrganizationId,
+    trialLifecycle,
   };
 }

@@ -3,6 +3,8 @@ package remotesessions
 import (
 	"strings"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 )
 
 // tokenResponse is the slice of the upstream /token reply we care about.
@@ -41,6 +43,34 @@ func (t tokenResponse) RefreshTokenTimeoutSeconds() (int64, bool) {
 		return t.RefreshTokenExpiresIn, true
 	}
 	return 0, false
+}
+
+// AccessExpiresAt is the access token's deadline, or nil when the provider
+// reported none. expires_in (RFC 6749 §5.1) governs when present. When it is
+// omitted and the access token is itself a JWT, the token's exp claim is the
+// provider's own statement of the deadline: RFC 9068 §2.2 makes exp mandatory
+// on JWT access tokens, and some providers rely on it instead of ever sending
+// expires_in.
+//
+// A zero expires_in is treated as unreported. Read literally it would describe
+// a token that expired as it was issued, turning every request into a refresh
+// grant — or a reconnect prompt when no refresh token exists — for providers
+// that send 0 to mean the token never expires.
+//
+// The JWT is decoded without signature verification. exp only schedules a
+// refresh and never authorizes anything, so a forged value can at worst move
+// one refresh attempt earlier or later.
+func (t tokenResponse) AccessExpiresAt(now time.Time) *time.Time {
+	if t.ExpiresIn > 0 {
+		deadline := now.Add(time.Duration(t.ExpiresIn) * time.Second)
+		return &deadline
+	}
+
+	exp, ok := jwtclaims.UnsafeExtractExpiry(t.AccessToken)
+	if !ok {
+		return nil
+	}
+	return &exp
 }
 
 // AuthorizationLifetimeSeconds is the remaining absolute lifetime of the

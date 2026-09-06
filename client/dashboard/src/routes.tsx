@@ -1,7 +1,7 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -30,6 +30,8 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
+import DataExports from "./pages/data-exports/DataExports";
+import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -37,33 +39,37 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
-import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
-import {
-  InsightsEmployeeDetailPage,
-  InsightsEmployeesLayout,
-  InsightsEmployeesPage,
-  InsightsHooksPage,
-  InsightsRoot,
-} from "./pages/insights/Insights";
+import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import IdentitiesIndex, {
+  IdentityDetailIndexRedirect,
+  IdentitiesRoot,
+} from "./pages/identities/IdentitiesIndex";
+import IdentityDetailRoot from "./pages/identities/IdentityDetailRoot";
+import IdentityOverview from "./pages/identities/IdentityOverview";
+import IdentityAccess from "./pages/identities/IdentityAccess";
+import IdentityUsage from "./pages/identities/IdentityUsage";
+import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityCost from "./pages/identities/IdentityCost";
+import IdentityDevices from "./pages/identities/IdentityDevices";
+import IdentityConnections from "./pages/identities/IdentityConnections";
+import IdentityActivity from "./pages/identities/IdentityActivity";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
-import Collections, { CollectionsRoot } from "./pages/collections/Collections";
-import CollectionDetail from "./pages/collections/CollectionDetail";
-import CreateCollection from "./pages/collections/CreateCollection";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -104,7 +110,6 @@ import {
 import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
-import PlatformAdminFeatures from "./pages/platform-admin/Features";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
@@ -133,6 +138,7 @@ import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
+import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
 import {
   AddFromCatalogGate,
   SourcesPage,
@@ -143,6 +149,21 @@ import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
+
+const Killswitches = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.default,
+  })),
+);
+const KillswitchDetail = React.lazy(
+  () => import("./pages/killswitch/KillswitchDetail"),
+);
+const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
+const SetupWizard = React.lazy(() =>
+  import("./pages/setup/components/onboarding-wizard").then((module) => ({
+    default: module.SetupWizard,
+  })),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -218,7 +239,7 @@ const ROUTE_STRUCTURE = {
   register: {
     title: "Register",
     url: "/register",
-    component: Register,
+    component: () => <Navigate to="/sign-up" replace />,
     unauthenticated: true,
   },
   exploreDemo: {
@@ -240,6 +261,11 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  guide: {
+    title: "Project Guide",
+    url: "guide",
+    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",
@@ -511,6 +537,42 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+      // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
+      // no slug of its own — routing identity lives on its mcp_endpoints.
+      gateway: {
+        title: "Gateway Details",
+        url: "gateway/:gatewayId",
+        component: GatewayDetailPage,
+        subPages: {
+          overview: {
+            title: "Gateway Overview",
+            url: "overview",
+          },
+          // Legacy URL: member management moved onto the Overview tab, and
+          // GatewayDetails redirects unknown tab segments there. Kept so old
+          // links keep resolving to the gateway page.
+          members: {
+            title: "Gateway Members",
+            url: "members",
+          },
+          inspect: {
+            title: "Gateway Inspect",
+            url: "inspect",
+          },
+          teamAccess: {
+            title: "Gateway Team Access",
+            url: "team-access",
+          },
+          sessions: {
+            title: "Gateway Clients and Sessions",
+            url: "sessions",
+          },
+          settings: {
+            title: "Gateway Settings",
+            url: "settings",
+          },
+        },
+      },
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
@@ -584,17 +646,70 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
   },
-  employees: {
-    title: "Employee Enrollment",
-    url: "employees",
+  // One page per person, reached from every surface that renders a human. The
+  // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
+  // url-encoded; the resolver folds every identifier for a subject onto the
+  // same canonical URN, so links built from different systems converge here.
+  //
+  // Project-level, where Employee Enrollment sat: a project is how an
+  // organization segments the people it manages, and usage, cost, chats and
+  // risk are all recorded per project. The org-scoped reads behind the page —
+  // identity resolution, the directory, roles, devices, the audit trail and the
+  // challenge log — answer the same whichever project you arrive from.
+  identities: {
+    title: "Identities",
+    url: "identities",
     icon: "users",
-    component: InsightsEmployeesLayout,
-    indexComponent: InsightsEmployeesPage,
+    component: IdentitiesRoot,
+    indexComponent: IdentitiesIndex,
     subPages: {
       detail: {
-        title: "Employee Detail",
-        url: ":userSlug",
-        component: InsightsEmployeeDetailPage,
+        title: "Identity",
+        url: ":identityUrn",
+        component: IdentityDetailRoot,
+        indexComponent: IdentityDetailIndexRedirect,
+        subPages: {
+          overview: {
+            title: "Identity Overview",
+            url: "overview",
+            component: IdentityOverview,
+          },
+          access: {
+            title: "Identity Access",
+            url: "access",
+            component: IdentityAccess,
+          },
+          usage: {
+            title: "Identity Usage",
+            url: "usage",
+            component: IdentityUsage,
+          },
+          security: {
+            title: "Identity Security",
+            url: "security",
+            component: IdentitySecurity,
+          },
+          cost: {
+            title: "Identity Cost",
+            url: "cost",
+            component: IdentityCost,
+          },
+          connections: {
+            title: "Identity Connections",
+            url: "connections",
+            component: IdentityConnections,
+          },
+          devices: {
+            title: "Identity Devices",
+            url: "devices",
+            component: IdentityDevices,
+          },
+          activity: {
+            title: "Identity Activity",
+            url: "activity",
+            component: IdentityActivity,
+          },
+        },
       },
     },
   },
@@ -952,12 +1067,6 @@ export const useRoutes = (overrides?: {
       ...subPages,
     };
 
-    if (route.url.startsWith("/")) {
-      newRoute.goTo = () => {
-        void route.url;
-      };
-    }
-
     return newRoute;
   };
 
@@ -1021,12 +1130,24 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
-  data: {
+  legacyData: {
     title: "Event Feed",
     url: "data",
     icon: "activity",
+    component: LegacyDataRedirect,
+  },
+  data: {
+    title: "Event Feed",
+    url: "data/event-feed",
+    icon: "activity",
     stage: "preview",
     component: EventFeed,
+  },
+  dataExports: {
+    title: "Exports",
+    url: "data/exports",
+    icon: "send",
+    component: DataExports,
   },
   skills: {
     title: "Skills",
@@ -1135,6 +1256,21 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  killswitch: {
+    title: "Killswitch",
+    url: "killswitch",
+    icon: "shield-off",
+    stage: "beta",
+    component: KillswitchesRoot,
+    indexComponent: Killswitches,
+    subPages: {
+      detail: {
+        title: "Killswitch detail",
+        url: ":killswitchId",
+        component: KillswitchDetail,
+      },
+    },
+  },
   mcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
@@ -1219,12 +1355,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "shield",
     component: PlatformAdminRbacOverride,
   },
-  platformAdminFeatures: {
-    title: "Platform Features",
-    url: "platform-admin/features",
-    icon: "sliders-horizontal",
-    component: PlatformAdminFeatures,
-  },
   platformAdminOnboarding: {
     title: "Enterprise Onboarding",
     url: "platform-admin/onboarding",
@@ -1290,29 +1420,19 @@ const ORG_ROUTE_STRUCTURE = {
     component: RequestAccess,
     outsideMainLayout: true,
   },
-  collections: {
-    title: "Collections",
-    url: "collections",
-    icon: "layout-grid",
-    component: CollectionsRoot,
-    indexComponent: Collections,
-    subPages: {
-      create: {
-        title: "Create Collection",
-        url: "create",
-        component: CreateCollection,
-      },
-      detail: {
-        title: "Collection",
-        url: ":collectionSlug",
-        component: CollectionDetail,
-      },
-    },
-  },
   setup: {
     title: "Setup",
     url: "setup",
     icon: "settings",
+    component: SetupBoard,
+    outsideMainLayout: true,
+  },
+  // The linear wizard walks one owner through setup step by step; the board at
+  // /setup is the default. SetupViewToggle swaps between the two.
+  setupWizard: {
+    title: "Setup wizard",
+    url: "setup/wizard",
+    icon: "list-checks",
     component: SetupWizard,
     outsideMainLayout: true,
   },

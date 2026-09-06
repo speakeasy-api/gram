@@ -68,6 +68,9 @@ type DisableKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -92,6 +95,9 @@ type EnableKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -850,6 +856,9 @@ type AdminOpenRouterKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -1218,6 +1227,12 @@ func NewDisableKeyAdminOpenRouterKeyOK(body *DisableKeyResponseBody) *adminopenr
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
 	}
+	if body.DisableCauses != nil {
+		v.DisableCauses = make([]string, len(body.DisableCauses))
+		for i, val := range body.DisableCauses {
+			v.DisableCauses[i] = val
+		}
+	}
 
 	return v
 }
@@ -1385,6 +1400,12 @@ func NewEnableKeyAdminOpenRouterKeyOK(body *EnableKeyResponseBody) *adminopenrou
 		Disabled:         *body.Disabled,
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
+	}
+	if body.DisableCauses != nil {
+		v.DisableCauses = make([]string, len(body.DisableCauses))
+		for i, val := range body.DisableCauses {
+			v.DisableCauses[i] = val
+		}
 	}
 
 	return v

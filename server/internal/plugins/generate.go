@@ -82,13 +82,11 @@ type GenerateConfig struct {
 	// APIKey is the plaintext consumer-scoped Gram API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
-	// HooksAPIKey controls whether the observability plugin and distributed-skill
-	// feedback MCP servers are emitted. Both authenticate with this hooks-scoped
-	// key.
+	// HooksAPIKey controls whether the observability plugin is emitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// and skill feedback MCP server require it via the Gram-Project header, and
-	// it scopes the default marketplace name for non-default projects.
+	// requires it via the Gram-Project header, and it scopes the default
+	// marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
 	// oldest by created_at, then id). The default project keeps the bare org-derived
@@ -101,9 +99,6 @@ type GenerateConfig struct {
 	// manifests as new and refresh installed copies. Empty pins deterministic
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
-	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
-	// package to the literal-default project's supported client marketplaces.
-	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
@@ -142,20 +137,19 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:            "Hooks Check",
-		OrgEmail:           "hooks-check@example.com",
-		OrgID:              "org-hooks-check",
-		ServerURL:          "https://app.getgram.ai",
-		APIKey:             fingerprintAPIKeySentinel,
-		HooksAPIKey:        fingerprintHooksKeySentinel,
-		ProjectSlug:        "hooks-check",
-		IsDefaultProject:   true,
-		Version:            "",
-		MarketplaceName:    "",
-		HooksOrgName:       "",
-		BrowserLogin:       false,
-		InstallFailOpen:    false,
-		PlatformMCPEnabled: false,
+		OrgName:          "Hooks Check",
+		OrgEmail:         "hooks-check@example.com",
+		OrgID:            "org-hooks-check",
+		ServerURL:        "https://app.getgram.ai",
+		APIKey:           fingerprintAPIKeySentinel,
+		HooksAPIKey:      fingerprintHooksKeySentinel,
+		ProjectSlug:      "hooks-check",
+		IsDefaultProject: true,
+		Version:          "",
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -206,9 +200,8 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin:       true,
-		InstallFailOpen:    false,
-		PlatformMCPEnabled: false,
+		BrowserLogin:    true,
+		InstallFailOpen: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -219,6 +212,12 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	}
 	if err := generateOpenCodeObservabilityPluginInDir(files, "plugin-opencode", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood opencode plugin: %w", err)
+	}
+	// plugin.json is at the package root here, not in a vendor subdirectory, so
+	// it survives the manifest sweep below -- which is what `copilot
+	// --plugin-dir plugin-copilot` needs to load the package at all.
+	if err := generateCopilotObservabilityPluginInDir(files, "plugin-copilot", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood copilot plugin: %w", err)
 	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
@@ -370,7 +369,7 @@ const mcpGeneratorVersion = "11"
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
 // plugin republish.
-const platformMCPGeneratorVersion = "2"
+const platformMCPGeneratorVersion = "3"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -383,13 +382,13 @@ const platformMCPGeneratorVersion = "2"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "35"
+const hooksGeneratorVersion = "39"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
-// hooks and skill feedback MCP output (see GenerateConfig.HooksAPIKey), which
-// would make the fingerprint blind to it. Constant values keep the generated
-// bytes stable across publishes while the real keys rotate.
+// hooks output (see GenerateConfig.HooksAPIKey), which would make the shared
+// fingerprint blind to it. Constant values keep the generated bytes stable
+// across publishes while the real keys rotate.
 const (
 	fingerprintAPIKeySentinel   = "gram_fingerprint_api_key"
 	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
@@ -401,34 +400,24 @@ const (
 // be assembled per plugin and this reserved entry can be reworked away.
 const mcpSharedFingerprintKey = "__shared__"
 
-// mcpPlatformFingerprintKey is deliberately not a valid customer plugin slug.
-const mcpPlatformFingerprintKey = "__platform_mcp__"
-
 const (
-	platformMCPPluginName         = "platform-mcp"
+	// The plugin name and the MCP server name are what agents concatenate into
+	// the label shown next to every tool call — Claude Code renders
+	// "plugin:speakeasy:platform" — so they read as vendor and surface instead
+	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
+	// client suffix because all five package roots share one repository.
+	platformMCPPluginName         = "speakeasy"
 	platformMCPDisplayName        = "Platform MCP"
-	platformMCPServerName         = "platform-mcp"
-	platformMCPPluginRoot         = "platform-mcp"
+	platformMCPServerName         = "platform"
+	platformMCPCursorPluginName   = "speakeasy-cursor"
+	platformMCPCodexPluginName    = "speakeasy-codex"
+	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
-	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
-	platformMCPCodexPluginRoot    = "platform-mcp-codex"
-	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
+	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
+	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
+	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
 	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
-
-	// platformMCPLegacyPluginName is the Agent Plugin and OpenCode identifier
-	// carry still recognizes in already-published repositories. Indeterminate
-	// admission preserves those bytes; a confirmed decision migrates them to
-	// platformMCPPluginName.
-	platformMCPLegacyPluginName = "speakeasy-aicp-platform-mcp"
-
-	// platformMCPLegacyAgentPluginRoot is the Agent Plugin directory that
-	// already-published repositories may still contain.
-	platformMCPLegacyAgentPluginRoot = agentPluginRoot + "/" + platformMCPLegacyPluginName
 )
-
-func platformMCPPackageFilename(platform string) string {
-	return platformMCPPluginName + "-" + platform + ".zip"
-}
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
 // every Platform MCP package. Add skills as
@@ -454,7 +443,7 @@ var platformMCPSkillsFS embed.FS
 func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
-	// Published repos carry a hooks key. Normalize it so skill feedback MCP
+	// Published repos carry a hooks key. Normalize it so shared observability
 	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
@@ -466,14 +455,6 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]strin
 		}
 		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
 	}
-	if cfg.PlatformMCPEnabled {
-		files, err := generatePlatformMCPFiles(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("generate Platform MCP files for fingerprint: %w", err)
-		}
-		out[mcpPlatformFingerprintKey] = hashFiles(platformMCPGeneratorVersion, files)
-	}
-
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("generate shared files for fingerprint: %w", err)
@@ -565,6 +546,25 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// CopilotObservabilityHookEvents are GitHub Copilot's native (camelCase) hook
+// event names. Copilot only invokes the hooks runtime for events listed here,
+// so an event missing from this list is silently dropped client-side. Copilot's
+// four remaining events (preCompact, errorOccurred, subagentStart,
+// userPromptTransformed) have no Gram canonical type and are deliberately
+// unregistered.
+var CopilotObservabilityHookEvents = []string{
+	"sessionStart",
+	"sessionEnd",
+	"userPromptSubmitted",
+	"preToolUse",
+	"postToolUse",
+	"postToolUseFailure",
+	"permissionRequest",
+	"agentStop",
+	"subagentStop",
+	"notification",
+}
+
 // cursorPluginRoot is the subdirectory under which all Cursor plugins are
 // grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
 // so plugin sources can be referenced by bare name relative to this root.
@@ -593,11 +593,6 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	mcp, err := generateMCPFiles(plugins, cfg)
 	if err != nil {
 		return nil, err
-	}
-	if cfg.PlatformMCPEnabled {
-		if err := generatePlatformMCPFilesInto(mcp, cfg); err != nil {
-			return nil, fmt.Errorf("generate Platform MCP package: %w", err)
-		}
 	}
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
@@ -633,6 +628,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generateOpenCodeObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
 	}
+	if err := generateCopilotObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
+	}
 	if err := generateOpenClawObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
 	}
@@ -663,22 +661,6 @@ func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	files, err := generateMCPFiles(plugins, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
-	}
-	if cfg.PlatformMCPEnabled {
-		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-			return nil, fmt.Errorf("enumerate Platform MCP file paths: %w", err)
-		}
-	}
-	return slices.Sorted(maps.Keys(files)), nil
-}
-
-// sharedFilePaths returns the deterministic marketplace manifests and README
-// paths that are regenerated on every publish. An indeterminate Platform MCP
-// admission must verify them before skipping so a partial repo is repaired.
-func sharedFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
-	files, err := generateSharedFiles(plugins, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("enumerate shared file paths: %w", err)
 	}
 	return slices.Sorted(maps.Keys(files)), nil
 }
@@ -721,18 +703,12 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
-	return generateSharedFilesWithPlatformClients(plugins, cfg, true)
-}
-
-// generateSharedFilesWithPlatformClients allows an indeterminate-admission
-// publish to preserve a complete B1 Claude/portable package without advertising
-// B2/B3 marketplace entries whose native package directories are not present.
-func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateConfig, includePlatformNativeClients bool) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
+	copilotPlugins := make([]marketplaceEntry, 0)
 
 	if cfg.HooksAPIKey != "" {
 		claudeObservability := ClaudeObservabilitySlug(cfg)
@@ -761,34 +737,13 @@ func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateCo
 				Authentication: "ON_USE",
 			},
 		})
-	}
-
-	if cfg.PlatformMCPEnabled {
-		claudePlugins = append(claudePlugins, marketplaceEntry{
-			Name:        platformMCPPluginName,
-			DisplayName: platformMCPDisplayName,
-			Source:      "./" + platformMCPPluginRoot,
-			Description: platformMCPDescription,
+		copilotObservability := CopilotObservabilitySlug(cfg)
+		copilotPlugins = append(copilotPlugins, marketplaceEntry{
+			Name:        copilotObservability,
+			DisplayName: cfg.OrgName + " Observability",
+			Source:      "./" + copilotObservability,
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
-		if includePlatformNativeClients {
-			cursorPlugins = append(cursorPlugins, marketplaceEntry{
-				Name:        "platform-mcp-cursor",
-				DisplayName: "",
-				Source:      "platform-mcp-cursor",
-				Description: platformMCPDescription,
-			})
-			codexPlugins = append(codexPlugins, codexMarketplaceEntry{
-				Name: "platform-mcp-codex",
-				Source: codexMarketplaceSource{
-					Source: "local",
-					Path:   "./" + platformMCPCodexPluginRoot,
-				},
-				Policy: codexMarketplacePolicy{
-					Installation:   "AVAILABLE",
-					Authentication: "ON_USE",
-				},
-			})
-		}
 	}
 
 	for _, p := range plugins {
@@ -815,6 +770,19 @@ func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateCo
 				Authentication: codexAuthPolicy(p, cfg),
 			},
 		})
+		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
+		// package, which generateMCPFiles omits for plugins that fail the
+		// portability gate. Re-run the same classification here so the manifest
+		// never advertises a directory that was never written — Copilot resolves
+		// an entry's source eagerly and a dangling one breaks the whole catalog.
+		if classifyAgentPlugin(p).Compatible {
+			copilotPlugins = append(copilotPlugins, marketplaceEntry{
+				Name:        p.Slug,
+				DisplayName: p.Name,
+				Source:      "./" + path.Join(agentPluginRoot, p.Slug),
+				Description: p.Description,
+			})
+		}
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
@@ -852,6 +820,27 @@ func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateCo
 	}
 	files[".agents/plugins/marketplace.json"] = codexManifest
 
+	// Copilot's manifest lives at the repo ROOT. Copilot probes, in order,
+	// marketplace.json, .plugin/marketplace.json, .github/plugin/marketplace.json
+	// and .claude-plugin/marketplace.json — so without a root file it would fall
+	// through to Claude's, whose entries point at the Claude packages. Those load
+	// (Copilot reads .claude-plugin/plugin.json too), but their hooks.json is
+	// Claude dialect, whose `"matcher": ""` silently kills telemetry on Copilot
+	// — see package-format.md#copilot-observability. The root file claims
+	// the highest-priority slot before that can happen. Entry names must equal
+	// the package's own plugin.json name — Copilot resolves
+	// installed-plugins/<marketplace>/<name>/ by it and skips a mismatch.
+	copilotManifest, err := marshalJSON(marketplaceManifest{
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  copilotPlugins,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal copilot marketplace.json: %w", err)
+	}
+	files["marketplace.json"] = copilotManifest
+
 	files["README.md"] = generateReadme(plugins, cfg)
 
 	return files, nil
@@ -886,11 +875,6 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	if cfg.HooksAPIKey != "" {
 		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
-	}
-
-	if cfg.PlatformMCPEnabled {
-		b.WriteString("## " + platformMCPDisplayName + "\n\n")
-		fmt.Fprintf(&b, "The `%s` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP catalog server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n", platformMCPPluginName)
 	}
 
 	if len(plugins) > 0 {
@@ -942,6 +926,26 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("into `~/.config/opencode/` (all projects) or a repository's `.opencode/` (that project only). ")
 	b.WriteString("OpenCode picks the package up on next start; remove the copied files to uninstall.\n")
 	b.WriteString("Plugins that need authentication read the environment variables named in their `mcp.json`.\n")
+
+	// OpenClaw ships only the observability package: there is no marketplace
+	// track and no per-plugin OpenClaw output. With no hooks key nothing
+	// OpenClaw-shaped is generated, so the whole section would describe files
+	// that are not in the repo.
+	if cfg.HooksAPIKey != "" {
+		obs := OpenClawObservabilitySlug(cfg)
+		b.WriteString("\n### OpenClaw\n\n")
+		fmt.Fprintf(&b, "Install the observability package from its directory:\n\n```\nopenclaw plugins install ./%s\n```\n\n", obs)
+		b.WriteString("Add `--force` when replacing an existing install. Then enable conversation-scope hooks — ")
+		b.WriteString("without this the prompt, assistant-response and usage hooks silently never fire:\n\n")
+		b.WriteString("```json\n{\n  \"plugins\": {\n    \"entries\": {\n      \"speakeasy-observability\": {\n        \"enabled\": true,\n        \"hooks\": { \"allowConversationAccess\": true }\n      }\n    }\n  }\n}\n```\n\n")
+		b.WriteString("Restart the Gateway to load the plugin. Uninstall with `openclaw plugins uninstall speakeasy-observability`.\n\n")
+		b.WriteString("> **Coverage depends on your model-auth mode.** When a model routes through the Claude CLI harness ")
+		b.WriteString("(`agentRuntime: claude-cli`, which `openclaw models auth login` writes by default when a claude-cli ")
+		b.WriteString("profile exists), OpenClaw delegates the model and tool loop out-of-process and its tool/LLM hooks ")
+		b.WriteString("never fire. Those sessions are captured only if Speakeasy's Claude Code hooks are also deployed on ")
+		b.WriteString("the machine. For OpenClaw-side tool capture and enforcement, configure the embedded runtime ")
+		b.WriteString("(`agentRuntime: { id: \"openclaw\" }`) for the models you want covered.\n")
+	}
 
 	return []byte(b.String())
 }
@@ -1114,23 +1118,6 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 		mcpServers[keys[i]] = entry
 	}
-	if bundleSkillFeedbackMCP(p) {
-		// Codex trims invalid edge characters when forming keys, so a
-		// non-exact display name can still occupy the reserved key.
-		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
-			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
-				Command:           "bash",
-				Args:              codexSkillFeedbackMCPArgs(name, cfg),
-				URL:               "",
-				BearerTokenEnvVar: "",
-				HTTPHeaders:       nil,
-				EnvHTTPHeaders:    nil,
-			}
-			if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
-				return err
-			}
-		}
-	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
 		return fmt.Errorf("marshal .mcp.json: %w", err)
@@ -1193,6 +1180,9 @@ func CodexObservabilitySlug(cfg GenerateConfig) string {
 func OpenCodeObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-opencode"
 }
+func CopilotObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-copilot"
+}
 func OpenClawObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-openclaw"
 }
@@ -1210,6 +1200,7 @@ func hooksSubtreePrefixes(orgName string) []string {
 		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
 		conv.ToSlug(orgName) + "-observability-codex/",
 		conv.ToSlug(orgName) + "-observability-opencode/",
+		conv.ToSlug(orgName) + "-observability-copilot/",
 	}
 }
 
@@ -1488,6 +1479,71 @@ func generateOpenCodeObservabilityPluginInDir(files map[string][]byte, subdir st
 	// The shim picks the PowerShell bootstrapper on Windows (OpenCode has no
 	// commandWindows equivalent — the spawn decision lives in the shim).
 	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+	return nil
+}
+
+// generateCopilotObservabilityPlugin emits the per-org observability plugin
+// for GitHub Copilot. Hooks only run in Copilot CLI (and the cloud agent, which
+// this package does not target); VS Code and the Copilot app load the plugin
+// but never fire its hooks.
+func generateCopilotObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCopilotObservabilityPluginInDir(files, CopilotObservabilitySlug(cfg), cfg)
+}
+
+// generateCopilotObservabilityPluginFlat emits the same files at the root
+// (no subdir) for direct ZIP installation via `copilot --plugin-dir`.
+func generateCopilotObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCopilotObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	name := subdir
+	if name == "" {
+		name = CopilotObservabilitySlug(cfg)
+	}
+	pluginJSON, err := marshalJSON(copilotPluginMeta{
+		Name:        name,
+		Version:     hooksManifestVersion(cfg),
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	// plugin.json sits at the package root (Agent Plugins 1.0), not in a vendor
+	// subdirectory like the Claude/Cursor/Codex packages.
+	files[path.Join(subdir, "plugin.json")] = pluginJSON
+
+	hookEvents := make(map[string][]copilotHookCommand, len(CopilotObservabilityHookEvents))
+	for _, event := range CopilotObservabilityHookEvents {
+		// sessionStart carries the cold-install download, so it gets the same
+		// headroom Cursor's does; Copilot's own default is 30s, not enough.
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
+		hookEvents[event] = []copilotHookCommand{{
+			Type:       "command",
+			Bash:       hooksBootstrapCommand(`$COPILOT_PLUGIN_ROOT`, "copilot", timeoutSeconds, false),
+			PowerShell: copilotHooksPowerShellCommand(timeoutSeconds),
+			TimeoutSec: timeoutSeconds,
+		}}
+	}
+	hooksJSON, err := marshalJSON(copilotHooksConfig{Version: 1, Hooks: hookEvents})
+	if err != nil {
+		return fmt.Errorf("marshal hooks.json: %w", err)
+	}
+	// hooks/hooks.json ONLY. Copilot parses both <root>/hooks.json and
+	// <root>/hooks/hooks.json, so shipping both registers every hook twice.
+	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// Copilot's per-entry powershell field points here. Without it a Windows
+	// machine with no bash fails preToolUse, which is fail-closed — every tool
+	// call would be denied, not merely untelemetered.
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+
 	return nil
 }
 
@@ -1905,6 +1961,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 		if err := generateOpenCodeObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
 		}
+	case "copilot":
+		if err := generateCopilotObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
+		}
 	case "openclaw":
 		if err := generateOpenClawObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
@@ -2071,7 +2131,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 
 // GenerateCodexInstallScript produces a bash install script that:
 //   - Registers the Gram marketplace with the Codex CLI
-//   - Patches ~/.codex/config.toml with feature flags and plugin entry
+//   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
 // When marketplaceURL is empty the script uses the directory it was run from as
@@ -2086,10 +2146,25 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
 
-	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, approvals), nil
+	otelEndpointBase := ""
+	if cfg.HooksAPIKey != "" {
+		serverURL, err := url.Parse(cfg.ServerURL)
+		if err != nil {
+			return nil, errors.New("invalid Codex OTLP server URL")
+		}
+		if serverURL.ForceQuery || serverURL.RawQuery != "" {
+			return nil, errors.New("invalid Codex OTLP server URL: query parameters are not allowed")
+		}
+		if err := validateAgentPluginRemoteURL(cfg.ServerURL); err != nil {
+			return nil, fmt.Errorf("invalid Codex OTLP server URL: %w", err)
+		}
+		otelEndpointBase = strings.TrimRight(serverURL.String(), "/") + "/otel/v1"
+	}
+
+	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, cfg.ProjectSlug, cfg.HooksAPIKey, approvals), nil
 }
 
-func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approvals []codexHookApproval) []byte {
+func renderCodexInstallScript(marketplaceURL, marketplace, plugin, otelEndpointBase, projectSlug, hooksAPIKey string, approvals []codexHookApproval) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
@@ -2181,7 +2256,7 @@ case "$(uname -s)" in
 esac
 export SPEAKEASY_HOOKS_OS
 python3 - <<'PYTHON'
-import os, re
+import json, os, re
 
 WINDOWS = os.environ.get("SPEAKEASY_HOOKS_OS") == "windows"
 
@@ -2198,30 +2273,257 @@ content = open(config_path).read() if os.path.exists(config_path) else ""
 # with an explicit [table] header elsewhere in the file. Only the region
 # before the first table header is touched.
 def strip_root_dotted_key(text, key):
-    m = re.search(r'(?m)^[ \t]*\[', text)
-    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
-    root = re.sub(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?', '', root)
-    return root + rest
+    pattern = re.compile(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=.*\n?')
+    matches = list(pattern.finditer(searchable_root(text)))
+    if not matches:
+        return text
+    parts = []
+    start = 0
+    for match in matches:
+        parts.append(text[start:match.start()])
+        start = match.end()
+    parts.append(text[start:])
+    return ''.join(parts)
+
+def toml_dotted_key_pattern(key):
+    components = []
+    for component in key.split('.'):
+        escaped = re.escape(component)
+        basic_chars = []
+        for char in component:
+            short_hex = f'{ord(char):04x}'
+            long_hex = f'{ord(char):08x}'
+            short_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in short_hex
+            )
+            long_pattern = ''.join(
+                f'[{digit.lower()}{digit.upper()}]' if digit.isalpha() else digit
+                for digit in long_hex
+            )
+            basic_chars.append(
+                '(?:' + re.escape(char) + r'|\\u' + short_pattern + r'|\\U' + long_pattern + ')'
+            )
+        basic = ''.join(basic_chars)
+        components.append(f"""(?:{escaped}|"{basic}"|'{escaped}')""")
+    return r'[ \t]*\.[ \t]*'.join(components)
+
+TOML_KEY_COMPONENT_PATTERN = r"""(?:[A-Za-z0-9_-]+|"(?:\\[^\r\n]|[^"\\\r\n])*"|'[^'\r\n]*')"""
+TOML_DOTTED_KEY_PATTERN = (
+    TOML_KEY_COMPONENT_PATTERN
+    + r'(?:[ \t]*\.[ \t]*' + TOML_KEY_COMPONENT_PATTERN + r')*'
+)
+TOML_TABLE_HEADER_PATTERN = (
+    r'(?m)^[ \t]*(?:'
+    + r'\[\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]\]'
+    + r'|\[[ \t]*' + TOML_DOTTED_KEY_PATTERN + r'[ \t]*\]'
+    + r')[ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)'
+)
+
+def toml_assignment_value(line):
+    quote = None
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            return None
+        elif char == '=':
+            return line[index + 1:]
+        index += 1
+    return None
+
+def scan_toml_value(value, nesting, multiline_delimiter):
+    quote = None
+    index = 0
+    while index < len(value):
+        if multiline_delimiter is not None:
+            end = value.find(multiline_delimiter, index)
+            if end < 0:
+                return nesting, multiline_delimiter
+            if multiline_delimiter == '"""':
+                backslashes = 0
+                cursor = end - 1
+                while cursor >= 0 and value[cursor] == '\\':
+                    backslashes += 1
+                    cursor -= 1
+                if backslashes % 2 == 1:
+                    index = end + len(multiline_delimiter)
+                    continue
+            index = end + len(multiline_delimiter)
+            multiline_delimiter = None
+            continue
+
+        char = value[index]
+        if quote == '"':
+            if char == '\\':
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+        elif quote == "'":
+            if char == "'":
+                quote = None
+        elif value.startswith('"""', index) or value.startswith("'''", index):
+            multiline_delimiter = value[index:index + 3]
+            index += 3
+            continue
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '#':
+            break
+        elif char in '[{':
+            nesting.append(char)
+        elif char == ']' and nesting and nesting[-1] == '[':
+            nesting.pop()
+        elif char == '}' and nesting and nesting[-1] == '{':
+            nesting.pop()
+        index += 1
+    return nesting, multiline_delimiter
+
+def searchable_toml(text):
+    lines = []
+    nesting = []
+    multiline_delimiter = None
+    for line in text.splitlines(keepends=True):
+        continuation = bool(nesting) or multiline_delimiter is not None
+        if continuation:
+            lines.append(''.join(char if char in '\r\n' else ' ' for char in line))
+            value = line
+        else:
+            lines.append(line)
+            value = toml_assignment_value(line)
+        if value is not None:
+            nesting, multiline_delimiter = scan_toml_value(
+                value,
+                nesting,
+                multiline_delimiter,
+            )
+    return ''.join(lines)
+
+def root_end(text):
+    match = re.search(TOML_TABLE_HEADER_PATTERN, searchable_toml(text))
+    return match.start() if match else len(text)
+
+def searchable_root(text):
+    return searchable_toml(text[:root_end(text)])
+
+def root_has_entry(text, key):
+    return re.search(
+        r'(?m)^[ \t]*' + toml_dotted_key_pattern(key) + r'[ \t]*=',
+        searchable_root(text),
+    ) is not None
+
+def root_has_dotted_table(text, table):
+    return re.search(
+        r'(?m)^[ \t]*' + toml_dotted_key_pattern(table) + r'[ \t]*\.[ \t]*',
+        searchable_root(text),
+    ) is not None
+
+def ensure_root_entry(text, key, value):
+    if root_has_entry(text, key):
+        return text
+    end = root_end(text)
+    root, rest = text[:end], text[end:]
+    root = root.rstrip('\n')
+    if root:
+        root += '\n'
+    return root + key + ' = ' + value + '\n\n' + rest.lstrip('\n')
 
 def table_body_bounds(text, table_header):
-    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
+    searchable = searchable_toml(text)
+    m = re.search(r'(?m)^[ \t]*' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', searchable)
     if not m:
         return None
     start = m.end()
-    m2 = re.search(r'(?m)^[ \t]*\[', text[start:])
+    m2 = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
     end = start + m2.start() if m2 else len(text)
     return start, end
 
-def ensure_table_entry(text, table_header, key, value):
-    bounds = table_body_bounds(text, table_header)
+def dotted_table_body_bounds(text, table):
+    pattern = (
+        r'(?m)^[ \t]*\[[ \t]*'
+        + toml_dotted_key_pattern(table)
+        + r'[ \t]*\][ \t]*(?:#.*)?(?:\n|$)'
+    )
+    searchable = searchable_toml(text)
+    match = re.search(pattern, searchable)
+    if match is None:
+        return None
+    start = match.end()
+    next_header = re.search(TOML_TABLE_HEADER_PATTERN, searchable[start:])
+    end = start + next_header.start() if next_header else len(text)
+    return start, end
+
+def dotted_table_has_entry(text, table, key):
+    bounds = dotted_table_body_bounds(text, table)
     if bounds is None:
-        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+        return False
+    pattern = r'(?m)^[ \t]*' + toml_dotted_key_pattern(key) + r'[ \t]*='
+    searchable = searchable_toml(text)
+    return re.search(pattern, searchable[bounds[0]:bounds[1]]) is not None
+
+def dotted_table_has_dotted_key_prefix(text, table, key):
+    bounds = dotted_table_body_bounds(text, table)
+    if bounds is None:
+        return False
+    pattern = (
+        r'(?m)^[ \t]*'
+        + toml_dotted_key_pattern(key)
+        + r'[ \t]*\.[ \t]*'
+    )
+    searchable = searchable_toml(text)
+    return re.search(pattern, searchable[bounds[0]:bounds[1]]) is not None
+
+def has_dotted_table_prefix(text, table):
+    pattern = (
+        r'(?m)^[ \t]*\[[ \t]*'
+        + toml_dotted_key_pattern(table)
+        + r'(?:[ \t]*\.|[ \t]*\])'
+    )
+    return re.search(pattern, searchable_toml(text)) is not None
+
+def ensure_dotted_table_entry(text, table, key, value):
+    bounds = dotted_table_body_bounds(text, table)
+    if bounds is None:
+        return ensure_table_entry(text, "[" + table + "]", key, value)
+    if dotted_table_has_entry(text, table, key):
         return text
     prefix = text[:bounds[0]]
     if not prefix.endswith('\n'):
         prefix += '\n'
     return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
+
+def ensure_table_entry(text, table_header, key, value):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
+    searchable = searchable_toml(text)
+    if re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', searchable[bounds[0]:bounds[1]]):
+        return text
+    prefix = text[:bounds[0]]
+    if not prefix.endswith('\n'):
+        prefix += '\n'
+    return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
+
+
+def table_has_entry(text, table_header, key):
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
+        return False
+    searchable = searchable_toml(text)
+    return re.search(r'(?m)^[ \t]*' + re.escape(key) + r'\s*=', searchable[bounds[0]:bounds[1]]) is not None
+
 
 def has_table_header(text, header):
     return table_body_bounds(text, header) is not None
@@ -2230,12 +2532,48 @@ def has_table_header(text, header):
 
 	// Python literals — embedded at generation time, not expanded by bash.
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
-	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
+	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n", marketplace)
+	fmt.Fprintf(&b, "OTEL_ENDPOINT_BASE = %q\n", otelEndpointBase)
+	fmt.Fprintf(&b, "OTEL_PROJECT = %q\n", projectSlug)
+	fmt.Fprintf(&b, "OTEL_API_KEY = %q\n\n", hooksAPIKey)
 
 	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
 content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
+
+if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
+    has_root_inline_otel = root_has_entry(content, "otel")
+    if has_root_inline_otel:
+        print("  ⚠  Existing root-level Codex OTEL configuration preserved; configure Speakeasy telemetry manually.")
+    elif root_has_dotted_table(content, "otel"):
+        content = ensure_root_entry(content, "otel.environment", '"prod"')
+    else:
+        content = ensure_dotted_table_entry(content, "otel", "environment", '"prod"')
+
+    headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+    for exporter_key, signal in [
+        ("exporter", "logs"),
+        ("trace_exporter", "traces"),
+        ("metrics_exporter", "metrics"),
+    ]:
+        exporter_table = f"[otel.{exporter_key}.otlp-http]"
+        has_root_dotted_exporter = (
+            root_has_entry(content, "otel." + exporter_key)
+            or root_has_dotted_table(content, "otel." + exporter_key)
+        )
+        has_inline_exporter = (
+            table_has_entry(content, "[otel]", exporter_key)
+            or dotted_table_has_entry(content, "otel", exporter_key)
+            or dotted_table_has_dotted_key_prefix(content, "otel", exporter_key)
+        )
+        has_exporter_table = has_dotted_table_prefix(content, "otel." + exporter_key)
+        if has_root_inline_otel or has_root_dotted_exporter or has_inline_exporter or has_exporter_table:
+            print(f"  ⚠  Existing Codex OTEL {signal} exporter preserved; configure Speakeasy telemetry manually.")
+            continue
+        content = ensure_table_entry(content, exporter_table, "endpoint", json.dumps(OTEL_ENDPOINT_BASE + "/" + signal))
+        content = ensure_table_entry(content, exporter_table, "protocol", '"binary"')
+        content = ensure_table_entry(content, exporter_table, "headers", headers)
 
 # Qualified [hooks.state."…"] sections do not require a bare parent header.
 if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^[ \t]*\[hooks\.state\.', content):
@@ -2278,14 +2616,6 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
-}
-
-func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
-	files := make(map[string][]byte)
-	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
@@ -2414,8 +2744,7 @@ func platformMCPPluginInfo(platformURL string) PluginInfo {
 			EnvConfigs:  nil,
 		}},
 		// Platform skills are emitted through emitPlatformMCPSkills after the
-		// native adapter runs. Keeping them out of this ordinary plugin model avoids
-		// coupling the first-party package to the hooks-backed skill-feedback sidecar.
+		// native adapter runs.
 		Skills:               nil,
 		AgentPluginsV1Issues: nil,
 	}
@@ -2424,7 +2753,7 @@ func platformMCPPluginInfo(platformURL string) PluginInfo {
 func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	plugin := platformMCPPluginInfo(platformURL)
 	files := make(map[string][]byte)
-	if err := generateCursorPluginInDir(files, "", "platform-mcp-cursor", plugin, cfg); err != nil {
+	if err := generateCursorPluginInDir(files, "", platformMCPCursorPluginName, plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP Cursor package: %w", err)
 	}
 	var manifest cursorPluginMeta
@@ -2448,7 +2777,7 @@ func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (m
 func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	plugin := platformMCPPluginInfo(platformURL)
 	files := make(map[string][]byte)
-	if err := generateCodexPluginInDir(files, "", "platform-mcp-codex", plugin, cfg); err != nil {
+	if err := generateCodexPluginInDir(files, "", platformMCPCodexPluginName, plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP Codex package: %w", err)
 	}
 	var manifest codexPluginMeta
@@ -2547,32 +2876,6 @@ func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platfo
 	}
 }
 
-// GeneratePlatformMCPPluginPackage produces a credential-free direct-install
-// package from the same server-owned definition used by marketplace publishing.
-func GeneratePlatformMCPPluginPackage(serverURL, version, platform string) (map[string][]byte, error) {
-	cfg := GenerateConfig{
-		OrgName:            "",
-		OrgEmail:           "",
-		OrgID:              "",
-		ServerURL:          serverURL,
-		APIKey:             "",
-		HooksAPIKey:        "",
-		ProjectSlug:        "",
-		IsDefaultProject:   false,
-		Version:            version,
-		PlatformMCPEnabled: false,
-		MarketplaceName:    "",
-		BrowserLogin:       false,
-		HooksOrgName:       "",
-		InstallFailOpen:    false,
-	}
-	platformURL, err := platformMCPURL(serverURL)
-	if err != nil {
-		return nil, err
-	}
-	return generatePlatformMCPPackageForClient(cfg, platformURL.String(), platform)
-}
-
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
@@ -2646,18 +2949,6 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 			Headers: headers,
 		}
 	}
-	if bundleSkillFeedbackMCP(p) {
-		mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
-			Type:    "stdio",
-			Command: "bash",
-			Args:    skillFeedbackMCPArgs(`${CLAUDE_PLUGIN_ROOT}`),
-			URL:     "",
-			Headers: nil,
-		}
-		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
-			return err
-		}
-	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
 	if err != nil {
 		return fmt.Errorf("marshal .mcp.json: %w", err)
@@ -2682,63 +2973,6 @@ func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
 		}
 		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
 	}
-}
-
-const skillFeedbackMCPServerName = "speakeasy-skill-feedback"
-
-// bundleSkillFeedbackMCP uses the same name predicate as emitPluginSkills, so
-// feedback is bundled exactly when this feature package carries a skill. A
-// customer server that already claims the reserved name wins.
-func bundleSkillFeedbackMCP(p PluginInfo) bool {
-	hasSkill := false
-	for _, skill := range p.Skills {
-		if domainskills.ValidSpecName(skill.Name) {
-			hasSkill = true
-			break
-		}
-	}
-	if !hasSkill {
-		return false
-	}
-	for _, server := range p.Servers {
-		if server.DisplayName == skillFeedbackMCPServerName {
-			return false
-		}
-	}
-	return true
-}
-
-// skillFeedbackMCPArgs builds the argv for the bundled stdio feedback server:
-// the plugin-root bootstrap script downloads the pinned hooks binary and
-// forwards to its skill-feedback subcommand. root is the harness's plugin-root
-// placeholder (${CLAUDE_PLUGIN_ROOT} or ${CURSOR_PLUGIN_ROOT}), which those
-// harnesses substitute in plugin MCP configs when they spawn the server, so
-// the entry works wherever the plugin is installed.
-func skillFeedbackMCPArgs(root string) []string {
-	// The subcommand must precede the flags: the binary dispatches on its
-	// first argument.
-	return []string{
-		root + "/hooks/bootstrap.sh",
-		"skill-feedback",
-		"--config=" + root + "/speakeasy.json",
-	}
-}
-
-// codexSkillFeedbackMCPArgs is the Codex variant: codex-cli does not
-// substitute ${PLUGIN_ROOT} in plugin MCP server configs (verified against
-// 0.145.0), so the entry addresses the deterministic plugin cache path —
-// <codex home>/plugins/cache/<marketplace>/<plugin>/<version> — and lets bash
-// expand the home from the process environment at spawn.
-func codexSkillFeedbackMCPArgs(pluginName string, cfg GenerateConfig) []string {
-	root := "${CODEX_HOME:-$HOME/.codex}/plugins/cache/" + path.Join(resolveMarketplaceName(cfg), pluginName, pluginManifestVersion(cfg))
-	return []string{
-		"-c",
-		fmt.Sprintf(`exec "%s/hooks/bootstrap.sh" skill-feedback "--config=%s/speakeasy.json"`, root, root),
-	}
-}
-
-func needsSkillFeedbackHooksKey(plugins []PluginInfo) bool {
-	return slices.ContainsFunc(plugins, bundleSkillFeedbackMCP)
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -2785,17 +3019,6 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 			Args:    nil,
 			URL:     s.MCPURL,
 			Headers: headers,
-		}
-	}
-	if bundleSkillFeedbackMCP(p) {
-		mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
-			Command: "bash",
-			Args:    skillFeedbackMCPArgs(`${CURSOR_PLUGIN_ROOT}`),
-			URL:     "",
-			Headers: nil,
-		}
-		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
-			return err
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
@@ -3052,6 +3275,36 @@ type cursorHookCommand struct {
 	Matcher    string `json:"matcher,omitempty"`
 	Timeout    *int   `json:"timeout,omitempty"`
 	FailClosed *bool  `json:"failClosed,omitempty"`
+}
+
+// copilotPluginMeta is Copilot's plugin.json, which lives at the package root
+// (Agent Plugins 1.0 layout) rather than in a vendor subdirectory.
+type copilotPluginMeta struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+}
+
+type copilotHooksConfig struct {
+	Version int                             `json:"version"`
+	Hooks   map[string][]copilotHookCommand `json:"hooks"`
+}
+
+// copilotHookCommand is one Copilot hook entry. Two deliberate omissions:
+//
+//   - No matcher field. Absent means match-all; an empty one is fatal.
+//   - No failClosed field. Copilot fixes the posture per event: preToolUse is
+//     fail-closed on any non-timeout error, everything else fails open.
+//
+// see package-format.md#copilot-observability
+//
+// bash and powershell are native per-entry fields, so unlike Codex the Windows
+// command needs no base64 -EncodedCommand wrapping.
+type copilotHookCommand struct {
+	Type       string `json:"type"`
+	Bash       string `json:"bash"`
+	PowerShell string `json:"powershell,omitempty"`
+	TimeoutSec int    `json:"timeoutSec,omitempty"`
 }
 
 type codexHooksConfig struct {

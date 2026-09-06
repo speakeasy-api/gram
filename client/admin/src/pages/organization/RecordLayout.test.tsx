@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
-  listOrganizationActivity: vi.fn(),
+  activityFetch: vi.fn(),
   enableOrganization: vi.fn(),
 }));
 
@@ -27,14 +27,13 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
-    listOrganizationActivity: mocks.listOrganizationActivity,
     enableOrganization: mocks.enableOrganization,
   };
 });
 
 const ORG = anOrganization();
 
-// Live and trialling, so the callout has a reason to draw.
+// Live and trialling, so a legacy page-wide callout would have drawn.
 const TRIALLING = anOrganization({
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
@@ -52,12 +51,23 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
-  mocks.listOrganizationActivity.mockReset();
-  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
+  mocks.activityFetch.mockReset();
+  mocks.activityFetch.mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+  vi.stubGlobal("fetch", mocks.activityFetch);
   mocks.enableOrganization.mockReset();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // The one region a screen reader hears a write through. Read as a node rather
 // than by its text, because what this is about is the text changing.
@@ -84,15 +94,6 @@ describe("RecordLayout", () => {
   });
 
   it("keeps record context around the activity view and requests by explicit ID", async () => {
-    mocks.listOrganizationActivity.mockImplementation(
-      (organizationID: string) =>
-        organizationID === ORG.id
-          ? Promise.resolve({ logs: [] })
-          : Promise.reject(
-              new Error(`unexpected organization ${organizationID}`),
-            ),
-    );
-
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/activity`,
     });
@@ -102,10 +103,10 @@ describe("RecordLayout", () => {
     expect(
       screen.getByRole("button", { name: /Open in Dashboard/ }),
     ).toBeTruthy();
-    expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(1);
-    expect(mocks.listOrganizationActivity).toHaveBeenCalledWith(
+    expect(mocks.activityFetch).toHaveBeenCalledTimes(1);
+    const request = mocks.activityFetch.mock.calls[0]?.[0] as Request;
+    expect(new URL(request.url).searchParams.get("organization_id")).toBe(
       ORG.id,
-      undefined,
     );
   });
 
@@ -117,11 +118,8 @@ describe("RecordLayout", () => {
     expect(await screen.findByRole("heading", { name: ORG.name })).toBeTruthy();
   });
 
-  // The claim that the header and the callout are record chrome rather than
-  // part of Overview. Without it, putting both inside `Overview.tsx` passes
-  // every other test in this file.
   it.each(["", "/activity", "/projects", "/members"])(
-    "renders the header and the callout above the view at %s",
+    "renders the header without a page-wide trial callout at %s",
     async (view) => {
       mocks.getOrganization.mockResolvedValue(TRIALLING);
 
@@ -132,31 +130,11 @@ describe("RecordLayout", () => {
       expect(
         await screen.findByRole("button", { name: /Open in Dashboard/ }),
       ).toBeTruthy();
-      const callout = await screen.findByRole("status");
-      expect(callout.textContent).toContain("Trial ends");
+      await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     },
   );
 
-  it("draws the callout under the record's title, not above it", async () => {
-    mocks.getOrganization.mockResolvedValue(TRIALLING);
-
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${TRIALLING.slug}`,
-    });
-
-    const heading = await screen.findByRole("heading", {
-      name: TRIALLING.name,
-    });
-    const callout = await screen.findByRole("status");
-    // The drawing puts the trial badge in the title and the warning beneath
-    // it. Both present in either order passes every other test here.
-    expect(
-      heading.compareDocumentPosition(callout) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("speaks the result of a write started from the record chrome", async () => {
+  it("speaks the result of a write started from the overview", async () => {
     // The actions report through context whose default is silent, so a record
     // page with no reporter of its own announces nothing at all.
     const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
@@ -179,7 +157,7 @@ describe("RecordLayout", () => {
     });
     expect(liveRegion().getAttribute("aria-live")).toBe("polite");
     // Heard and not read. Without the class every write result is printed into
-    // the record as body text, between the callout and the view.
+    // the record as body text above the view.
     expect(liveRegion().className.split(" ")).toContain("sr-only");
   });
 

@@ -99,13 +99,15 @@ INSERT INTO gcp_iam_credentials (
   impersonate_service_account,
   wif_pool_id,
   wif_provider_id,
-  wif_project_number
+  wif_project_number,
+  skip_project_verification
 ) VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5
+  $5,
+  $6
 )
 RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
@@ -116,6 +118,7 @@ type CreateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 }
 
 func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCredentialParams) (GcpIamCredential, error) {
@@ -125,6 +128,7 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 	)
 	var i GcpIamCredential
 	err := row.Scan(
@@ -479,8 +483,9 @@ SET impersonate_service_account = $1,
     wif_pool_id = $2,
     wif_provider_id = $3,
     wif_project_number = $4,
+    skip_project_verification = $5,
     updated_at = clock_timestamp()
-WHERE external_credential_id = $5
+WHERE external_credential_id = $6
 RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
 
@@ -489,6 +494,7 @@ type UpdateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 	ExternalCredentialID      uuid.UUID
 }
 
@@ -501,6 +507,7 @@ func (q *Queries) UpdateGcpIamCredential(ctx context.Context, arg UpdateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 		arg.ExternalCredentialID,
 	)
 	var i GcpIamCredential

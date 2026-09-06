@@ -18,6 +18,7 @@ dependencies = [
   "opentelemetry-instrumentation-system-metrics>=0.64b0",
   "opentelemetry-semantic-conventions>=0.64b0",
   "presidio-analyzer>=2.2.364",
+  "redis>=6.4.0",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
   "uvicorn>=0.51.0",
@@ -25,6 +26,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "fakeredis>=2.26.0",
   "pyrefly>=1.1.1",
   "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",

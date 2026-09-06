@@ -23,7 +23,7 @@ func validateFunctionsArchive(ctx context.Context, logger *slog.Logger, filename
 	if err != nil {
 		return fmt.Errorf("open zip archive: %w", err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close functions zip archive", func() error {
 		return rdr.Close()
 	})
 

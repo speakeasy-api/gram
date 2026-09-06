@@ -678,6 +678,119 @@ func TestSearchUsers_PersonalAccountAttachesToOwnerSummary(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+// TestSearchUsers_UserIDFilterReachesEmailKeyedSummaries pins the identity
+// widening on the userIds filter: the employee detail page filters by one gram
+// user id, but summaries key email-first and the token-bearing usage-import
+// rows carry only an email — the directory email or a linked personal-account
+// email. The filter must reach all of them, and nobody else's (DNO-827 for the
+// searchUsers surface; the account selector showed one of three linked
+// accounts).
+func TestSearchUsers_UserIDFilterReachesEmailKeyedSummaries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID, workEmail := seedConnectedOrgUser(t, ctx, ti, "dave")
+	personalEmail := "dave-personal-" + uuid.New().String() + "@gmail.com"
+	linkUserAccount(t, ctx, ti, userID, personalEmail, "personal")
+	strangerEmail := "stranger-" + uuid.New().String() + "@example.com"
+
+	// Email-only rows: work usage, personal-account usage, and a stranger's.
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), personalEmail, 400, 200, 2.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerEmail, 9000, 9000, 99)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:    from,
+				To:      to,
+				UserIds: []string{userID},
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
+			return
+		}
+
+		keys := make([]string, 0, len(res.Users))
+		var totalInput int64
+		for _, u := range res.Users {
+			keys = append(keys, u.UserID)
+			totalInput += u.TotalInputTokens
+		}
+		assert.ElementsMatch(c, []string{workEmail, personalEmail}, keys)
+		assert.Equal(c, int64(500), totalInput)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// The mirror of the id-filter test for the agents page's dominant key shape:
+// filtering by a directory email must reach the summaries keyed by the
+// person's gram user id and linked personal-account email too.
+func TestSearchUsers_EmailFilterReachesLinkedAccountEmailSummaries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID, workEmail := seedConnectedOrgUser(t, ctx, ti, "erin")
+	personalEmail := "erin-personal-" + uuid.New().String() + "@gmail.com"
+	linkUserAccount(t, ctx, ti, userID, personalEmail, "personal")
+
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), personalEmail, 400, 200, 2.0)
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:    from,
+				To:      to,
+				UserIds: []string{workEmail},
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
+			return
+		}
+
+		keys := make([]string, 0, len(res.Users))
+		var totalInput, toolCalls int64
+		for _, u := range res.Users {
+			keys = append(keys, u.UserID)
+			totalInput += u.TotalInputTokens
+			toolCalls += u.TotalToolCalls
+		}
+		assert.ElementsMatch(c, []string{personalEmail, userID}, keys)
+		assert.Equal(c, int64(400), totalInput)
+		assert.Equal(c, int64(1), toolCalls)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 // seedConnectedOrgUser creates a user connected to the test org and returns
 // its id and directory email, satisfying the user_accounts FK and the email
 // resolution that account attachment relies on.

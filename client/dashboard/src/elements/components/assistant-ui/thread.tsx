@@ -93,7 +93,10 @@ import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
 import {
+  composerContextToolsEmptyMessage,
+  composerMcpServersPresence,
   mcpToolsAvailability,
+  mcpToolsListPending,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
 } from "@/elements/lib/mcpToolsAvailability";
@@ -1313,7 +1316,7 @@ const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
  * `@mention` into the draft — but the user makes one trip to one list.
  */
 const ComposerContextPicker: FC = () => {
-  const { config, mcpTools, mcpToolsLoading } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const aui = useAui();
   const triggerRef = useRef<HTMLButtonElement>(null);
   // Read the composer text from the same reactive source the tool-mention
@@ -1336,6 +1339,15 @@ const ComposerContextPicker: FC = () => {
       composerConfig.toolMentions.enabled !== false);
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+  const serversPresence = composerMcpServersPresence(config.mcp, config.mcps);
+  const toolsListPending =
+    serversPresence === "unknown" ||
+    mcpToolsListPending(
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+      serversPresence === "some",
+    );
 
   const categories = useMemo<ToolCategory[]>(() => {
     const grouped = new Map<string, MentionableTool[]>();
@@ -1355,11 +1367,11 @@ const ComposerContextPicker: FC = () => {
 
   // Both halves stay visible while their source is still loading, so the
   // button appears immediately rather than popping in once the async list
-  // resolves — but a half that loaded empty is dropped, and a button with
-  // nothing behind it at all is not rendered.
+  // resolves. An empty tools/list stays visible too — hiding it would read
+  // as "this assistant has no tools" with no explanation.
   const hasSkills =
     !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
-  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  const hasTools = toolMentionsEnabled;
   if (!hasSkills && !hasTools) {
     return null;
   }
@@ -1594,7 +1606,7 @@ const ComposerContextPicker: FC = () => {
                 {/* A search that outruns the fetch has nothing to match yet;
                     saying "nothing found" there reports absence when the
                     answer is simply not back. */}
-                {skillContext?.loading || mcpToolsLoading
+                {skillContext?.loading || toolsListPending
                   ? "Loading…"
                   : "Nothing found"}
               </div>
@@ -1630,7 +1642,12 @@ const ComposerContextPicker: FC = () => {
                   />
                   <ContextToolResults
                     tools={matchingTools}
-                    loading={mcpToolsLoading}
+                    emptyMessage={composerContextToolsEmptyMessage(
+                      mcpToolsLoading,
+                      mcpTools,
+                      mcpToolsError,
+                      serversPresence,
+                    )}
                     onSelect={insertMention}
                   />
                 </>
@@ -1644,17 +1661,17 @@ const ComposerContextPicker: FC = () => {
 
 function ContextToolResults({
   tools,
-  loading,
+  emptyMessage,
   onSelect,
 }: {
   tools: MentionableTool[];
-  loading: boolean;
+  emptyMessage: string;
   onSelect: (toolName: string) => void;
 }): React.ReactElement {
   if (tools.length === 0) {
     return (
       <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-        {loading ? "Loading tools…" : "No tools found"}
+        {emptyMessage}
       </div>
     );
   }

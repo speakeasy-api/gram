@@ -160,11 +160,12 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	t.Helper()
 
 	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      "test tunneled mcp server " + uuid.NewString(),
-		KeyHash:   "test-key-hash-" + uuid.NewString(),
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "test tunneled mcp server " + uuid.NewString(),
+		KeyHash:            "test-key-hash-" + uuid.NewString(),
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -215,7 +216,7 @@ func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpoo
 	require.NoError(t, err)
 
 	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        server.Name,
+		Name:        pgtype.Text{String: server.Name, Valid: true},
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServerID,
 		ProjectID:   projectID,

@@ -52,6 +52,13 @@ type Service interface {
 	SendEnterpriseAdminOnboardingEmail(context.Context, *SendEnterpriseAdminOnboardingEmailPayload) (res *SendEnterpriseAdminOnboardingEmailResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
+	// List the fixed setup task catalog projected with organization state and
+	// completion evidence.
+	ListSetupTasks(context.Context, *ListSetupTasksPayload) (res *ListSetupTasksResult, err error)
+	// Update one fixed setup task. The request must include at least one effective
+	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
+	// mutually exclusive with clear_assignee=true.
+	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -74,7 +81,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink"}
+var MethodNames = [16]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -151,6 +158,21 @@ type ListInvitesResult struct {
 	// Pending invitations for the organization only; accepted, expired, and
 	// revoked invitations are omitted.
 	Invitations []*OrganizationInvitation
+}
+
+// ListSetupTasksPayload is the payload type of the organizations service
+// listSetupTasks method.
+type ListSetupTasksPayload struct {
+	// Include hidden tasks for platform administrators.
+	IncludeHidden *bool
+	SessionToken  *string
+}
+
+// ListSetupTasksResult is the result type of the organizations service
+// listSetupTasks method.
+type ListSetupTasksResult struct {
+	// Setup tasks in catalog order.
+	Tasks []*SetupTask
 }
 
 // ListUsersPayload is the payload type of the organizations service listUsers
@@ -303,6 +325,49 @@ type SendInvitePayload struct {
 	SessionToken *string
 }
 
+// SetupTask is the result type of the organizations service updateSetupTask
+// method.
+type SetupTask struct {
+	// Stable code-owned task key.
+	Key string
+	// Task title.
+	Title string
+	// Task description.
+	Description string
+	// Effective task status.
+	Status string
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact bool
+	// Current resolved user or email assignee.
+	Assignee *SetupTaskAssignee
+	// Incomplete prerequisite task keys.
+	BlockedBy []string
+	// Whether a platform administrator hid the task.
+	Hidden bool
+}
+
+type SetupTaskAssignee struct {
+	// Resolved active organization member ID.
+	UserID *string
+	// Assignee email address.
+	Email string
+	// Resolved member display name.
+	Name *string
+	// Resolved member photo URL.
+	PhotoURL *string
+}
+
+// Assignee selector. Exactly one of user_id or email must be present and
+// non-empty.
+type SetupTaskAssigneeInput struct {
+	// Active organization member to assign. Mutually exclusive with email.
+	UserID *string
+	// Email address to assign before membership exists. Mutually exclusive with
+	// user_id.
+	Email *string
+}
+
 // UpdateInviteRolePayload is the payload type of the organizations service
 // updateInviteRole method.
 type UpdateInviteRolePayload struct {
@@ -310,6 +375,22 @@ type UpdateInviteRolePayload struct {
 	InvitationID string
 	// Role ID to assign to the invitee.
 	RoleID       string
+	SessionToken *string
+}
+
+// UpdateSetupTaskPayload is the payload type of the organizations service
+// updateSetupTask method.
+type UpdateSetupTaskPayload struct {
+	// Stable setup task key.
+	TaskKey string
+	// Setup task status.
+	Status *string
+	// Replacement task assignee. Must not be set when clear_assignee=true.
+	Assignee *SetupTaskAssigneeInput
+	// Clear the current task assignee. Must not be true when assignee is set.
+	ClearAssignee *bool
+	// Hide or restore the task.
+	Hidden       *bool
 	SessionToken *string
 }
 

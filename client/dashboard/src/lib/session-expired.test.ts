@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-async function loadModule(pathname: string, search = "") {
+async function loadModule(pathname: string, search = "", sessionStatus = 401) {
   vi.resetModules();
   const assign = vi.fn();
+  const fetch = vi.fn().mockResolvedValue({ status: sessionStatus });
   const localStorage = {
     clear: vi.fn(),
     getItem: vi.fn(),
@@ -15,13 +16,14 @@ async function loadModule(pathname: string, search = "") {
     ...localStorage,
     clear: vi.fn(),
   };
+  vi.stubGlobal("fetch", fetch);
   vi.stubGlobal("window", {
     localStorage,
     location: { origin: "https://app.example", pathname, search, assign },
     sessionStorage,
   });
   const mod = await import("./session-expired");
-  return { assign, localStorage, sessionStorage, ...mod };
+  return { assign, fetch, localStorage, sessionStorage, ...mod };
 }
 
 describe("safeRedirectPath", () => {
@@ -58,6 +60,10 @@ describe("redirectToLoginOnUnauthorized", () => {
     vi.unstubAllGlobals();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("redirects to login and preserves the current location", async () => {
     const {
       assign,
@@ -66,7 +72,7 @@ describe("redirectToLoginOnUnauthorized", () => {
       sessionStorage,
     } = await loadModule("/acme/projects/default/insights", "?range=7d");
 
-    redirectToLoginOnUnauthorized();
+    await redirectToLoginOnUnauthorized();
 
     expect(localStorage.clear).toHaveBeenCalledOnce();
     expect(sessionStorage.clear).toHaveBeenCalledOnce();
@@ -87,7 +93,7 @@ describe("redirectToLoginOnUnauthorized", () => {
       });
     }
 
-    redirectToLoginOnUnauthorized();
+    await redirectToLoginOnUnauthorized();
 
     expect(assign).toHaveBeenCalledWith(
       `/login?redirect=${encodeURIComponent("/acme/toolsets")}`,
@@ -95,13 +101,16 @@ describe("redirectToLoginOnUnauthorized", () => {
   });
 
   it("redirects once even when several queries fail together", async () => {
-    const { assign, redirectToLoginOnUnauthorized } =
+    const { assign, fetch, redirectToLoginOnUnauthorized } =
       await loadModule("/acme/toolsets");
 
-    redirectToLoginOnUnauthorized();
-    redirectToLoginOnUnauthorized();
-    redirectToLoginOnUnauthorized();
+    await Promise.all([
+      redirectToLoginOnUnauthorized(),
+      redirectToLoginOnUnauthorized(),
+      redirectToLoginOnUnauthorized(),
+    ]);
 
+    expect(fetch).toHaveBeenCalledOnce();
     expect(assign).toHaveBeenCalledTimes(1);
   });
 
@@ -110,17 +119,67 @@ describe("redirectToLoginOnUnauthorized", () => {
       "//evil.example/path",
     );
 
-    redirectToLoginOnUnauthorized();
+    await redirectToLoginOnUnauthorized();
 
     expect(assign).toHaveBeenCalledWith("/login");
   });
 
   it("stays put on paths that render without a session", async () => {
-    const { assign, redirectToLoginOnUnauthorized } =
+    const { assign, fetch, redirectToLoginOnUnauthorized } =
       await loadModule("/login");
 
-    redirectToLoginOnUnauthorized();
+    await redirectToLoginOnUnauthorized();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("stays put when the dashboard session is still valid", async () => {
+    const {
+      assign,
+      fetch,
+      localStorage,
+      redirectToLoginOnUnauthorized,
+      sessionStorage,
+    } = await loadModule("/acme/setup", "?projectSlug=missing", 200);
+
+    await redirectToLoginOnUnauthorized();
+
+    expect(fetch).toHaveBeenCalledWith("https://app.example/rpc/auth.info", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      signal: expect.any(AbortSignal),
+    });
+    expect(localStorage.clear).not.toHaveBeenCalled();
+    expect(sessionStorage.clear).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("stays put when session verification fails", async () => {
+    const { assign, fetch, redirectToLoginOnUnauthorized } =
+      await loadModule("/acme/toolsets");
+    fetch.mockRejectedValueOnce(new TypeError("network down"));
+
+    await redirectToLoginOnUnauthorized();
 
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("releases a stuck session check after its timeout", async () => {
+    vi.useFakeTimers();
+    const { assign, fetch, redirectToLoginOnUnauthorized } =
+      await loadModule("/acme/toolsets");
+    fetch.mockImplementation(() => new Promise(() => undefined));
+
+    const firstCheck = redirectToLoginOnUnauthorized();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await firstCheck;
+    const secondCheck = redirectToLoginOnUnauthorized();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(assign).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await secondCheck;
   });
 });

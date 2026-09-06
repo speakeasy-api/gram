@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   INFERENCE_CAPS_ANCHOR,
   inferenceCapAnchor,
-  inferenceCapBillingNote,
-  inferenceCapInvoiceNote,
   inferenceCapLabel,
   inferenceCapPausedNote,
   inferenceCapRaiseLabel,
@@ -78,28 +76,6 @@ describe("cap copy", () => {
     );
   });
 
-  it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
-    "includes the %s key in PAYG billing",
-    (keyType) => {
-      expect(inferenceCapInvoiceNote(keyType)).toMatch(
-        /included in the inference spend.*invoice/i,
-      );
-      expect(inferenceCapInvoiceNote(keyType)).not.toMatch(/estimate above/i);
-    },
-  );
-
-  // The uncapped meter renders the invoice half on its own, so it has to read
-  // as a whole sentence rather than as a fragment of the note it comes from.
-  it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
-    "makes the %s cap's invoice sentence stand alone",
-    (keyType) => {
-      expect(inferenceCapBillingNote(keyType)).toContain(
-        inferenceCapInvoiceNote(keyType),
-      );
-      expect(inferenceCapInvoiceNote(keyType)).not.toContain("resets");
-    },
-  );
-
   const FORBIDDEN = ["chat", "internal", "spend cap", "fallback key"] as const;
 
   // The correction this section exists for: the misleading identifiers are gone
@@ -111,7 +87,6 @@ describe("cap copy", () => {
         inferenceCapLabel(keyType),
         inferenceCapPausedNote(keyType),
         inferenceCapRaiseLabel(keyType),
-        inferenceCapBillingNote(keyType),
       ]
         .join(" ")
         .toLowerCase();

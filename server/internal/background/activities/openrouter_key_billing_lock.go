@@ -67,8 +67,7 @@ func wrapOpenRouterKeyBillingLockError(err error, keyType openrouter.KeyType) er
 	if err == nil {
 		return nil
 	}
-	var applicationErr *temporal.ApplicationError
-	if errors.As(err, &applicationErr) {
+	if applicationErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		return applicationErr
 	}
 	return fmt.Errorf("hold OpenRouter %s key billing lock: %w", keyType, err)

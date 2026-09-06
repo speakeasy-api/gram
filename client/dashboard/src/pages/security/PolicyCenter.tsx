@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { TabbedPage } from "@/components/page-templates";
@@ -1009,7 +1010,9 @@ function PolicyCenterContent() {
       width: "1fr",
       render: (row) => (
         <span className="text-muted-foreground text-sm">
-          {row.userId || "Unknown user"}
+          <IdentityLink identifier={row.userId ? { userId: row.userId } : null}>
+            {row.userId || "Unknown user"}
+          </IdentityLink>
         </span>
       ),
     },
@@ -1117,7 +1120,13 @@ function PolicyCenterContent() {
                 <dt className="text-muted-foreground">Policy</dt>
                 <dd>{row.riskPolicyName}</dd>
                 <dt className="text-muted-foreground">User</dt>
-                <dd className="break-all">{row.userId || "Unknown user"}</dd>
+                <dd className="break-all">
+                  <IdentityLink
+                    identifier={row.userId ? { userId: row.userId } : null}
+                  >
+                    {row.userId || "Unknown user"}
+                  </IdentityLink>
+                </dd>
                 <dt className="text-muted-foreground">Quarantined</dt>
                 <dd>
                   <PolicyDateCell date={row.createdAt} />

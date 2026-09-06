@@ -139,16 +139,22 @@ type featureUnavailableResult struct {
 }
 
 type operationBudgetResult struct {
-	Code    string `json:"code"`
-	Reason  string `json:"reason,omitempty"`
-	Message string `json:"message"`
+	Code          string         `json:"code"`
+	Reason        string         `json:"reason,omitempty"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Actions       []RepairAction `json:"actions,omitempty"`
+	Message       string         `json:"message"`
 }
 
 // newServer composes the Platform MCP tools for one deployment. It returns the
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate)
+}
+
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -168,6 +174,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 		}, "\n\n"),
 		PageSize: 32,
 	})
@@ -175,6 +182,29 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerRiskToolsWithMutations(reg, postgresReader.riskReads, riskMutations)
+		if postgresReader.dataExports == nil {
+			registerUnavailableDataExportTools(reg)
+		} else {
+			registerDataExportTools(reg, postgresReader)
+		}
+		if postgresReader.dataExportMutations == nil {
+			registerUnavailableDataExportMutationTool(reg)
+		} else {
+			registerDataExportMutationTool(reg, postgresReader)
+		}
+		if postgresReader.recentToolCalls == nil {
+			registerUnavailableRecentToolCallTools(reg)
+		} else {
+			registerRecentToolCallTools(reg, postgresReader)
+		}
+	} else {
+		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
+		registerUnavailableDataExportTools(reg)
+		registerUnavailableDataExportMutationTool(reg)
+		registerUnavailableRecentToolCallTools(reg)
+	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
 		registerUnavailableSearchDocsTool(reg)
@@ -266,6 +296,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailablePluginTools(reg)
 	} else {
 		registerPluginTools(reg, plugins)
+	}
+	if !sessionRecall.valid() {
+		registerUnavailableSessionRecallTools(reg)
+	} else {
+		registerSessionRecallTools(reg, sessionRecall)
 	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
@@ -395,9 +430,11 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrCatalogUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "catalog_unavailable", Message: "The reviewed catalogue of MCP servers is temporarily unavailable. Try searching it again shortly; everything else still works."}
 	case errors.Is(err, ErrDirectRemoteRejected):
-		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", Message: "That MCP server URL is unsafe, unsupported, or did not answer a Streamable HTTP check. Use an HTTPS URL with no credentials, query parameters, or fragments."}
+		category := setupCategoryFromError(err)
+		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", SetupCategory: category, Actions: inspectionFailureActions(category), Message: "That MCP server URL is unsafe, unsupported, or did not answer a Streamable HTTP check. Use an HTTPS URL with no credentials, credential-like query parameters, or fragments."}
 	case errors.Is(err, ErrDirectRemoteUnavailable):
-		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", Message: "That MCP server could not be checked safely right now. Try again shortly."}
+		category := setupCategoryFromError(err)
+		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", SetupCategory: category, Actions: inspectionFailureActions(category), Message: "That MCP server could not be checked safely right now. Try again shortly."}
 	case errors.Is(err, ErrLifecycleVisibilityUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP server was not set up through this platform, so it cannot be turned on or off from here. Manage it in the dashboard instead."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):

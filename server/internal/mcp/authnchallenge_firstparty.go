@@ -76,6 +76,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		Subject:    nil,
 		CreatedAt:  time.Now(),
 		FirstParty: true,
+		// Auto-connect has not run for a challenge this new.
+		AutoConnectDone: false,
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)

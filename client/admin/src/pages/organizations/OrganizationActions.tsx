@@ -7,7 +7,9 @@ import {
   type FormEvent,
   type JSX,
   type ReactNode,
+  type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -50,7 +52,6 @@ import {
 } from "@/lib/trialDates";
 import { cn, fmtDateShort } from "@/lib/utils";
 
-import { PEEK_PANEL_ID } from "./PeekPanel";
 import {
   canExtendTrial,
   canRearmTrial,
@@ -133,8 +134,7 @@ type OpenDialog = "disable" | "extend" | "rearm" | "start";
 
 /**
  * Disable, re-enable, extend, re-arm and start, wherever the record is on
- * screen: the row menu, the peek panel footer, the record header and the
- * overview trial row.
+ * screen: the row menu, the peek panel footer and the overview panels.
  *
  * One component for all of them, because they are the same actions against the
  * same record: two implementations would be two answers to "can this trial be
@@ -149,20 +149,24 @@ export function OrganizationActions({
   actions = "all",
   buttonClassName,
   fieldTrigger,
+  focusFallbackRef,
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
-  // Which of the record's actions this instance draws. The record shows two
-  // bars at once: lifecycle in the header, the trial's own resolution beside
-  // the facts it acts on. `all` is every other surface.
+  // Which of the organization's actions this instance draws. The overview
+  // separates lifecycle actions into Danger zone and trial actions into the
+  // Enterprise trial panel. `all` keeps the row menu and peek footer complete.
   actions?: "all" | "lifecycle" | "trial";
   // For a surface that is not the page's own background. A stock outline
   // button brings the page's border and fill with it, which inside a toned
   // panel reads as a control belonging to something else.
   buttonClassName?: string;
-  // Overview's Trial row: the control is the field value, sized like Account
-  // type beside it. Peek and the row menu keep a named action.
+  // Compact control used where the trial field itself is the start action.
   fieldTrigger?: boolean;
+  // A stable destination owned by the surface drawing these actions. Used when
+  // a successful mutation replaces the disconnected control that opened the
+  // dialog. Menu triggers remain their own stable destination.
+  focusFallbackRef?: RefObject<HTMLElement | null>;
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -200,6 +204,7 @@ export function OrganizationActions({
   const showLifecycle = actions !== "trial";
   const showExtend = actions !== "lifecycle" && canExtendTrial(org);
   const showStart = actions !== "lifecycle" && canStartTrial(org);
+  const showRearm = actions !== "lifecycle" && canRearmTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
@@ -207,8 +212,8 @@ export function OrganizationActions({
   // `DialogTrigger`, and these dialogs have none: its `onCloseAutoFocus`
   // cancels FocusScope's own restore and then focuses `triggerRef.current`,
   // which is null here, so without this every close drops the keyboard onto
-  // `document.body`. One handler covers all five exits: success, Escape,
-  // Cancel, the backdrop and the X.
+  // `document.body`. The close handler also schedules an app-owned restore,
+  // because browser smoke proved controlled unmount can skip that Radix hook.
   const openedFrom = useRef<HTMLElement | null>(null);
 
   const openDialog = (dialog: OpenDialog, from: HTMLElement | null): void => {
@@ -222,29 +227,49 @@ export function OrganizationActions({
     setOpen(dialog);
   };
 
-  const restoreFocus = (event: Event): void => {
-    const control = openedFrom.current;
+  const focusOrigin = (control: HTMLElement | null): boolean => {
     if (control?.isConnected) {
-      event.preventDefault();
       control.focus();
-      return;
+      return true;
     }
 
-    // A re-armed record is running rather than demoted, so the bar takes the
-    // Re-arm button down and mounts an Extend button in a sibling slot rather
-    // than reusing the node. The peek panel is already focusable, so the
-    // keyboard goes there. Nothing to fall back to on any other surface.
-    if (layout !== "buttons") return;
-    const panel = document.getElementById(PEEK_PANEL_ID);
-    if (!panel) return;
-    event.preventDefault();
-    panel.focus();
+    const fallback = focusFallbackRef?.current;
+    if (!fallback?.isConnected) return false;
+    fallback.focus();
+    return true;
+  };
+
+  const restoreAfterCommit = (control: HTMLElement | null): void => {
+    // The controlled dialog can unmount without Radix firing close-autofocus in
+    // a browser. Restore after React disconnects the dialog control instead of
+    // relying on DialogTrigger behavior these dialogs do not have.
+    setTimeout(() => {
+      focusOrigin(control);
+    });
+  };
+
+  const closeAfterWrite = (): void => {
+    const control = openedFrom.current;
+    setOpen(undefined);
+    restoreAfterCommit(control);
+  };
+
+  const cancelDialog = (): void => {
+    const control = openedFrom.current;
+    // Cancellation leaves the opener in place. Commit the dialog removal now,
+    // then restore focus before the event can expose document.body as a stop.
+    flushSync(() => setOpen(undefined));
+    focusOrigin(control);
+  };
+
+  const restoreFocus = (event: Event): void => {
+    if (focusOrigin(openedFrom.current)) event.preventDefault();
   };
 
   const runDisable = (): void => {
     disable.mutate(org.id, {
       onSuccess: () => {
-        setOpen(undefined);
+        closeAfterWrite();
         showFailure(null);
         announce(`${org.name} is disabled.`);
       },
@@ -255,11 +280,15 @@ export function OrganizationActions({
     });
   };
 
-  const runEnable = (): void => {
+  const runEnable = (from: HTMLElement | null): void => {
     enable.mutate(org.id, {
       onSuccess: () => {
         showFailure(null);
         announce(`${org.name} is enabled.`);
+        // The keyed Re-enable control is replaced by Disable when the canonical
+        // record lands. Restore to it if it survived, or to the surface-owned
+        // stable destination after React commits the replacement.
+        restoreAfterCommit(from);
       },
       // The one write with no dialog, so its failure is shown as well as
       // spoken. Without the banner the only account of it on the page is
@@ -277,7 +306,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          setOpen(undefined);
+          closeAfterWrite();
           showFailure(null);
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
@@ -292,7 +321,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          setOpen(undefined);
+          closeAfterWrite();
           showFailure(null);
           announce(`${org.name} trial re-armed for ${dayCount(days)}.`);
         },
@@ -307,7 +336,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          setOpen(undefined);
+          closeAfterWrite();
           showFailure(null);
           announce(startCopy.started(days));
         },
@@ -324,7 +353,7 @@ export function OrganizationActions({
           org={org}
           pending={disable.isPending}
           failure={disable.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onConfirm={runDisable}
         />
@@ -344,7 +373,7 @@ export function OrganizationActions({
           failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runExtend}
         />
@@ -357,13 +386,13 @@ export function OrganizationActions({
           // Everything the write does, because an operator who reads "days" and
           // expects only a new date has been told less than half of it. The
           // gate is what the whitelist flag is called outside the schema.
-          description="Restores the account type, brings the model provider keys back, and takes the organization out from behind the book-a-demo gate. The trial then runs for the days below, counted from now rather than from the date the old one ended."
+          description="Restores the account type, removes the trial disable cause from model provider keys, and takes the organization out from behind the book-a-demo gate. Keys with admin, billing, or unknown causes remain disabled. The trial then runs for the days below, counted from now rather than from the date the old one ended."
           submitLabel="Re-arm"
           pendingLabel="Re-arming..."
           failureLead={rearmFailureLead}
           pending={rearm.isPending}
           failure={rearm.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runRearm}
         />
@@ -379,7 +408,7 @@ export function OrganizationActions({
           failureLead={startFailureLead}
           pending={start.isPending}
           failure={start.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runStart}
         />
@@ -414,17 +443,19 @@ export function OrganizationActions({
         {showLifecycle &&
           (isDisabled ? (
             <Button
+              key="re-enable"
               variant="outline"
               size="xs"
               aria-label={`Re-enable ${org.name}`}
               aria-busy={busy}
               className={buttonClassName}
-              onClick={runEnable}
+              onClick={(event) => runEnable(event.currentTarget)}
             >
               Re-enable
             </Button>
           ) : (
             <Button
+              key="disable"
               variant="outline"
               size="xs"
               aria-label={`Disable ${org.name}`}
@@ -447,12 +478,13 @@ export function OrganizationActions({
             Extend trial
           </Button>
         )}
-        {canRearmTrial(org) && (
+        {showRearm && (
           <Button
             variant="outline"
             size="xs"
             aria-label={`Re-arm trial for ${org.name}`}
             aria-busy={busy}
+            className={buttonClassName}
             onClick={(event) => openDialog("rearm", event.currentTarget)}
           >
             Re-arm trial
@@ -497,7 +529,7 @@ export function OrganizationActions({
         <DropdownMenuContent align="start">
           {showLifecycle &&
             (isDisabled ? (
-              <DropdownMenuItem onSelect={runEnable}>
+              <DropdownMenuItem onSelect={() => runEnable(null)}>
                 Re-enable
               </DropdownMenuItem>
             ) : (
@@ -523,7 +555,7 @@ export function OrganizationActions({
               Extend trial
             </DropdownMenuItem>
           )}
-          {canRearmTrial(org) && (
+          {showRearm && (
             <DropdownMenuItem
               onSelect={() => openDialog("rearm", menuTrigger.current)}
             >

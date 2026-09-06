@@ -17,7 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -80,16 +84,26 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	hasToolset := payload.ToolsetID != nil && *payload.ToolsetID != ""
 	hasServer := payload.McpServerID != nil && *payload.McpServerID != ""
-	if hasToolset == hasServer {
-		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id or mcp_server_id must be provided").LogError(ctx, s.logger)
+	hasMeta := payload.MetaMcpServerID != nil && *payload.MetaMcpServerID != ""
+	targets := 0
+	for _, set := range []bool{hasToolset, hasServer, hasMeta} {
+		if set {
+			targets++
+		}
+	}
+	if targets != 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided").LogError(ctx, s.logger)
 	}
 
 	var target *mintTarget
 	var err error
-	if hasToolset {
+	switch {
+	case hasToolset:
 		target, err = s.resolveToolsetMintTarget(ctx, *payload.ToolsetID, *authCtx.ProjectID)
-	} else {
+	case hasServer:
 		target, err = s.resolveServerMintTarget(ctx, *payload.McpServerID, *authCtx.ProjectID)
+	default:
+		target, err = s.resolveMetaServerMintTarget(ctx, *payload.MetaMcpServerID, *authCtx.ProjectID)
 	}
 	if err != nil {
 		return nil, err
@@ -102,8 +116,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:        target.issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             target.issuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -169,10 +184,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}, nil
 }
 
-// resolveToolsetMintTarget binds the JWT to a toolset's /mcp/{slug} audience
-// (urn.NewToolset). The iss claim is descriptive only — the gate validates
-// audience, not issuer — but matching what /token emits keeps minted JWTs
-// indistinguishable in audit trails.
+// resolveToolsetMintTarget binds a toolset-addressed mint to the toolset's
+// wrapper when a live one exists (issuer-URN audience, wrapper RBAC), else to
+// the legacy toolset binding — matching what the serving path validates.
 func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr string, projectID uuid.UUID) (*mintTarget, error) {
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
@@ -188,6 +202,29 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
+	}
+
+	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: toolset.ID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// No wrapper: legacy toolset binding below.
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
+	case wrapper.Visibility == visibility.Disabled:
+		// The runtime refuses disabled wrappers and serves the legacy route,
+		// so a wrapper-bound token would be rejected everywhere.
+	case !wrapper.UserSessionIssuerID.Valid:
+		// A wrapper without an issuer cannot be a mint target; the toolset's
+		// own issuer gate below still applies.
+	default:
+		target, err := s.wrapperMintTarget(ctx, &wrapper, projectID)
+		if err != nil || target != nil {
+			return target, err
+		}
+		// No addressable endpoint: only the legacy toolset route serves.
 	}
 
 	if !toolset.UserSessionIssuerID.Valid {
@@ -211,12 +248,10 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	}, nil
 }
 
-// resolveServerMintTarget binds the JWT to a remote MCP server's
-// user_session_issuer audience (urn.NewUserSessionIssuer, the /x/mcp
-// convention). Remote servers carry no toolset — the
-// mcp_servers_backend_exclusivity_check constraint makes toolset_id and
-// remote_mcp_server_id mutually exclusive — and the /x/mcp runtime validates
-// bearer audience against the issuer URN (see NewResolvedMcpEndpointFromMcpServer).
+// resolveServerMintTarget binds the JWT to an mcp_server's user_session_issuer
+// audience (urn.NewUserSessionIssuer) — any issuer-gated backend, hosted
+// (toolset-backed) servers included. The runtime validates bearer audience
+// against the issuer URN (see NewResolvedMcpEndpointFromMcpServer).
 func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr string, projectID uuid.UUID) (*mintTarget, error) {
 	serverID, err := uuid.Parse(serverIDStr)
 	if err != nil {
@@ -234,23 +269,137 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 
+	return s.serverMintTarget(ctx, &server, projectID)
+}
+
+// serverMintTarget is the shared mint binding for an already-loaded
+// mcp_servers row, used by both addressing arms (mcp_server_id directly, and
+// toolset_id resolving to its wrapper).
+func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	if !server.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
 	}
-	if server.Slug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no slug").LogError(ctx, s.logger)
-	}
 
-	issuerURL, err := url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	issuerURL, err := s.serverMintIssuerURL(ctx, server, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+		return nil, err
 	}
 
+	return serverMintTargetAt(server, issuerURL), nil
+}
+
+// wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
+// it; a nil target means the legacy toolset route is the one that serves.
+func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
+	}
+	if issuerURL == "" {
+		return nil, nil
+	}
+	return serverMintTargetAt(server, issuerURL), nil
+}
+
+func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *mintTarget {
 	return &mintTarget{
 		issuerID:   server.UserSessionIssuerID.UUID,
 		audience:   urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
 		issuerURL:  issuerURL,
 		resourceID: server.ID.String(),
 		logAttr:    attr.SlogMcpServerID(server.ID.String()),
+	}
+}
+
+// serverMintIssuerURL builds the descriptive iss claim from the server's
+// primary endpoint; servers with no endpoint keep the legacy /x/mcp shape.
+func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (string, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
+	}
+	if issuerURL != "" {
+		return issuerURL, nil
+	}
+
+	if server.Slug.String == "" {
+		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
+	}
+	issuerURL, err = url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+	}
+	return issuerURL, nil
+}
+
+// resolveMetaServerMintTarget binds the JWT to a meta MCP server's
+// user_session_issuer audience, matching what
+// NewResolvedMcpEndpointFromMetaMcpServer expects on the wire. A gateway has
+// no slug of its own, so the issuer claim names its platform endpoint — the
+// address a client would actually connect to. The mcp:connect check runs
+// against the gateway id, so a caller whose grant is restricted to specific
+// resources cannot mint for it.
+func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDStr string, projectID uuid.UUID) (*mintTarget, error) {
+	metaServerID, err := uuid.Parse(metaServerIDStr)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, s.logger)
+	}
+
+	metaServer, err := metamcprepo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{
+		ID:        metaServerID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, s.logger)
+	}
+
+	if !metaServer.UserSessionIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "meta mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
+	}
+
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMetaMCPServerIDParams{
+		ProjectID:       projectID,
+		MetaMcpServerID: metaServerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp server endpoints").LogError(ctx, s.logger)
+	}
+	slug := ""
+	for _, endpoint := range endpoints {
+		// Prefer the platform address; a custom-domain endpoint only serves
+		// under its own host, which this claim cannot name.
+		if !endpoint.CustomDomainID.Valid {
+			slug = endpoint.Slug
+			break
+		}
+	}
+	if slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "meta mcp server has no hosted address to mint against").LogError(ctx, s.logger)
+	}
+
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", slug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+	}
+
+	return &mintTarget{
+		issuerID:   metaServer.UserSessionIssuerID.UUID,
+		audience:   urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
+		issuerURL:  issuerURL,
+		resourceID: metaServer.ID.String(),
+		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
 }

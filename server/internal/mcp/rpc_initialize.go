@@ -110,6 +110,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 	result := &result[initializeResult]{
 		ID:             req.ID,
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 		Result: initializeResult{
 			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{

@@ -15,31 +15,33 @@ import (
 
 // Client is the "jsonWebKeySets" service client.
 type Client struct {
-	CreateSetEndpoint   goa.Endpoint
-	UpdateSetEndpoint   goa.Endpoint
-	ListSetsEndpoint    goa.Endpoint
-	GetSetEndpoint      goa.Endpoint
-	DeleteSetEndpoint   goa.Endpoint
-	ListKeysEndpoint    goa.Endpoint
-	PublishKeyEndpoint  goa.Endpoint
-	ActivateKeyEndpoint goa.Endpoint
-	RetireKeyEndpoint   goa.Endpoint
-	RevokeKeyEndpoint   goa.Endpoint
+	CreateSetEndpoint             goa.Endpoint
+	UpdateSetEndpoint             goa.Endpoint
+	ListSetsEndpoint              goa.Endpoint
+	GetSetEndpoint                goa.Endpoint
+	GetSetDeletePreflightEndpoint goa.Endpoint
+	DeleteSetEndpoint             goa.Endpoint
+	ListKeysEndpoint              goa.Endpoint
+	PublishKeyEndpoint            goa.Endpoint
+	ActivateKeyEndpoint           goa.Endpoint
+	RetireKeyEndpoint             goa.Endpoint
+	RevokeKeyEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "jsonWebKeySets" service client given the endpoints.
-func NewClient(createSet, updateSet, listSets, getSet, deleteSet, listKeys, publishKey, activateKey, retireKey, revokeKey goa.Endpoint) *Client {
+func NewClient(createSet, updateSet, listSets, getSet, getSetDeletePreflight, deleteSet, listKeys, publishKey, activateKey, retireKey, revokeKey goa.Endpoint) *Client {
 	return &Client{
-		CreateSetEndpoint:   createSet,
-		UpdateSetEndpoint:   updateSet,
-		ListSetsEndpoint:    listSets,
-		GetSetEndpoint:      getSet,
-		DeleteSetEndpoint:   deleteSet,
-		ListKeysEndpoint:    listKeys,
-		PublishKeyEndpoint:  publishKey,
-		ActivateKeyEndpoint: activateKey,
-		RetireKeyEndpoint:   retireKey,
-		RevokeKeyEndpoint:   revokeKey,
+		CreateSetEndpoint:             createSet,
+		UpdateSetEndpoint:             updateSet,
+		ListSetsEndpoint:              listSets,
+		GetSetEndpoint:                getSet,
+		GetSetDeletePreflightEndpoint: getSetDeletePreflight,
+		DeleteSetEndpoint:             deleteSet,
+		ListKeysEndpoint:              listKeys,
+		PublishKeyEndpoint:            publishKey,
+		ActivateKeyEndpoint:           activateKey,
+		RetireKeyEndpoint:             retireKey,
+		RevokeKeyEndpoint:             revokeKey,
 	}
 }
 
@@ -130,6 +132,29 @@ func (c *Client) GetSet(ctx context.Context, p *GetSetPayload) (res *JSONWebKeyS
 		return
 	}
 	return ires.(*JSONWebKeySet), nil
+}
+
+// GetSetDeletePreflight calls the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+// GetSetDeletePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSetDeletePreflight(ctx context.Context, p *GetSetDeletePreflightPayload) (res *JSONWebKeySetDeletePreflight, err error) {
+	var ires any
+	ires, err = c.GetSetDeletePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*JSONWebKeySetDeletePreflight), nil
 }
 
 // DeleteSet calls the "deleteSet" endpoint of the "jsonWebKeySets" service.

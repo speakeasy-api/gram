@@ -1,35 +1,15 @@
-// Command migrations back-fills historical data into ClickHouse using a generic
-// Source -> Transform -> Sink pipeline (see the pipeline package). Two
-// migrations are wired, selected by an optional leading subcommand:
+// Command migrations runs one explicitly selected offline migration.
 //
-//   - riskfindings (default): moves Postgres risk_results rows into the
-//     ClickHouse risk_findings event log (see RISK_RESULTS_MIGRATION.md).
-//   - riskfindingscols: backfills the message_created_at and assistant_id
-//     columns onto existing risk_findings rows via ClickHouse mutations (see
-//     RISKFINDINGS_COLS_MIGRATION.md).
+//   - riskfindings (default): PostgreSQL to ClickHouse; see RISK_RESULTS_MIGRATION.md.
+//   - riskfindingscols: ClickHouse mutations; see RISKFINDINGS_COLS_MIGRATION.md.
+//   - openrouter-disable-causes: PostgreSQL-only classification; see
+//     OPENROUTER_DISABLE_CAUSES_MIGRATION.md. It defaults to a non-writing dry
+//     run. Writes use -apply or -manual-override and require explicit target
+//     confirmation.
 //
-// It is an offline operator tool, run by hand against production reached
-// through Cloud SQL Auth Proxy and a ClickHouse tunnel:
-//
-// Secrets come from the environment only (never flags, which leak through argv):
-//
-//	GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
-//	CLICKHOUSE_PASSWORD=... \
-//	GRAM_RISK_FINGERPRINT_PEPPER_KEYRING='{"current":"v1","keys":{"v1":"<base64>"}}' \
-//	  go run ./server/cmd/tools/migrations \
-//	  -ch-host 127.0.0.1 -ch-database gram -ch-username gram \
-//	  -org org_123 -from 2024-01-01T00:00:00Z -to 2024-06-01T00:00:00Z \
-//	  -dry-run=false
-//
-// Safety properties:
-//   - -dry-run defaults to true: a plain run reads and transforms but writes
-//     nothing (and skips connecting to ClickHouse).
-//   - The read is a keyset scan over risk_results.id (uuidv7, time-ordered). The
-//     resume cursor is the sink's last committed id, printed in the final report;
-//     an interrupted run exits nonzero and logs that cursor for -cursor.
-//   - The full raw match is never written to ClickHouse: only its length, the
-//     partial-mask display string (internal/risk/maskdisplay — boundary
-//     characters only), and one-way HMAC fingerprints.
+// Each guide documents its own connectivity, secret environment variables,
+// invocation modes, output, and recovery procedure. Flags are subcommand-local;
+// in particular, openrouter-disable-causes does not accept -dry-run=false.
 package main
 
 import (
@@ -102,9 +82,11 @@ func run() int {
 		return runRiskFindings(args)
 	case "riskfindingscols":
 		return runRiskFindingsCols(args)
+	case "openrouter-disable-causes":
+		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes)")
 		return 2
 	}
 }

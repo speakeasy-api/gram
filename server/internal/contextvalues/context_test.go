@@ -22,6 +22,23 @@ func TestIsSupportSessionRequiresValidatedContext(t *testing.T) {
 
 }
 
+func TestValidatedGramSessionProvenanceIsPrivateAndPropagatesLegacyImpersonation(t *testing.T) {
+	t.Parallel()
+
+	base := &AuthContext{UserID: "user_123"}
+	untrusted := SetAuthContext(t.Context(), base)
+	require.False(t, HasValidatedGramSession(untrusted))
+	require.False(t, IsLegacyImpersonatedSession(untrusted))
+
+	validated := WithValidatedGramSession(t.Context(), base, false)
+	require.True(t, HasValidatedGramSession(validated))
+	require.False(t, IsLegacyImpersonatedSession(validated))
+
+	impersonated := WithValidatedGramSession(t.Context(), base, true)
+	require.True(t, HasValidatedGramSession(impersonated))
+	require.True(t, IsLegacyImpersonatedSession(impersonated))
+}
+
 func TestRefreshSessionCookieIgnoresNilCallback(t *testing.T) {
 	t.Parallel()
 

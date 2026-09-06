@@ -21,9 +21,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -186,8 +188,16 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
 	t.Helper()
 
+	return newTestCIMDServiceWithMeterProvider(t, testenv.NewMeterProvider(t))
+}
+
+// newTestCIMDServiceWithMeterProvider is newTestCIMDService over a caller's
+// meter provider, for tests that read the admission counter back.
+func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+	t.Helper()
+
 	ds := startCIMDDocServer(t)
-	ctx, ti := newTestMCPServiceWithGuardianOptions(t, guardian.WithTLSRootCAs(ds.certPool()))
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, meterProvider, guardian.WithTLSRootCAs(ds.certPool()))
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)

@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateConfiguration  goa.Endpoint
 	GetSessionMeta       goa.Endpoint
 	ReportSessionMoved   goa.Endpoint
+	ReportAIScan         goa.Endpoint
 	CreateSessionHandoff goa.Endpoint
 }
 
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateConfiguration:  NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
 		GetSessionMeta:       NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
+		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -48,6 +50,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateConfiguration = m(e.UpdateConfiguration)
 	e.GetSessionMeta = m(e.GetSessionMeta)
 	e.ReportSessionMoved = m(e.ReportSessionMoved)
+	e.ReportAIScan = m(e.ReportAIScan)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
 }
 
@@ -186,6 +189,29 @@ func NewReportSessionMovedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return nil, s.ReportSessionMoved(ctx, p)
+	}
+}
+
+// NewReportAIScanEndpoint returns an endpoint function that calls the method
+// "reportAIScan" of service "agent".
+func NewReportAIScanEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportAIScanPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.ReportAIScan(ctx, p)
 	}
 }
 

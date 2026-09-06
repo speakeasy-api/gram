@@ -231,7 +231,7 @@ func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 		userID,
 		"directory_user_null_attribute",
 		"null-attribute@example.com",
-		[]byte(`{"department_name":null,"job_title":"Platform Engineer"}`),
+		[]byte(`{"department_name":null,"job_title":"  Platform Engineer  ","employee_type":42}`),
 		time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC),
 	)
 
@@ -239,8 +239,11 @@ func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, profile.RawAttributes, "department_name")
 	require.Nil(t, profile.RawAttributes["department_name"])
-	require.Equal(t, "Platform Engineer", profile.RawAttributes["job_title"])
+	// A null value, a non-string value and a value that is only whitespace are
+	// all the same as an absent attribute.
+	require.Equal(t, "  Platform Engineer  ", profile.RawAttributes["job_title"])
 	require.Equal(t, directory.UserAttributes{JobTitle: "Platform Engineer"}, profile.Attributes())
+	require.Empty(t, profile.EmployeeType)
 	require.NotNil(t, profile.Groups)
 	require.Empty(t, profile.Groups)
 }
@@ -352,4 +355,23 @@ func TestServiceResolveUserAssociationsByEmailsWithNoEmails(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, associations)
 	require.NotNil(t, associations)
+}
+
+func TestServiceListActiveGroupMemberEmailsNormalizesAndDeduplicates(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+
+	const organizationID = "org_directory_member_emails"
+	seedOrganization(t, conn, organizationID)
+	syncedAt := time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC)
+	group := seedDirectoryGroup(t, conn, organizationID, "directory_group_member_emails", "Engineering", syncedAt)
+
+	padded := seedDirectoryUser(t, conn, organizationID, "user_padded", "directory_user_padded", "  Member@Example.com  ", []byte(`{}`), syncedAt)
+	duplicate := seedDirectoryUser(t, conn, organizationID, "user_duplicate", "directory_user_duplicate", "member@EXAMPLE.COM", []byte(`{}`), syncedAt)
+	addUserToGroup(t, conn, padded, "directory_group_member_emails", group, syncedAt)
+	addUserToGroup(t, conn, duplicate, "directory_group_member_emails", group, syncedAt)
+
+	emails, err := service.ListActiveGroupMemberEmails(t.Context(), organizationID, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"member@example.com"}, emails)
 }

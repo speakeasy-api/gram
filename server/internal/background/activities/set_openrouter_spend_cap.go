@@ -266,7 +266,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 				return fmt.Errorf("check active trial before setting inference cap: %w", err)
 			}
 		}
-		if key.Disabled {
+		if openrouter.EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return fmt.Errorf("cannot set inference cap while the %s key is disabled", keyType)
 		}
 
@@ -363,7 +363,7 @@ func (s *SetOpenRouterSpendCap) rearmCreditsAlertsIfCurrent(
 	if err != nil {
 		return fmt.Errorf("read %s key before re-arming inference alerts: %w", keyType, err)
 	}
-	if key.Disabled {
+	if openrouter.EffectiveDisabled(key.Disabled, key.DisableCauses) {
 		return nil
 	}
 	return s.rearmCreditsAlerts(ctx, args, keyType)

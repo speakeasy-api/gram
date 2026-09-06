@@ -1,10 +1,12 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -22,17 +24,17 @@ import (
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -45,7 +47,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -87,11 +88,17 @@ type BillingOperations interface {
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
-// TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
+// TrialKeyReviver is the OpenRouter surface used by admin key operations and
+// trial lifecycle replacement. The WithDB removal records local desired state
+// only; reconciliation happens after the business transaction commits.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
+	PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, enterpriseFloor int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error
+	ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType openrouter.KeyType) error
 }
 
 type OpenRouterSpendCapScheduler interface {
@@ -120,8 +127,6 @@ func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
 	return ErrChatAnalysisTriggerUnavailable
 }
 
-const keyBillingLockWaitTimeout = 5 * time.Second
-
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
 
@@ -135,6 +140,22 @@ func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openro
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error) {
+	return openrouter.EnterpriseTrialConversionKeyChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyConversionPolicy(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
@@ -206,56 +227,197 @@ func NewService(
 	}
 }
 
+func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return &gen.AdminSession{Email: authCtx.Email, Name: conv.PtrEmpty(authCtx.Name)}, nil
+}
+
+func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
+	return &gen.ProductFeatures{
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
+		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
+		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
+	}
+}
+
+func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetOrganizationFeaturesPayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, _ := adminActor(ctx)
+	mutator := productfeatures.NewMutator(s.productFeatures, s.audit)
+	feature := productfeatures.Feature(payload.FeatureName)
+	mutationActor := productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		err = mutator.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, payload.Enabled, mutationActor)
+	} else {
+		err = mutator.SetFeature(ctx, organizationID, feature, payload.Enabled, mutationActor)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("set organization feature: %w", err)
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func chatAnalysisSettingsResult(settings chatanalysis.Settings) *gen.AdminChatAnalysisSettings {
+	return &gen.AdminChatAnalysisSettings{
+		OrganizationID: settings.OrganizationID, WorkUnitsEnabled: settings.WorkUnitsEnabled, WorkUnitsDailyCap: settings.WorkUnitsDailyCap,
+		BusinessMemoryEnabled: settings.BusinessMemoryEnabled, BusinessMemoryDailyCap: settings.BusinessMemoryDailyCap, IsDefault: settings.IsDefault,
+	}
+}
+
+func (s *Service) GetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := chatanalysis.LoadSettings(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat analysis settings").LogError(ctx, s.logger)
+	}
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) SetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.SetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, operatorEmail := adminActor(ctx)
+	settings, err := chatanalysis.UpsertSettings(ctx, s.db, s.audit, organizationID, payload.Judge, payload.Enabled, payload.DailyCap, actor, displayName)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update chat analysis settings").LogError(ctx, s.logger)
+	}
+	s.logger.InfoContext(ctx, "updated chat analysis settings", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) TriggerOrganizationChatAnalysis(ctx context.Context, payload *gen.TriggerOrganizationChatAnalysisPayload) (*gen.AdminChatAnalysisTriggerResult, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	projectsSignaled, err := chatanalysis.TriggerOrganization(ctx, s.db, s.chatAnalysisSignaler, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "trigger chat analysis").LogError(ctx, s.logger)
+	}
+	_, _, operatorEmail := adminActor(ctx)
+	s.logger.InfoContext(ctx, "triggered chat analysis", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return &gen.AdminChatAnalysisTriggerResult{ProjectsSignaled: projectsSignaled}, nil
+}
+
+func (s *Service) OpenOrganizationInDashboard(ctx context.Context, payload *gen.OpenOrganizationInDashboardPayload) (*gen.AdminDashboardRedirect, error) {
+	organizationID := strings.TrimSpace(payload.OrganizationID)
+	if organizationID == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "organization_id is required")
+	}
+	if s.dashboardURL == nil || s.dashboardURL.Scheme == "" || s.dashboardURL.Host == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "dashboard URL is not configured").LogError(ctx, s.logger)
+	}
+	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load support target").LogError(ctx, s.logger)
+	}
+	if organization.DisabledAt.Valid {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	token, err := s.supportHandoffIssuer.Issue(ctx, organization.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "issue support handoff").LogError(ctx, s.logger)
+	}
+	query := url.Values{}
+	query.Set("support_handoff", token)
+	query.Set("redirect", "/"+organization.Slug)
+	destination := url.URL{Scheme: s.dashboardURL.Scheme, Host: s.dashboardURL.Host, Path: "/rpc/auth.login", RawQuery: query.Encode()}
+	return &gen.AdminDashboardRedirect{Location: destination.String(), CacheControl: "no-store"}, nil
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
+	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
+	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	adminserver.Mount(mux, server)
 
-	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
-	// features_handler.go for why these routes are hand written rather than
-	// generated from the Goa design.
-	mux.Handle(
-		http.MethodGet,
-		"/admin/session.get",
-		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleGetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleSetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisTrigger",
-		oops.ErrHandle(service.logger, service.handleTriggerChatAnalysis).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.open-dashboard",
-		oops.ErrHandle(service.logger, service.handleOpenOrganizationInDashboard).ServeHTTP,
-	)
+}
+
+type adminPreauthorizedKey struct{}
+
+func markAdminPreauthorized(ctx context.Context) context.Context {
+	return context.WithValue(ctx, adminPreauthorizedKey{}, true)
+}
+
+func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
+}
+
+const maxAdminJSONBodyBytes = 1 << 20
+
+func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminJSONBodyBytes))
+		if err != nil {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")
+			}
+			return oops.E(oops.CodeBadRequest, err, "read admin request body")
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(body()); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
+		return ctx, nil
+	}
 	ctx, err := s.verifier.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("admin auth: %w", err)
@@ -737,6 +899,8 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 		SubjectID:              pgtype.Text{String: "", Valid: false},
 		SubjectIds:             nil,
 		ActingSurface:          pgtype.Text{String: "", Valid: false},
+		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := audit.DecodeCursor(*payload.Cursor)
@@ -780,7 +944,13 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		metadata, _ = decoded.(map[string]any)
 	}
 
-	actorDisplayName := conv.FromPGText[string](row.ActorDisplayName)
+	// Directory name first, matching the audit feed: every writer stores the
+	// acting user's email, so the stored value renders this list as a column
+	// of addresses. Actors with no directory row keep what was stored.
+	actorDisplayName := conv.FromPGText[string](row.ActorUserDisplayName)
+	if actorDisplayName == nil || *actorDisplayName == "" {
+		actorDisplayName = conv.FromPGText[string](row.ActorDisplayName)
+	}
 	if row.ActorID == "system" {
 		actorDisplayName = conv.PtrEmpty("System")
 	}
@@ -808,6 +978,16 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
 	}
 
+	if payload.AccountType != nil && *payload.AccountType == "enterprise" {
+		trial, trialErr := trialsRepo.New(s.db).GetTrial(ctx, payload.ID)
+		switch {
+		case trialErr == nil && trial.Tier == "enterprise":
+			return nil, oops.E(oops.CodeConflict, nil, "enterprise trial conversion and retries require MarkEnterpriseTrialConverted")
+		case trialErr != nil && !errors.Is(trialErr, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeUnexpected, trialErr, "check enterprise trial before organization update").LogError(ctx, s.logger)
+		}
+	}
+
 	queries := repo.New(s.db)
 	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
 		ID:          payload.ID,
@@ -833,12 +1013,29 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
 	}
 
-	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin bulk account type update").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := repo.New(tx)
+	if payload.AccountType == "enterprise" {
+		if trialID, lockErr := queries.LockEnterpriseTrialInOrganizations(ctx, payload.Ids); lockErr == nil {
+			return nil, oops.E(oops.CodeConflict, nil, "organization %s has an enterprise trial; use atomic enterprise conversion", trialID)
+		} else if !errors.Is(lockErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, lockErr, "check enterprise trials before bulk account type update").LogError(ctx, s.logger)
+		}
+	}
+
+	updated, err := queries.AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
 		AccountType: payload.AccountType,
 		Ids:         payload.Ids,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit bulk account type update").LogError(ctx, s.logger)
 	}
 
 	written := make(map[string]struct{}, len(updated))
@@ -1132,72 +1329,13 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
 }
 
-// RearmTrial puts a demoted enterprise trial back on.
-//
-// The keys come back up before the restore commits, deliberately not mirroring
-// the demotion's ordering: a partial failure must leave the organization
-// demoted with live keys, never a running trial with dead ones.
+// RearmTrial atomically replaces trial_demotion with the active-trial key policy.
 func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
-	// Defence in depth against a non-HTTP caller: the design's bounds are
-	// generated into the request decoder alone. Keep this on the wide
-	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
 	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
 		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
-	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
-	var result *gen.AdminOrganization
-	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
-		var lockedErr error
-		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys)
-		return lockedErr
-	})
-	if err == nil {
-		return result, nil
-	}
-
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
-		return nil, shareable
-	}
-	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-	}
-	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial re-arm").LogError(ctx, logger)
-}
-
-func (s *Service) withTrialKeyBillingLocks(
-	ctx context.Context,
-	logger *slog.Logger,
-	organizationID string,
-	keyTypes []openrouter.KeyType,
-	locked map[openrouter.KeyType]*pgxpool.Conn,
-	operation func() error,
-) error {
-	if len(keyTypes) == 0 {
-		return operation()
-	}
-
-	keyType := keyTypes[0]
-	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
-		locked[keyType] = conn
-		defer delete(locked, keyType)
-		return s.withTrialKeyBillingLocks(ctx, logger, organizationID, keyTypes[1:], locked, operation)
-	})
-	if err != nil {
-		return fmt.Errorf("hold OpenRouter %s key billing lock for trial re-arm: %w", keyType, err)
-	}
-	return nil
-}
-
-func (s *Service) rearmTrialLocked(
-	ctx context.Context,
-	logger *slog.Logger,
-	payload *gen.RearmTrialPayload,
-	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
-) (*gen.AdminOrganization, error) {
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
@@ -1205,50 +1343,95 @@ func (s *Service) rearmTrialLocked(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	trials := trialsRepo.New(tx)
-
-	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
-		OrganizationID: payload.ID,
-		RearmForDays:   conv.SafeInt32(payload.Days),
-	})
+	lockedTrial, err := trials.LockTrialLifecycle(ctx, payload.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// rejectTrialChange reads on the pool, so this connection goes back
-		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
-		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
-			"look up organization after unrearmed trial",
-			"organization has no demoted enterprise trial to re-arm")
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for re-arm").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
+	if lockedTrial.ConvertedAt.Valid {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+
+	retryOperations, auditErr := repo.New(tx).AdminGetEnterpriseTrialRetryOperationIDs(ctx, payload.ID)
+	if auditErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, auditErr, "check trial generation audit operations").LogError(ctx, logger)
+	}
+	armOperationID, armErr := uuid.Parse(retryOperations.ArmOperationID)
+	rearmArmOperationID, rearmErr := uuid.Parse(retryOperations.RearmArmOperationID)
+
+	if !lockedTrial.DemotedAt.Valid {
+		sameGeneration := armErr == nil && rearmErr == nil && armOperationID == rearmArmOperationID && retryOperations.MatchingRearmCount == 1
+		if sameGeneration && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
+			}
+			s.updateTrialFeatureCache(ctx, payload.ID)
+			if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, openrouter.AllKeyTypes); err != nil {
+				return nil, err
+			}
+			return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm retry")
+		}
+
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+	if armErr != nil {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unaudited trial", "organization trial generation has no valid arm operation")
+	}
+
+	// The lifecycle row is locked first. Every transaction advisory lock then
+	// follows in canonical order before any key-row access.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial re-arm", keyType).LogError(ctx, logger)
+		}
+	}
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{OrganizationID: payload.ID, RearmForDays: conv.SafeInt32(payload.Days)})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
-		OrganizationID: payload.ID,
-		AccountType:    rearmed.Tier,
-	})
+	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(rearmed.Tier), true)
+	if !ok || desiredLimit <= 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
+	}
+
+	reconcile := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	keyAccessChanged := false
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, change, removeErr := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, tx, payload.ID, keyType, openrouter.DisableCauseTrialDemotion, &desiredLimit)
+		switch {
+		case errors.Is(removeErr, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeInvalid, removeErr, "this server cannot update model provider key lifecycle state")
+		case removeErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, removeErr, "remove trial demotion cause from openrouter %s key", keyType).LogError(ctx, logger)
+		}
+		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
+		if change.KeyAccessChanged {
+			reconcile = append(reconcile, keyType)
+		}
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: payload.ID, AccountType: rearmed.Tier})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
 	}
-
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
 	}
 
 	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
-		OrganizationID:   payload.ID,
-		Actor:            actor,
-		ActorDisplayName: actorDisplayName,
-		ActorSlug:        nil,
-		OrganizationName: organization.Name,
-		OrganizationSlug: organization.Slug,
-		AccountType:      rearmed.Tier,
-		TrialEndsAt:      rearmed.EndsAt.Time,
+		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil,
+		OrganizationName: organization.Name, OrganizationSlug: organization.Slug, AccountType: rearmed.Tier,
+		TrialEndsAt: rearmed.EndsAt.Time, ArmAuditOperation: armOperationID.String(), KeyAccessChanged: keyAccessChanged,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
 	}
@@ -1257,16 +1440,11 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
 	}
 
-	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
-	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	s.updateTrialFeatureCache(ctx, payload.ID)
+	if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, reconcile); err != nil {
+		return nil, err
 	}
-
-	// Speakeasy-only, and the only place the email meets the entry's subject.
-	logger.InfoContext(ctx, "re-armed enterprise trial",
-		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
-	)
-
+	logger.InfoContext(ctx, "re-armed enterprise trial", attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
 }
 
@@ -1274,9 +1452,9 @@ func (s *Service) rearmTrialLocked(
 // never trialled or to one whose previous trial expired without converting or
 // being demoted.
 //
-// Keys come back up before the grant commits, matching re-arm: a partial
-// failure must leave the organization without a running trial rather than an
-// admitted trial whose keys are still disabled.
+// Key policy is recorded inside the same transaction as the grant, matching
+// re-arm: a rollback must not leave live keys on an organization that is still
+// without a running trial.
 func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload) (*gen.AdminOrganization, error) {
 	// Defence in depth against a non-HTTP caller: the design's bounds are
 	// generated into the request decoder alone. Keep this on the wide
@@ -1286,33 +1464,6 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
-	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
-	var result *gen.AdminOrganization
-	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
-		var lockedErr error
-		result, lockedErr = s.startTrialLocked(ctx, logger, payload, lockedKeys)
-		return lockedErr
-	})
-	if err == nil {
-		return result, nil
-	}
-
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
-		return nil, shareable
-	}
-	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-	}
-	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial start").LogError(ctx, logger)
-}
-
-func (s *Service) startTrialLocked(
-	ctx context.Context,
-	logger *slog.Logger,
-	payload *gen.StartTrialPayload,
-	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
-) (*gen.AdminOrganization, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin trial start transaction").LogError(ctx, logger)
@@ -1320,6 +1471,26 @@ func (s *Service) startTrialLocked(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	trials := trialsRepo.New(tx)
+	lockedTrial, err := trials.LockTrialLifecycle(ctx, payload.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Never trialled: StartTrial inserts the row.
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for start").LogError(ctx, logger)
+	default:
+		if lockedTrial.ConvertedAt.Valid || lockedTrial.DemotedAt.Valid || (lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now())) {
+			_ = tx.Rollback(ctx)
+			return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unstarted trial", "organization has no startable enterprise trial")
+		}
+	}
+
+	// The lifecycle row is locked first when it exists. Every transaction
+	// advisory lock then follows in canonical order before any key-row access.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial start", keyType).LogError(ctx, logger)
+		}
+	}
 
 	started, err := trials.StartTrial(ctx, trialsRepo.StartTrialParams{
 		OrganizationID: payload.ID,
@@ -1336,9 +1507,23 @@ func (s *Service) startTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
-	if err != nil {
-		return nil, err
+	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(started.Tier), true)
+	if !ok || desiredLimit <= 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", started.Tier).LogError(ctx, logger)
+	}
+
+	reconcile := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, change, removeErr := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, tx, payload.ID, keyType, openrouter.DisableCauseTrialDemotion, &desiredLimit)
+		switch {
+		case errors.Is(removeErr, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeInvalid, removeErr, "this server cannot update model provider key lifecycle state")
+		case removeErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, removeErr, "remove trial demotion cause from openrouter %s key", keyType).LogError(ctx, logger)
+		}
+		if change.KeyAccessChanged {
+			reconcile = append(reconcile, keyType)
+		}
 	}
 
 	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
@@ -1375,14 +1560,10 @@ func (s *Service) startTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial start transaction").LogError(ctx, logger)
 	}
 
-	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
-	for _, feature := range productfeatures.EnterpriseTrialBundle {
-		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	s.updateStartedTrialFeatureCache(ctx, payload.ID)
+	if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, reconcile); err != nil {
+		return nil, err
 	}
-	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
-	}
-	s.productFeatures.UpdateFeatureCache(ctx, payload.ID, productfeatures.FeatureSkills, true)
 
 	logger.InfoContext(ctx, "started enterprise trial",
 		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
@@ -1391,78 +1572,36 @@ func (s *Service) startTrialLocked(
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial start")
 }
 
-// reviveTrialKeys brings every platform key the organization holds back up, and
-// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
-//
-// Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
-// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
-//
-// The caller holds both per-key session locks through commit. Key revival uses
-// those locked sessions but stays outside the organization transaction, so a
-// later rollback leaves the org demoted with live keys instead of exposing an
-// admitted trial whose keys are still disabled.
-func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, error) {
-	var uncapped []openrouter.KeyType
-
-	for _, keyType := range openrouter.AllKeyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
-		}
-		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-			OrganizationID: organizationID,
-			KeyType:        string(keyType),
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			continue
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		case !row.Disabled:
-			continue
-		}
-
-		// The ceiling recorded on the row, not the policy default: a trial
-		// key is minted well below that default. A zero resolves from the
-		// pre-commit free-tier projection and is corrected after commit.
-		if row.MonthlyCredits == 0 {
-			uncapped = append(uncapped, keyType)
-		}
-		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
-		switch {
-		case errors.Is(err, ErrOpenRouterUnavailable):
-			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
-		case err != nil:
-			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
-		}
-	}
-
-	return uncapped, nil
+func (s *Service) updateTrialFeatureCache(ctx context.Context, organizationID string) {
+	s.updateEnabledFeatureCache(ctx, organizationID, productfeatures.TrialRuntimeFeatures)
 }
 
-// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
-// could only revive at the free-tier one. It must run after the commit, because
-// a nil limit resolves from the now-committed organization tier.
-//
-// A failure is logged and swallowed: the re-arm is already durable, so an error
-// here would report an armed trial as unarmed.
-func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string, keyTypes []openrouter.KeyType) {
-	for _, keyType := range keyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: missing key lock",
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
+func (s *Service) updateStartedTrialFeatureCache(ctx context.Context, organizationID string) {
+	features := make([]productfeatures.Feature, 0, len(productfeatures.EnterpriseTrialBundle)+len(productfeatures.TrialRuntimeFeatures)+1)
+	features = append(features, productfeatures.EnterpriseTrialBundle...)
+	features = append(features, productfeatures.TrialRuntimeFeatures...)
+	features = append(features, productfeatures.FeatureSkills)
+	s.updateEnabledFeatureCache(ctx, organizationID, features)
+}
+
+func (s *Service) updateEnabledFeatureCache(ctx context.Context, organizationID string, features []productfeatures.Feature) {
+	seen := make(map[productfeatures.Feature]struct{}, len(features))
+	for _, feature := range features {
+		if _, dup := seen[feature]; dup {
 			continue
 		}
-		if _, err := s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
-				attr.SlogError(err),
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
+		seen[feature] = struct{}{}
+		s.productFeatures.UpdateFeatureCache(ctx, organizationID, feature, true)
+	}
+}
+
+func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) error {
+	for _, keyType := range keyTypes {
+		if err := s.openRouter.ReconcileAPIKeyDisabled(ctx, organizationID, keyType); err != nil {
+			return oops.E(oops.CodeGatewayError, err, "reconcile openrouter %s key after trial re-arm", keyType).LogError(ctx, logger)
 		}
 	}
+	return nil
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session

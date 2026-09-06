@@ -6,6 +6,7 @@ import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
+import { foldSummariesForMembers } from "@/components/observe/insightsEmployeesData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
@@ -19,9 +20,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForUserKey } from "@/lib/identity-urn";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
@@ -63,7 +64,6 @@ import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
-import { Link } from "react-router";
 import { toast } from "sonner";
 
 ChartJS.register(
@@ -155,6 +155,7 @@ const COST_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
 ]);
 
@@ -283,7 +284,17 @@ export function InsightsAgentsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+  // One person's rows can come back as several summaries (work email,
+  // personal account email, bare user id); fold them to one summary per
+  // member so nobody renders as multiple rows or inflates the active count.
+  const users = useMemo(
+    () =>
+      foldSummariesForMembers(
+        membersData?.members ?? [],
+        usersQuery.data ?? [],
+      ),
+    [membersData, usersQuery.data],
+  );
   const roleUsage = useMemo(
     () => roleUsageQuery.data ?? [],
     [roleUsageQuery.data],
@@ -928,14 +939,13 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
-function employeeDetailSegment(user: EmployeeRow): string {
-  if (user.email) {
-    return slugify(user.displayName);
-  }
-  if (user.userId.includes("@")) {
-    return encodeURIComponent(user.userId);
-  }
-  return slugify(user.userId);
+/**
+ * The row's person, in whichever form it holds one. The resolver folds an
+ * address and an agent-side id onto the same identity, so a row keyed either
+ * way reaches the same page.
+ */
+function employeeIdentityRef(user: EmployeeRow) {
+  return identityRefForUserKey(user.email || user.userId);
 }
 
 function EmployeeCostTable({
@@ -956,7 +966,6 @@ function EmployeeCostTable({
   roleUsageLoading: boolean;
 }) {
   const PAGE_SIZE = 10;
-  const routes = useRoutes();
   const [page, setPage] = useState(0);
   const isCost = valueMode === "cost";
   const isRoleView = groupByDimension === "role";
@@ -1235,18 +1244,17 @@ function EmployeeCostTable({
         header: "",
         width: "0.6fr",
         render: (user) => (
-          <Link
-            to={routes.employees.detail.href(employeeDetailSegment(user))}
+          <IdentityLink
+            identifier={employeeIdentityRef(user)}
             className="flex items-center gap-1"
-            aria-label={`View ${user.displayName}`}
           >
             View
             <Icon name="arrow-right" />
-          </Link>
+          </IdentityLink>
         ),
       },
     ],
-    [clientFilter, isCost, routes.employees.detail],
+    [clientFilter, isCost],
   );
 
   const sortedUsers = useMemo(

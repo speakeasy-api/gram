@@ -22,8 +22,8 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 | Authoring source shipped to users | `server/internal/plugins/platform_mcp_skills/<skill-name>/SKILL.md`                      |
 | Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
 | Package tests                     | `server/internal/plugins/generate_test.go`                                               |
-| Claude package output             | `platform-mcp/skills/<skill-name>/SKILL.md`                                              |
-| Portable Agent Plugin output      | `agent-plugins/platform-mcp/skills/<skill-name>/SKILL.md`                                |
+| Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                                 |
+| Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                                   |
 | Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                      |
 
 Do not put a user-facing Platform workflow under `.agents/skills/`: that directory teaches contributors and coding agents how to work on this repository. It is not copied into the customer Platform Plugin.
@@ -102,7 +102,7 @@ Use it as the pattern for authority boundaries and evidence, not as a template f
 
 - Editing generated package output instead of `platform_mcp_skills/`.
 - Putting the shipped workflow in `.agents/skills/`, which only reaches repository contributors.
-- Reusing ordinary `PluginInfo.Skills`; that path intentionally bundles the hooks-backed skill-feedback sidecar.
+- Reusing ordinary `PluginInfo.Skills`; Platform MCP skills require the reviewed generator path and package metadata.
 - Hardcoding one skill in Go, forcing every new skill to modify the generator.
 - Claiming install, OAuth intent, or a stale status proves authorization/readiness.
 - Asking the user to paste secrets into chat instead of using the secure server-returned handoff.

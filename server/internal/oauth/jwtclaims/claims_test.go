@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -47,4 +48,39 @@ func TestUnsafeExtractSubjectOpaqueToken(t *testing.T) {
 	t.Parallel()
 	got := UnsafeExtractSubject("eyJhbGciOiJSUzI1NiJ9.notvalidbase64.sig")
 	require.Empty(t, got)
+}
+
+func TestUnsafeExtractExpiryValidJWT(t *testing.T) {
+	t.Parallel()
+	exp := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	token := buildUnsignedJWT(map[string]any{"sub": "user-123", "exp": exp.Unix()})
+	got, ok := UnsafeExtractExpiry(token)
+	require.True(t, ok)
+	require.Equal(t, exp, got.UTC())
+}
+
+func TestUnsafeExtractExpiryMissingExp(t *testing.T) {
+	t.Parallel()
+	token := buildUnsignedJWT(map[string]any{"sub": "user-123"})
+	_, ok := UnsafeExtractExpiry(token)
+	require.False(t, ok)
+}
+
+func TestUnsafeExtractExpiryNonNumericExp(t *testing.T) {
+	t.Parallel()
+	token := buildUnsignedJWT(map[string]any{"exp": "tomorrow"})
+	_, ok := UnsafeExtractExpiry(token)
+	require.False(t, ok)
+}
+
+func TestUnsafeExtractExpiryEmptyString(t *testing.T) {
+	t.Parallel()
+	_, ok := UnsafeExtractExpiry("")
+	require.False(t, ok)
+}
+
+func TestUnsafeExtractExpiryNotAJWT(t *testing.T) {
+	t.Parallel()
+	_, ok := UnsafeExtractExpiry("xoxp-opaque-token")
+	require.False(t, ok)
 }

@@ -26,7 +26,12 @@ import {
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
 import { TREND } from "@/components/chart/palette";
-import { displayName, formatWorkUnits, isAttributionDim } from "./taxonomy";
+import {
+  displayName,
+  formatWorkUnits,
+  isAttributionDim,
+  llmTokens,
+} from "./taxonomy";
 
 // Average cost per chat session for a row; 0 when there are no sessions.
 function costPerSession(row: QueryRow): number {
@@ -201,7 +206,7 @@ function sortValue(
     case "cache":
       return row.measures.cacheCreationInputTokens ?? 0;
     case "tokens":
-      return row.measures.totalTokens ?? 0;
+      return llmTokens(row.measures);
     case "units":
     // Units share is units ÷ a constant total, so it sorts identically.
     case "unitsShare":
@@ -400,7 +405,7 @@ export function CostTable({
               sort={sort}
               onSort={onSort}
             />
-            <InfoTooltip text="Tokens relative to work delivered by scored sessions." />
+            <InfoTooltip text="Tokens relative to work delivered by scored sessions. Uses the billed token population, which also counts cache writes." />
           </span>
           <span className="flex items-center gap-1">
             <HeaderButton
@@ -559,7 +564,7 @@ export function CostTable({
             : (row.measures.totalToolCalls ?? 0).toLocaleString()}
         </span>
         <span className="text-left tabular-nums whitespace-nowrap">
-          {(row.measures.totalTokens ?? 0).toLocaleString()}
+          {llmTokens(row.measures).toLocaleString()}
         </span>
       </>
     );

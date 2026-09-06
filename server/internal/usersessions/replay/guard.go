@@ -88,11 +88,13 @@ func (g *Guard) MaxHold() time.Duration {
 // An error means the store could not be consulted. The identifier's status is
 // then unknown, and an unknown identifier must be treated as a replay.
 func (g *Guard) Reserve(ctx context.Context, key Key, holdUntil time.Time) (bool, error) {
-	if key.Issuer == "" || key.Client == "" || key.ID == "" {
+	if key.Issuer == "" || key.Party == "" || key.ID == "" {
 		// An assertion with no jti reaches here only through a caller that
 		// failed to require one, and an empty part would put every such
-		// assertion on the same storage key.
-		return false, errors.New("replay: every Key part must be set")
+		// assertion on the same storage key. Subject is exempt: a client
+		// assertion legitimately leaves it empty, because Party already
+		// names the whole minting party.
+		return false, errors.New("replay: Key needs an Issuer, a Party, and an ID")
 	}
 
 	ttl := min(max(time.Until(holdUntil), minHoldTTL), g.maxHold)

@@ -35,6 +35,7 @@ func EncodeServeImageResponse(encoder func(context.Context, http.ResponseWriter)
 		if res.AccessControlAllowOrigin != nil {
 			w.Header().Set("Access-Control-Allow-Origin", *res.AccessControlAllowOrigin)
 		}
+		w.Header().Set("Cross-Origin-Resource-Policy", res.CrossOriginResourcePolicy)
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}

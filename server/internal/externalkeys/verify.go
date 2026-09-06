@@ -134,7 +134,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 		return nil, oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
 	}
 	// Each client owns a gRPC connection, so skipping this leaks one per verify.
-	defer o11y.LogDefer(ctx, logger, func() error { return client.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return client.Close() })
 
 	result := gcpkms.VerifySigningKey(ctx, client, row.GcpKmsKey.ResourceName, want)
 	if !result.Verified {
@@ -167,6 +167,7 @@ func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger
 		Present:                   row.CredentialID.Valid,
 		ImpersonateServiceAccount: row.ImpersonateServiceAccount.String,
 		HasWifConfig:              row.WifPoolID.Valid || row.WifProviderID.Valid || row.WifProjectNumber.Valid,
+		SkipProjectVerification:   row.SkipProjectVerification.Bool,
 	})
 	if err != nil {
 		return credential, "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)

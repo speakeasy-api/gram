@@ -15,6 +15,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
+import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 
@@ -51,6 +52,7 @@ function CreateTunneledMcpForm() {
   const routes = useRoutes();
   const createSource = useCreateTunneledMcpSource();
   const [name, setName] = useState("");
+  const [resourceIdentifier, setResourceIdentifier] = useState("");
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<CreatedState | null>(null);
 
@@ -64,7 +66,10 @@ function CreateTunneledMcpForm() {
     if (validateDisplayName(name) !== null) return;
 
     try {
-      const result = await createSource.mutateAsync({ name: name.trim() });
+      const result = await createSource.mutateAsync({
+        name: name.trim(),
+        resourceIdentifier: resourceIdentifier.trim() || undefined,
+      });
       setCreated(result);
       toast.success("Tunneled MCP server added");
     } catch (error) {
@@ -176,6 +181,27 @@ function CreateTunneledMcpForm() {
                 <span>{validationError}</span>
               </div>
             )}
+          </Stack>
+
+          <Stack gap={1}>
+            <label
+              htmlFor="tunneled-mcp-resource-identifier"
+              className="text-sm leading-none font-medium"
+            >
+              Resource identifier{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </label>
+            <Input
+              id="tunneled-mcp-resource-identifier"
+              placeholder="https://mcp.internal.example.com/mcp"
+              value={resourceIdentifier}
+              onChange={(value) => setResourceIdentifier(value)}
+            />
+            <Text muted small>
+              {`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if unknown — it can be recorded later in the source settings.`}
+            </Text>
           </Stack>
 
           <Stack gap={1}>

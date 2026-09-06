@@ -52,6 +52,8 @@ export function buildShadowMCPInventoryServersForUserQuery(
     queryKey: queryKeyShadowMCPInventoryServersForUser({
       projectId: request.projectId,
       userKeys: request.userKeys,
+      from: request.from,
+      to: request.to,
       limit: request.limit,
       gramSession: request.gramSession,
     }),
@@ -83,6 +85,8 @@ export function queryKeyShadowMCPInventoryServersForUser(
   parameters: {
     projectId: string;
     userKeys: Array<string>;
+    from?: Date | undefined;
+    to?: Date | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
   },

@@ -104,3 +104,53 @@ func ValidateRedirectURI(raw string) error {
 		return nil
 	}
 }
+
+// ResourceIndicatorsFrom extracts every RFC 8707 `resource` parameter from a
+// query string or form body, in submission order. RFC 8707 §2 permits repeating
+// the parameter to request a token usable at several resources, so reading only
+// the first value would leave the rest unvalidated.
+//
+// The returned slice distinguishes the three cases that matter: empty when the
+// parameter was absent, which is permitted; a single element for the ordinary
+// request; and one element per submission when repeated. An explicitly empty
+// `resource=` arrives as a one-element slice holding the empty string, which is
+// a malformed value rather than an omission — the RFC requires an absolute URI —
+// and is rejected as such by ValidateResourceIndicators.
+func ResourceIndicatorsFrom(values url.Values) []string {
+	return values["resource"]
+}
+
+// ValidateResourceIndicators checks every submitted RFC 8707 `resource` against
+// canonical, the resource identifier for the address the request arrived on. No
+// resources at all is accepted: RFC 8707 §2 leaves demanding the parameter to
+// the authorization server's discretion, and clients predating MCP 2026-07-28 do
+// not send one.
+//
+// Every value must match. This surface mints a token audienced to exactly one
+// endpoint, so it cannot honour a request naming any other resource, and
+// accepting a matching value alongside a mismatched one would confirm a binding
+// that was never made.
+//
+// Comparison is byte equality. MCP 2026-07-28 asks implementations to accept
+// uppercase scheme and host components for robustness; this surface
+// deliberately declines, holding `resource` to the simple string comparison
+// (RFC 3986 §6.2.1) that RFC 9207 §2.4 mandates for `iss`. The two identifiers
+// are minted from one base URL and published in the same metadata documents,
+// so a client echoing the value it read back matches on the first attempt.
+//
+// canonical is address-specific — one MCP server is reachable under several
+// identifiers (custom domain or platform origin, each under two route bases).
+// Callers must derive it from the request being validated, never from a stored
+// or global URL.
+func ValidateResourceIndicators(resources []string, canonical string) error {
+	for _, resource := range resources {
+		if resource != canonical {
+			// The submitted value is deliberately not echoed: on the authorize
+			// leg this description is carried in a redirect the client renders.
+			// The expected value is already public in the protected-resource
+			// metadata.
+			return &Error{Code: "invalid_target", Description: fmt.Sprintf("resource does not identify this MCP server (expected %q)", canonical)}
+		}
+	}
+	return nil
+}

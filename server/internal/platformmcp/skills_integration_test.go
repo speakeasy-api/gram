@@ -270,7 +270,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	siteURL, err := url.Parse("https://app.getgram.test")
 	require.NoError(t, err)
-	skills := skillsservice.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), nil, siteURL)
+	skills := skillsservice.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), nil, nil, siteURL)
 
 	_, err = featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
 		OrganizationID: principal.OrganizationID,
@@ -344,7 +344,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 
 	runtime := NewRuntimeWithLifecycle(
 		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, &testAuthorizer{},
-		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, CatalogDescriptor{},
+		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
 	)
 	server := httptest.NewServer(runtime.Handler())
 	t.Cleanup(server.Close)

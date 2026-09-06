@@ -26,10 +26,39 @@ const (
 	// implementation-defined band reserved by JSON-RPC 2.0.
 	RejectCodeServerError = -32000
 
+	// RejectCodeForbidden is the shared MCP application-level denial code.
+	RejectCodeForbidden = int(oops.MCPCodeForbidden)
+
 	// RejectCodeHeaderMismatch reports a 2026-07-28 mirrored request header
 	// that disagrees with the JSON-RPC body it claims to describe.
 	RejectCodeHeaderMismatch = -32020
 )
+
+const KillswitchRejectionCode = "mcp_tool_calls_paused"
+
+// KillswitchRejectionData is the complete public machine-readable payload for
+// a matched mcp_tool_execution prescription.
+type KillswitchRejectionData struct {
+	Code string `json:"code"`
+}
+
+// NewKillswitchMatchRejection preserves the selected external note exactly.
+func NewKillswitchMatchRejection(externalNote string) *RejectError {
+	return &RejectError{
+		Code:    RejectCodeForbidden,
+		Message: externalNote,
+		Data:    KillswitchRejectionData{Code: KillswitchRejectionCode},
+	}
+}
+
+// NewKillswitchInfrastructureRejection fails closed without match language.
+func NewKillswitchInfrastructureRejection() *RejectError {
+	return &RejectError{
+		Code:    RejectCodeInternalError,
+		Message: oops.CodeUnavailable.UserMessage(),
+		Data:    nil,
+	}
+}
 
 // RejectError is the typed rejection shape an interceptor can return when it
 // wants the proxy to synthesize a JSON-RPC error response (or, on the SSE

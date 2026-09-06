@@ -36,6 +36,10 @@ export type MetaMcpServer = {
    */
   id: string;
   /**
+   * The number of live members. Only populated by listMetaMcpServers.
+   */
+  memberCount?: number | undefined;
+  /**
    * The display name of the meta MCP server
    */
   name: string;
@@ -77,6 +81,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    member_count: z.optional(z.int()),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
@@ -90,6 +95,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "member_count": "memberCount",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

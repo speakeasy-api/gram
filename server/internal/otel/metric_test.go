@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	oteldialect "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -15,10 +16,10 @@ func TestEnrichMetricCombinesResourceAttributesInEnricherOrder(t *testing.T) {
 	t.Parallel()
 
 	enrichers := []MetricEnricher{
-		stubMetricEnricher{name: "first", enrich: func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
+		stubMetricEnricher{name: "first", enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			return []attribute.KeyValue{attribute.String("first", "one")}, nil
 		}},
-		stubMetricEnricher{name: "second", enrich: func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
+		stubMetricEnricher{name: "second", enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			return []attribute.KeyValue{attribute.String("second", "two")}, nil
 		}},
 	}
@@ -45,7 +46,7 @@ func TestEnrichMetricReturnsEnricherErrors(t *testing.T) {
 		t.Context(),
 		newMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
 		new(otelv1.InboundMetric),
-		[]MetricEnricher{stubMetricEnricher{name: "failing", enrich: func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
+		[]MetricEnricher{stubMetricEnricher{name: "failing", enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			return nil, expected
 		}}},
 	)
@@ -61,7 +62,7 @@ func TestEnrichMetricConvertsPanicsToErrors(t *testing.T) {
 		t.Context(),
 		newMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
 		new(otelv1.InboundMetric),
-		[]MetricEnricher{stubMetricEnricher{name: "panicking", enrich: func(context.Context, *otelv1.InboundMetric) ([]attribute.KeyValue, error) {
+		[]MetricEnricher{stubMetricEnricher{name: "panicking", enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			panic("boom")
 		}}},
 	)

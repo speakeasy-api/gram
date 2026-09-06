@@ -201,13 +201,14 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 	}
 
 	rows, err := t.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       authCtx.ProjectID.String(),
-		SkillIDs:        skillIDs,
-		SkillVersionIDs: nil,
-		From:            from,
-		To:              to,
-		IntervalSeconds: int64(insightInterval.Seconds()),
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+		SkillIDs:            skillIDs,
+		SkillVersionIDs:     nil,
+		From:                from,
+		To:                  to,
+		IntervalSeconds:     int64(insightInterval.Seconds()),
+		IncludeSessionUsage: true,
 	})
 	if err != nil {
 		return fmt.Errorf("query skill insights: %w", err)

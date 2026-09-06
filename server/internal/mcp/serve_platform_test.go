@@ -195,37 +195,6 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.Equal(t, "[REDACTED]", params["api_token"], "secret-shaped params must be scrubbed")
 }
 
-func TestServePlatformToolset_PreservesShareableToolError(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	assistantID := createAssistant(t, ti, authCtx, "Feedback")
-	token, _ := mintThreadAssistantToken(t, ti, authCtx, assistantID, "feedback-error")
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "tools/call",
-		"params": map[string]any{
-			"name": platformtools.ToolNamePlatformSkillFeedback,
-			"arguments": map[string]any{
-				"skill":   "missing-skill",
-				"outcome": "did_not_help",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	w, err := servePlatformHTTP(t, ti, platformtools.AssistantsPlatformToolsetSlug, body, token)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "call skills_load for this skill before submitting feedback")
-	require.NotContains(t, w.Body.String(), "Internal error")
-}
-
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
 	t.Helper()
 	a, err := assistantsrepo.New(ti.conn).CreateAssistant(t.Context(), assistantsrepo.CreateAssistantParams{
@@ -352,6 +321,13 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	// The assistant only ever acts in its own project, so the project the
 	// policy supplies is not advertised as an argument for a model to choose.
 	require.NotContains(t, body, `"project_id"`, "project arguments are injected, not requested")
+
+	// The catalogue is narrowed by the active organization's product features
+	// and embeds that organization's project in each tool, so it is never
+	// shareable with another caller.
+	var envelope map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	requireCacheHints(t, envelope["result"], "private")
 }
 
 func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {

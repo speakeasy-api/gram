@@ -5,8 +5,10 @@ import type { ReactNode } from "react";
 // Chrome-level gate for the Platform Admin pages. Mirrors the visibility rule
 // of the old floating Developer Toolkit: always available in local dev (so
 // non-admins can reach the platform-admin impersonation toggle), platform
-// admins only everywhere else. Presentation only — every endpoint these pages
-// call enforces the platform-admin flag server-side.
+// admins only everywhere else. Presentation only — authorization is enforced
+// server-side by every endpoint these pages call: staff-managed entitlement
+// toggles require the platform-admin flag, org-self-serve features surfaced
+// here (e.g. Platform MCP access) require org:admin.
 export function PlatformAdminGate({
   children,
 }: {

@@ -297,7 +297,8 @@ SELECT
   gic.impersonate_service_account,
   gic.wif_pool_id,
   gic.wif_provider_id,
-  gic.wif_project_number
+  gic.wif_project_number,
+  gic.skip_project_verification
 FROM external_keys AS ek
 JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 LEFT JOIN external_credentials AS ec
@@ -327,6 +328,7 @@ type GetGcpKmsKeyForVerifyRow struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   pgtype.Bool
 }
 
 // Loads everything the verify probe needs in one read: the key, its provider
@@ -374,6 +376,7 @@ func (q *Queries) GetGcpKmsKeyForVerify(ctx context.Context, arg GetGcpKmsKeyFor
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 	)
 	return i, err
 }

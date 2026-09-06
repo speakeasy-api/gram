@@ -81,11 +81,12 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				contentType              string
-				contentLength            int64
-				lastModified             string
-				accessControlAllowOrigin *string
-				err                      error
+				contentType               string
+				contentLength             int64
+				lastModified              string
+				accessControlAllowOrigin  *string
+				crossOriginResourcePolicy string
+				err                       error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
 			if contentTypeRaw == "" {
@@ -112,10 +113,15 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			if accessControlAllowOriginRaw != "" {
 				accessControlAllowOrigin = &accessControlAllowOriginRaw
 			}
+			crossOriginResourcePolicyRaw := resp.Header.Get("Cross-Origin-Resource-Policy")
+			if crossOriginResourcePolicyRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("cross_origin_resource_policy", "header"))
+			}
+			crossOriginResourcePolicy = crossOriginResourcePolicyRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("assets", "serveImage", err)
 			}
-			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin)
+			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

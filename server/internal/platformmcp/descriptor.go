@@ -43,6 +43,10 @@ const (
 	// ProjectScopeExplicit: the caller names the project. An external client
 	// spans every project in its organization, so it has to say which.
 	ProjectScopeExplicit
+	// ProjectScopeDefaultable: an external caller may name an exact project or
+	// omit both selectors to use the organization's literal default project. The
+	// assistant still injects its own exact project and hides the selectors.
+	ProjectScopeDefaultable
 )
 
 // ToolMeta is what a tool declares beyond its schemas: who may call it, and
@@ -78,6 +82,7 @@ type Descriptor struct {
 // returns these as an error result; a direct caller receives this error, so
 // the reason survives instead of being replaced by an empty payload.
 type ToolRefusalError struct {
+	Code    string
 	Payload string
 }
 
@@ -130,13 +135,20 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
-	server      *mcp.Server
-	descriptors []Descriptor
-	resources   []ResourceDescriptor
+	server        *mcp.Server
+	descriptors   []Descriptor
+	resources     []ResourceDescriptor
+	riskTelemetry RiskTelemetry
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}}
+}
+
+func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
+	if r != nil && telemetry != nil {
+		r.riskTelemetry = telemetry
+	}
 }
 
 // Descriptors returns everything registered, before any audience filter.
@@ -282,10 +294,10 @@ func refusalFromResult(result *mcp.CallToolResult) (*ToolRefusalError, bool) {
 	}
 	for _, content := range result.Content {
 		if text, ok := content.(*mcp.TextContent); ok && text.Text != "" {
-			return &ToolRefusalError{Payload: text.Text}, true
+			return &ToolRefusalError{Code: "", Payload: text.Text}, true
 		}
 	}
-	return &ToolRefusalError{Payload: `{"code":"` + unavailableCode + `"}`}, true
+	return &ToolRefusalError{Code: unavailableCode, Payload: `{"code":"` + unavailableCode + `"}`}, true
 }
 
 // prepareInputSchema returns one schema for all three consumers: MCP transport
@@ -317,12 +329,16 @@ func prepareInputSchema[In any](tool *mcp.Tool) ([]byte, *jsonschema.Resolved) {
 	return encoded, resolved
 }
 
-// wireTypeSchemas overrides schema inference for types whose JSON form does not
-// match their Go shape. Inference reflects on the Go type and cannot see a
-// custom MarshalJSON, so a type that serializes as something other than its
-// struct has to say so here.
+// wireTypeSchemas overrides schema inference for types whose JSON contract is
+// narrower than their Go shape. Inference cannot see a custom MarshalJSON or a
+// named string's closed vocabulary, so those types declare their wire schema
+// here.
 var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 	reflect.TypeFor[SubjectCount](): subjectCountSchema,
+	reflect.TypeFor[SetupCategory](): {
+		Type: "string",
+		Enum: setupCategoryEnumValues(),
+	},
 }
 
 // inferOutputSchema derives the schema the tool advertises for its result,

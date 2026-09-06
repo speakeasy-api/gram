@@ -348,8 +348,7 @@ func (p *ToolExtractor) doSpeakeasy(
 			ctx,
 			*result.def,
 		); err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) {
+			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 				// Special logging for path constraint violations
 				if pgErr.ConstraintName == "http_tool_definitions_path_check" {
 					logger.ErrorContext(

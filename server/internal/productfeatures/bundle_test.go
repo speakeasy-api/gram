@@ -11,6 +11,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+		enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, enabled, "feature %s should be enabled for a new organization", feature)
+	}
+}
+
 func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +91,17 @@ func TestSetTrialRuntimeFeaturesTx_TogglesOnlyRuntimeFeatures(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.True(t, ssoEnabled)
+		for _, feature := range productfeatures.OrganizationDefaultFeatures {
+			if feature == productfeatures.FeaturePlatformMCP {
+				continue
+			}
+			defaultEnabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+				OrganizationID: organizationID,
+				FeatureName:    string(feature),
+			})
+			require.NoError(t, err)
+			require.Truef(t, defaultEnabled, "default feature %s should survive trial runtime toggles", feature)
+		}
 	}
 
 	for range 2 {

@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { Column, Table } from "@/components/ui/Table";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useMemo, useState, ReactElement } from "react";
+import { useNavigate } from "react-router";
 
 function getInitials(name: string) {
   return name
@@ -187,9 +189,12 @@ function ToolRow({ tool }: { tool: Tool }) {
 function AccessBadge({
   level,
   onClick,
+  onGrant,
 }: {
   level: AccessLevel;
   onClick?: () => void;
+  /** Deep-link to grant this scope; renders "No access" as a click target. */
+  onGrant?: () => void;
 }) {
   switch (level) {
     case "full":
@@ -206,7 +211,16 @@ function AccessBadge({
       );
     case "tools":
       return (
-        <button type="button" onClick={onClick} className="cursor-pointer">
+        <button
+          type="button"
+          // The row underneath navigates to the grant flow; this button only
+          // opens the tool drill-down sheet.
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.();
+          }}
+          className="cursor-pointer"
+        >
           <Badge
             variant="neutral"
             className="hover:bg-accent transition-colors"
@@ -216,8 +230,22 @@ function AccessBadge({
         </button>
       );
     case "none":
+      if (!onGrant) {
+        return (
+          <span className="text-muted-foreground/50 text-sm">No access</span>
+        );
+      }
       return (
-        <span className="text-muted-foreground/50 text-sm">No access</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onGrant();
+          }}
+          className="text-muted-foreground/50 hover:text-foreground cursor-pointer text-sm underline-offset-2 hover:underline"
+        >
+          No access
+        </button>
       );
   }
 }
@@ -253,10 +281,22 @@ export function MCPTeamAccessTab({
   tools?: Tool[];
 }): ReactElement | null {
   const orgRoutes = useOrgRoutes();
+  const navigate = useNavigate();
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData, isLoading: rolesLoading } = useRoles();
 
   const [sheetData, setSheetData] = useState<ToolDetailSheet | null>(null);
+
+  // Deep-links into the Access page's pre-filled grant dialog (the same one
+  // access-request emails open), scoped to this member and this server.
+  const goToGrantAccess = (row: MemberAccess, scope: string) => {
+    const params = new URLSearchParams({
+      grant_user: row.member.id,
+      scope,
+      resource_id: resourceId,
+    });
+    void navigate(`${orgRoutes.access.roles.href()}?${params.toString()}`);
+  };
 
   const memberAccess = useMemo((): MemberAccess[] => {
     const members = membersData?.members ?? [];
@@ -332,9 +372,11 @@ export function MCPTeamAccessTab({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <Text variant="body" className="truncate font-medium">
-              {row.member.name}
-            </Text>
+            <IdentityLink identifier={{ userId: row.member.id }}>
+              <Text variant="body" className="truncate font-medium">
+                {row.member.name}
+              </Text>
+            </IdentityLink>
             <Text
               variant="body"
               className="text-muted-foreground truncate text-xs"
@@ -371,6 +413,7 @@ export function MCPTeamAccessTab({
               ? () => openToolSheet(row, "mcp:read", "Read")
               : undefined
           }
+          onGrant={() => goToGrantAccess(row, "mcp:read")}
         />
       ),
     },
@@ -386,6 +429,7 @@ export function MCPTeamAccessTab({
               ? () => openToolSheet(row, "mcp:write", "Write")
               : undefined
           }
+          onGrant={() => goToGrantAccess(row, "mcp:write")}
         />
       ),
     },
@@ -401,6 +445,7 @@ export function MCPTeamAccessTab({
               ? () => openToolSheet(row, "mcp:connect", "Connect")
               : undefined
           }
+          onGrant={() => goToGrantAccess(row, "mcp:connect")}
         />
       ),
     },
@@ -420,7 +465,7 @@ export function MCPTeamAccessTab({
           <Table.Header columns={columns} />
           {memberAccess.length === 0 ? (
             <Table.NoResultsMessage>
-              <div className="px-4 py-6 text-center">
+              <div className="text-center">
                 No team members have access to this server.
               </div>
             </Table.NoResultsMessage>
@@ -429,6 +474,9 @@ export function MCPTeamAccessTab({
               columns={columns}
               data={memberAccess}
               rowKey={(row) => row.member.id}
+              // Row click lands on the Access page's grant dialog for this
+              // member and server; connect is the "can use this server" scope.
+              onRowClick={(row) => goToGrantAccess(row, "mcp:connect")}
             />
           )}
           <Table.Row>

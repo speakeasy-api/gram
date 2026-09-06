@@ -83,6 +83,30 @@ func TestOperationBudgetThrottlesAConnectionlessAssistantBeforeOrganization(t *t
 	require.Empty(t, organization.keys)
 }
 
+func TestRiskMutationBudgetUsesOnlyOrganizationForConnectionlessAssistant(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).AllowConnectionOrOrganization(t.Context(), Principal{UserID: "user", OrganizationID: "organization", ClientID: AssistantClientID, Surface: SurfaceProjectAssistant})
+
+	require.NoError(t, err)
+	require.Empty(t, connection.keys)
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
+func TestRiskMutationBudgetStillChargesOAuthConnectionFirst(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).AllowConnectionOrOrganization(t.Context(), Principal{UserID: "user", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation"})
+
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+	require.Equal(t, []string{"connection"}, connection.keys)
+	require.Empty(t, organization.keys)
+}
+
 func TestOperationBudgetRejectsAConnectionClaimedByGenerationAlone(t *testing.T) {
 	t.Parallel()
 

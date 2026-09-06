@@ -530,7 +530,8 @@ SELECT EXISTS (
      AND project.deleted IS FALSE
     JOIN user_session_issuers AS issuer
       ON issuer.id = server.user_session_issuer_id
-     AND issuer.project_id = project.id
+     AND (issuer.project_id = project.id
+          OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
      AND issuer.deleted IS FALSE
     JOIN mcp_endpoints AS endpoint
       ON endpoint.mcp_server_id = server.id
@@ -692,6 +693,7 @@ INSERT INTO platform_mcp_operation_receipts (
     input_hash,
     status,
     result_code,
+    result_payload,
     expires_at
 ) VALUES (
     @organization_id,
@@ -706,6 +708,7 @@ INSERT INTO platform_mcp_operation_receipts (
     @input_hash,
     @status,
     @result_code,
+    @result_payload,
     @expires_at
 )
 RETURNING *;
@@ -724,6 +727,7 @@ UPDATE platform_mcp_operation_receipts
 SET registration_id = @registration_id,
     status = @status,
     result_code = @result_code,
+    result_payload = @result_payload,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -2438,6 +2442,117 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
 
+-- Session recall (list_my_sessions / continue_session). Every read below
+-- fuses tenancy and ownership into the row filter — organization, owner
+-- user_id, not-deleted, and the personal-account exclusion — rather than
+-- fetching then authorizing. An unresolved actor (empty user_id) matches no
+-- rows because chats.user_id is never the empty string: fail-closed.
+-- Personal-account sessions are excluded from BOTH list and continue:
+-- personal-account ownership attribution is partly device-bridge-inferred,
+-- which is acceptable for titles but not for transcripts (see the
+-- ListOwnedChatSessionMeta warning in agent/queries.sql). The predicate
+-- (ua.id IS NULL OR ua.account_type <> 'personal') also drops rows whose
+-- account_type is NULL — the comparison evaluates to NULL — and that is
+-- deliberate: an unclassified account might be personal, so it gets the
+-- same fail-closed treatment.
+
+-- name: ListOwnedChatSessionsForRecall :many
+SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+FROM chats c
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.updated_at DESC
+LIMIT @row_limit;
+
+-- name: GetOwnedChatForRecall :one
+SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @chat_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal');
+
+-- name: ListOwnedChatTranscriptMessagesForRecall :many
+-- Latest generation only: compaction/edit rewrites bump chat_messages.generation
+-- and the digest must reflect the current conversation view, not superseded
+-- rows. chat_messages.project_id is NULL on old rows — always filtered, so
+-- pre-project-stamp rows fail closed rather than leaking across tenants.
+-- Newest rows first under @row_limit so the cap keeps the end of a long
+-- session — the part a handoff digest is about — and the service restores
+-- chronological order. Content is never truncated here: finding-span
+-- verification compares exact bytes, so per-message bounding happens after
+-- masking, not at the read.
+SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE cm.chat_id = @chat_id
+  AND cm.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = @chat_id
+      AND project_id = @project_id
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT @row_limit;
+
+-- name: ListRiskFindingSpansForRecall :many
+-- Findings that drive inline masking of the recall digest. Message-anchored
+-- rows only (the digest does not render content parts), with the canonical
+-- suppression filters from risk's ListRiskResultsByChatFound: found, not
+-- excluded, not swept as false positive, policy still enabled and not deleted.
+-- Latest generation only, matching the transcript read: findings on
+-- superseded generations mask nothing the digest renders, so loading them
+-- would only let long, repeatedly compacted sessions inflate the scan.
+SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE cm.chat_id = @chat_id
+  AND rr.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = @chat_id
+      AND project_id = @project_id
+  )
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
+
+-- name: InsertChatSessionRecallLink :exec
+-- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
+-- edge always has a NULL child: the OAuth principal carries no harness
+-- session id, so the continuation is unknowable at recall time and each
+-- recall records a distinct event. The ON CONFLICT clause is therefore inert
+-- today (the partial unique index only covers non-NULL children) and kept
+-- verbatim for forward safety.
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  @project_id, @organization_id, @parent_chat_id, @child_chat_id,
+  @parent_session_id, @child_session_id, 'recall', @target_harness, @source_surface,
+  @actor_email, @device_serial, @device_hostname
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
 -- Plugin inventory. Plugins are the unit an administrator installs and reasons
 -- about, so this surface reads them directly rather than inferring them from
 -- distribution targets. Membership is derived from plugin_servers and
@@ -2468,9 +2583,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2478,6 +2593,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND projects.organization_id = @organization_id
@@ -2508,9 +2641,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2518,6 +2651,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.id = @plugin_id
   AND p.project_id = @project_id
   AND p.organization_id = @organization_id
@@ -2590,6 +2741,130 @@ WHERE sd.plugin_id = @plugin_id
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY sk.name ASC
+LIMIT @result_limit;
+
+-- name: ListPlatformMCPPluginAssignments :many
+-- Reads the exact plugin's complete assignment set only after proving the
+-- plugin belongs to the caller's organization and project. The complete set is
+-- required for the optimistic-concurrency version; no principal leaves this
+-- internal query boundary.
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentOptions :many
+-- Resolves only the bounded assignment options this Platform response can use.
+-- selected_principal_urns is empty for the organization-wide chooser and set to
+-- one plugin's current assignments for the detail view.
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_roles.organization_id = @organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+), assignment_options AS (
+  SELECT
+    0::int AS kind_order,
+    ''::text AS sort_key,
+    'everyone'::text AS kind,
+    'Everyone'::text AS display_name,
+    NULL::bigint AS member_count,
+    '*'::text AS principal_urn
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR '*' = ANY(@selected_principal_urns::text[])
+  UNION ALL
+  SELECT
+    1::int,
+    active_roles.workos_slug,
+    'role'::text,
+    active_roles.workos_name,
+    COUNT(DISTINCT ora.user_id)::bigint,
+    ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text
+  FROM active_roles
+  LEFT JOIN organization_role_assignments ora
+    ON ora.organization_id = @organization_id
+    AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+    AND ora.user_id IS NOT NULL
+    AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY(@selected_principal_urns::text[])
+  GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
+  UNION ALL
+  SELECT
+    2::int,
+    dg.name,
+    'directory_group'::text,
+    dg.name,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_group:' || dg.id::text)::text
+  FROM directory_groups dg
+  LEFT JOIN directory_user_group_memberships m
+    ON m.directory_group_id = dg.id
+    AND m.deleted IS FALSE
+  LEFT JOIN directory_users du
+    ON du.id = m.directory_user_id
+    AND du.organization_id = dg.organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+  WHERE dg.organization_id = @organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY(@selected_principal_urns::text[])
+    )
+  GROUP BY dg.id, dg.name
+  UNION ALL
+  SELECT
+    3::int,
+    attribute.key || ':' || attribute.value,
+    'directory_attribute'::text,
+    attribute.key || ': ' || attribute.value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_attribute:' ||
+      translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+      translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_'))::text
+  FROM directory_users du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) attribute(key, value)
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
+    AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY(@selected_principal_urns::text[])
+    )
+  GROUP BY attribute.key, attribute.value
+)
+SELECT kind, display_name, member_count, principal_urn
+FROM assignment_options
+WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+   OR principal_urn = ANY(@selected_principal_urns::text[])
+ORDER BY kind_order, sort_key, principal_urn
 LIMIT @result_limit;
 
 -- name: ResolvePlatformMCPPluginTarget :many

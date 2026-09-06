@@ -61,6 +61,10 @@ type Client struct {
 	// addExternalOAuthServer endpoint.
 	AddExternalOAuthServerDoer goahttp.Doer
 
+	// UpdateExternalOAuthServer Doer is the HTTP client used to make requests to
+	// the updateExternalOAuthServer endpoint.
+	UpdateExternalOAuthServerDoer goahttp.Doer
+
 	// RemoveOAuthServer Doer is the HTTP client used to make requests to the
 	// removeOAuthServer endpoint.
 	RemoveOAuthServerDoer goahttp.Doer
@@ -104,6 +108,7 @@ func NewClient(
 		CheckMCPSlugAvailabilityDoer:   doer,
 		CloneToolsetDoer:               doer,
 		AddExternalOAuthServerDoer:     doer,
+		UpdateExternalOAuthServerDoer:  doer,
 		RemoveOAuthServerDoer:          doer,
 		SetUserSessionIssuerDoer:       doer,
 		SetToolVariationsGroupDoer:     doer,
@@ -374,6 +379,30 @@ func (c *Client) AddExternalOAuthServer() goa.Endpoint {
 		resp, err := c.AddExternalOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "addExternalOAuthServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateExternalOAuthServer returns an endpoint that makes HTTP requests to
+// the toolsets service updateExternalOAuthServer server.
+func (c *Client) UpdateExternalOAuthServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateExternalOAuthServerRequest(c.encoder)
+		decodeResponse = DecodeUpdateExternalOAuthServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateExternalOAuthServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateExternalOAuthServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "updateExternalOAuthServer", err)
 		}
 		return decodeResponse(resp)
 	}

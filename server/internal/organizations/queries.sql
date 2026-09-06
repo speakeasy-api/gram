@@ -44,6 +44,23 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: LockOrganizationForInviteAcceptance :one
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = @organization_id
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> @user_id
+);
+
 -- name: GetOrganizationMetadataBySlug :one
 SELECT *
 FROM organization_metadata
@@ -90,6 +107,16 @@ SELECT EXISTS(
     AND organization_user_relationships.organization_id = @organization_id
     AND organization_user_relationships.deleted_at IS NULL
 ) AS exists;
+
+-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = @user_id
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u;
 
 -- name: GetOrganizationUserRelationship :one
 SELECT *
@@ -296,14 +323,15 @@ WHERE id = @id
   AND expires_at > clock_timestamp()
 RETURNING *;
 
--- name: AcceptInvitation :execrows
+-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND state = 'pending'
-  AND expires_at > clock_timestamp();
+  AND expires_at > clock_timestamp()
+RETURNING *;
 
 -- name: AcceptPendingInvitationForMember :one
 UPDATE organization_invitations
@@ -750,3 +778,64 @@ LEFT JOIN global_roles gr
 WHERE ora.organization_id = @organization_id
   AND ora.user_id IS NOT NULL
   AND ora.deleted_at IS NULL;
+
+-- name: ListOrganizationSetupTasks :many
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id;
+
+-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT *
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
+-- name: GetOrganizationSetupTask :one
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id
+  AND task_key = @task_key;
+
+-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
+) VALUES (
+    @organization_id,
+    @task_key,
+    @status,
+    sqlc.narg('assignee_user_id')::text,
+    sqlc.narg('assignee_email')::text,
+    sqlc.narg('hidden_at')::timestamptz
+)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetSetupTaskCompletionFacts :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = @organization_id
+      AND deleted IS FALSE
+    ORDER BY created_at, id
+    LIMIT 1
+)
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        JOIN default_project ON default_project.id = plugin_github_connections.project_id
+    ) AS marketplace_published
+FROM organization_metadata
+WHERE organization_metadata.id = @organization_id;

@@ -44,6 +44,8 @@ function PageBody({
   return (
     // Nest the max-width container inside another div so that the entire page area remains scrollable
     <div
+      // Anchor for useTabScrollReset: the one scroll container a page owns.
+      data-page-scroll=""
       className={cn(
         // flex-1 + min-h-0 ensures this pane occupies exactly the remaining
         // space in PageLayout's flex column (after PageHeader). Using h-full
@@ -113,7 +115,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           direction="horizontal"
           justify="space-between"
           align="center"
-          className="mb-6"
+          className="mb-6 max-sm:flex-col max-sm:items-stretch max-sm:gap-4"
         >
           <Stack gap={2} className="min-w-0">
             {slots.title}
@@ -123,7 +125,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
             direction="horizontal"
             gap={2}
             align="center"
-            className="shrink-0"
+            className="shrink-0 max-sm:self-end"
           >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}

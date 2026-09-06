@@ -226,6 +226,8 @@ export function setSkillEfficacyInsightsData(
       to?: Date | undefined;
       includeVersions?: boolean | undefined;
       includeScoredSessions?: boolean | undefined;
+      includeSessionCost?: boolean | undefined;
+      includeRegressionSignal?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -248,6 +250,8 @@ export function invalidateSkillEfficacyInsights(
       to?: Date | undefined;
       includeVersions?: boolean | undefined;
       includeScoredSessions?: boolean | undefined;
+      includeSessionCost?: boolean | undefined;
+      includeRegressionSignal?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;

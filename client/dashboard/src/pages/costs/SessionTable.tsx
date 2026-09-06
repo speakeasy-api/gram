@@ -3,6 +3,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
+import { llmTokens } from "./taxonomy";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -70,7 +71,7 @@ function sortValue(session: SessionSummary, key: SortKey): number {
     case "cost":
       return session.totalCost;
     case "tokens":
-      return session.totalTokens;
+      return llmTokens(session);
     case "tools":
       return session.toolCallCount;
     case "messages":
@@ -139,6 +140,9 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(120px,24rem)",
     render: (s) => (
       <div className="flex min-w-0 items-center">
+        {/* Not a link: the row is a button that opens the session, and an
+            anchor inside it is invalid markup. The session's own detail names
+            the owner and links from there. */}
         <span className="truncate">{displayOrDash(s.userEmail)}</span>
       </div>
     ),
@@ -184,7 +188,7 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(max-content,1fr)",
     sortKey: "tokens",
     render: (s) => (
-      <span className={NUM_CELL}>{s.totalTokens.toLocaleString()}</span>
+      <span className={NUM_CELL}>{llmTokens(s).toLocaleString()}</span>
     ),
   },
   {

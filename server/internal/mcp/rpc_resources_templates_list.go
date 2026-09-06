@@ -30,6 +30,9 @@ func handleResourcesTemplatesList(ctx context.Context, logger *slog.Logger, req 
 			ResourceTemplates: make([]*resourceTemplateListEntry, 0),
 		},
 		serverIdentity: serverInfoHostedToolset,
+		// The empty list is a constant, so every caller receives it
+		// identically regardless of server visibility or authentication.
+		cacheHints: cacheHintsCallerUniform,
 	}
 
 	bs, err := json.Marshal(result)

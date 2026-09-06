@@ -16,9 +16,15 @@
 // resolution rules. The second half — an issuer's own custom URL rows — is a
 // database lookup the caller performs, and only when Evaluate asks for it.
 //
+// The resting policy admits everything, so the catalog would go unexercised
+// were it consulted only to refuse. EvaluateShadow is how it stays
+// exercised: a mode that admits unconditionally still asks what the curated
+// allowlist would have decided, and records the answer.
+//
 // Layout is one type per file:
 //
-//   - admission.go: Evaluate, the entry point combining the rest
+//   - admission.go: Evaluate, the entry point combining the rest, plus
+//     EvaluateShadow, the measurement an admitting mode records instead
 //   - mode.go: Mode and the rules resolving a stored column value onto one
 //   - decision.go: Decision, what Evaluate returns
 //   - outcome.go: Outcome, whether a client was admitted, denied, or needs

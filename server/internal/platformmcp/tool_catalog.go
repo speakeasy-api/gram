@@ -46,6 +46,8 @@ type CandidateInspection struct {
 	Authentication         string                      `json:"authentication,omitempty"`
 	OAuthDiscovery         string                      `json:"oauth_discovery,omitempty"`
 	SetupIntent            string                      `json:"setup_intent,omitempty"`
+	SetupCategory          SetupCategory               `json:"setup_category,omitempty"`
+	Actions                []RepairAction              `json:"actions,omitempty"`
 }
 
 func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
@@ -133,20 +135,21 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 		}
 		if remoteURL != "" {
 			if directRemote == nil || gate == nil {
-				return directRemoteInspectionUnavailableToolResult()
+				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			enabled, err := gate.EnabledOrganization(ctx, principal.OrganizationID)
 			if err != nil || !enabled {
-				return directRemoteInspectionUnavailableToolResult()
+				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			inspection, err := directRemote.Inspect(ctx, remoteURL)
 			if err != nil {
 				if result, ok := operationBudgetToolResult(err); ok {
 					return result, CandidateInspection{}, nil
 				}
-				return directRemoteInspectionUnavailableToolResult()
+				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery}, nil
+			category := setupCategoryFromInspection(inspection)
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
@@ -165,8 +168,8 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 	})
 }
 
-func directRemoteInspectionUnavailableToolResult() (*mcp.CallToolResult, CandidateInspection, error) {
-	if result, ok := operationBudgetToolResult(ErrDirectRemoteUnavailable); ok {
+func directRemoteInspectionUnavailableToolResult(err error) (*mcp.CallToolResult, CandidateInspection, error) {
+	if result, ok := operationBudgetToolResult(err); ok {
 		return result, CandidateInspection{}, nil
 	}
 	return nil, CandidateInspection{}, ErrDirectRemoteUnavailable

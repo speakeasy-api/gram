@@ -10,8 +10,8 @@ import type { SourceType } from "@/lib/sources";
 /**
  * Filters for the Sources listing.
  *
- * `transport`, `format`, and `catalogKind` are *conditional*: each only makes
- * sense for one source type, so it is hidden until that type is selected. The
+ * `transport` and `format` are *conditional*: each only makes sense for one
+ * source type, so it is hidden until that type is selected. The
  * filter system has no built-in notion of conditional dimensions, so
  * visibility is derived here (see {@link visibleSourceFilters}) and the same
  * predicate gates matching — otherwise a stale `?transport=sse` left in the URL
@@ -25,11 +25,16 @@ export const SOURCE_FILTERS = defineFilters([
     label: "MCP usage",
     kind: "select",
     allLabel: "Any MCP usage",
+    description: "Whether the source's tools are served by an MCP server.",
   },
   { id: "transport", label: "Transport", kind: "multiselect" },
   { id: "format", label: "Format", kind: "multiselect" },
-  { id: "catalogKind", label: "Catalog kind", kind: "multiselect" },
-  { id: "failing", label: "Deployment errors", kind: "boolean" },
+  {
+    id: "failing",
+    label: "Deployment errors",
+    kind: "boolean",
+    description: "Only sources whose latest deployment failed.",
+  },
 ]);
 
 export type SourceFilterValues = FilterValues<typeof SOURCE_FILTERS>;
@@ -38,7 +43,6 @@ export type SourceFilterValues = FilterValues<typeof SOURCE_FILTERS>;
 const CONDITIONAL_ON: Record<string, SourceType> = {
   transport: "remotemcp",
   format: "openapi",
-  catalogKind: "externalmcp",
 };
 
 function isDimensionVisible(id: string, values: SourceFilterValues): boolean {
@@ -85,10 +89,6 @@ export const SOURCE_FILTER_OPTIONS: OptionsById = {
     { value: "json", label: "JSON" },
     { value: "yaml", label: "YAML" },
   ],
-  catalogKind: [
-    { value: "server", label: "Server" },
-    { value: "collection", label: "Collection" },
-  ],
   // `transport` is supplied at render time — the set of transports in use is
   // data, not a fixed enum.
 };
@@ -116,8 +116,6 @@ export interface SourceFacets {
   transport?: string | undefined;
   /** OpenAPI only. */
   format?: "json" | "yaml" | undefined;
-  /** Catalog only. */
-  catalogKind?: "server" | "collection" | undefined;
   failing: boolean;
 }
 
@@ -159,14 +157,6 @@ export function matchesSourceFilters(
 
   if (isDimensionVisible("format", values) && values.format.length > 0) {
     if (!facets.format || !values.format.includes(facets.format)) return false;
-  }
-
-  if (
-    isDimensionVisible("catalogKind", values) &&
-    values.catalogKind.length > 0
-  ) {
-    if (!facets.catalogKind || !values.catalogKind.includes(facets.catalogKind))
-      return false;
   }
 
   return true;

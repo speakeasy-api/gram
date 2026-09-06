@@ -9,6 +9,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 var (
@@ -42,6 +44,7 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, instance, projects := newProjectAccessTest(t, "bound-project")
+	ctx = wide.Start(ctx)
 	key := createTestAPIKey(t, ctx, instance, &projects[0].ID)
 
 	ctx, err := instance.authorizer.Authorize(ctx, key, apiKeyScheme)
@@ -53,6 +56,32 @@ func TestAuthorizeProjectBoundKeyAllowsBoundProjectSlug(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, projects[0].ID, *authCtx.ProjectID)
 	require.Equal(t, projects[0].Slug, *authCtx.ProjectSlug)
+
+	attrCounts := make(map[string]int)
+	var apiKeySchemeFound, projectSchemeFound bool
+	for _, eventAttr := range wide.Emit(ctx) {
+		attrCounts[eventAttr.Key]++
+		switch eventAttr.Key {
+		case string(attr.RequestAuthSchemeAPIKeyKey):
+			apiKeySchemeFound = true
+			require.True(t, eventAttr.Value.Bool())
+		case string(attr.RequestAuthSchemeProjectKey):
+			projectSchemeFound = true
+			require.True(t, eventAttr.Value.Bool())
+		}
+	}
+	require.True(t, apiKeySchemeFound)
+	require.True(t, projectSchemeFound)
+	for _, key := range []string{
+		string(attr.RequestAuthOrganizationIDKey),
+		string(attr.RequestAuthOrganizationSlugKey),
+		string(attr.RequestAuthAccountTypeKey),
+		string(attr.RequestAuthAPIKeyIDKey),
+		string(attr.RequestAuthProjectIDKey),
+		string(attr.RequestAuthProjectSlugKey),
+	} {
+		require.Equal(t, 1, attrCounts[key], "attribute %q must be emitted once", key)
+	}
 }
 
 func TestAuthorizeProjectBoundKeyRejectsSiblingProjectSlugWithoutRepointing(t *testing.T) {
@@ -108,7 +137,7 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
-	firstCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
+	firstCtx, err := instance.authorizer.Authorize(wide.Start(t.Context()), session.SessionID, sessionScheme)
 	require.NoError(t, err)
 	firstCtx, err = instance.authorizer.Authorize(firstCtx, projects[0].Slug, projectSlugScheme)
 	require.NoError(t, err)
@@ -116,6 +145,9 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, projects[0].ID, *firstAuthCtx.ProjectID)
 
+	for _, eventAttr := range wide.Emit(firstCtx) {
+		require.NotEqual(t, session.SessionID, eventAttr.Value.Any(), "session token must not be logged")
+	}
 	secondCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
 	require.NoError(t, err)
 	secondCtx, err = instance.authorizer.Authorize(secondCtx, projects[1].Slug, projectSlugScheme)
@@ -123,6 +155,41 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	secondAuthCtx, ok := contextvalues.GetAuthContext(secondCtx)
 	require.True(t, ok)
 	require.Equal(t, projects[1].ID, *secondAuthCtx.ProjectID)
+}
+
+func TestAuthorizeOrganizationlessSessionOmitsEmptyWideAttrs(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	session := sessions.Session{
+		SessionID: "organizationless-session",
+		UserID:    userInfo.UserID,
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = wide.Start(ctx)
+	ctx, err := instance.authorizer.Authorize(ctx, session.SessionID, sessionScheme)
+	require.NoError(t, err)
+
+	emptyAuthKeys := map[string]struct{}{
+		string(attr.RequestAuthOrganizationIDKey):   {},
+		string(attr.RequestAuthOrganizationSlugKey): {},
+		string(attr.RequestAuthAccountTypeKey):      {},
+	}
+	var userIDFound bool
+	for _, eventAttr := range wide.Emit(ctx) {
+		_, isEmptyAuthAttr := emptyAuthKeys[eventAttr.Key]
+		require.False(t, isEmptyAuthAttr, "empty attribute %q must be omitted", eventAttr.Key)
+		if eventAttr.Key == string(attr.RequestAuthUserIDKey) {
+			userIDFound = true
+			require.Equal(t, userInfo.UserID, eventAttr.Value.String())
+		}
+	}
+	require.True(t, userIDFound)
 }
 
 func TestAuthorizeSessionRejectsUngrantedOrganizationProject(t *testing.T) {

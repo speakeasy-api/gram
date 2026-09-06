@@ -285,20 +285,30 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger             *slog.Logger
-	reader             *readmodel.Reader
-	inventory          *platformrepo.Queries
-	inventoryCursor    *inventoryCursorCodec
-	metadataVersionKey []byte
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	reader              *readmodel.Reader
+	inventory           *platformrepo.Queries
+	inventoryCursor     *inventoryCursorCodec
+	metadataVersionKey  []byte
+	riskReads           *RiskReadService
+	dataExports         *DataExportReadService
+	dataExportMutations *dataExportMutationService
+	recentToolCalls     *RecentToolCallReadService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:             logger.With(attr.SlogComponent("platformmcp")),
-		reader:             readmodel.New(db),
-		inventory:          platformrepo.New(db),
-		inventoryCursor:    nil,
-		metadataVersionKey: nil,
+		logger:              logger.With(attr.SlogComponent("platformmcp")),
+		db:                  db,
+		reader:              readmodel.New(db),
+		inventory:           platformrepo.New(db),
+		inventoryCursor:     nil,
+		metadataVersionKey:  nil,
+		riskReads:           nil,
+		dataExports:         nil,
+		dataExportMutations: nil,
+		recentToolCalls:     nil,
 	}
 }
 
@@ -307,6 +317,9 @@ func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 	if err == nil {
 		r.inventoryCursor = codec
 		r.metadataVersionKey = lifecycleMetadataVersionKey(keyMaterial)
+	}
+	if riskReads, riskErr := newRiskReadService(r.db, keyMaterial); riskErr == nil {
+		r.riskReads = riskReads
 	}
 }
 

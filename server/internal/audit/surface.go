@@ -37,6 +37,9 @@ const (
 	SurfaceProjectAssistant Surface = "project_assistant"
 	// SurfaceAdmin is the isolated Google-authenticated admin app.
 	SurfaceAdmin Surface = "admin"
+	// SurfacePlatformBreakGlass is the main-server platform-administrator
+	// killswitch recovery path. It remains distinct from customer management.
+	SurfacePlatformBreakGlass Surface = "platform_break_glass"
 )
 
 // knownSurfaces is the allowlist an explicitly marked surface is checked
@@ -44,12 +47,13 @@ const (
 // depend on this one; anything not named here records an unknown surface
 // rather than widening what the column can hold.
 var knownSurfaces = map[Surface]struct{}{
-	SurfaceUnknown:          {},
-	SurfaceDashboard:        {},
-	SurfaceAPIKey:           {},
-	SurfacePlatformMCP:      {},
-	SurfaceProjectAssistant: {},
-	SurfaceAdmin:            {},
+	SurfaceUnknown:            {},
+	SurfaceDashboard:          {},
+	SurfaceAPIKey:             {},
+	SurfacePlatformMCP:        {},
+	SurfaceProjectAssistant:   {},
+	SurfaceAdmin:              {},
+	SurfacePlatformBreakGlass: {},
 }
 
 // actingIdentity is how a change was made: the surface, and the registered

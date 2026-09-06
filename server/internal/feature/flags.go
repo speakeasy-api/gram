@@ -22,6 +22,8 @@ const (
 	// FlagRiskRecommendedScopes gates per-project composition of recommended
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -36,14 +38,14 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
-	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
-	// durable platform_mcp product feature remains the organization-admin opt-in
-	// once this release flag permits access.
-	FlagPlatformMCP Flag = "platform-mcp"
-	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
-	// Platform MCP. It is presentation-only; runtime authorization requires
-	// FlagPlatformMCP and the durable organization product feature.
-	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
+	// replacing a plugin's complete audience assignment set through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
@@ -122,13 +124,6 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOTELLogCustomerRelay controls which organizations have normalized
-	// OTEL logs relayed to customer-defined destinations. It is targeted by
-	// PostHog organization group (org slug) and fails closed per organization,
-	// so one unavailable evaluation never changes another organization's
-	// delivery.
-	FlagOTELLogCustomerRelay Flag = "otel-log-customer-relay"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

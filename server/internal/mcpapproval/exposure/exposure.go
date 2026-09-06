@@ -168,6 +168,8 @@ func Assess(ctx context.Context, reader Reader, projectID uuid.UUID, target stri
 		Limit:               usageLookupLimit,
 		OrganizationID:      "",
 		UserKeys:            nil,
+		From:                nil,
+		To:                  nil,
 	})
 	if err != nil {
 		return Signals{}, fmt.Errorf("read shadow mcp inventory usage: %w", err)

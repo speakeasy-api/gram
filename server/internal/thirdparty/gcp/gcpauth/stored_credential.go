@@ -42,6 +42,17 @@ type StoredCredential struct {
 	// HasWifConfig reports whether any Workload Identity Federation column is
 	// still set on the row.
 	HasWifConfig bool
+
+	// SkipProjectVerification exempts this credential from the refusal of
+	// targets in this deployment's own GCP project, which a platform
+	// administrator granted when the row was written. The exemption is recorded
+	// on the row because this screening also runs where no request actor exists
+	// to consult.
+	//
+	// It must always be read from the stored column. Writing a literal true at a
+	// call site grants the exemption to a credential nobody approved, which is
+	// the whole of what the screening prevents.
+	SkipProjectVerification bool
 }
 
 // ScreenStoredCredential settles which identity an outbound GCP call should
@@ -66,6 +77,12 @@ type StoredCredential struct {
 // earlier can still name a service account in Gram's own project — and an
 // endpoint would then authenticate as it against a caller-supplied resource
 // name, which is an inventory oracle for Gram's own GCP estate.
+//
+// A row carrying SkipProjectVerification is forgiven that final refusal, and
+// only that one. The screening still runs in full: forgiving a classified
+// refusal rather than skipping the comparison costs nothing here, because this
+// path resolves the ambient identity on every call regardless, and it keeps the
+// exemption from widening to a malformed address.
 func (i *Identity) ScreenStoredCredential(ctx context.Context, logger *slog.Logger, stored StoredCredential) (Credential, StoredCredentialProblem, string, error) {
 	if !stored.Present {
 		return noCredential(), StoredCredentialDeleted, "the backing credential for this key was deleted; point the key at a live credential", nil
@@ -78,11 +95,12 @@ func (i *Identity) ScreenStoredCredential(ctx context.Context, logger *slog.Logg
 		return noCredential(), StoredCredentialUnusable, "the backing credential still uses Workload Identity Federation, which cannot be used; save it again to convert it to impersonation", nil
 	}
 
-	reason, err := i.ImpersonationTargetProblem(ctx, logger, stored.ImpersonateServiceAccount)
+	kind, reason, err := i.ImpersonationTargetProblem(ctx, logger, stored.ImpersonateServiceAccount)
 	if err != nil {
 		return noCredential(), "", "", err
 	}
-	if reason != "" {
+	exempted := kind == TargetOwnProject && stored.SkipProjectVerification
+	if kind != TargetOK && !exempted {
 		return noCredential(), StoredCredentialUnusable, reason, nil
 	}
 

@@ -408,9 +408,12 @@ func dedupeAndValidate(topics []DesiredTopic, subs []DesiredSubscription) ([]Des
 			dlqLabels[deprecatedLabelKey] = deprecatedLabelValue
 		}
 
+		// A DLQ inherits its subscription's retention: dead-lettered payloads
+		// can carry raw content and must not outlive the source's window on a
+		// provider default.
 		dlqTopic := DesiredTopic{
 			Name:         sub.DeadLetterTopic,
-			Retention:    0,
+			Retention:    sub.Retention,
 			Labels:       dlqLabels,
 			ProtoMessage: sub.ProtoMessage,
 		}

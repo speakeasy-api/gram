@@ -142,6 +142,40 @@ func TestUpdateConfigurationRejectsInvalidPlatformLayer(t *testing.T) {
 	require.Equal(t, oops.CodeInvalid, shareableErr.Code)
 }
 
+func TestUpdateConfigurationAcceptsAIScanInterval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"ai_scan_interval_seconds": 21600},
+	})
+	require.NoError(t, err)
+	require.True(t, updated.IsConfigured)
+
+	// The setting flows to agents through the existing configuration blob on
+	// the plugin poll, like every other admin-saved key.
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	require.NotNil(t, poll.Configuration)
+	require.EqualValues(t, 21600, poll.Configuration.Config["ai_scan_interval_seconds"])
+}
+
+func TestUpdateConfigurationRejectsInvalidAIScanInterval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	for _, invalid := range []any{"six hours", 0, 59, 24*60*60 + 1, 1.5} {
+		_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+			Config: map[string]any{"ai_scan_interval_seconds": invalid},
+		})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, "value %v must be rejected", invalid)
+		require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+	}
+}
+
 func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

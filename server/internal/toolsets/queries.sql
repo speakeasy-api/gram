@@ -3,6 +3,12 @@ SELECT *
 FROM toolsets
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetToolsetForUpdate :one
+SELECT *
+FROM toolsets
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetToolsetByIDAndProject :one
 SELECT *
 FROM toolsets
@@ -230,10 +236,17 @@ INSERT INTO toolset_prompts (
 ) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id, @prompt_name);
 
 -- name: CheckMCPSlugAvailability :one
+-- Deprecated inline-editor probe: taken when any live toolset or endpoint
+-- holds the slug in any scope. Removed with the mcp_slug fallback (AIS-646).
 SELECT EXISTS (
   SELECT 1
   FROM toolsets
   WHERE mcp_slug = @mcp_slug
+  AND deleted IS FALSE
+) OR EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = @mcp_slug
   AND deleted IS FALSE
 );
 
@@ -282,7 +295,9 @@ UPDATE toolsets
 SET
     external_oauth_server_id = @external_oauth_server_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug
+  AND project_id = @project_id
+  AND external_oauth_server_id IS NULL
 RETURNING *;
 
 -- name: UpdateToolsetUserSessionIssuer :one

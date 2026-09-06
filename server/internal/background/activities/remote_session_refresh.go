@@ -135,8 +135,7 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		}
-		var failure *remotesessions.RefreshError
-		if errors.As(err, &failure) {
+		if failure, ok := errors.AsType[*remotesessions.RefreshError](err); ok {
 			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
 		}
 		if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {

@@ -10,6 +10,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
+func TestCurrentPlatformAdminRequiresDurableEntitlementAndLiveUser(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, isCurrentPlatformAdmin(true, false))
+	require.False(t, isCurrentPlatformAdmin(false, false))
+	require.False(t, isCurrentPlatformAdmin(true, true))
+	require.False(t, isCurrentPlatformAdmin(false, true))
+}
+
 func TestValidSupportSessionRejectsExpiredSession(t *testing.T) {
 	t.Parallel()
 

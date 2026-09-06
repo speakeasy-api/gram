@@ -1,6 +1,7 @@
 import logging as stdlogging
 import os
 import signal
+from contextlib import AsyncExitStack
 from functools import partial
 
 import anyio
@@ -8,12 +9,19 @@ import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v2 import ping_pb2, processor_pb2
-from gram.risk.v1 import finding_pb2, presidio_analysis_pb2, presidio_analyzer_pb2
+from gram.risk.v1 import (
+    finding_pb2,
+    presidio_analysis_pb2,
+    presidio_analyzer_pb2,
+    presidio_enforcement_pb2,
+    presidio_enforcer_pb2,
+)
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     PubSubBroker,
     pubsub_publisher_for_message_async,
 )
+from redis import asyncio as redis_asyncio
 
 from pystreams import attr
 from pystreams.deps import logging, otel
@@ -22,9 +30,12 @@ from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.deps.scanner import build_presidio_scanner
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
+from pystreams.risk.enforce_handler import PresidioEnforceHandler
+from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.replywriter import ReplyWriter
 
-from . import flags_control, flags_gcp, flags_presidio, flags_service
+from . import flags_control, flags_enforce, flags_gcp, flags_presidio, flags_service
 from .receiver import ReceiverGroup
 
 
@@ -35,6 +46,7 @@ from .receiver import ReceiverGroup
         *flags_control.server_options(),
         *flags_gcp.pubsub_options(),
         *flags_presidio.presidio_options(),
+        *flags_enforce.enforce_options(),
     ],
 )
 def cli(**kwargs):
@@ -64,6 +76,10 @@ async def multi(
     scan_timeout: float,
     scan_slot_timeout: float,
     max_inflight: int | None,
+    # Enforcement lane options
+    redis_addr: str | None,
+    redis_password: str | None,
+    risk_fingerprint_pepper_keyring: str | None,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -107,11 +123,48 @@ async def multi(
     async with otel.otel_sdk(otel_options, logger=logger):
         # The broker owns the publisher/subscriber clients: entering it flushes
         # and closes them on exit (including a clean teardown on Ctrl-C).
-        with broker:
+        # The stack owns the Redis client from creation, so any later startup
+        # failure still closes its pool.
+        async with AsyncExitStack() as stack:
+            stack.enter_context(broker)
             health_state = HealthState()
             findings_publisher = await pubsub_publisher_for_message_async(
                 broker, finding_pb2.Finding
             )
+
+            # The enforcement lane registers only when both Redis and the
+            # pepper keyring are configured; validated before the scan pool
+            # exists so a startup failure cannot leak pool workers.
+            enforce_redis = None
+            enforce_fingerprinter = None
+            if redis_addr and risk_fingerprint_pepper_keyring:
+                host, sep, port = redis_addr.rpartition(":")
+                if not sep or "]" in port or (":" in host and "[" not in host):
+                    # Bare hostname, or an IPv6 literal without a port.
+                    host, port = redis_addr, ""
+                # Accept bracketed IPv6 endpoints such as [::1]:6379.
+                host = host.strip("[]")
+                # Bounded timeouts: a Redis stall surfaces as an ACKed write
+                # failure instead of hanging past the ack deadline.
+                enforce_redis = redis_asyncio.Redis(
+                    host=host or redis_addr,
+                    port=int(port) if port else 6379,
+                    password=redis_password or None,
+                    socket_connect_timeout=1.0,
+                    socket_timeout=2.0,
+                )
+                stack.push_async_callback(enforce_redis.aclose)
+                # Fail startup, not per-message: consuming without a reachable
+                # reply store would ACK requests while losing their replies.
+                await enforce_redis.ping()
+                enforce_fingerprinter = parse_pepper_keyring(
+                    risk_fingerprint_pepper_keyring
+                )
+            else:
+                logger.info(
+                    "presidio enforcement lane disabled",
+                    reason="redis address or fingerprint pepper keyring not configured",
+                )
 
             # Build the scan strategy: a pool of worker processes (the default,
             # with --scan-workers > 0) or the in-process thread scanner. The
@@ -140,9 +193,19 @@ async def multi(
                 logger, findings_publisher, presidio_scanner
             )
 
-            # The scanner is an async context manager: leaving the block releases
-            # it, draining in-flight scans and reaping the worker processes for
-            # the pool scanner (a no-op for the in-process one).
+            enforce_handler = None
+            if enforce_redis is not None and enforce_fingerprinter is not None:
+                enforce_handler = PresidioEnforceHandler(
+                    logger,
+                    ReplyWriter(enforce_redis),
+                    presidio_scanner,
+                    enforce_fingerprinter,
+                )
+
+            # The scanner is an async context manager: leaving the block
+            # releases it, draining in-flight scans and reaping the worker
+            # processes for the pool scanner (a no-op for the in-process one).
+            # Exits after the task group drains, before the stack closes Redis.
             async with presidio_scanner, anyio.create_task_group() as tg:
                 tg.start_soon(
                     _shutdown_on_signal, tg.cancel_scope, health_state, logger
@@ -186,6 +249,20 @@ async def multi(
                     presidio_handler.handle,
                     max_concurrency=max_inflight,
                 )
+                if enforce_handler is not None:
+                    # Enforcement shares the scan pool with batch, so it gets
+                    # roughly one handler per slot (floored at two so a reply
+                    # write can overlap a scan); excess waits at the broker.
+                    if scan_workers > 0:
+                        enforce_slots = scan_workers
+                    else:
+                        enforce_slots = max_scan_concurrency or 2
+                    await receivers.receive(
+                        presidio_enforcement_pb2.PresidioEnforcement,
+                        presidio_enforcer_pb2.PresidioEnforcer,
+                        enforce_handler.handle,
+                        max_concurrency=max(2, enforce_slots),
+                    )
 
                 health_state.set_ready()
 

@@ -56,9 +56,8 @@ func registerReadDocTool(reg *Registrar) {
 		if errors.Is(err, ErrSetupGuideUnavailable) {
 			// The withheld guide carries its own trusted links, so the model is
 			// handed the sources it is told to pass on rather than recalling them.
-			var withheld *SetupGuideUnavailableError
 			links := []string{docsIndexURL}
-			if errors.As(err, &withheld) {
+			if withheld, ok := errors.AsType[*SetupGuideUnavailableError](err); ok {
 				links = withheld.TrustedLinks()
 			}
 			return nil, docUnavailable(input.URI, "This guide is too far past its revalidation date to stand behind and has been withheld. Tell the user the reviewed guide is stale and point them at the trusted links returned with this result.", links), nil

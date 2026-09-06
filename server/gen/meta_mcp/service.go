@@ -24,11 +24,12 @@ type Service interface {
 	GetMetaMcpServer(context.Context, *GetMetaMcpServerPayload) (res *types.MetaMcpServer, err error)
 	// List meta MCP servers for a project
 	ListMetaMcpServers(context.Context, *ListMetaMcpServersPayload) (res *ListMetaMcpServersResult, err error)
-	// Update a meta MCP server. This is a full-record replace: a
-	// user_session_issuer_id omitted from the request becomes null on the stored
-	// record. Visibility is the exception — omitting it preserves the stored
-	// value, so a caller that does not manage visibility cannot re-enable a
-	// disabled gateway by saving an unrelated field.
+	// Update a meta MCP server. Omitting user_session_issuer_id preserves the
+	// stored issuer, and a gateway that would end up without one gets a dedicated
+	// issuer minted — an update can never leave a gateway serving anonymously.
+	// Omitting visibility preserves the stored value, so a caller that does not
+	// manage visibility cannot re-enable a disabled gateway by saving an unrelated
+	// field.
 	UpdateMetaMcpServer(context.Context, *UpdateMetaMcpServerPayload) (res *types.MetaMcpServer, err error)
 	// Delete a meta MCP server. Its live memberships and MCP endpoints are deleted
 	// along with it.

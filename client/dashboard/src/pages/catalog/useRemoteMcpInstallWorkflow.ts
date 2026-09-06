@@ -140,10 +140,11 @@ export type RemoteMcpInstallWorkflow =
 interface UseRemoteMcpInstallWorkflowOptions {
   servers: PulseMCPServer[];
   projectSlug?: string;
+  serverNameSuffix?: string;
   /**
    * Install every endpoint of multi-remote servers instead of pausing on the
    * interactive selectRemotes phase. Required by headless/auto-start callers
-   * (collection installs, onboarding), which have no UI to select from.
+   * (onboarding), which have no UI to select from.
    */
   autoSelectRemotes?: boolean;
 }
@@ -153,10 +154,13 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
   return `${remoteUrl} ${headerName.toLowerCase()}`;
 }
 
-function buildServerConfig(server: PulseMCPServer): ServerConfig {
+function buildServerConfig(
+  server: PulseMCPServer,
+  serverNameSuffix = "",
+): ServerConfig {
   return {
     server,
-    name: server.title ?? server.registrySpecifier,
+    name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
   };
@@ -180,7 +184,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     remote,
     name:
       config.remotes.length > 1
-        ? `${config.name} ${getRemoteDisplayInfo(remote.url).name}`
+        ? `${config.name.replace(/_Governed$/, "")} ${getRemoteDisplayInfo(remote.url).name}_Governed`
         : config.name,
     headers: collectibleHeaders(remote).flatMap((header) => {
       const value =
@@ -326,6 +330,7 @@ export function useRemoteMcpInstallWorkflow({
   servers,
   projectSlug,
   autoSelectRemotes = false,
+  serverNameSuffix = "",
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
@@ -393,12 +398,12 @@ export function useRemoteMcpInstallWorkflow({
       if (remotes.length > 1 && !autoSelectRemotes) {
         multiRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
-        singleRemote.push(buildServerConfig(server));
+        singleRemote.push(buildServerConfig(server, serverNameSuffix));
       }
     }
 
@@ -407,7 +412,7 @@ export function useRemoteMcpInstallWorkflow({
     setCurrentServerIndex(0);
     lastProcessedIndexRef.current = -1;
     setPhase(multiRemote.length > 0 ? "selectRemotes" : "configure");
-  }, [servers, autoSelectRemotes]);
+  }, [autoSelectRemotes, serverNameSuffix, servers]);
 
   // Initialize server configs when servers change - partition into multi/single remote.
   useEffect(() => {

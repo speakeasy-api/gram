@@ -553,9 +553,10 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	}
 
 	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
-	// risk scans below already run adapter-agnostically, and an over-budget
-	// actor is over budget regardless of which agent carries the event.
+	// with a per-provider enforcement surface (claude, codex, cursor,
+	// openclaw) — the risk scans below already run adapter-agnostically, and
+	// an over-budget actor is over budget regardless of which agent carries
+	// the event.
 	// Adapters are self-reported slugs, so this remains a cooperative-client
 	// boundary like the rest of the ingest surface; matching is on the
 	// lowercased value so a case variant cannot dodge the gate. opencode
@@ -1363,7 +1364,10 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
 	if raw != "" {
 		var parse func(string) (HookEvent, bool)
-		switch strings.TrimSpace(payload.Source.Adapter) {
+		// Lowercased like every other adapter check on this path, so a case
+		// variant resolves the same raw vocabulary instead of silently
+		// falling through to the canonical map.
+		switch strings.ToLower(strings.TrimSpace(payload.Source.Adapter)) {
 		case "claude":
 			parse = parseClaudeHookEvent
 		case "cursor":
@@ -1372,6 +1376,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCodexHookEvent
 		case "opencode":
 			parse = parseOpencodeHookEvent
+		case "copilot":
+			parse = parseCopilotHookEvent
 		}
 		if parse != nil {
 			if event, ok := parse(raw); ok {
@@ -1426,6 +1432,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			ChatID:           sessionIDToUUID(sessionID),
 			ProjectID:        *authCtx.ProjectID,
 			Role:             role,
@@ -1623,7 +1630,9 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		return ""
 	}
 	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	if adapter != "codex" && adapter != "opencode" && adapter != "litellm" {
+	// openclaw carries OpenClaw's own ctx.runId, which the spike proved stable
+	// across before_agent_run, before_tool_call, llm_output and agent_end.
+	if adapter != "codex" && adapter != "opencode" && adapter != "openclaw" && adapter != "litellm" {
 		return ""
 	}
 	if payload.Session != nil && payload.Session.TurnID != nil {
@@ -1631,7 +1640,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		if encoded, ok := strings.CutPrefix(turnID, agentTurnPrefix); ok {
 			encodedProvider, nativeTurnID, found := strings.Cut(encoded, ":")
 			encodedProvider = strings.ToLower(strings.TrimSpace(encodedProvider))
-			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode"
+			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode" || encodedProvider == "openclaw"
 			if found && stableProvider && (adapter == "litellm" || adapter == encodedProvider) && strings.TrimSpace(nativeTurnID) != "" {
 				return encodedProvider + ":" + strings.TrimSpace(nativeTurnID)
 			}

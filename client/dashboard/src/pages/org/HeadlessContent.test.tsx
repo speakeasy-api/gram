@@ -14,6 +14,9 @@ vi.mock("@/components/mode-switch-starfield", () => ({
 vi.mock("@/components/gram-logo/variants/icon", () => ({
   GramIcon: () => null,
 }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ home: { goTo: vi.fn() } }),
+}));
 // The wizard is a stack of sheets over live onboarding queries; this page's
 // own job is the list that opens it.
 vi.mock("./PlatformMCP", () => ({
@@ -45,10 +48,9 @@ describe("HeadlessContent", () => {
     expect(agentNames(container).slice(0, -1)).toEqual([
       "Claude Code",
       "Claude Cowork",
-      "Cursor",
       "OpenAI Codex",
+      "Cursor",
       "opencode",
-      "OpenClaw",
     ]);
   });
 });

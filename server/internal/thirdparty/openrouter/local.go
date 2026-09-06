@@ -38,6 +38,34 @@ func (o *Development) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, o
 	return o.ReinstateAPIKeyLimit(ctx, orgID, keyType, limit)
 }
 
+func (o *Development) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) AddAPIKeyDisableCauseWithDB(context.Context, DBTX, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) RemoveAPIKeyDisableCauseWithDB(context.Context, DBTX, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, floor int64) (EnterpriseTrialConversionKeyChange, error) {
+	return new(OpenRouter).PrepareEnterpriseTrialConversionKeyWithDB(ctx, db, orgID, keyType, floor)
+}
+
+func (o *Development) ReconcileAPIKeyDisabled(context.Context, string, KeyType) error {
+	return nil
+}
+
+func (o *Development) ReconcileAPIKeyConversionPolicy(context.Context, string, KeyType) error {
+	return nil
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }

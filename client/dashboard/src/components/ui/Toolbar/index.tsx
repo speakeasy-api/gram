@@ -319,33 +319,48 @@ function ToolbarFilters({
     );
 
   // One brand hue per dimension, keyed on the dimension id so a filter keeps
-  // its color across pages, and de-duplicated within this bar.
+  // its color across pages, and de-duplicated within this bar. Every schema
+  // dimension gets a hue, not just the pilled ones, so the sheet can label
+  // each control with the same swatch its chip carries; pilled dims are asked
+  // for first so the visible bar keeps its colors when a sheet-only filter
+  // becomes active and joins the row.
   const accents = getFilterAccents([
     ...pillDims.map((d) => d.id),
+    ...schema.filter((d) => !pillDims.includes(d)).map((d) => d.id),
     ...customFilters.map((f) => f.path),
   ]);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {pillDims.map((dim) => (
-        <FilterChip
-          key={dim.id}
-          label={chipLabel(dim, values[dim.id]!, optionsById[dim.id])}
-          color={accents[dim.id]}
-          active={!isDimensionAtDefault(dim, values[dim.id]!)}
-          onClick={() => setSheetOpen(true)}
-          // A default pinned chip ("All …", default daterange) has nothing to
-          // clear, and a `required` dimension has nothing to clear *to* —
-          // clearing it just resolves back to a value, so the × would look
-          // broken. Omit onRemove in both cases so it is hidden rather than a
-          // no-op.
-          onRemove={
-            dim.required || isDimensionAtDefault(dim, values[dim.id]!)
-              ? undefined
-              : () => onClear(dim.id)
-          }
-        />
-      ))}
+      {pillDims.map((dim) => {
+        const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
+        const ariaLabel =
+          dim.kind === "select" ||
+          dim.kind === "multiselect" ||
+          dim.kind === "daterange"
+            ? `${dim.label} filter: ${label}`
+            : label;
+        return (
+          <FilterChip
+            key={dim.id}
+            label={label}
+            ariaLabel={ariaLabel}
+            color={accents[dim.id]}
+            active={!isDimensionAtDefault(dim, values[dim.id]!)}
+            onClick={() => setSheetOpen(true)}
+            // A default pinned chip ("All …", default daterange) has nothing to
+            // clear, and a `required` dimension has nothing to clear *to* —
+            // clearing it just resolves back to a value, so the × would look
+            // broken. Omit onRemove in both cases so it is hidden rather than a
+            // no-op.
+            onRemove={
+              dim.required || isDimensionAtDefault(dim, values[dim.id]!)
+                ? undefined
+                : () => onClear(dim.id)
+            }
+          />
+        );
+      })}
 
       {customFilters.map((filter) => (
         <CustomFilterChip
@@ -397,6 +412,7 @@ function ToolbarFilters({
         optionsById={optionsById}
         onChange={onChange}
         onClearAll={onClearAll}
+        accents={accents}
         projectSlug={projectSlug}
         customFilters={customFilters}
         onEditCustomFilter={onEditCustomFilter}

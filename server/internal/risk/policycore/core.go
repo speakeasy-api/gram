@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -32,6 +35,12 @@ func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
 		core.mutations = &mutations[0]
 	}
 	return core
+}
+
+// PageCursor identifies one policy in deterministic keyset order.
+type PageCursor struct {
+	CreatedAt time.Time
+	ID        uuid.UUID
 }
 
 // List returns all policies for a project with their audiences. Progress is
@@ -61,11 +70,50 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 	return policies, nil
 }
 
+// ListPage returns at most limit+1 policies in deterministic keyset order. The
+// extra row lets a transport decide whether to issue a next cursor without a
+// separate count query.
+func (c *Core) ListPage(ctx context.Context, organizationID string, projectID uuid.UUID, cursor *PageCursor, limit int32) ([]Policy, error) {
+	params := repo.ListRiskPoliciesPageParams{
+		ProjectID:       projectID,
+		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PageLimit:       limit + 1,
+	}
+	if cursor != nil {
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, InfinityModifier: pgtype.Finite, Valid: true}
+		params.CursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
+	}
+	rows, err := c.queries.ListRiskPoliciesPage(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list risk policies page: %w", err)
+	}
+	if len(rows) == 0 {
+		return []Policy{}, nil
+	}
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	audienceByPolicy, err := c.audienceURNsByPolicy(ctx, organizationID, policyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy page audiences: %w", err)
+	}
+	policies := make([]Policy, 0, len(rows))
+	for _, row := range rows {
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+	}
+	return policies, nil
+}
+
 // Get returns one policy with best-effort message-analysis progress.
 func (c *Core) Get(ctx context.Context, projectID, policyID uuid.UUID) (Policy, error) {
 	row, err := c.queries.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID, ProjectID: projectID})
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return Policy{}, fmt.Errorf("%w: %w", ErrLoadPolicy, err)
+	}
+	if err != nil {
+		return Policy{}, fmt.Errorf("get risk policy row: %w", err)
 	}
 	return c.ProjectWithProgress(ctx, row)
 }

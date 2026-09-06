@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const attachPlatformMCPOperationReceiptRegistration = `-- name: AttachPlatformMCPOperationReceiptRegistration :one
@@ -169,9 +170,10 @@ UPDATE platform_mcp_operation_receipts
 SET registration_id = $1,
     status = $2,
     result_code = $3,
+    result_payload = $4,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
+WHERE id = $5
+  AND organization_id = $6
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
@@ -179,6 +181,7 @@ type CompletePlatformMCPOperationReceiptParams struct {
 	RegistrationID uuid.NullUUID
 	Status         string
 	ResultCode     pgtype.Text
+	ResultPayload  []byte
 	ID             uuid.UUID
 	OrganizationID string
 }
@@ -188,6 +191,7 @@ func (q *Queries) CompletePlatformMCPOperationReceipt(ctx context.Context, arg C
 		arg.RegistrationID,
 		arg.Status,
 		arg.ResultCode,
+		arg.ResultPayload,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -928,6 +932,7 @@ INSERT INTO platform_mcp_operation_receipts (
     input_hash,
     status,
     result_code,
+    result_payload,
     expires_at
 ) VALUES (
     $1,
@@ -942,7 +947,8 @@ INSERT INTO platform_mcp_operation_receipts (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    $14
 )
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
@@ -960,6 +966,7 @@ type CreatePlatformMCPOperationReceiptParams struct {
 	InputHash            string
 	Status               string
 	ResultCode           pgtype.Text
+	ResultPayload        []byte
 	ExpiresAt            pgtype.Timestamptz
 }
 
@@ -977,6 +984,7 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		arg.InputHash,
 		arg.Status,
 		arg.ResultCode,
+		arg.ResultPayload,
 		arg.ExpiresAt,
 	)
 	var i PlatformMcpOperationReceipt
@@ -1838,6 +1846,46 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 		&i.InvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwnedChatForRecall = `-- name: GetOwnedChatForRecall :one
+SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.user_id = $3::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+`
+
+type GetOwnedChatForRecallParams struct {
+	ChatID         uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type GetOwnedChatForRecallRow struct {
+	ID             uuid.UUID
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	Cwd            pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatForRecallParams) (GetOwnedChatForRecallRow, error) {
+	row := q.db.QueryRow(ctx, getOwnedChatForRecall, arg.ChatID, arg.OrganizationID, arg.UserID)
+	var i GetOwnedChatForRecallRow
+	err := row.Scan(
+		&i.ID,
+		&i.ExternalChatID,
+		&i.Title,
+		&i.Cwd,
+		&i.UpdatedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -2727,9 +2775,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2737,18 +2785,36 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-WHERE p.id = $1
-  AND p.project_id = $2
-  AND p.organization_id = $3
-  AND projects.organization_id = $3
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
+WHERE p.id = $3
+  AND p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
   AND projects.deleted IS FALSE
   AND p.deleted IS FALSE
 `
 
 type GetPlatformMCPPluginInventoryItemParams struct {
-	PluginID       uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	PluginID       uuid.UUID
 }
 
 type GetPlatformMCPPluginInventoryItemRow struct {
@@ -2767,7 +2833,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 }
 
 func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg GetPlatformMCPPluginInventoryItemParams) (GetPlatformMCPPluginInventoryItemRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.ProjectID, arg.OrganizationID, arg.PluginID)
 	var i GetPlatformMCPPluginInventoryItemRow
 	err := row.Scan(
 		&i.ID,
@@ -3677,6 +3743,56 @@ func (q *Queries) HasPlatformMCPSelectedUseEvidence(ctx context.Context, arg Has
 	return exists, err
 }
 
+const insertChatSessionRecallLink = `-- name: InsertChatSessionRecallLink :exec
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, 'recall', $7, $8,
+  $9, $10, $11
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+`
+
+type InsertChatSessionRecallLinkParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+}
+
+// Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
+// edge always has a NULL child: the OAuth principal carries no harness
+// session id, so the continuation is unknowable at recall time and each
+// recall records a distinct event. The ON CONFLICT clause is therefore inert
+// today (the partial unique index only covers non-NULL children) and kept
+// verbatim for forward safety.
+func (q *Queries) InsertChatSessionRecallLink(ctx context.Context, arg InsertChatSessionRecallLinkParams) error {
+	_, err := q.db.Exec(ctx, insertChatSessionRecallLink,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ParentChatID,
+		arg.ChildChatID,
+		arg.ParentSessionID,
+		arg.ChildSessionID,
+		arg.TargetHarness,
+		arg.SourceSurface,
+		arg.ActorEmail,
+		arg.DeviceSerial,
+		arg.DeviceHostname,
+	)
+	return err
+}
+
 const invalidateActivePlatformMCPSetupHandoffs = `-- name: InvalidateActivePlatformMCPSetupHandoffs :execrows
 UPDATE platform_mcp_setup_handoffs
 SET invalidated_at = clock_timestamp(),
@@ -3767,7 +3883,8 @@ SELECT EXISTS (
      AND project.deleted IS FALSE
     JOIN user_session_issuers AS issuer
       ON issuer.id = server.user_session_issuer_id
-     AND issuer.project_id = project.id
+     AND (issuer.project_id = project.id
+          OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
      AND issuer.deleted IS FALSE
     JOIN mcp_endpoints AS endpoint
       ON endpoint.mcp_server_id = server.id
@@ -3787,6 +3904,171 @@ func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizatio
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
+
+SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+FROM chats c
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.organization_id = $1
+  AND c.user_id = $2::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.updated_at DESC
+LIMIT $3
+`
+
+type ListOwnedChatSessionsForRecallParams struct {
+	OrganizationID string
+	UserID         string
+	RowLimit       int32
+}
+
+type ListOwnedChatSessionsForRecallRow struct {
+	ID             uuid.UUID
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	Summary        pgtype.Text
+	Cwd            pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	ProjectName    string
+	ProjectSlug    string
+}
+
+// Session recall (list_my_sessions / continue_session). Every read below
+// fuses tenancy and ownership into the row filter — organization, owner
+// user_id, not-deleted, and the personal-account exclusion — rather than
+// fetching then authorizing. An unresolved actor (empty user_id) matches no
+// rows because chats.user_id is never the empty string: fail-closed.
+// Personal-account sessions are excluded from BOTH list and continue:
+// personal-account ownership attribution is partly device-bridge-inferred,
+// which is acceptable for titles but not for transcripts (see the
+// ListOwnedChatSessionMeta warning in agent/queries.sql). The predicate
+// (ua.id IS NULL OR ua.account_type <> 'personal') also drops rows whose
+// account_type is NULL — the comparison evaluates to NULL — and that is
+// deliberate: an unclassified account might be personal, so it gets the
+// same fail-closed treatment.
+func (q *Queries) ListOwnedChatSessionsForRecall(ctx context.Context, arg ListOwnedChatSessionsForRecallParams) ([]ListOwnedChatSessionsForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatSessionsForRecall, arg.OrganizationID, arg.UserID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatSessionsForRecallRow
+	for rows.Next() {
+		var i ListOwnedChatSessionsForRecallRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExternalChatID,
+			&i.Title,
+			&i.Summary,
+			&i.Cwd,
+			&i.UpdatedAt,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedChatTranscriptMessagesForRecall = `-- name: ListOwnedChatTranscriptMessagesForRecall :many
+SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE cm.chat_id = $1
+  AND cm.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = $1
+      AND project_id = $2
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT $5
+`
+
+type ListOwnedChatTranscriptMessagesForRecallParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	UserID         string
+	RowLimit       int32
+}
+
+type ListOwnedChatTranscriptMessagesForRecallRow struct {
+	ID              uuid.UUID
+	Seq             int64
+	CreatedAt       pgtype.Timestamptz
+	Role            string
+	Content         string
+	ContentAssetUrl pgtype.Text
+	ToolCalls       []byte
+	ToolCallID      pgtype.Text
+	ToolUrn         urn.Tool
+	Source          pgtype.Text
+	RiskAnalyzedAt  pgtype.Timestamptz
+}
+
+// Latest generation only: compaction/edit rewrites bump chat_messages.generation
+// and the digest must reflect the current conversation view, not superseded
+// rows. chat_messages.project_id is NULL on old rows — always filtered, so
+// pre-project-stamp rows fail closed rather than leaking across tenants.
+// Newest rows first under @row_limit so the cap keeps the end of a long
+// session — the part a handoff digest is about — and the service restores
+// chronological order. Content is never truncated here: finding-span
+// verification compares exact bytes, so per-message bounding happens after
+// masking, not at the read.
+func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, arg ListOwnedChatTranscriptMessagesForRecallParams) ([]ListOwnedChatTranscriptMessagesForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatTranscriptMessagesForRecall,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatTranscriptMessagesForRecallRow
+	for rows.Next() {
+		var i ListOwnedChatTranscriptMessagesForRecallRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.Source,
+			&i.RiskAnalyzedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPlatformMCPClientConnectionsForUpdate = `-- name: ListPlatformMCPClientConnectionsForUpdate :many
@@ -4131,6 +4413,196 @@ func (q *Queries) ListPlatformMCPInventoryDistributions(ctx context.Context, arg
 	return items, nil
 }
 
+const listPlatformMCPPluginAssignmentOptions = `-- name: ListPlatformMCPPluginAssignmentOptions :many
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_roles.organization_id = $3
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+), assignment_options AS (
+  SELECT
+    0::int AS kind_order,
+    ''::text AS sort_key,
+    'everyone'::text AS kind,
+    'Everyone'::text AS display_name,
+    NULL::bigint AS member_count,
+    '*'::text AS principal_urn
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR '*' = ANY($1::text[])
+  UNION ALL
+  SELECT
+    1::int,
+    active_roles.workos_slug,
+    'role'::text,
+    active_roles.workos_name,
+    COUNT(DISTINCT ora.user_id)::bigint,
+    ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text
+  FROM active_roles
+  LEFT JOIN organization_role_assignments ora
+    ON ora.organization_id = $3
+    AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+    AND ora.user_id IS NOT NULL
+    AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY($1::text[])
+  GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
+  UNION ALL
+  SELECT
+    2::int,
+    dg.name,
+    'directory_group'::text,
+    dg.name,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_group:' || dg.id::text)::text
+  FROM directory_groups dg
+  LEFT JOIN directory_user_group_memberships m
+    ON m.directory_group_id = dg.id
+    AND m.deleted IS FALSE
+  LEFT JOIN directory_users du
+    ON du.id = m.directory_user_id
+    AND du.organization_id = dg.organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+  WHERE dg.organization_id = $3
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY($1::text[])
+    )
+  GROUP BY dg.id, dg.name
+  UNION ALL
+  SELECT
+    3::int,
+    attribute.key || ':' || attribute.value,
+    'directory_attribute'::text,
+    attribute.key || ': ' || attribute.value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_attribute:' ||
+      translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+      translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_'))::text
+  FROM directory_users du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) attribute(key, value)
+  WHERE du.organization_id = $3
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
+    AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY($1::text[])
+    )
+  GROUP BY attribute.key, attribute.value
+)
+SELECT kind, display_name, member_count, principal_urn
+FROM assignment_options
+WHERE COALESCE(cardinality($1::text[]), 0) = 0
+   OR principal_urn = ANY($1::text[])
+ORDER BY kind_order, sort_key, principal_urn
+LIMIT $2
+`
+
+type ListPlatformMCPPluginAssignmentOptionsParams struct {
+	SelectedPrincipalUrns []string
+	ResultLimit           int32
+	OrganizationID        string
+}
+
+type ListPlatformMCPPluginAssignmentOptionsRow struct {
+	Kind         string
+	DisplayName  string
+	MemberCount  pgtype.Int8
+	PrincipalUrn string
+}
+
+// Resolves only the bounded assignment options this Platform response can use.
+// selected_principal_urns is empty for the organization-wide chooser and set to
+// one plugin's current assignments for the detail view.
+func (q *Queries) ListPlatformMCPPluginAssignmentOptions(ctx context.Context, arg ListPlatformMCPPluginAssignmentOptionsParams) ([]ListPlatformMCPPluginAssignmentOptionsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignmentOptions, arg.SelectedPrincipalUrns, arg.ResultLimit, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginAssignmentOptionsRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginAssignmentOptionsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.DisplayName,
+			&i.MemberCount,
+			&i.PrincipalUrn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPPluginAssignments = `-- name: ListPlatformMCPPluginAssignments :many
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPlatformMCPPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Reads the exact plugin's complete assignment set only after proving the
+// plugin belongs to the caller's organization and project. The complete set is
+// required for the optimistic-concurrency version; no principal leaves this
+// internal query boundary.
+func (q *Queries) ListPlatformMCPPluginAssignments(ctx context.Context, arg ListPlatformMCPPluginAssignmentsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
 
 SELECT
@@ -4153,9 +4625,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -4163,6 +4635,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND projects.organization_id = $2
@@ -4671,6 +5161,86 @@ func (q *Queries) ListPlatformMCPSubjectConnections(ctx context.Context, arg Lis
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskFindingSpansForRecall = `-- name: ListRiskFindingSpansForRecall :many
+SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE cm.chat_id = $1
+  AND rr.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = $1
+      AND project_id = $2
+  )
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
+`
+
+type ListRiskFindingSpansForRecallParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type ListRiskFindingSpansForRecallRow struct {
+	ChatMessageID uuid.NullUUID
+	Source        string
+	RuleID        pgtype.Text
+	Match         pgtype.Text
+	Spans         []byte
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
+}
+
+// Findings that drive inline masking of the recall digest. Message-anchored
+// rows only (the digest does not render content parts), with the canonical
+// suppression filters from risk's ListRiskResultsByChatFound: found, not
+// excluded, not swept as false positive, policy still enabled and not deleted.
+// Latest generation only, matching the transcript read: findings on
+// superseded generations mask nothing the digest renders, so loading them
+// would only let long, repeatedly compacted sessions inflate the scan.
+func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskFindingSpansForRecallRow
+	for rows.Next() {
+		var i ListRiskFindingSpansForRecallRow
+		if err := rows.Scan(
+			&i.ChatMessageID,
+			&i.Source,
+			&i.RuleID,
+			&i.Match,
+			&i.Spans,
+			&i.StartPos,
+			&i.EndPos,
 		); err != nil {
 			return nil, err
 		}

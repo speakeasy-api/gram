@@ -2182,6 +2182,7 @@ func unmarshalMetaMcpServerResponseBodyToTypesMetaMcpServer(v *MetaMcpServerResp
 		Visibility:          types.MetaMcpServerVisibility(*v.Visibility),
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
+		MemberCount:         v.MemberCount,
 	}
 
 	return res

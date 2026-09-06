@@ -47,7 +47,7 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 
 	current, err := service.Get(ctx, assistant, project, registrationID)
 	require.NoError(t, err)
-	require.Equal(t, "reporting", current.Mode, "a freshly registered MCP reports the unconfigured default")
+	require.Equal(t, "open", current.Mode, "a freshly registered MCP reports the default written at create")
 	require.Equal(t, []string{"disabled", "presets", "open"}, current.AllowedModes)
 	require.Empty(t, current.CustomClientURLs)
 

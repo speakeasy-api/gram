@@ -270,7 +270,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	state := selectionURL.Query().Get("state")
 	require.Contains(t, selection.Body.String(), `name="csrf_token" value="`)
 	csrfStart := strings.Index(selection.Body.String(), `name="csrf_token" value="`) + len(`name="csrf_token" value="`)
-	csrf := strings.Split(selection.Body.String()[csrfStart:], `"`)[0]
+	csrf, _, _ := strings.Cut(selection.Body.String()[csrfStart:], `"`)
 
 	selected := httptest.NewRecorder()
 	selectionForm := url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {"org-1"}}

@@ -187,10 +187,13 @@ type ObjectCompletionRequest struct {
 
 // CompletionResponse encapsulates the result of a completion call.
 type CompletionResponse struct {
-	StartTime    time.Time
-	Message      *or.ChatMessages
-	MessageID    string
-	Model        string
+	StartTime time.Time
+	Message   *or.ChatMessages
+	MessageID string
+	Model     string
+
+	// Provider is the exact provider identity reported by the completion gateway.
+	Provider     string
 	Usage        Usage
 	FinishReason *string
 	ToolCalls    []ToolCall

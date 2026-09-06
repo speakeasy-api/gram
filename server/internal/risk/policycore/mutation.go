@@ -107,7 +107,11 @@ type UpdateMutation struct {
 	BlockedURLsSet       bool
 	EffectiveDisposition string
 	SupersedeDecisions   bool
-	Actor                Actor
+	// ValidateLocked runs after the current row is locked but before any domain
+	// write. It returns the authoritative policy snapshot used by the adapter for
+	// validation so the core can carry its audience through audit and results.
+	ValidateLocked func(context.Context, pgx.Tx, Policy) (Policy, error)
+	Actor          Actor
 }
 
 // MutationResult is the committed policy row and canonical audience.
@@ -165,6 +169,32 @@ func (c *Core) CreatePolicy(ctx context.Context, input CreateMutation) (Mutation
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	result, err := c.createPolicyInTransaction(ctx, tx, input, deps)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MutationResult{}, mutationError("commit risk policy create", err)
+	}
+	c.AfterCreatePolicy(ctx, result)
+	return result, nil
+}
+
+// CreatePolicyInTransaction applies the complete policy create and audit to a
+// caller-owned transaction. The caller owns commit and must invoke
+// AfterCreatePolicy only after that commit succeeds.
+func (c *Core) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation) (MutationResult, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return MutationResult{}, err
+	}
+	if tx == nil {
+		return MutationResult{}, mutationError("policy mutation transaction is not configured", nil)
+	}
+	return c.createPolicyInTransaction(ctx, tx, input, deps)
+}
+
+func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (MutationResult, error) {
 	queries := repo.New(tx)
 	if err := queries.LockRiskPolicyMutations(ctx, input.Params.ProjectID.String()); err != nil {
 		return MutationResult{}, mutationError("lock risk policy mutations", err)
@@ -222,17 +252,22 @@ func (c *Core) CreatePolicy(ctx context.Context, input CreateMutation) (Mutation
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy create", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return MutationResult{}, mutationError("commit risk policy create", err)
-	}
-
-	if deps.CacheInvalidator != nil {
-		deps.CacheInvalidator.Invalidate(ctx, row.ProjectID)
-	}
-	if row.Enabled {
-		_ = deps.Signaler.Signal(ctx, row.ProjectID)
-	}
 	return MutationResult{Row: row, AudiencePrincipalURNs: audience}, nil
+}
+
+// AfterCreatePolicy runs best-effort convergence only after the transaction
+// containing the policy, audit, and any outer receipt has committed.
+func (c *Core) AfterCreatePolicy(ctx context.Context, result MutationResult) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return
+	}
+	if deps.CacheInvalidator != nil {
+		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
+	}
+	if result.Row.Enabled {
+		_ = deps.Signaler.Signal(ctx, result.Row.ProjectID)
+	}
 }
 
 // UpdatePolicy locks the current row, rejects a stale prepared command, and
@@ -249,6 +284,32 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	result, err := c.updatePolicyInTransaction(ctx, tx, input, deps)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MutationResult{}, mutationError("commit risk policy update", err)
+	}
+	c.AfterUpdatePolicy(ctx, result)
+	return result, nil
+}
+
+// UpdatePolicyInTransaction applies the complete locked sparse update and audit
+// to a caller-owned transaction. The caller owns commit and must invoke
+// AfterUpdatePolicy only after that commit succeeds.
+func (c *Core) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation) (MutationResult, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return MutationResult{}, err
+	}
+	if tx == nil {
+		return MutationResult{}, mutationError("policy mutation transaction is not configured", nil)
+	}
+	return c.updatePolicyInTransaction(ctx, tx, input, deps)
+}
+
+func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation, deps *MutationDependencies) (MutationResult, error) {
 	queries := repo.New(tx)
 	if err := queries.LockRiskPolicyMutations(ctx, input.Params.ProjectID.String()); err != nil {
 		return MutationResult{}, mutationError("lock risk policy mutations", err)
@@ -275,12 +336,28 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 	if err != nil {
 		return MutationResult{}, mutationError("load risk policy audience snapshot", err)
 	}
+	if input.ValidateLocked != nil {
+		validated, err := input.ValidateLocked(ctx, tx, Project(locked, currentAudience, nil))
+		if err != nil {
+			return MutationResult{}, err
+		}
+		currentAudience = validated.AudiencePrincipalURNs
+	}
+	effectiveAudience := input.AudiencePrincipals
+	if !input.AudienceChanged {
+		effectiveAudience, err = parsePrincipalURNs(currentAudience)
+		if err != nil {
+			return MutationResult{}, mutationError("parse risk policy audience snapshot", err)
+		}
+	}
 	row, err := queries.UpdateRiskPolicy(ctx, input.Params)
 	if err != nil {
 		return MutationResult{}, mutationError("update risk policy", err)
 	}
-	if err := replaceAudience(ctx, tx, row.OrganizationID, row.ID.String(), input.AudiencePrincipals); err != nil {
-		return MutationResult{}, mutationError("sync risk policy audience", err)
+	if input.AudienceChanged {
+		if err := replaceAudience(ctx, tx, row.OrganizationID, row.ID.String(), input.AudiencePrincipals); err != nil {
+			return MutationResult{}, mutationError("sync risk policy audience", err)
+		}
 	}
 
 	wasBlocking := isBlockingShadowPolicy(locked)
@@ -320,7 +397,7 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    optionalURLs(input.AllowedURLs, input.AllowedURLsSet),
-			Principals:     input.AudiencePrincipals,
+			Principals:     effectiveAudience,
 			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return MutationResult{}, mutationError("reconcile shadow mcp policy allowed urls", err)
@@ -344,7 +421,7 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 		}
 	}
 
-	audience := principalStrings(input.AudiencePrincipals)
+	audience := principalStrings(effectiveAudience)
 	if err := deps.Auditor.LogPolicyUpdate(ctx, tx, UpdateAuditEvent{
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
@@ -354,15 +431,20 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy update", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return MutationResult{}, mutationError("commit risk policy update", err)
-	}
-
-	if deps.CacheInvalidator != nil {
-		deps.CacheInvalidator.Invalidate(ctx, row.ProjectID)
-	}
-	_ = deps.Signaler.Signal(ctx, row.ProjectID)
 	return MutationResult{Row: row, AudiencePrincipalURNs: audience}, nil
+}
+
+// AfterUpdatePolicy runs best-effort convergence only after the transaction
+// containing the policy, audit, and any outer receipt has committed.
+func (c *Core) AfterUpdatePolicy(ctx context.Context, result MutationResult) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return
+	}
+	if deps.CacheInvalidator != nil {
+		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
+	}
+	_ = deps.Signaler.Signal(ctx, result.Row.ProjectID)
 }
 
 func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {
@@ -393,6 +475,18 @@ func principalStrings(principals []urn.Principal) []string {
 		values = append(values, principal.String())
 	}
 	return values
+}
+
+func parsePrincipalURNs(values []string) ([]urn.Principal, error) {
+	principals := make([]urn.Principal, 0, len(values))
+	for _, value := range values {
+		principal, err := urn.ParsePrincipal(value)
+		if err != nil {
+			return nil, fmt.Errorf("parse principal %q: %w", value, err)
+		}
+		principals = append(principals, principal)
+	}
+	return principals, nil
 }
 
 func isBlockingShadowPolicy(row repo.RiskPolicy) bool {

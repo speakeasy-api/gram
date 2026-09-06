@@ -61,12 +61,12 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		},
 		{
 			Name:        ToolDescribeTools,
-			Description: "Fetch full input schemas for named tools. Do not call a tool without first describing it to get its input schema.",
+			Description: "Fetch full input schemas for named tools. Do not call a tool without first describing it to get its input schema. Member catalog failures are reported under failed rather than failing the whole call.",
 			InputSchema: describeToolsSchema,
 		},
 		{
 			Name:        ToolExecuteTool,
-			Description: "Execute a specific tool by qualified name (serverslug--toolname), passing arguments that match that tool's schema.",
+			Description: "Execute one tool. Pass its qualified name (serverslug--toolname) as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`.",
 			InputSchema: executeToolSchema,
 		},
 	}

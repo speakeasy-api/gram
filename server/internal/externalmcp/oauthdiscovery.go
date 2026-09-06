@@ -355,7 +355,7 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return resp.Body.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close oauth discovery response body", func() error { return resp.Body.Close() })
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 		// The server deliberately answering that this well-known document is

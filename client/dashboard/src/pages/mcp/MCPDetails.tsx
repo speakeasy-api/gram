@@ -1,7 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
-import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -48,12 +47,12 @@ import {
   EXCLUDED_TAG_KEY,
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   getOAuthParadigm,
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
 } from "./toolsetAuthSurface";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
@@ -278,6 +277,7 @@ function MCPDetailPageContent({
   const location = useLocation();
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const tabContentRef = useTabScrollReset(activeTab ?? undefined);
 
   if (!activeTab) {
     const initialTab = initialTabFromHash(window.location.hash);
@@ -298,7 +298,10 @@ function MCPDetailPageContent({
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
         {/* Name, status, URL, and Playground live in the sidebar header now */}
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderMcpDetailTabContent(activeTab, toolset)}
         </div>
       </Page.Body>
@@ -607,10 +610,6 @@ export function MCPStatusDropdown({
     const needsConvertBlock =
       status === "private" &&
       mustConvertOAuthBeforePrivate({
-        flagEnabled:
-          telemetry.isFeatureEnabled(
-            ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
-          ) ?? false,
         mcpIsPublic: toolset.mcpIsPublic ?? false,
         userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),
@@ -1589,8 +1588,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      <MCPPublishingSection toolset={toolset} />
-
       <MCPToolFilteringSection
         className="mb-8"
         target={{
@@ -1704,23 +1701,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   );
 }
 
-// MCPPublishingSection wraps the shared publishing section for toolset-backed
-// MCP servers. The mcp_server-backed variant lives on the Remote MCP server
-// settings page; both share MCPPublishingSection.
-function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
-  return (
-    <SharedMCPPublishingSection
-      target={{
-        kind: "toolset",
-        toolsetId: toolset.id,
-        mcpSlug: toolset.mcpSlug ?? undefined,
-      }}
-      canPublish={Boolean(toolset.mcpEnabled && toolset.mcpSlug)}
-      disabledMessage="Enable this MCP server before publishing it to a collection."
-    />
-  );
-}
-
 export function PageSection({
   heading,
   description,
@@ -1764,10 +1744,12 @@ export function PageSection({
 export function OAuthDetailsModal({
   isOpen,
   onClose,
+  onManageMetadata,
   toolset,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onManageMetadata?: () => void;
   toolset: Toolset;
 }): React.JSX.Element {
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -1782,32 +1764,15 @@ export function OAuthDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="flex max-h-[80vh] max-w-2xl flex-col">
-        <Dialog.Header className="shrink-0">
+      <Dialog.Content className="max-w-2xl">
+        <Dialog.Header>
           <Dialog.Title>External OAuth Configuration</Dialog.Title>
         </Dialog.Header>
-        <div className="flex-1 overflow-y-auto">
+        <div>
           <Stack gap={4}>
             {toolset.externalOauthServer && (
               <Stack gap={2}>
-                <div className="flex items-center justify-between">
-                  <Text className="font-medium">External OAuth Server</Text>
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                    onClick={() =>
-                      removeOAuthMutation.mutate({
-                        request: { slug: toolset.slug },
-                      })
-                    }
-                  >
-                    <Button.LeftIcon>
-                      <Trash2 className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text className="sr-only">Remove OAuth</Button.Text>
-                  </Button>
-                </div>
+                <Text className="font-medium">External OAuth Server</Text>
                 <Stack gap={2} className="pl-4">
                   <div>
                     <Text small className="text-muted-foreground font-medium">
@@ -1817,35 +1782,90 @@ export function OAuthDetailsModal({
                       {toolset.externalOauthServer.slug}
                     </CodeBlock>
                   </div>
+                  {!toolset.externalOauthServer.authorizationServerIssuer && (
+                    <div>
+                      <Text small className="text-muted-foreground font-medium">
+                        OAuth Authorization Server Discovery URL:
+                      </Text>
+                      <CodeBlock
+                        className="mt-1"
+                        innerClassName="max-h-24 overflow-auto"
+                      >
+                        {mcpUrl
+                          ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
+                              toolset.mcpSlug
+                            }`
+                          : ""}
+                      </CodeBlock>
+                    </div>
+                  )}
                   <div>
                     <Text small className="text-muted-foreground font-medium">
-                      OAuth Authorization Server Discovery URL:
+                      Metadata Source:
                     </Text>
                     <CodeBlock className="mt-1">
-                      {mcpUrl
-                        ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
-                        : ""}
+                      {toolset.externalOauthServer.authorizationServerIssuer
+                        ? "Provider hosted"
+                        : "Gram hosted"}
                     </CodeBlock>
                   </div>
-                  <div>
-                    <Text small className="text-muted-foreground font-medium">
-                      OAuth Authorization Server Metadata:
-                    </Text>
-                    <CodeBlock className="mt-1">
-                      {JSON.stringify(
-                        toolset.externalOauthServer.metadata,
-                        null,
-                        2,
-                      )}
-                    </CodeBlock>
-                  </div>
+                  {toolset.externalOauthServer.authorizationServerIssuer ? (
+                    <div>
+                      <Text small className="text-muted-foreground font-medium">
+                        Issuer URL:
+                      </Text>
+                      <CodeBlock
+                        className="mt-1"
+                        innerClassName="max-h-24 overflow-auto"
+                      >
+                        {toolset.externalOauthServer.authorizationServerIssuer}
+                      </CodeBlock>
+                    </div>
+                  ) : (
+                    <div>
+                      <Text small className="text-muted-foreground font-medium">
+                        OAuth Authorization Server Metadata:
+                      </Text>
+                      <CodeBlock
+                        className="mt-1"
+                        innerClassName="max-h-64 overflow-auto"
+                      >
+                        {JSON.stringify(
+                          toolset.externalOauthServer.metadata,
+                          null,
+                          2,
+                        )}
+                      </CodeBlock>
+                    </div>
+                  )}
                 </Stack>
               </Stack>
             )}
           </Stack>
         </div>
+        {toolset.externalOauthServer && (
+          <Dialog.Footer>
+            {onManageMetadata && (
+              <Button variant="secondary" onClick={onManageMetadata}>
+                Manage metadata source
+              </Button>
+            )}
+            <Button
+              variant="destructive-secondary"
+              disabled={removeOAuthMutation.isPending}
+              onClick={() =>
+                removeOAuthMutation.mutate({
+                  request: { slug: toolset.slug },
+                })
+              }
+            >
+              <Button.LeftIcon>
+                <Trash2 className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Remove OAuth</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        )}
       </Dialog.Content>
     </Dialog>
   );

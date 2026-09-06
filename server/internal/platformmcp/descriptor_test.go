@@ -17,7 +17,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -170,7 +170,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -178,14 +178,22 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	}
 
 	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment.
+	// compatibility deployment. Session recall stays external-only because it
+	// contains user-personal cross-project transcripts. Data exports stay
+	// external-only because creation can send future project data off-platform.
 	for _, name := range []string{
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
+		"list_plugin_assignments",
 		"list_plugins",
 		"get_plugin",
+		operationSetPluginAssignments,
+		"list_my_sessions",
+		"continue_session",
+		"list_data_exports",
+		"create_data_export",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
 
 	// The reads, registration paths, and persisted readiness projections are
@@ -197,6 +205,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_recent_tool_calls",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
@@ -211,6 +220,13 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"set_mcp_client_admission",
 		"disable_mcp",
 		"enable_mcp",
+		"list_risk_policies",
+		"get_risk_policy",
+		"list_risk_exclusions",
+		"create_risk_policy",
+		"update_risk_policy",
+		"create_risk_exclusion",
+		"update_risk_exclusion",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -222,7 +238,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {
@@ -309,6 +325,15 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 		require.NoError(t, json.Unmarshal(encoded, &decoded))
 		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
 	}
+}
+
+func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetMCPReadinessToolOutput]("get_mcp_readiness")
+	category := schema.Properties["setup_category"]
+	require.NotNil(t, category)
+	require.Equal(t, setupCategoryEnumValues(), category.Enum)
 }
 
 // Schema inference panics at process boot, so a tool input the nil-dependency

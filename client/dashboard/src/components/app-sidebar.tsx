@@ -23,8 +23,10 @@ import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
+import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
@@ -118,6 +120,7 @@ export function AppSidebar({
   const isWideSidebarDetailRoute =
     routes.mcp.details.active ||
     routes.mcp.x.active ||
+    routes.mcp.gateway.active ||
     routes.mcp.builtIn.active ||
     routes.skills.detail.active ||
     routes.plugins.detail.active;
@@ -138,6 +141,8 @@ export function AppSidebar({
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
+  } else if (routes.mcp.gateway.active) {
+    sidebarContent = <GatewaySidebarNav />;
   } else if (routes.mcp.builtIn.active) {
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
@@ -188,6 +193,9 @@ export function AppSidebar({
             label="Observe"
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
+              // First in the group: an identity is the subject the rest of
+              // these pages measure.
+              { item: routes.identities, ...accessFor(routes.identities) },
               { item: routes.costs, ...accessFor(routes.costs) },
               { item: routes.insights, ...accessFor(routes.insights) },
               {
@@ -198,7 +206,6 @@ export function AppSidebar({
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
-              { item: routes.employees, ...accessFor(routes.employees) },
             ]}
           />
 
@@ -302,6 +309,7 @@ export function AppSidebar({
         <div className="mb-2 flex flex-col gap-1.5">
           <TrialStatusCard />
           <OnboardingResumeButton />
+          <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>
         <SidebarUserMenu />

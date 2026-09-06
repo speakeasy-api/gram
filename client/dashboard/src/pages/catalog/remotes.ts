@@ -14,7 +14,8 @@ export function isFigmaCatalogServer(server: PulseMCPServer): boolean {
 
 export function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
   const httpRemotes = server.remotes?.filter(
-    (r) => r.transportType === "streamable-http",
+    (r) =>
+      r.transportType === "streamable-http" && r.url.startsWith("https://"),
   );
   return {
     ...server,

@@ -51,7 +51,7 @@ func testKey(t *testing.T, id string) Key {
 
 	return Key{
 		Issuer: t.Name(),
-		Client: "https://client.example.com/oauth/client.json",
+		Party:  "https://client.example.com/oauth/client.json",
 		ID:     id,
 	}
 }

@@ -5,6 +5,13 @@
 
 #USAGE flag "--long" help="Enable more detailed reporting"
 
+# The server is linted with a golangci-lint binary that has the glint plugin
+# compiled in (see .custom-gcl.yml). Everything else is stock golangci-lint:
+# its cache is shared across worktrees because golangci-lint 2.13.2 and later
+# key entries on module-relative paths, and Go's GOMEMLIMIT/GOGC are honored
+# from the environment for anyone who needs to bound a cold run on a small
+# machine (mise.local.toml is the place to set them).
+
 set -eo pipefail
 
 args=(--show-stats=false --output.text.print-issued-lines=false)
@@ -12,195 +19,67 @@ if [ "${usage_long:-false}" = "true" ]; then
     args=()
 fi
 
-gcl_fingerprint_file=./bin/gcl.fingerprint
+# `golangci-lint custom` builds whatever version .custom-gcl.yml names, so a
+# mise bump that forgets the file would silently keep linting with the old
+# version (and the old cache-key behavior).
+expected_version=$(sed -n 's/^version: v\{0,1\}//p' .custom-gcl.yml)
+installed_version=$(golangci-lint version --short)
+if [ "$expected_version" != "$installed_version" ]; then
+    echo "golangci-lint $installed_version is installed but .custom-gcl.yml builds v$expected_version; keep them in sync" >&2
+    exit 1
+fi
 
-gcl_input_fingerprint() (
+# gcl gets its own cache directory so that clearing it after a rebuild (below)
+# does not discard the stock binary's entries for the other Go modules. The
+# cache is still shared by every worktree.
+export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}}/gcl"
+
+# Rebuild gcl only when its inputs change: the Go toolchain it embeds (a
+# binary built with an older go/types cannot check packages that require a
+# newer Go), the glint module, and the build configuration. The plugin module
+# has its own go.mod, so server dependency bumps do not invalidate the
+# binary. Only files git would track count, so test reports and other ignored
+# artifacts under glint/ do not trigger a rebuild, and test fixtures and test
+# files are excluded because they never reach the binary.
+gcl_fingerprint_file=./bin/gcl.fingerprint
+gcl_inputs=$(
     cd ..
-    paths=$(find glint server/.custom-gcl.yml go.mod go.sum -type f -print | LC_ALL=C sort)
     {
-        printf 'paths\n%s\ncontents\n' "$paths"
-        printf '%s\n' "$paths" | git hash-object --stdin-paths
+        go env GOVERSION GOOS GOARCH
+        git ls-files --cached --others --exclude-standard -- glint server/.custom-gcl.yml |
+            grep -v -e '^glint/testdata/' -e '_test\.go$' |
+            LC_ALL=C sort |
+            while IFS= read -r path; do
+                # A tracked file deleted from the working tree is still an
+                # index entry but no longer an input. Paths are hashed next
+                # to contents so that a rename also counts as a change.
+                if [ -f "$path" ]; then
+                    printf '%s\n' "$path"
+                    git hash-object "$path"
+                fi
+            done
     } | git hash-object --stdin
 )
-
-gcl_inputs=$(gcl_input_fingerprint)
 gcl_stamp=
 if [ -r "$gcl_fingerprint_file" ]; then
     IFS= read -r gcl_stamp < "$gcl_fingerprint_file"
 fi
 
-gcl_binary=
-if [ -x ./bin/gcl ]; then
-    gcl_binary=$(git hash-object ./bin/gcl)
-fi
-
-if [ "$gcl_stamp" != "${gcl_inputs}:${gcl_binary}" ]; then
+if [ ! -x ./bin/gcl ] || [ "$gcl_stamp" != "$gcl_inputs" ]; then
     echo "Building gcl..."
     build_started=$SECONDS
-    golangci-lint custom --destination ./bin --name gcl
-    gcl_binary=$(git hash-object ./bin/gcl)
-    gcl_stamp="${gcl_inputs}:${gcl_binary}"
-    printf '%s\n' "$gcl_stamp" > "$gcl_fingerprint_file"
+    # GOTOOLCHAIN=local pins the build to the Go that mise installs. Without it
+    # the cloned golangci-lint module can pull a newer toolchain and compile
+    # the whole dependency tree a second time under it.
+    GOTOOLCHAIN=local golangci-lint custom --destination ./bin --name gcl
+    printf '%s\n' "$gcl_inputs" > "$gcl_fingerprint_file"
     echo "Built gcl in $((SECONDS - build_started))s"
-fi
-
-current_worktree=$(git rev-parse --show-toplevel)
-common_git_dir=$(cd "$(git rev-parse --git-common-dir)" && pwd)
-lint_config=$(git hash-object .golangci.yaml)
-lint_cache_key=$(printf '%s\n%s\n' "$gcl_stamp" "$lint_config" | git hash-object --stdin)
-
-lint_input_fingerprint() (
-    cd "$current_worktree"
-
-    hash_paths() {
-        while IFS= read -r path; do
-            if [ -f "$path" ]; then
-                printf '%s\n' "$path"
-            fi
-        done | git hash-object --stdin-paths
-    }
-
-    untracked=$(git ls-files --others --exclude-standard)
-    special_index=$(
-        while IFS= read -r entry; do
-            tag=${entry%% *}
-            # The pattern carries a leading parenthesis because bash 3.2, which
-            # is still the /bin/bash macOS ships, cannot parse a case statement
-            # inside $( ) without one and fails the whole script at parse time.
-            case "$tag" in
-                ([a-z]|S) printf '%s\n' "${entry#? }" ;;
-            esac
-        done < <(git ls-files -v)
-    )
-    ignored_go_inputs=$(
-        git ls-files --others --ignored --exclude-standard -- \
-            '*.go' '*.c' '*.cc' '*.cxx' '*.cpp' '*.m' \
-            '*.h' '*.hh' '*.hpp' '*.f' '*.F' '*.for' '*.f90' \
-            '*.s' '*.S' '*.sx' '*.swig' '*.swigcxx' '*.syso' \
-            'go.mod' 'go.sum' 'go.work' 'go.work.sum'
-    )
-    go_work=$(go env GOWORK)
-    go_env_file=$(go env GOENV)
-    # Leading parentheses on the patterns for the bash 3.2 reason above.
-    go_config_paths=$(
-        case "$go_work" in
-            (''|off) ;;
-            (*) printf '%s\n%s.sum\n' "$go_work" "$go_work" ;;
-        esac
-        case "$go_env_file" in
-            (''|off) ;;
-            (*) printf '%s\n' "$go_env_file" ;;
-        esac
-    )
-
-    {
-        printf 'head\n'
-        git rev-parse HEAD
-        printf 'staged\n'
-        git diff --cached --no-ext-diff --binary | git hash-object --stdin
-        printf 'unstaged\n'
-        git diff --no-ext-diff --binary | git hash-object --stdin
-        printf 'untracked-paths\n%s\nuntracked-contents\n' "$untracked"
-        printf '%s\n' "$untracked" | hash_paths
-        printf 'special-index-paths\n%s\nspecial-index-contents\n' "$special_index"
-        printf '%s\n' "$special_index" | hash_paths
-        printf 'ignored-go-paths\n%s\nignored-go-contents\n' "$ignored_go_inputs"
-        printf '%s\n' "$ignored_go_inputs" | hash_paths
-        printf 'go-config-paths\n%s\ngo-config-contents\n' "$go_config_paths"
-        printf '%s\n' "$go_config_paths" | hash_paths
-        printf 'go-env\n'
-        go env \
-            GOOS GOARCH GOAMD64 GOARM64 GOEXPERIMENT GOFLAGS GOVERSION GOROOT \
-            CGO_ENABLED CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_LDFLAGS \
-            CC CXX PKG_CONFIG GOWORK GOENV GOMOD GOMODCACHE GOPATH GOTOOLCHAIN
-    } | git hash-object --stdin
-)
-
-# golangci-lint includes absolute filenames in its cache keys. Run worktrees
-# with the same binary and lint configuration through one stable path so they
-# share cache entries. Including the cache key in that path also prevents stale
-# reuse after either input changes. The lock prevents another worktree from
-# retargeting the symlink while linting is in progress.
-stable_worktree="${common_git_dir}/gcl-lint-worktree-${lint_cache_key}"
-lint_lock="${stable_worktree}.lock"
-lock_start=$(LC_ALL=C ps -p "$$" -o lstart=)
-lock_owner="$$:${lock_start}"
-
-acquire_lint_lock() {
-    local current_start owner owner_pid owner_start
-    while ! ln -s "$lock_owner" "$lint_lock" 2>/dev/null; do
-        owner=$(readlink "$lint_lock" 2>/dev/null || true)
-        owner_pid=${owner%%:*}
-        owner_start=${owner#*:}
-        case "$owner_pid" in
-            ''|*[!0-9]*) ;;
-            *)
-                if [ "$owner_start" != "$owner" ]; then
-                    current_start=$(LC_ALL=C ps -p "$owner_pid" -o lstart= 2>/dev/null || true)
-                    if [ -n "$current_start" ] && [ "$current_start" = "$owner_start" ]; then
-                        sleep 1
-                        continue
-                    fi
-                fi
-                ;;
-        esac
-        rm -f "$lint_lock"
-    done
-}
-
-release_lint_lock() {
-    local owner
-    owner=$(readlink "$lint_lock" 2>/dev/null || true)
-    if [ "$owner" = "$lock_owner" ]; then
-        rm -f "$stable_worktree" "$lint_lock"
-    fi
-}
-
-acquire_lint_lock
-trap release_lint_lock EXIT
-rm -f "$stable_worktree"
-ln -s "$current_worktree" "$stable_worktree"
-cd "${stable_worktree}/server"
-lint_inputs=$(lint_input_fingerprint)
-
-# A cold golangci-lint run over every server package holds the analysis graph
-# for thousands of files at once. Priming the cache from the server binary
-# first covers most shared dependencies with a much smaller live set; the full
-# run can then reuse those results. Once this cache/config pair has completed,
-# skip the prime so warm runs retain their existing fast path.
-lint_cache_location=${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME}}
-lint_warm_key=$(printf '%s\n%s\n' "$lint_cache_key" "$lint_cache_location" | git hash-object --stdin)
-lint_warm_marker="${common_git_dir}/gcl-lint-warm-${lint_warm_key}"
-lint_success_file="${common_git_dir}/gcl-lint-success-${lint_cache_key}"
-lint_success=
-if [ -r "$lint_success_file" ]; then
-    IFS= read -r lint_success < "$lint_success_file"
-fi
-
-# A successful lint is deterministic for the linter, config, worktree, and
-# Go build environment fingerprinted above. Avoid starting go list and
-# golangci-lint again when another worktree has already checked the exact same
-# inputs. --long always runs because its purpose is to print detailed results.
-if [ "${usage_long:-false}" != "true" ] && [ "$lint_success" = "$lint_inputs" ]; then
-    release_lint_lock
-    trap - EXIT
-    exit 0
-fi
-
-if [ ! -e "$lint_warm_marker" ]; then
-    echo "Priming gcl cache..."
-    prime_started=$SECONDS
-    if ./bin/gcl run \
-        --issues-exit-code=0 \
-        --show-stats=false \
-        --output.text.path=/dev/null \
-        .
-    then
-        echo "Primed gcl cache in $((SECONDS - prime_started))s"
-        touch "$lint_warm_marker"
-    else
-        echo "Failed to prime gcl cache; continuing with full run" >&2
-    fi
+    # golangci-lint keys its cache on a hash of the plugin directory, but that
+    # hash does not descend into subdirectories, so analyzer changes under
+    # glint/imports would otherwise be served stale results from the cache.
+    # Only gcl's own cache directory is affected (see GOLANGCI_LINT_CACHE
+    # above).
+    ./bin/gcl cache clean
 fi
 
 # Generated packages produce no diagnostics after golangci-lint's generated
@@ -230,20 +109,4 @@ while IFS= read -r package_dir; do
     esac
 done <<< "$package_dirs"
 
-if ./bin/gcl run --max-issues-per-linter=0 "${args[@]}" "${lint_packages[@]}"; then
-    lint_status=0
-else
-    lint_status=$?
-fi
-
-if [ "$lint_status" -eq 0 ]; then
-    touch "$lint_warm_marker"
-    lint_inputs_after=$(lint_input_fingerprint)
-    if [ "$lint_inputs_after" = "$lint_inputs" ]; then
-        printf '%s\n' "$lint_inputs" > "$lint_success_file"
-    fi
-fi
-
-release_lint_lock
-trap - EXIT
-exit "$lint_status"
+exec ./bin/gcl run --max-issues-per-linter=0 "${args[@]}" "${lint_packages[@]}"

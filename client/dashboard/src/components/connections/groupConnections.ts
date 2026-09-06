@@ -17,13 +17,17 @@ import type { UserSessionUpstream } from "@gram/client/models/components/userses
  * admin arrives with is almost always about someone — who has access, and what
  * can they reach — rather than about a credential.
  */
-export type ConnectionGrouping = "subject" | "provider" | "client";
+export type ConnectionGrouping = "subject" | "issuer" | "provider" | "client";
 
 // "Agent" rather than "client": the OAuth client on the other side of a
 // connection is an agent, and that is what it is called everywhere else in the
 // product. `client` stays as the key, which names the protocol record.
 export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
   subject: "Person",
+  // The Gram MCP server the session was issued through, which is what the rest
+  // of the product means by "MCP server" — distinct from "Provider", the
+  // upstream the server holds tokens for.
+  issuer: "MCP server",
   provider: "Provider",
   client: "Agent",
 };
@@ -53,7 +57,9 @@ export type ConnectionGroup = {
    * face. Absent for provider and client groups, which are not identities and
    * would read oddly with an initials badge.
    */
-  identity?: { photoUrl?: string };
+  // `urn` is the subject URN the sessions were filed under, which is also the
+  // identity URN the person's page resolves from.
+  identity?: { photoUrl?: string; urn?: string };
   /**
    * The registration this group stands for, under client grouping. Carrying the
    * whole record (rather than an id) lets the header offer "revoke
@@ -98,6 +104,15 @@ function groupKeysFor(
   switch (grouping) {
     case "subject":
       return [{ key: session.subjectUrn, label: subjectLabel(session) }];
+    case "issuer":
+      return [
+        {
+          key: session.userSessionIssuerId,
+          // The slug is the server's own name; unlike an upstream's it needs
+          // no provider lookup to read.
+          label: session.issuerSlug,
+        },
+      ];
     case "client": {
       const label = session.clientName ?? "Unknown client";
       return [{ key: session.userSessionClientId ?? label, label }];
@@ -178,7 +193,10 @@ export function groupConnections(
           // initials rather than omitting the avatar.
           identity:
             grouping === "subject" && session.subjectType === "user"
-              ? { photoUrl: session.subjectPhotoUrl ?? undefined }
+              ? {
+                  photoUrl: session.subjectPhotoUrl ?? undefined,
+                  urn: session.subjectUrn,
+                }
               : undefined,
           client: undefined,
           // Both read off the session rather than a registration record, which

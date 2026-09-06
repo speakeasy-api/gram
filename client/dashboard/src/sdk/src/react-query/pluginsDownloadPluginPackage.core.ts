@@ -12,10 +12,10 @@ import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPack
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
-  DownloadPluginPackageQueryParamPlatform,
   DownloadPluginPackageRequest,
   DownloadPluginPackageResponse,
   DownloadPluginPackageSecurity,
+  QueryParamPlatform,
 } from "../models/operations/downloadpluginpackage.js";
 import { unwrapAsync } from "../types/fp.js";
 export type PluginsDownloadPluginPackageQueryData =
@@ -83,7 +83,7 @@ export function buildPluginsDownloadPluginPackageQuery(
 export function queryKeyPluginsDownloadPluginPackage(
   parameters: {
     pluginId: string;
-    platform: DownloadPluginPackageQueryParamPlatform;
+    platform: QueryParamPlatform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

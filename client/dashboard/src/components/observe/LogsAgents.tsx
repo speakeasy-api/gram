@@ -123,6 +123,7 @@ const SESSION_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
   {
     id: "min_risk_score",
@@ -130,6 +131,7 @@ const SESSION_FILTERS = defineFilters([
     kind: "number",
     min: 1,
     placeholder: "e.g. 3 (≥ 3 findings)",
+    description: "Only sessions with at least this many risk findings.",
   },
 ]);
 

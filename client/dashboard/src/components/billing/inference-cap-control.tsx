@@ -1,4 +1,5 @@
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
+import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import {
   inferenceCapAnchor,
   inferenceCapLabel,
@@ -14,15 +15,10 @@ import { invalidateAllGetInferenceSpendCaps } from "@gram/client/react-query/get
 import { useSetSpendCapMutation } from "@gram/client/react-query/setSpendCap.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
 
 /** The bounds the API accepts for a monthly inference cap, in whole USD. */
 const MIN_CAP_USD = 1;
 const MAX_CAP_USD = 10_000;
-
-// The in-app booking gate, which prefills the form from the session — the same
-// path the trial card sends people to. Not the marketing site's /talk-to-us.
-const SALES_PATH = "/talk-to-us";
 
 function formatUsd(amount: number): string {
   return `$${amount.toLocaleString("en-US")}`;
@@ -143,7 +139,7 @@ function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
     <Stack gap={4} className="max-w-md">
       <Stack gap={2}>
         <Label htmlFor={fieldId}>{label}</Label>
-        <InferenceCapMeter cap={cap} title={false} />
+        <InferenceCapMeter cap={cap} />
         <Input
           id={fieldId}
           type="number"
@@ -174,7 +170,7 @@ function CapReadOnly({
   return (
     <Stack gap={2} className="max-w-md">
       <Text className="text-eyebrow">{inferenceCapLabel(cap.keyType)}</Text>
-      <InferenceCapMeter cap={cap} title={false} />
+      <InferenceCapMeter cap={cap} />
       <Text muted small>
         {note}
       </Text>
@@ -297,7 +293,7 @@ function CapForm({
       <Stack gap={4} className="max-w-md">
         <Stack gap={2}>
           <Label htmlFor={fieldId}>{label}</Label>
-          <InferenceCapMeter cap={cap} title={false} />
+          <InferenceCapMeter cap={cap} />
           <Input
             id={fieldId}
             type="number"
@@ -330,9 +326,17 @@ function CapForm({
               admin who just had a larger amount rejected. */}
           <Text muted small>
             Need a cap above {MAX_LABEL}?{" "}
-            <Link to={SALES_PATH} className="underline underline-offset-2">
+            <BookingCalendarLink
+              eventLabel="Inference caps — 30 min"
+              formDefaults={{
+                source: "Dashboard: Inference caps",
+                notes: `Request inference cap above ${MAX_LABEL}`,
+              }}
+              telemetrySource="inference_cap"
+              className="underline"
+            >
               Talk to us
-            </Link>
+            </BookingCalendarLink>
             .
           </Text>
         </Stack>

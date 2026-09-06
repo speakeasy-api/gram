@@ -220,9 +220,9 @@ func firstNonEmpty(values ...string) string {
 // invoking the returned cancel.
 func runtimeRequestContext(parent context.Context, maxTimeSeconds int, fallback time.Duration) (context.Context, context.CancelFunc) {
 	if maxTimeSeconds > 0 {
-		return context.WithTimeout(parent, time.Duration(maxTimeSeconds)*time.Second) //nolint:gosec // cancel returned to caller
+		return context.WithTimeout(parent, time.Duration(maxTimeSeconds)*time.Second)
 	}
-	return context.WithTimeout(parent, fallback) //nolint:gosec // cancel returned to caller
+	return context.WithTimeout(parent, fallback)
 }
 
 // threadBootstrap is the response the runner receives from

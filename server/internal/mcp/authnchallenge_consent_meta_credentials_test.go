@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -52,16 +51,21 @@ func (g connectedMeta) resolveTokens(t *testing.T, ctx context.Context) map[uuid
 	return tokens
 }
 
-// route drives the real routeUpstreamToken for one backend's upstream
-// resource. Nothing here is stubbed: the map comes from the database and the
-// selection rule is the one the proxy uses.
-func (g connectedMeta) route(t *testing.T, ctx context.Context, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) (string, error) {
+// tokenFor returns the resolved credential for one member's client. The
+// selection rule that spends these maps (routeUpstreamToken) is pinned by its
+// own unit table in serveendpoint_internal_test.go; these tests assert the
+// grant state consent persisted — the writer half of that contract.
+func tokenFor(t *testing.T, tokens map[uuid.UUID]remotesessions.UpstreamToken, clientID uuid.UUID) remotesessions.UpstreamToken {
 	t.Helper()
-	token, err := mcp.RouteUpstreamTokenForTest(ctx, g.fx.ti.logger, tokens, upstreamResource)
-	if err != nil {
-		return "", fmt.Errorf("route upstream token: %w", err)
+	// The map is keyed by remote_session_issuer_id; each entry names the
+	// client its credential belongs to.
+	for _, token := range tokens {
+		if token.RemoteSessionClientID == clientID {
+			return token
+		}
 	}
-	return token, nil
+	require.Failf(t, "no credential resolved", "client %s", clientID)
+	return remotesessions.UpstreamToken{}
 }
 
 // connectMeta seeds a meta MCP with count remote members and drives each
@@ -149,21 +153,22 @@ func TestMetaMCPCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 3)
 
+	resources := map[string]bool{}
 	for _, member := range gw.members {
-		got, err := gw.route(t, ctx, tokens, member.upstreamURL)
-		require.NoError(t, err, "member %s must resolve a credential", member.upstreamURL)
-		require.Equal(t, member.accessToken, got, "member %s must receive its own credential", member.upstreamURL)
+		token := tokenFor(t, tokens, member.clientID)
+		require.Equal(t, member.accessToken, token.Token, "member %s must hold its own credential", member.upstreamURL)
+		require.Equal(t, member.upstreamURL, token.Resource, "the credential must be qualified to its member")
+		resources[token.Resource] = true
 	}
-
-	// A backend nobody consented to gets nothing rather than somebody else's.
-	got, err := gw.route(t, ctx, tokens, "https://aim87-select-unknown.example.com/mcp")
-	require.Error(t, err)
-	require.Empty(t, got)
+	// Every resource is distinct and none matches a backend nobody consented
+	// to, so the exact-match selection rule cannot serve an unknown backend.
+	require.Len(t, resources, 3)
+	require.NotContains(t, resources, "https://aim87-select-unknown.example.com/mcp")
 }
 
-// The same meta MCP unstamped records unqualified grants, and routeUpstreamToken
-// — untouched by this change — then serves no member at all. The negative that
-// gives the positive above its meaning, and the pre-backfill state.
+// The same meta MCP unstamped records unqualified grants, which the routers
+// then serve to no remote member at all. The negative that gives the positive
+// above its meaning, and the pre-backfill state.
 func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
 	t.Parallel()
 
@@ -177,17 +182,19 @@ func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 3)
 
+	// Several credentials, all unqualified: exact-match selection serves none
+	// of them to a remote member, however few there are.
 	for _, member := range gw.members {
-		got, err := gw.route(t, ctx, tokens, member.upstreamURL)
-		require.Error(t, err, "member %s must not be served from an unqualified credential", member.upstreamURL)
-		require.Empty(t, got)
+		require.Empty(t, tokenFor(t, tokens, member.clientID).Resource,
+			"member %s must not hold a qualified credential", member.upstreamURL)
 	}
 }
 
-// The complement, and pre-existing routeUpstreamToken behaviour this change
-// leaves alone: a lone credential is forwarded even to a member it was not
-// minted for. Why qualification matters once a meta MCP holds a second member.
-func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
+// A member without a stamped issuer mints an unqualified grant. The routers
+// refuse to forward it to any member — there is no lone-token fallback — so
+// the credential resolves but spends nowhere until re-consent qualifies it;
+// the selection rules are pinned by the router unit tables.
+func TestMetaMCPCredentials_LoneCredentialStaysUnqualified(t *testing.T) {
 	t.Parallel()
 
 	ctx, gw := connectMeta(t, "aim87-lone", 1, false)
@@ -195,9 +202,9 @@ func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 1)
 
-	got, err := gw.route(t, ctx, tokens, "https://aim87-lone-other.example.com/mcp")
-	require.NoError(t, err, "the lone-credential pass-through is deliberate")
-	require.Equal(t, gw.members[0].accessToken, got)
+	token := tokenFor(t, tokens, gw.members[0].clientID)
+	require.Equal(t, gw.members[0].accessToken, token.Token)
+	require.Empty(t, token.Resource)
 }
 
 // A grant qualified before a member was detached stays bound to the member it
@@ -224,13 +231,14 @@ func TestMetaMCPCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	require.Equal(t, survivor.upstreamURL, postConnectAction(t, gw.fx, survivor.clientID).Query().Get("resource"),
 		"and the surviving member must still qualify its own")
 
-	// The credentials minted before the detach are untouched by it.
+	// The credentials minted before the detach are untouched by it: each
+	// stays qualified to the member it was minted for, so the exact-match
+	// selection rule keeps them bound rather than drifting.
 	tokens := gw.resolveTokens(t, ctx)
-	got, err := gw.route(t, ctx, tokens, removed.upstreamURL)
-	require.NoError(t, err)
-	require.Equal(t, removed.accessToken, got, "the stale credential stays bound to the member it was minted for")
-
-	got, err = gw.route(t, ctx, tokens, survivor.upstreamURL)
-	require.NoError(t, err)
-	require.Equal(t, survivor.accessToken, got, "and the surviving member still selects its own")
+	removedToken := tokenFor(t, tokens, removed.clientID)
+	require.Equal(t, removed.accessToken, removedToken.Token, "the stale credential stays bound to the member it was minted for")
+	require.Equal(t, removed.upstreamURL, removedToken.Resource)
+	survivorToken := tokenFor(t, tokens, survivor.clientID)
+	require.Equal(t, survivor.accessToken, survivorToken.Token, "and the surviving member keeps its own")
+	require.Equal(t, survivor.upstreamURL, survivorToken.Resource)
 }

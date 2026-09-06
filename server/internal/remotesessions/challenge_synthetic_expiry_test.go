@@ -15,6 +15,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -137,9 +138,17 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 	require.NoError(t, err)
 	state := states[env.clientID]
 	require.True(t, state.CanRefresh)
+	// The two deadlines stay apart rather than collapsing to the earliest.
+	// They behave oppositely — using the session postpones the refresh idle
+	// timeout, while nothing moves the authorization lifetime — so the consent
+	// page states them separately and suppresses only the idle one when auto
+	// refresh is renewing the session.
 	require.NotNil(t, state.RefreshExpiresAt)
-	require.WithinDuration(t, before.Add(time.Hour), *state.RefreshExpiresAt, time.Minute,
-		"the consent tooltip must show the earliest known renewal deadline")
+	require.WithinDuration(t, before.Add(2*time.Hour), *state.RefreshExpiresAt, time.Minute,
+		"refresh expiry is the refresh token's own idle deadline")
+	require.NotNil(t, state.AuthorizationExpiresAt)
+	require.WithinDuration(t, before.Add(time.Hour), *state.AuthorizationExpiresAt, time.Minute,
+		"authorization expiry is the absolute end of the grant")
 }
 
 // syntheticExpiryEnv is the materialized state after a remote-login round trip
@@ -167,6 +176,27 @@ type syntheticExpiryEnv struct {
 // remote_sessions row and the handles needed to resolve it. slugSuffix keeps
 // fixtures unique per test.
 func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv) {
+	t.Helper()
+
+	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, callback.Code)
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	env.session = session
+
+	return ctx, env
+}
+
+// driveSyntheticLogin is newSyntheticExpiryEnv up to and including the
+// callback. The callback's recorder and error come back unasserted, so a test
+// can exercise a code exchange the callback is expected to reject; the
+// returned env carries no session row.
+func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
 	t.Helper()
 
 	ctx, ti := newTestService(t)
@@ -269,14 +299,10 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	cbReq := httptest.NewRequest(http.MethodGet,
 		"/mcp/remote_login_callback?code=upstream-code&state="+url.QueryEscape(state), nil)
 	cbW := httptest.NewRecorder()
-	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))
-	require.Equal(t, http.StatusSeeOther, cbW.Code)
-
-	session, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            subject,
-		RemoteSessionClientID: client.ID,
-	})
-	require.NoError(t, err)
+	callbackErr := mgr.HandleRemoteLoginCallback(cbW, cbReq)
+	if callbackErr != nil {
+		callbackErr = fmt.Errorf("handle remote login callback: %w", callbackErr)
+	}
 
 	return ctx, syntheticExpiryEnv{
 		mgr:       mgr,
@@ -289,6 +315,5 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		organizationID: authCtx.ActiveOrganizationID,
 		clientID:       client.ID,
 		subject:        subject,
-		session:        session,
-	}
+	}, cbW, callbackErr
 }

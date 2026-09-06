@@ -94,7 +94,7 @@ var _ = Service("metaMcp", func() {
 	})
 
 	Method("updateMetaMcpServer", func() {
-		Description("Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.")
+		Description("Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.")
 
 		Payload(func() {
 			Extend(UpdateMetaMcpServerForm)
@@ -274,7 +274,7 @@ var CreateMetaMcpServerForm = Type("CreateMetaMcpServerForm", func() {
 })
 
 var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
-	Description("Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.")
+	Description("Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.")
 
 	Attribute("id", String, "The ID of the meta MCP server to update", func() {
 		Format(FormatUUID)
@@ -316,6 +316,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 		Description("When the meta MCP server was last updated")
 		Format(FormatDateTime)
 	})
+	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
 	Required("id", "organization_id", "project_id", "name", "visibility", "created_at", "updated_at")
 })

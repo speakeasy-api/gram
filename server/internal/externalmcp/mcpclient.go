@@ -74,8 +74,7 @@ type limitedBody struct {
 
 func (b *limitedBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
-	var tooLarge *http.MaxBytesError
-	if errors.As(err, &tooLarge) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		b.tripped.Store(true)
 		return n, fmt.Errorf("%w: %w", ErrResponseTooLarge, err)
 	}

@@ -1,5 +1,15 @@
 # admin
 
+## 0.3.1
+
+### Patch Changes
+
+- c71902b: Show completed trial status, tier, lifecycle date, and original end date on the organization overview.
+- 4adf330: Show live trial state, tier, UTC end date, and automatically updating time remaining on the organization overview.
+- e5e23be: Add an organization Activity view showing cursor-loaded audit history with event surfaces, actor and subject details, snapshots, and metadata.
+- 338bc97: Remove legacy free-trial timestamps from admin organization responses now that trial state and lifecycle dates come from factual trial records.
+- 56f835b: The admin organization detail endpoint now reports a trial's stored tier, conversion date, and demotion date. These factual fields come from the trials table and are absent for organizations that never trialled.
+
 ## 0.3.0
 
 ### Minor Changes

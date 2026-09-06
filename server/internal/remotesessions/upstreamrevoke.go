@@ -266,6 +266,7 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 	if err := q.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
 	}

@@ -1,5 +1,4 @@
 import { Checkbox } from "@/components/ui/Checkbox";
-import { RequireScope } from "@/components/require-scope";
 import {
   ToolSelectionPanel,
   type ToolAnnotation,
@@ -10,18 +9,15 @@ import {
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
-import { useOrgRoutes, useRoutes } from "@/routes";
-import { useListCollections } from "@gram/client/react-query/listCollections.js";
+import { useRoutes } from "@/routes";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { ArrowUpRight, Check, Info, Plus, X } from "lucide-react";
+import { ArrowUpRight, Check, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useQueries } from "@tanstack/react-query";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 import {
@@ -33,11 +29,12 @@ import {
   ANNOTATION_TO_DISPOSITION,
   DISPOSITION_TO_ANNOTATION,
   isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+  unrestrictedResourceLabel,
 } from "./types";
-import { computePanelState, type CollectionGroup } from "./computePanelState";
+import { computePanelState } from "./computePanelState";
 import {
   mergeMcpServersIntoGroups,
-  type Server,
   type ServerGroup,
   type ServerTool,
 } from "./serverMerge";
@@ -168,13 +165,8 @@ export function GrantRuleDrawerContent({
 
   const isMcpConnect = scope === "mcp:connect";
   const projectSelectable = isProjectSelectableResourceType(resourceType);
-  const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
 
-  const panelState = computePanelState(
-    selectors,
-    collectionGroups,
-    resourceType,
-  );
+  const panelState = computePanelState(selectors, resourceType);
   // Use override only when selectors are empty (user just switched mode)
   const activePanel =
     selectors !== null && selectors.length === 0 && panelOverride
@@ -250,8 +242,6 @@ export function GrantRuleDrawerContent({
     return projects;
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const resourceKind = projectSelectable ? resourceType : "mcp";
-
   const filteredProjectList = useMemo(
     () =>
       resourceSearch
@@ -322,26 +312,17 @@ export function GrantRuleDrawerContent({
   );
 
   // Fixed-scope permissions have no resource picker — their granularity is
-  // baked into the scope definition. Org scopes are always org-wide;
-  // environment scopes apply to every environment in the project; chat:read is
-  // granted org-wide (members are scoped to their own sessions automatically on
-  // the server, so the role editor only offers the unrestricted "all sessions"
-  // grant that admins receive).
-  if (
-    resourceType === "org" ||
-    resourceType === "environment" ||
-    resourceType === "chat"
-  ) {
+  // baked into the scope definition. The role editor only offers unrestricted
+  // grants for these resources.
+  if (isUnrestrictedResourceType(resourceType)) {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center border bg-transparent px-2 py-1 text-xs">
-        {resourceType === "environment"
-          ? "All in project"
-          : resourceType === "chat"
-            ? "All sessions"
-            : "All"}
+        {unrestrictedResourceLabel(resourceType)}
       </span>
     );
   }
+
+  const resourceKind = projectSelectable ? resourceType : "mcp";
 
   // For MCP scopes, `id` is `Server.id`, which serverMerge.ts guarantees is
   // the id enforcement checks (toolset id for toolset-backed servers, the
@@ -437,14 +418,6 @@ export function GrantRuleDrawerContent({
           description="Give fine-grained access to individual tools"
           selected={activePanel === "tools"}
           onClick={() => switchPanel("tools")}
-        />
-      )}
-      {isMcpConnect && isPanelAllowed("collection") && (
-        <ScopeOption
-          label="Specific collections"
-          description="Give access to a curated set of tools"
-          selected={activePanel === "collection"}
-          onClick={() => switchPanel("collection")}
         />
       )}
     </div>
@@ -638,18 +611,6 @@ export function GrantRuleDrawerContent({
     />
   );
 
-  const collectionPanel = (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="border-border flex min-h-0 flex-1 flex-col overflow-y-auto border-t px-2 py-1">
-        <CollectionGroupPanel
-          collectionGroups={collectionGroups}
-          selectors={selectors ?? []}
-          onChangeSelectors={onChangeSelectors}
-        />
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
       {renderScopeOptions()}
@@ -658,7 +619,6 @@ export function GrantRuleDrawerContent({
       {activePanel === "tools" && (
         <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
       )}
-      {activePanel === "collection" && collectionPanel}
     </div>
   );
 }
@@ -730,6 +690,35 @@ function remoteServerStatus(
 }
 
 /**
+ * Link to the MCP server's Inspect tab, correctly scoped to the server's
+ * project. Uses useRoutes with the project slug override so the link works
+ * when rendered from org-level pages (where the ambient projectSlug is
+ * undefined).
+ */
+function InspectTabLink({
+  serverId,
+  serverSlug,
+  projectSlug,
+}: {
+  serverId: string;
+  serverSlug: string;
+  projectSlug?: string;
+}) {
+  const routes = useRoutes({ projectSlug });
+  return (
+    <Link
+      to={routes.mcp.x.inspect.href(
+        mcpServerRouteParam({ id: serverId, slug: serverSlug }),
+      )}
+      className="text-primary inline-flex items-center gap-1 hover:underline"
+    >
+      Connect it on the Inspect tab
+      <ArrowUpRight className="h-3 w-3" />
+    </Link>
+  );
+}
+
+/**
  * Dashboard adapter around the shared ToolSelectionPanel: converts server
  * groups and selectors into the panel's normalized types, lazily loads remote
  * tool metadata, and replays panel toggles as the legacy selector/annotation
@@ -762,8 +751,6 @@ function RoleToolSelectionPanel({
   isDeny?: boolean;
   className?: string;
 }): JSX.Element {
-  const routes = useRoutes();
-
   const allServers = useMemo(
     () =>
       mcpServers
@@ -836,15 +823,11 @@ function RoleToolSelectionPanel({
               <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
                 <p>This server&apos;s tools haven&apos;t been synced yet.</p>
                 <p>
-                  <Link
-                    to={routes.mcp.x.inspect.href(
-                      mcpServerRouteParam({ id: server.id, slug: server.slug }),
-                    )}
-                    className="text-primary inline-flex items-center gap-1 hover:underline"
-                  >
-                    Connect it on the Inspect tab
-                    <ArrowUpRight className="h-3 w-3" />
-                  </Link>{" "}
+                  <InspectTabLink
+                    serverId={server.id}
+                    serverSlug={server.slug}
+                    projectSlug={server.projectSlug}
+                  />{" "}
                   to permission its tools individually.
                 </p>
               </div>
@@ -860,7 +843,7 @@ function RoleToolSelectionPanel({
           status: "ready",
         };
       }),
-    [allServers, remoteTools, routes],
+    [allServers, remoteTools],
   );
 
   // Annotation counts stay pinned to deploy-time tools: lazily loaded remote
@@ -987,198 +970,6 @@ function RoleToolSelectionPanel({
         className={className}
       />
     </>
-  );
-}
-
-/** Fetches collection groups with resolved server/tool data. */
-function useCollectionGroups(
-  mcpServers: ServerGroup[],
-  enabled: boolean,
-): CollectionGroup[] {
-  const client = useSdkClient();
-  const { data: collectionsData } = useListCollections({}, undefined, {
-    enabled,
-  });
-  const collections = useMemo(
-    () => collectionsData?.collections ?? [],
-    [collectionsData?.collections],
-  );
-
-  const serverQueries = useQueries({
-    queries: collections.map((c) => ({
-      queryKey: ["collections", "listServers", c.slug],
-      queryFn: () =>
-        client.collections.listServers({ collectionSlug: c.slug! }),
-      enabled: enabled && !!c.slug,
-    })),
-  });
-
-  const mcpSlugToServer = useMemo(() => {
-    const map = new Map<string, Server>();
-    for (const group of mcpServers) {
-      for (const server of group.servers) {
-        if (server.mcpSlug) map.set(server.mcpSlug, server);
-      }
-    }
-    return map;
-  }, [mcpServers]);
-
-  return useMemo(() => {
-    return collections
-      .map((c, i) => {
-        const externalServers = serverQueries[i]?.data?.servers ?? [];
-        const matchedServers: Server[] = [];
-        for (const es of externalServers) {
-          const parts = es.registrySpecifier.split("/");
-          const mcpSlug = parts[parts.length - 1]!;
-          const server = mcpSlugToServer.get(mcpSlug);
-          if (server) matchedServers.push(server);
-        }
-        return {
-          id: c.id!,
-          name: c.name!,
-          slug: c.slug,
-          servers: matchedServers,
-        };
-      })
-      .filter((g) => g.servers.some((s) => s.tools.length > 0));
-  }, [collections, serverQueries, mcpSlugToServer]);
-}
-
-function CollectionGroupPanel({
-  collectionGroups,
-  selectors,
-  onChangeSelectors,
-  onNavigate,
-}: {
-  collectionGroups: CollectionGroup[];
-  selectors: Selector[];
-  onChangeSelectors: (selectors: Selector[] | null) => void;
-  onNavigate?: () => void;
-}) {
-  const orgRoutes = useOrgRoutes();
-
-  const goToCreateCollection = () => {
-    onNavigate?.();
-    orgRoutes.collections.create.goTo();
-  };
-
-  if (collectionGroups.length === 0) {
-    return (
-      <div className="flex flex-col items-center px-4 py-5 text-center">
-        <div className="bg-muted mb-3 flex h-8 w-8 items-center justify-center rounded-full">
-          <Info className="text-muted-foreground h-4 w-4" />
-        </div>
-        <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
-          Collections group MCP servers for reuse across projects.
-          <br />
-          Selecting one grants access to all its tools.
-        </p>
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="You need org admin to create a collection."
-        >
-          {({ disabled }) => (
-            <button
-              type="button"
-              onClick={disabled ? undefined : goToCreateCollection}
-              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs shadow-xs transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              Create new collection
-            </button>
-          )}
-        </RequireScope>
-      </div>
-    );
-  }
-
-  return (
-    <div className="py-1">
-      <div className="text-muted-foreground px-2 py-2 text-xs">
-        Select all tools by collection:
-      </div>
-      {collectionGroups.map((group) => {
-        const allToolSelectors: Selector[] = group.servers.flatMap((s) =>
-          s.tools.map((t) => ({
-            resourceKind: "mcp" as const,
-            resourceId: s.id,
-            tool: t.name,
-          })),
-        );
-        const allSelected =
-          allToolSelectors.length > 0 &&
-          allToolSelectors.every((ts) =>
-            selectors.some(
-              (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
-            ),
-          );
-
-        const toggleAll = () => {
-          if (allSelected) {
-            onChangeSelectors(
-              selectors.filter(
-                (s) =>
-                  !allToolSelectors.some(
-                    (ts) =>
-                      s.resourceId === ts.resourceId && s.tool === ts.tool,
-                  ),
-              ),
-            );
-          } else {
-            const toAdd = allToolSelectors.filter(
-              (ts) =>
-                !selectors.some(
-                  (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
-                ),
-            );
-            onChangeSelectors([...selectors, ...toAdd]);
-          }
-        };
-
-        return (
-          <button
-            key={group.id}
-            type="button"
-            onClick={toggleAll}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm"
-          >
-            <Checkbox
-              checked={allSelected}
-              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-              tabIndex={-1}
-            />
-            <span className="min-w-0 flex-1 truncate text-left font-medium">
-              {group.name}
-            </span>
-            <span className="text-muted-foreground shrink-0 text-xs">
-              {allToolSelectors.length} tool
-              {allToolSelectors.length !== 1 ? "s" : ""}
-            </span>
-          </button>
-        );
-      })}
-      <div className="border-border mx-2 mt-2 border-t pt-2">
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="You need org admin to create a collection."
-          className="w-full"
-        >
-          {({ disabled }) => (
-            <button
-              type="button"
-              onClick={disabled ? undefined : goToCreateCollection}
-              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 px-3 py-1.5 text-xs transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              Create new collection
-            </button>
-          )}
-        </RequireScope>
-      </div>
-    </div>
   );
 }
 

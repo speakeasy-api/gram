@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acceptInvitation = `-- name: AcceptInvitation :execrows
+const acceptInvitation = `-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
@@ -20,14 +20,27 @@ SET state = 'accepted',
 WHERE id = $1
   AND state = 'pending'
   AND expires_at > clock_timestamp()
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 `
 
-func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, acceptInvitation, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, acceptInvitation, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :one
@@ -545,6 +558,34 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getOrganizationSetupTask = `-- name: GetOrganizationSetupTask :one
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+  AND task_key = $2
+`
+
+type GetOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+}
+
+func (q *Queries) GetOrganizationSetupTask(ctx context.Context, arg GetOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSetupTask, arg.OrganizationID, arg.TaskKey)
+	var i OrganizationSetupTask
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationUserRelationship = `-- name: GetOrganizationUserRelationship :one
 SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
@@ -630,6 +671,40 @@ func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Conte
 	return i, err
 }
 
+const getSetupTaskCompletionFacts = `-- name: GetSetupTaskCompletionFacts :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = $1
+      AND deleted IS FALSE
+    ORDER BY created_at, id
+    LIMIT 1
+)
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        JOIN default_project ON default_project.id = plugin_github_connections.project_id
+    ) AS marketplace_published
+FROM organization_metadata
+WHERE organization_metadata.id = $1
+`
+
+type GetSetupTaskCompletionFactsRow struct {
+	SsoConfigured        bool
+	DsyncConfigured      bool
+	MarketplacePublished bool
+}
+
+func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
+	row := q.db.QueryRow(ctx, getSetupTaskCompletionFacts, organizationID)
+	var i GetSetupTaskCompletionFactsRow
+	err := row.Scan(&i.SsoConfigured, &i.DsyncConfigured, &i.MarketplacePublished)
+	return i, err
+}
+
 const getSvixAppID = `-- name: GetSvixAppID :one
 SELECT svix_app_id
 FROM organization_metadata
@@ -686,6 +761,30 @@ type HasOrganizationUserRelationshipParams struct {
 
 func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOrganizationUserRelationshipParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasOtherActiveOrganizationUsers = `-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = $1
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> $2
+)
+`
+
+type HasOtherActiveOrganizationUsersParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) HasOtherActiveOrganizationUsers(ctx context.Context, arg HasOtherActiveOrganizationUsersParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOtherActiveOrganizationUsers, arg.OrganizationID, arg.UserID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -902,6 +1001,41 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 	return items, nil
 }
 
+const listOrganizationSetupTasks = `-- name: ListOrganizationSetupTasks :many
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+`
+
+func (q *Queries) ListOrganizationSetupTasks(ctx context.Context, organizationID string) ([]OrganizationSetupTask, error) {
+	rows, err := q.db.Query(ctx, listOrganizationSetupTasks, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationSetupTask
+	for rows.Next() {
+		var i OrganizationSetupTask
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.TaskKey,
+			&i.Status,
+			&i.AssigneeUserID,
+			&i.AssigneeEmail,
+			&i.HiddenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT
   our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
@@ -1055,6 +1189,93 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockActiveOrganizationUser = `-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = $1
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u
+`
+
+type LockActiveOrganizationUserParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActiveOrganizationUserParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, lockActiveOrganizationUser, arg.UserID, arg.OrganizationID)
+	var user_id pgtype.Text
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForInviteAcceptance, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organizationID string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForSetupTaskUpdate, organizationID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec
@@ -1778,6 +1999,63 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationSetupTask = `-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4::text,
+    $5::text,
+    $6::timestamptz
+)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+RETURNING organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+`
+
+type UpsertOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+	Status         string
+	AssigneeUserID pgtype.Text
+	AssigneeEmail  pgtype.Text
+	HiddenAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertOrganizationSetupTask(ctx context.Context, arg UpsertOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationSetupTask,
+		arg.OrganizationID,
+		arg.TaskKey,
+		arg.Status,
+		arg.AssigneeUserID,
+		arg.AssigneeEmail,
+		arg.HiddenAt,
+	)
+	var i OrganizationSetupTask
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

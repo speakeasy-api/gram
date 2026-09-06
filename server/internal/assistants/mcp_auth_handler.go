@@ -128,8 +128,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	r.Body = http.MaxBytesReader(w, r.Body, mcpAuthFlowMaxBodyBytes)
 	var req createMCPAuthFlowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return oops.E(oops.CodeBadRequest, err, "request body too large")
 		}
 		return oops.E(oops.CodeBadRequest, err, "decode mcp auth flow request")

@@ -291,8 +291,8 @@ function CustomClientList({
   }
 
   // No enforcement claim in the empty state: what an empty list means
-  // depends on the admission mode, and in the unconfigured "reporting" state
-  // nothing is refused at all.
+  // depends on the admission mode, and this panel also renders against an
+  // unsaved selection, before that mode applies to anything.
   if (clients.length === 0) {
     return (
       <Text muted small className="block p-3">

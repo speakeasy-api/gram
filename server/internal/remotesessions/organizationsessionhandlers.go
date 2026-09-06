@@ -27,7 +27,9 @@ import (
 // sessions from its attached MCP servers. Exactly one distinct upstream URL
 // binds the audience; zero or multiple return "" so the parameter is omitted
 // (matching pre-resource behavior — an ambiguous multi-upstream client can't
-// be bound to a single audience). Url is empty for non-remote backends.
+// be bound to a single audience). Url is empty for every non-remote backend,
+// tunneled included: those route by their own issuer identity instead, so an
+// identifier here would only risk making a mixed issuer read as ambiguous.
 func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
 	resource := ""
 	for _, row := range rows {
@@ -211,8 +213,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
-		var refreshErr *TokenRefreshError
-		if errors.As(err, &refreshErr) {
+		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "Unable to refresh: %s", refreshErr.Reason).LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "refresh organization admin remote session").LogError(ctx, logger)

@@ -29,6 +29,7 @@ describe("AgentProviderIcon", () => {
       "codex",
       "opencode",
       "openclaw",
+      "copilot",
     ]);
   });
 

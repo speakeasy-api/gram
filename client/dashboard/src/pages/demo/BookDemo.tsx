@@ -39,7 +39,7 @@ export default function BookDemo(): JSX.Element {
     >
       <DemoBookingFlow />
       <Button
-        variant="primary"
+        variant="secondary"
         size="md"
         icon="arrow-right"
         iconAfter

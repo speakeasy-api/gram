@@ -376,30 +376,8 @@
   animation: var(--aui-spin);
 }
 
-/* Standalone rainbow dot for the cycling "thinking" indicator (shown before
-   the assistant streams any answer text). Same ring as the inline dot above. */
-.gram-elements .aui-thinking-dot {
-  display: inline-block;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  width: 0.95em;
-  height: 0.95em;
-  padding: 2.5px;
-  border-radius: 50%;
-  background: var(--aui-rainbow);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  animation: var(--aui-spin);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  /* Stops both the trailing streaming dot and the standalone thinking dot. */
+  /* Stops the trailing streaming dot. */
   .gram-elements {
     --aui-spin: none;
   }
