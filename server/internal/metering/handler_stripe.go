@@ -125,6 +125,10 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 	if !ok {
 		return fmt.Errorf("meter %q version %d is not registered", reading.GetMeterId(), reading.GetMeterVersion())
 	}
+	if !definition.stripeExportable {
+		e.recordReadingOutcome(ctx, stripeExportOutcomeIneligible)
+		return nil
+	}
 	if e.stripeCatalog == nil {
 		return errors.New("stripe catalog is not configured")
 	}

@@ -18,6 +18,7 @@ type Definition struct {
 	unit              Unit
 	measurementMethod MeasurementMethod
 	scopeKind         scopeKind
+	stripeExportable  bool
 }
 
 const (
@@ -29,6 +30,23 @@ const (
 
 	// MeterMCPBandwidthEgress measures application-visible MCP response body bytes.
 	MeterMCPBandwidthEgress MeterID = "gram.mcp.bandwidth.egress"
+
+	// Risk evaluation meters measure detector-qualified scanned volume.
+	MeterRiskGitleaksRealtime        MeterID = "gram.risk.evaluation.gitleaks.realtime"
+	MeterRiskGitleaksBatch           MeterID = "gram.risk.evaluation.gitleaks.batch"
+	MeterRiskGitleaksShadow          MeterID = "gram.risk.evaluation.gitleaks.shadow"
+	MeterRiskPresidioRealtime        MeterID = "gram.risk.evaluation.presidio.realtime"
+	MeterRiskPresidioBatch           MeterID = "gram.risk.evaluation.presidio.batch"
+	MeterRiskPresidioShadow          MeterID = "gram.risk.evaluation.presidio.shadow"
+	MeterRiskPromptInjectionRealtime MeterID = "gram.risk.evaluation.prompt_injection.realtime"
+	MeterRiskPromptInjectionBatch    MeterID = "gram.risk.evaluation.prompt_injection.batch"
+	MeterRiskPromptInjectionShadow   MeterID = "gram.risk.evaluation.prompt_injection.shadow"
+	MeterRiskPromptPolicyRealtime    MeterID = "gram.risk.evaluation.prompt_policy.realtime"
+	MeterRiskPromptPolicyBatch       MeterID = "gram.risk.evaluation.prompt_policy.batch"
+	MeterRiskPromptPolicyShadow      MeterID = "gram.risk.evaluation.prompt_policy.shadow"
+	MeterRiskCustomRulesRealtime     MeterID = "gram.risk.evaluation.custom_rules.realtime"
+	MeterRiskCustomRulesBatch        MeterID = "gram.risk.evaluation.custom_rules.batch"
+	MeterRiskCustomRulesShadow       MeterID = "gram.risk.evaluation.custom_rules.shadow"
 
 	// UnitSTokens is the Gram-owned Speakeasy token workload unit.
 	UnitSTokens Unit = "stokens"
@@ -51,6 +69,7 @@ func AgentSessionStorage() Definition {
 		unit:              UnitSTokens,
 		measurementMethod: MeasurementTiktokenO200kBase,
 		scopeKind:         scopeKindProject,
+		stripeExportable:  true,
 	}
 }
 
@@ -62,6 +81,7 @@ func MCPBandwidthIngress() Definition {
 		unit:              UnitBytes,
 		measurementMethod: MeasurementHTTPBodyBytes,
 		scopeKind:         scopeKindProject,
+		stripeExportable:  true,
 	}
 }
 
@@ -73,18 +93,70 @@ func MCPBandwidthEgress() Definition {
 		unit:              UnitBytes,
 		measurementMethod: MeasurementHTTPBodyBytes,
 		scopeKind:         scopeKindProject,
+		stripeExportable:  true,
+	}
+}
+
+// RiskEvaluationDefinition returns the registered detector-and-mode workload definition.
+func RiskEvaluationDefinition(detector, executionMode string) (Definition, bool) {
+	id, ok := RiskEvaluationMeterID(detector, executionMode)
+	if !ok {
+		var zero Definition
+		return zero, false
+	}
+	return Definition{
+		id:                id,
+		version:           1,
+		unit:              UnitSTokens,
+		measurementMethod: MeasurementTiktokenO200kBase,
+		scopeKind:         scopeKindProject,
+		stripeExportable:  false,
+	}, true
+}
+
+// RiskEvaluationMeterID returns the registered meter identity for a detector and mode.
+func RiskEvaluationMeterID(detector, executionMode string) (MeterID, bool) {
+	var ids [3]MeterID
+	switch detector {
+	case "gitleaks":
+		ids = [3]MeterID{MeterRiskGitleaksRealtime, MeterRiskGitleaksBatch, MeterRiskGitleaksShadow}
+	case "presidio":
+		ids = [3]MeterID{MeterRiskPresidioRealtime, MeterRiskPresidioBatch, MeterRiskPresidioShadow}
+	case "prompt_injection":
+		ids = [3]MeterID{MeterRiskPromptInjectionRealtime, MeterRiskPromptInjectionBatch, MeterRiskPromptInjectionShadow}
+	case "prompt_policy":
+		ids = [3]MeterID{MeterRiskPromptPolicyRealtime, MeterRiskPromptPolicyBatch, MeterRiskPromptPolicyShadow}
+	case "custom_rules":
+		ids = [3]MeterID{MeterRiskCustomRulesRealtime, MeterRiskCustomRulesBatch, MeterRiskCustomRulesShadow}
+	default:
+		return "", false
+	}
+
+	switch executionMode {
+	case "realtime":
+		return ids[0], true
+	case "batch":
+		return ids[1], true
+	case "shadow":
+		return ids[2], true
+	default:
+		return "", false
 	}
 }
 
 // LookupDefinition returns a registered meter definition by identity.
 func LookupDefinition(id MeterID, version uint32) (Definition, bool) {
-	for _, definition := range [...]Definition{
-		AgentSessionStorage(),
-		MCPBandwidthIngress(),
-		MCPBandwidthEgress(),
-	} {
+	for _, definition := range [...]Definition{AgentSessionStorage(), MCPBandwidthIngress(), MCPBandwidthEgress()} {
 		if id == definition.id && version == definition.version {
 			return definition, true
+		}
+	}
+	for _, detector := range [...]string{"gitleaks", "presidio", "prompt_injection", "prompt_policy", "custom_rules"} {
+		for _, mode := range [...]string{"realtime", "batch", "shadow"} {
+			definition, _ := RiskEvaluationDefinition(detector, mode)
+			if id == definition.id && version == definition.version {
+				return definition, true
+			}
 		}
 	}
 	var zero Definition
