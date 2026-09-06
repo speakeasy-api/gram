@@ -1,0 +1,28 @@
+server/internal/mcpapproval/enforcement.go
+  h_9630b74bdac540 34-35,55-57
+server/internal/platformmcp/shadow_decision_test.go
+  h_9630b74bdac540 7,23-28,31,60-75
+server/internal/platformmcp/shadow_decision.go
+  h_9630b74bdac540 122-123,138-140
+server/internal/platformmcp/shadow_decision_version.go
+  h_9630b74bdac540 11-12,27
+server/internal/platformmcp/shadow_inventory_test.go
+  h_9630b74bdac540 66
+server/internal/platformmcp/shadow_decision_integration_test.go
+  h_9630b74bdac540 12,17,22,63-85,103-180
+server/internal/mcpapproval/decision_core.go
+  h_9630b74bdac540 87-92,94-99
+server/internal/platformmcp/tool_shadow_decision.go
+  h_9630b74bdac540 36-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "78a896277a0fd9ddc5927b408e047f855173b532",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
