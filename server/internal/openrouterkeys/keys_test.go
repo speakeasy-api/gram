@@ -553,9 +553,20 @@ func TestAdminLocalHardTimeoutCannotCommitAfterCrashGuardBecomesEligible(t *test
 	unlocked, err := queries.ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(params))
 	require.NoError(t, err)
 	require.True(t, unlocked)
-	require.Never(t, func() bool {
-		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
-	}, 100*time.Millisecond, 10*time.Millisecond, "timed-out mutation must never commit later")
+	// Keep database checks on the test goroutine so none outlive its context.
+	observation := time.NewTimer(100 * time.Millisecond)
+	defer observation.Stop()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+observe:
+	for {
+		require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "timed-out mutation must never commit later")
+		select {
+		case <-observation.C:
+			break observe
+		case <-poll.C:
+		}
+	}
 	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 	after, err := executor.CaptureCursor(ctx, scope)
 	require.NoError(t, err)

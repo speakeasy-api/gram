@@ -1606,6 +1606,30 @@ func TestCreateStripeCheckoutConcurrentDoubleClickCreatesOneCustomer(t *testing.
 	require.Equal(t, "cus_1", stored.StripeCustomerID.String)
 }
 
+func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	holder := testenv.BeginTx(t, t.Context(), ti.service.db)
+	require.NoError(t, repo.New(holder).LockBillingMetadataOrganization(t.Context(), ti.orgID))
+
+	ctx, cancel := context.WithTimeout(ti.adminContext(t), time.Second)
+	defer cancel()
+	_, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "lock billing metadata organization")
+
+	_, err = repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "Checkout must not insert before acquiring the organization lock")
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Empty(t, checkouts)
+
+	require.NoError(t, holder.Rollback(t.Context()))
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.NotEmpty(t, checkoutURL)
+}
+
 func TestCreateStripeCheckoutPersistsIntentWhenCheckoutFails(t *testing.T) {
 	t.Parallel()
 
