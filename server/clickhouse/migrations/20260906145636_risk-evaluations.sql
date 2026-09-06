@@ -1,0 +1,31 @@
+-- Create "risk_evaluations" table
+CREATE TABLE `risk_evaluations` (
+  `id` UUID COMMENT 'Unique physical attempt UUID stable across Pub/Sub redelivery.',
+  `evaluation_id` UUID COMMENT 'Deterministic logical detector evaluation UUID.',
+  `organization_id` String COMMENT 'Organization that owns the evaluated workload.',
+  `project_id` UUID COMMENT 'Project that owns the evaluated workload.',
+  `operation_id` String COMMENT 'Stable caller-defined identity input for the logical evaluation.',
+  `detector` LowCardinality(String) COMMENT 'Detector class.',
+  `execution_mode` LowCardinality(String) COMMENT 'Execution mode: realtime, batch, or shadow.',
+  `outcome` LowCardinality(String) COMMENT 'Terminal outcome: completed, failed, cancelled, or skipped.',
+  `record_kind` LowCardinality(String) COMMENT 'Measurement kind: scan or inference.',
+  `occurred_at` DateTime64(9, 'UTC') COMMENT 'UTC time when the physical attempt started.',
+  `produced_at` DateTime64(9, 'UTC') COMMENT 'UTC time when the physical attempt completed.',
+  `inserted_at` DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'UTC time when ClickHouse received the row.',
+  `stokens` Nullable(Int64) COMMENT 'Detector-visible s-token volume. NULL means unknown or not applicable.',
+  `measurement_method` LowCardinality(String) COMMENT 'Tokenizer used for scan volume.',
+  `model` String DEFAULT '' COMMENT 'Inference model, empty when not applicable.',
+  `provider_request_id` String DEFAULT '' COMMENT 'Provider request identity when reported.',
+  `prompt_tokens` Nullable(Int64) COMMENT 'Provider-reported prompt tokens, NULL when unknown.',
+  `completion_tokens` Nullable(Int64) COMMENT 'Provider-reported completion tokens, NULL when unknown.',
+  `cost_usd` Nullable(Float64) COMMENT 'Provider-reported USD cost, NULL when unknown.',
+  `measurement_error` Bool COMMENT 'True when scan volume could not be measured.',
+  `policy_id` String DEFAULT '' COMMENT 'Diagnostic policy attribution.',
+  `policy_version` Int64 DEFAULT '0' COMMENT 'Diagnostic policy version.',
+  INDEX `idx_risk_evaluations_occurred_at` ((occurred_at)) TYPE minmax GRANULARITY 1,
+  CONSTRAINT `risk_evaluation_identity_valid` CHECK ((id != toUUID('00000000-0000-0000-0000-000000000000')) AND (evaluation_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (project_id != toUUID('00000000-0000-0000-0000-000000000000')) AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(operation_id))),
+  CONSTRAINT `risk_evaluation_dimensions_valid` CHECK (((detector = 'gitleaks') OR (detector = 'presidio') OR (detector = 'prompt_injection') OR (detector = 'prompt_policy') OR (detector = 'custom_rules')) AND ((execution_mode = 'realtime') OR (execution_mode = 'batch') OR (execution_mode = 'shadow')) AND ((outcome = 'completed') OR (outcome = 'failed') OR (outcome = 'cancelled') OR (outcome = 'skipped')) AND ((record_kind = 'scan') OR (record_kind = 'inference'))),
+  CONSTRAINT `risk_evaluation_measurement_valid` CHECK ((measurement_method = 'tiktoken_o200k_base') AND (policy_version >= 0) AND ((stokens IS NULL) OR (stokens >= 0)) AND ((prompt_tokens IS NULL) OR (prompt_tokens >= 0)) AND ((completion_tokens IS NULL) OR (completion_tokens >= 0)) AND ((cost_usd IS NULL) OR (isFinite(cost_usd) AND (cost_usd >= 0)))),
+  CONSTRAINT `risk_evaluation_kind_valid` CHECK (((record_kind = 'scan') AND ((stokens IS NULL) OR (NOT measurement_error)) AND (model = '') AND (provider_request_id = '') AND (prompt_tokens IS NULL) AND (completion_tokens IS NULL) AND (cost_usd IS NULL)) OR ((record_kind = 'inference') AND (stokens IS NULL) AND (NOT measurement_error)))
+) ENGINE = ReplacingMergeTree(produced_at)
+PRIMARY KEY (`organization_id`, `project_id`, `detector`, `execution_mode`) ORDER BY (`organization_id`, `project_id`, `detector`, `execution_mode`, `id`) PARTITION BY (toYYYYMM(occurred_at)) SETTINGS index_granularity = 8192 COMMENT 'Raw terminal risk measurement attempts with physical-id redelivery convergence';
