@@ -348,6 +348,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
@@ -396,6 +397,19 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+// attachShadowInventory keeps the Shadow tools registered on both browser and
+// local-fixture surfaces. Missing dependencies degrade to stable unavailable
+// descriptors, but the capability loss is logged rather than silently hidden.
+func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
+	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budget, config.JWTSigningKey)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
+		return false
+	}
+	reader.WithShadowInventory(shadowInventory)
+	return true
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -699,10 +713,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
-	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
-	if shadowErr == nil {
-		platformReader.WithShadowInventory(shadowInventory)
-	}
+	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)

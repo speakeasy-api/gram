@@ -8,7 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestPlatformMCPLocalFixtureConfigIsEnabledByDefaultLocally(t *testing.T) {
@@ -35,6 +41,27 @@ func TestPlatformMCPLocalFixtureConfigDoesNotLeakOutsideLocal(t *testing.T) {
 	fixture, err := platformMCPLocalFixtureConfigFromCLI("production", "https://localhost:8080")
 	require.NoError(t, err)
 	require.Nil(t, fixture)
+}
+
+type allowingPlatformMCPBudget struct{}
+
+func (allowingPlatformMCPBudget) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true}, nil
+}
+func (allowingPlatformMCPBudget) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.T) {
+	t.Parallel()
+
+	limiter := allowingPlatformMCPBudget{}
+	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil)
+	attached := attachShadowInventory(reader, platformMCPConfig{
+		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
+		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},
+	}, platformmcp.OperationBudget{Connection: limiter, Organization: limiter})
+	require.True(t, attached)
 }
 
 func TestLocalPlatformMCPMarketplaceTokenResolvesDedicatedRepository(t *testing.T) {

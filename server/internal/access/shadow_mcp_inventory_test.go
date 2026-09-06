@@ -381,6 +381,22 @@ func TestService_ReadShadowMCPInventoryTarget_RequestOnlyStdio(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	request := seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx -y exact-package", "requested")
+	queries := mcpapprovalrepo.New(ti.conn)
+	_, err := queries.CreateApprovalDecision(ctx, mcpapprovalrepo.CreateApprovalDecisionParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpApprovalRequestID: request.ID,
+		Decision: "approved", DecidedBy: authCtx.UserID, EvidenceSnapshot: []byte(`{}`), EvidenceVersion: 0, GrantedPrincipalUrns: []string{},
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateApprovalDecision(ctx, mcpapprovalrepo.CreateApprovalDecisionParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpApprovalRequestID: request.ID,
+		Decision: "denied", DecidedBy: authCtx.UserID, EvidenceSnapshot: []byte(`{}`), EvidenceVersion: 0, GrantedPrincipalUrns: []string{},
+	})
+	require.NoError(t, err)
+	_, err = queries.UpsertApprovalRequestRequester(ctx, mcpapprovalrepo.UpsertApprovalRequestRequesterParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpApprovalRequestID: request.ID,
+		UserID: authCtx.UserID, UserEmail: conv.ToPGTextEmpty("reader@example.com"), Note: conv.ToPGTextEmpty("review request"),
+	})
+	require.NoError(t, err)
 
 	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -393,6 +409,24 @@ func TestService_ReadShadowMCPInventoryTarget_RequestOnlyStdio(t *testing.T) {
 	require.Equal(t, shadowMCPTargetKindStdioCommand, *server.TargetKind)
 	require.NotNil(t, server.ApprovalRequest)
 	require.Equal(t, request.ID.String(), server.ApprovalRequest.ID)
+	require.Equal(t, "denied", *server.ApprovalRequest.StandingDecision)
+	require.Equal(t, 1, server.ApprovalRequest.RequesterCount)
+}
+
+func TestService_ReadShadowMCPInventoryTarget_RejectsProjectFromAnotherOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx private-package", "requested")
+
+	_, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: uuid.NewString(), ProjectID: *authCtx.ProjectID,
+		TargetKind: shadowMCPTargetKindStdioCommand, TargetKey: "npx private-package",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestService_UpdateShadowMCPInventoryServerName_TrimsAndSavesOverride(t *testing.T) {

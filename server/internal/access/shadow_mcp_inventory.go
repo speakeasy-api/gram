@@ -468,8 +468,7 @@ func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input Shadow
 }
 
 func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (mcpapprovalrepo.ListApprovalRequestTargetsRow, error) {
-	repo := mcpapprovalrepo.New(s.db)
-	request, err := repo.GetApprovalRequestByTarget(ctx, mcpapprovalrepo.GetApprovalRequestByTargetParams{
+	request, err := mcpapprovalrepo.New(s.db).GetApprovalRequestTarget(ctx, mcpapprovalrepo.GetApprovalRequestTargetParams{
 		ProjectID:  input.ProjectID,
 		TargetKind: input.TargetKind,
 		TargetKey:  input.TargetKey,
@@ -478,22 +477,24 @@ func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input Shad
 	case errors.Is(err, pgx.ErrNoRows):
 		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory target not found").LogError(ctx, s.logger)
 	case err != nil:
-		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "get shadow mcp approval request by target").LogError(ctx, s.logger)
-	case request.OrganizationID != input.OrganizationID:
-		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, nil, "approval request organization mismatch").LogError(ctx, s.logger)
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "get shadow mcp approval request target").LogError(ctx, s.logger)
+	default:
+		// Keep this explicit: the generated rows intentionally share a shape, but
+		// converting them positionally would let same-typed SQL columns be reordered
+		// without a compile error while silently changing the public projection.
+		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct // Filled explicitly below to protect generated query field order.
+		result.ID = request.ID
+		result.TargetKind = request.TargetKind
+		result.TargetRaw = request.TargetRaw
+		result.TargetKey = request.TargetKey
+		result.Status = request.Status
+		result.EvidenceChangedAt = request.EvidenceChangedAt
+		result.CreatedAt = request.CreatedAt
+		result.UpdatedAt = request.UpdatedAt
+		result.LatestDecision = request.LatestDecision
+		result.RequesterCount = request.RequesterCount
+		return result, nil
 	}
-
-	targets, err := repo.ListApprovalRequestTargets(ctx, input.ProjectID)
-	if err != nil {
-		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "list shadow mcp approval request targets").LogError(ctx, s.logger)
-	}
-	for _, target := range targets {
-		if target.TargetKind == input.TargetKind && target.TargetKey == input.TargetKey {
-			return target, nil
-		}
-	}
-
-	return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory target not found").LogError(ctx, s.logger)
 }
 
 // shadowMCPServerFromApprovalRequest resolves a server page slug against the
