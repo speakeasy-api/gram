@@ -268,7 +268,7 @@ function OrgApiKeysInner() {
       </ResourceListPage>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
-        <Dialog.Content>
+        <Dialog.Content className="max-h-[90vh] overflow-y-auto">
           <Dialog.Header>
             <Dialog.Title>
               {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
