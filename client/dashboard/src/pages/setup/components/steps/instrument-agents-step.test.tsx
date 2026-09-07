@@ -16,6 +16,13 @@ vi.mock("../platform-instrumentation-sheet", () => ({
   }) => (open ? <div>Opened platform: {initialPlatformId}</div> : null),
 }));
 
+vi.mock("../marketplace-section", () => ({
+  MarketplaceSection: () => null,
+}));
+vi.mock("../confirm-traffic-section", () => ({
+  ConfirmTrafficSection: () => null,
+}));
+
 afterEach(cleanup);
 
 describe("InstrumentAgentsStep", () => {

@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Book, ExternalLink } from "lucide-react";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
-import { Badge } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { StepContainer } from "../step-container";
+import { StepSection } from "../step-section";
+import { MarketplaceSection } from "../marketplace-section";
+import { isMarketplacePublished } from "../marketplace-status";
+import { ConfirmTrafficSection } from "../confirm-traffic-section";
+import { isCoworkSource } from "../hook-event-sources";
 import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { platformStatusBadge } from "../platform-status-badge";
@@ -25,13 +25,9 @@ export function AnthropicEnterpriseStep({
 }: AnthropicEnterpriseStepProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [status, setStatus] = useState<PlatformSetupStatus>("not_started");
-  const { data: publishStatus, isLoading } = usePublishStatus();
+  const { data: publishStatus } = usePublishStatus();
+  const published = isMarketplacePublished(publishStatus);
   const provider = AGENT_PROVIDERS[ANTHROPIC_ENTERPRISE_PLATFORM_ID];
-
-  // Claude.ai syncs Cowork plugins straight from the marketplace's GitHub
-  // repo, and the instructions quote its owner/name — so without a published
-  // marketplace there is nothing to register yet.
-  const isConnected = !!(publishStatus?.connected && publishStatus.repoUrl);
 
   return (
     <StepContainer
@@ -41,38 +37,46 @@ export function AnthropicEnterpriseStep({
         </div>
       }
       title="Set up Anthropic Enterprise"
-      description="Claude Cowork runs in Claude.ai's cloud sandbox, out of the device agent's reach, so it is configured from Claude.ai's organization settings instead. Register your plugin marketplace there and require the observability plugin so every Cowork session reports to Speakeasy. Claude Code is instrumented alongside your other coding assistants under Instrument agents."
+      description="Claude Cowork runs in Claude.ai's cloud sandbox, out of the device agent's reach, so it is configured from Claude.ai's organization settings instead. Publish your plugin marketplace, register it there with the observability plugin required, and confirm Cowork events arrive. Claude Code is instrumented alongside your other coding assistants under Instrument agents."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack
       onBack={onBack}
     >
-      <div className="space-y-3">
-        {isLoading ? (
-          <Skeleton>
-            <div className="h-[74px] w-full" />
-          </Skeleton>
-        ) : isConnected ? (
-          <MarketplaceRepoRow publishStatus={publishStatus} />
-        ) : (
-          <Alert variant="warning">
-            <AlertTitle>Publish your plugin marketplace first</AlertTitle>
-            <AlertDescription>
-              Claude.ai syncs Cowork plugins straight from your marketplace's
-              GitHub repo, so it has to exist before you can register it. Go
-              back to Create plugin marketplace to publish it.
-            </AlertDescription>
-          </Alert>
-        )}
+      <div className="space-y-8">
+        <MarketplaceSection
+          index={1}
+          description="Claude.ai syncs Cowork plugins straight from your marketplace's GitHub repo, so it has to exist before you can register it."
+          publishedHint="Select this repo when Claude.ai asks which repository to sync."
+        />
 
-        <AgentPlatformPickerItem
-          platformId={ANTHROPIC_ENTERPRISE_PLATFORM_ID}
-          name={provider.name}
-          description={provider.description}
+        <StepSection
+          index={2}
+          title="Connect Claude Cowork"
+          description="Register the marketplace in Claude.ai's organization settings and mark the observability plugin as required for every member."
           complete={status === "complete"}
-          statusBadge={platformStatusBadge(status)}
-          disabled={!isConnected}
-          onClick={() => setSheetOpen(true)}
+          aside={platformStatusBadge(status)}
+        >
+          <AgentPlatformPickerItem
+            platformId={ANTHROPIC_ENTERPRISE_PLATFORM_ID}
+            name={provider.name}
+            description={provider.description}
+            complete={status === "complete"}
+            disabled={!published}
+            onClick={() => setSheetOpen(true)}
+          />
+          {!published ? (
+            <p className="text-muted-foreground mt-2 text-xs">
+              Publish the marketplace above first. The instructions reference
+              its repo.
+            </p>
+          ) : null}
+        </StepSection>
+
+        <ConfirmTrafficSection
+          index={3}
+          description="Start a Cowork session and run any action. Its events show up here once the plugin is active for your organization."
+          matchesSource={isCoworkSource}
         />
       </div>
 
@@ -83,44 +87,5 @@ export function AnthropicEnterpriseStep({
         onPlatformStatusChange={(_, next) => setStatus(next)}
       />
     </StepContainer>
-  );
-}
-
-// The repo the Cowork instructions ask the admin to pick inside Claude.ai,
-// shown up front so they know what they're looking for before opening them.
-function MarketplaceRepoRow({
-  publishStatus,
-}: {
-  publishStatus: PublishStatusResult;
-}): JSX.Element {
-  return (
-    <div className="border-border bg-card flex items-center gap-4 border p-4">
-      <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
-        <Book className="text-muted-foreground h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <p className="text-foreground text-sm font-medium">
-            Plugin marketplace
-          </p>
-          <Badge variant="success" background>
-            <Badge.Text>Published</Badge.Text>
-          </Badge>
-        </div>
-        <p className="text-muted-foreground text-xs">
-          Claude.ai will sync plugins from{" "}
-          <a
-            href={publishStatus.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-foreground inline-flex items-center gap-1 underline underline-offset-2"
-          >
-            {publishStatus.repoOwner}/{publishStatus.repoName}
-            <ExternalLink className="h-3 w-3" />
-          </a>
-          . Select that repo when Claude.ai asks.
-        </p>
-      </div>
-    </div>
   );
 }

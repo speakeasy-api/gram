@@ -12,7 +12,12 @@ const publishStatus = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => publishStatus.current,
 }));
-
+vi.mock("../marketplace-section", () => ({
+  MarketplaceSection: () => <div>Marketplace section</div>,
+}));
+vi.mock("../confirm-traffic-section", () => ({
+  ConfirmTrafficSection: () => <div>Confirm traffic section</div>,
+}));
 vi.mock("../platform-instrumentation-sheet", () => ({
   PlatformInstrumentationSheet: ({
     open,
@@ -30,13 +35,11 @@ beforeEach(() => {
 });
 
 describe("AnthropicEnterpriseStep", () => {
-  it("shows the published marketplace repo and opens the Cowork instructions", () => {
+  it("stacks marketplace, Cowork, and traffic sections in one card", () => {
     publishStatus.current = {
       data: {
         connected: true,
-        repoUrl: "https://github.com/acme/acme-speakeasy",
-        repoOwner: "acme",
-        repoName: "acme-speakeasy",
+        repoUrl: "https://github.com/acme/acme-plugins",
       },
       isLoading: false,
     };
@@ -44,24 +47,23 @@ describe("AnthropicEnterpriseStep", () => {
     render(<AnthropicEnterpriseStep onComplete={() => {}} onBack={() => {}} />);
 
     expect(screen.getByText("Set up Anthropic Enterprise")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "acme/acme-speakeasy" }),
-    ).toBeTruthy();
+    expect(screen.getByText("Marketplace section")).toBeTruthy();
+    expect(screen.getByText("Confirm traffic section")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Claude Cowork/ }));
 
     expect(screen.getByText("Opened platform: claude-cowork")).toBeTruthy();
   });
 
-  it("asks for the marketplace first when it is not published yet", () => {
+  it("holds the Cowork instructions until the marketplace is published", () => {
     render(<AnthropicEnterpriseStep onComplete={() => {}} onBack={() => {}} />);
 
-    expect(
-      screen.getByText("Publish your plugin marketplace first"),
-    ).toBeTruthy();
     const cowork = screen.getByRole("button", {
       name: /Claude Cowork/,
     }) as HTMLButtonElement;
     expect(cowork.disabled).toBe(true);
+    expect(
+      screen.getByText(/Publish the marketplace above first/),
+    ).toBeTruthy();
   });
 });

@@ -19,6 +19,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { MarketplaceSection } from "../marketplace-section";
+import { isMarketplacePublished } from "../marketplace-status";
+import { StepSection } from "../step-section";
 import {
   invalidateAllPlugins,
   usePlugins,
@@ -130,6 +133,7 @@ export function DistributeServersStep({
     refetch: refetchCatalog,
   } = useListMCPCatalog(undefined, undefined, { throwOnError: false });
   const { data: publishStatus } = usePublishStatus();
+  const marketplacePublished = isMarketplacePublished(publishStatus);
 
   // Default-plugin membership: map its mcp_server-backed entries through their
   // remote MCP server URLs back to catalog remotes so we can flag servers that
@@ -415,10 +419,21 @@ export function DistributeServersStep({
       skipLabel={skipLabel}
       continueLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
-      canContinue={deployableCount > 0}
+      canContinue={deployableCount > 0 && marketplacePublished}
       showBack
       onBack={onBack}
     >
+      <div className="space-y-8">
+        <MarketplaceSection
+          index={1}
+          description="Distributed servers are bundled into your Default plugin and published to your marketplace, so it has to exist first."
+        />
+
+        <StepSection
+          index={2}
+          title="Choose servers"
+          description="Pick reviewed MCP servers to deploy and publish for your team."
+        >
       <div className="space-y-6">
         {onSetupPlatformMCP && (
           <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -569,6 +584,8 @@ export function DistributeServersStep({
             </p>
           )}
         </div>
+      </div>
+        </StepSection>
       </div>
 
       <Sheet

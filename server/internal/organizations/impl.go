@@ -1150,13 +1150,14 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
 			}
 			if workos.HasActiveConnection(connections) {
-				nextStepSlug = "directory-sync"
+				// Directory sync lives on the same card as single sign-on.
+				nextStepSlug = "identity-provider"
 			}
 		}
 	case "dsync":
 		// Directory sync may take time to become "linked" after portal setup.
 		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "create-marketplace"
+		nextStepSlug = "anthropic-enterprise"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)

@@ -43,14 +43,11 @@ type setupTaskDefinition struct {
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: nil},
-	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil},
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil},
-	{Key: "anthropic-enterprise", Title: "Set up Anthropic Enterprise", Description: "Register the marketplace with Claude.ai so Claude Cowork installs the observability plugin.", Prerequisites: []string{"create-marketplace"}},
-	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Gram hook telemetry.", Prerequisites: nil},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil},
+	{Key: "anthropic-enterprise", Title: "Set up Anthropic Enterprise", Description: "Publish the plugin marketplace, register it with Claude.ai for Claude Cowork, and confirm traffic arrives.", Prerequisites: nil},
+	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil},
-	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Install and publish approved MCP servers.", Prerequisites: []string{"create-marketplace"}},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil},
 	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil},
 	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil},
 }
@@ -325,9 +322,10 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		completedByFact := (definition.Key == "connect-idp" && facts.SsoConfigured) ||
-			(definition.Key == "directory-sync" && facts.DsyncConfigured) ||
-			(definition.Key == "create-marketplace" && facts.MarketplacePublished)
+		// The identity provider card covers both single sign-on and directory
+		// sync, so it only completes by fact once both are configured; an admin
+		// who skips directory sync marks the card done by hand.
+		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

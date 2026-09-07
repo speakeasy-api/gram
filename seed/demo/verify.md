@@ -123,9 +123,10 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 16. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
     Instrument agents, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, Configure policies is Done, and Confirm
-    traffic is visibly blocked. As a platform admin, enable **Include hidden
-    tasks** and confirm Set up Platform MCP appears with a Hidden badge.
+    integrations in Awaiting Support, Configure policies is Done, and Set up
+    identity provider, Set up Anthropic Enterprise, and Distribute MCP servers
+    sit in To Do. As a platform admin, enable **Include hidden tasks** and
+    confirm Set up Platform MCP appears with a Hidden badge.
 
 ## On failure
 

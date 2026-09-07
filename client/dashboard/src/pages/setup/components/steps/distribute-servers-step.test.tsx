@@ -83,6 +83,9 @@ vi.mock("@/pages/catalog/useRemoteMcpInstallWorkflow", () => ({
 vi.mock("@gram/client/react-query/mcpServers", () => ({
   useMcpServers: () => serverState.mcpServers,
 }));
+vi.mock("../marketplace-section", () => ({
+  MarketplaceSection: () => null,
+}));
 vi.mock("@gram/client/react-query/remoteMcpServers", () => ({
   useRemoteMcpServers: () => serverState.remoteMcpServers,
 }));

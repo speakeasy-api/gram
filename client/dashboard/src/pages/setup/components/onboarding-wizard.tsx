@@ -7,33 +7,20 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
 import { SetupShell } from "./setup-shell";
 import {
-  ConnectIdpStep,
-  DirectorySyncStep,
-  CreateMarketplaceStep,
+  IdentityProviderStep,
   AnthropicEnterpriseStep,
   DistributeServersStep,
   InstrumentAgentsStep,
   AdditionalAgentConfigStep,
-  ConfirmTrafficStep,
   ConfigurePoliciesStep,
   PlatformMCPSetupStep,
 } from "./steps";
 
 const CORE_STEPS: Step[] = [
   {
-    id: "connect-idp",
-    title: "Connect identity provider",
-    description: "Link SSO for authentication",
-  },
-  {
-    id: "directory-sync",
-    title: "Directory sync",
-    description: "Confirm users and roles",
-  },
-  {
-    id: "create-marketplace",
-    title: "Create plugin marketplace",
-    description: "For distributing servers to your users",
+    id: "identity-provider",
+    title: "Set up identity provider",
+    description: "Connect SSO and sync users and roles",
   },
   {
     id: "anthropic-enterprise",
@@ -50,11 +37,7 @@ const CORE_STEPS: Step[] = [
     title: "Additional agent configuration",
     description: "Optional API keys for usage and compliance data",
   },
-  {
-    id: "confirm-traffic",
-    title: "Confirm traffic",
-    description: "Verify connectivity and compliance",
-  },
+
   {
     id: "distribute-servers",
     title: "Distribute MCP servers",
@@ -107,11 +90,11 @@ export function SetupWizard(): JSX.Element {
   const stepSlug = searchParams.get("step");
 
   // Server-side onboarding signals used to resume at the right step on reload.
-  // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (anthropic-enterprise,
-  // instrument-agents, additional-agent-config, confirm-traffic,
-  // distribute-servers) have no server signal — once marketplace is published
-  // we land on anthropic-enterprise and let the user click forward.
+  // `onboardingStatus` covers the identity provider card (SSO + DSYNC);
+  // `publishStatus` says whether the plugin marketplace was published, which
+  // only happens from a later card. Nothing after identity provider has a
+  // signal of its own, so once either directory sync or the marketplace is
+  // done we land on anthropic-enterprise and let the user click forward.
   // throwOnError: false so a failed resume check degrades to step 0 (as the
   // effect below assumes) instead of throwing to the page error boundary. The
   // QueryClient default only suppresses 401/403, so a 500 here would otherwise
@@ -128,12 +111,8 @@ export function SetupWizard(): JSX.Element {
     // If either query errored, its data is undefined and the checks below all
     // fail — we fall back to step 0.
     let resumeStep = 0;
-    if (publishStatus?.connected) {
+    if (publishStatus?.connected || onboardingStatus?.dsyncConfigured) {
       resumeStep = indexOfStep(steps, "anthropic-enterprise");
-    } else if (onboardingStatus?.dsyncConfigured) {
-      resumeStep = indexOfStep(steps, "create-marketplace");
-    } else if (onboardingStatus?.ssoConfigured) {
-      resumeStep = indexOfStep(steps, "directory-sync");
     }
     setSearchParams(
       (prev) => {
@@ -243,28 +222,8 @@ export function SetupWizard(): JSX.Element {
 
   const renderStep = () => {
     switch (steps[currentStep]?.id) {
-      case "connect-idp":
-        return (
-          <ConnectIdpStep
-            onSkip={completeCurrentStep}
-            onComplete={completeCurrentStep}
-          />
-        );
-      case "directory-sync":
-        return (
-          <DirectorySyncStep
-            onComplete={completeCurrentStep}
-            onSkip={completeCurrentStep}
-            onBack={goBack}
-          />
-        );
-      case "create-marketplace":
-        return (
-          <CreateMarketplaceStep
-            onComplete={completeCurrentStep}
-            onBack={goBack}
-          />
-        );
+      case "identity-provider":
+        return <IdentityProviderStep onComplete={completeCurrentStep} />;
       case "anthropic-enterprise":
         return (
           <AnthropicEnterpriseStep
@@ -287,13 +246,7 @@ export function SetupWizard(): JSX.Element {
             onBack={goBack}
           />
         );
-      case "confirm-traffic":
-        return (
-          <ConfirmTrafficStep
-            onComplete={completeCurrentStep}
-            onBack={goBack}
-          />
-        );
+
       case "distribute-servers":
         return (
           <DistributeServersStep

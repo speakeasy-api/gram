@@ -79,12 +79,12 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
  * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
  * Sync has not been configured yet so first-run setup happens in-product.
  */
-function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
+function SetupStepButton() {
   const orgRoutes = useOrgRoutes();
 
   return (
     <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setup.Link queryParams={{ step }}>
+      <orgRoutes.setup.Link queryParams={{ step: "identity-provider" }}>
         <Button variant="secondary" size="sm">
           Configure
         </Button>
@@ -209,7 +209,7 @@ function SSOConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
   if (active) return <SSOConfigureButton />;
-  return <SetupStepButton step="connect-idp" />;
+  return <SetupStepButton />;
 }
 
 /**
@@ -225,7 +225,7 @@ function DirectorySyncConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
   if (active) return <DirectorySyncConfigureButton />;
-  return <SetupStepButton step="directory-sync" />;
+  return <SetupStepButton />;
 }
 
 function IdentitySection({

@@ -44,14 +44,11 @@ vi.mock("./onboarding-stepper", () => ({
   OnboardingStepper: () => null,
 }));
 vi.mock("./steps", () => ({
-  ConnectIdpStep: () => null,
-  DirectorySyncStep: () => null,
-  CreateMarketplaceStep: () => null,
+  IdentityProviderStep: () => null,
   AnthropicEnterpriseStep: () => null,
   DistributeServersStep: () => null,
   InstrumentAgentsStep: () => null,
   AdditionalAgentConfigStep: () => null,
-  ConfirmTrafficStep: () => null,
   ConfigurePoliciesStep: () => null,
   PlatformMCPSetupStep: () => null,
 }));
@@ -96,7 +93,7 @@ describe("SetupWizard", () => {
     expect(resumedStep()).toBe("anthropic-enterprise");
   });
 
-  it("resumes at directory-sync when only SSO is configured", () => {
+  it("stays on identity-provider when only SSO is configured", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: false },
       isLoading: false,
@@ -104,10 +101,10 @@ describe("SetupWizard", () => {
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("directory-sync");
+    expect(resumedStep()).toBe("identity-provider");
   });
 
-  it("resumes at create-marketplace after directory sync is configured", () => {
+  it("resumes at anthropic-enterprise after directory sync is configured", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: true },
       isLoading: false,
@@ -115,6 +112,6 @@ describe("SetupWizard", () => {
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("create-marketplace");
+    expect(resumedStep()).toBe("anthropic-enterprise");
   });
 });

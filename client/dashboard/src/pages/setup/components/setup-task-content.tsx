@@ -2,11 +2,8 @@ import {
   AdditionalAgentConfigStep,
   AnthropicEnterpriseStep,
   ConfigurePoliciesStep,
-  ConfirmTrafficStep,
-  ConnectIdpStep,
-  CreateMarketplaceStep,
-  DirectorySyncStep,
   DistributeServersStep,
+  IdentityProviderStep,
   InstrumentAgentsStep,
   PlatformMCPSetupStep,
 } from "./steps";
@@ -31,26 +28,8 @@ export function SetupTaskContent({
 }: SetupTaskContentProps): JSX.Element | null {
   let step: JSX.Element | null;
   switch (taskKey) {
-    case "connect-idp":
-      step = (
-        <ConnectIdpStep
-          onComplete={onComplete}
-          onSkip={onSkip}
-          onBack={onBack}
-        />
-      );
-      break;
-    case "directory-sync":
-      step = (
-        <DirectorySyncStep
-          onComplete={onComplete}
-          onSkip={onSkip}
-          onBack={onBack}
-        />
-      );
-      break;
-    case "create-marketplace":
-      step = <CreateMarketplaceStep onComplete={onComplete} onBack={onBack} />;
+    case "identity-provider":
+      step = <IdentityProviderStep onComplete={onComplete} onBack={onBack} />;
       break;
     case "anthropic-enterprise":
       step = (
@@ -68,9 +47,6 @@ export function SetupTaskContent({
           onBack={onBack}
         />
       );
-      break;
-    case "confirm-traffic":
-      step = <ConfirmTrafficStep onComplete={onComplete} onBack={onBack} />;
       break;
     case "distribute-servers":
       step = (
