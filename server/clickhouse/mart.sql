@@ -29,6 +29,7 @@ GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 CREATE VIEW IF NOT EXISTS marts.weekly_ai_surface_adoption
 DEFINER = marts_definer SQL SECURITY DEFINER
 AS
+WITH lowerUTF8(trimBoth(user_email)) AS normalized_email
 SELECT
     toMonday(time_bucket) AS week_start,
     if(
@@ -36,7 +37,7 @@ SELECT
         hook_source,
         'other'
     ) AS surface,
-    uniqExactIf(user_email, user_email != '') AS active_users
+    uniqExactIf(normalized_email, normalized_email != '') AS active_users
 FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
   AND time_bucket >= toDateTime(toMonday(now('UTC')) - INTERVAL 12 WEEK, 'UTC')
