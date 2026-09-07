@@ -1,4 +1,5 @@
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import { useState } from "react";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { RiskExposureSlice } from "@gram/client/models/components/riskexposureslice.js";
@@ -6,7 +7,7 @@ import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
 import { getRiskCategoryChartColor } from "../riskTrendChartData";
 
 const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
-const INACTIVE_GREY = "hsl(0, 0%, 75%)";
+const INACTIVE_GREY = "hsl(0, 0%, 88%)";
 
 function categoryLabel(category: string): string {
   return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
@@ -18,6 +19,8 @@ function categoryLabel(category: string): string {
  * reads as the same color across the Secure section. Segments and legend
  * entries toggle the signals list's category filter; slices outside the
  * active selection dim so the bar doubles as the filter's state display.
+ * Hovering a segment or legend entry previews that same dimming, so pointing
+ * at a slice isolates it before committing to the filter.
  */
 export function ExposureBar({
   slices,
@@ -32,12 +35,17 @@ export function ExposureBar({
   onToggleCategory: (category: string) => void;
 }): JSX.Element {
   const seriesColors = useSeriesColors();
+  const [hovered, setHovered] = useState<string | null>(null);
   const sliceColor = (category: string) =>
     getRiskCategoryChartColor(category, seriesColors) ?? FALLBACK_SLICE_COLOR;
   const visible = slices.filter((slice) => slice.findings > 0);
   const active = new Set(activeCategories);
+  // Hover previews an isolation of the pointed-at slice, overriding the
+  // committed filter for as long as the pointer stays on the bar or legend.
   const isDimmed = (category: string) =>
-    active.size > 0 && !active.has(category);
+    hovered !== null
+      ? hovered !== category
+      : active.size > 0 && !active.has(category);
 
   if (visible.length === 0) {
     return (
@@ -70,6 +78,10 @@ export function ExposureBar({
                 aria-label={`Filter by ${categoryLabel(slice.category)}`}
                 title={`${categoryLabel(slice.category)} · ${Math.round(slice.share * 100)}%`}
                 onClick={() => onToggleCategory(slice.category)}
+                onMouseEnter={() => setHovered(slice.category)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(slice.category)}
+                onBlur={() => setHovered(null)}
                 className="cursor-pointer transition-colors hover:opacity-80"
                 style={{
                   width: `${Math.max(slice.share * 100, 1)}%`,
@@ -94,6 +106,10 @@ export function ExposureBar({
                 type="button"
                 aria-pressed={isActive}
                 onClick={() => onToggleCategory(slice.category)}
+                onMouseEnter={() => setHovered(slice.category)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(slice.category)}
+                onBlur={() => setHovered(null)}
                 className={cn(
                   "text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition-opacity",
                   dimmed && "opacity-50",
