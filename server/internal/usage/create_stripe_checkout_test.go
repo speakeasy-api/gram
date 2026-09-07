@@ -1623,7 +1623,13 @@ func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.
 	}()
 	defer func() {
 		cancel()
-		<-done
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancelCleanup()
+		select {
+		case <-done:
+		case <-cleanupCtx.Done():
+			t.Error("Checkout did not return after cancellation during cleanup")
+		}
 	}()
 
 	// The deadline guards the test; cancellation follows an observed lock wait.
