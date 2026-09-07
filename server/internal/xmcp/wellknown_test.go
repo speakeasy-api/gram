@@ -342,6 +342,10 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerOnlyToolsetBackendO
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 
 	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.NoError(t, err)
