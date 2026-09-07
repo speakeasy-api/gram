@@ -704,22 +704,26 @@ func DescribeToolset(
 			ProjectID: pid,
 			ID:        toolset.ExternalOauthServerID.UUID,
 		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").LogError(ctx, logger)
-		}
-		if len(externalOauthMetadata.Metadata) > 0 {
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").LogError(ctx, logger)
+			}
+		} else {
 			var metadata any
-			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").LogError(ctx, logger)
+			if len(externalOauthMetadata.Metadata) > 0 {
+				if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").LogError(ctx, logger)
+				}
 			}
 
 			externalOAuthServer = &types.ExternalOAuthServer{
-				ID:        externalOauthMetadata.ID.String(),
-				ProjectID: externalOauthMetadata.ProjectID.String(),
-				Slug:      types.Slug(externalOauthMetadata.Slug),
-				Metadata:  metadata,
-				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
+				ID:                        externalOauthMetadata.ID.String(),
+				ProjectID:                 externalOauthMetadata.ProjectID.String(),
+				Slug:                      types.Slug(externalOauthMetadata.Slug),
+				Metadata:                  metadata,
+				AuthorizationServerIssuer: conv.PtrEmpty(externalOauthMetadata.AuthorizationServerIssuer.String),
+				CreatedAt:                 externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:                 externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
 			}
 		}
 	}

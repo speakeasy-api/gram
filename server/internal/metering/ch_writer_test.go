@@ -48,7 +48,7 @@ func usageMessage(t *testing.T, input metering.UsageInput) (*meteringv1.MeterRea
 	t.Helper()
 	reading, err := metering.NewUsage(input)
 	require.NoError(t, err)
-	message := commonMessage(reading.ID(), input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
+	message := commonMessage(t, reading.ID(), input.Meter, input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
 	message.SetKind(meteringv1.MeterReading_KIND_USAGE)
 	return message, reading
 }
@@ -57,7 +57,7 @@ func adjustmentMessage(t *testing.T, input metering.AdjustmentInput) (*meteringv
 	t.Helper()
 	reading, err := metering.NewAdjustment(input)
 	require.NoError(t, err)
-	message := commonMessage(reading.ID(), input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
+	message := commonMessage(t, reading.ID(), input.Meter, input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
 	message.SetKind(meteringv1.MeterReading_KIND_ADJUSTMENT)
 	message.SetCorrectsReadingId(input.CorrectsReadingID.String())
 	message.SetAdjustmentReason(input.Reason)
@@ -65,7 +65,9 @@ func adjustmentMessage(t *testing.T, input metering.AdjustmentInput) (*meteringv
 }
 
 func commonMessage(
+	t *testing.T,
 	id uuid.UUID,
+	definition metering.Definition,
 	scope metering.Scope,
 	operationID string,
 	value int64,
@@ -74,23 +76,65 @@ func commonMessage(
 	source string,
 	attributes map[string]string,
 ) *meteringv1.MeterReading {
+	t.Helper()
+	meterID, unit, measurementMethod := definitionProtoFields(t, definition)
 	message := &meteringv1.MeterReading{}
 	message.SetId(id.String())
 	message.SetOrganizationId(scope.OrganizationID())
 	if projectID, ok := scope.ProjectID(); ok {
 		message.SetProjectId(projectID.String())
 	}
-	message.SetMeterId(string(metering.MeterAgentSessionStorage))
+	message.SetMeterId(string(meterID))
 	message.SetOperationId(operationID)
-	message.SetUnit(string(metering.UnitSTokens))
+	message.SetUnit(string(unit))
 	message.SetValue(value)
 	message.SetOccurredAt(occurredAt.Format(time.RFC3339Nano))
 	message.SetAttributes(attributes)
 	message.SetMeterVersion(1)
 	message.SetProducedAt(producedAt.Format(time.RFC3339Nano))
-	message.SetMeasurementMethod(string(metering.MeasurementTiktokenO200kBase))
+	message.SetMeasurementMethod(string(measurementMethod))
 	message.SetSource(source)
 	return message
+}
+func definitionProtoFields(t *testing.T, definition metering.Definition) (metering.MeterID, metering.Unit, metering.MeasurementMethod) {
+	t.Helper()
+	switch definition {
+	case metering.AgentSessionStorage():
+		return metering.MeterAgentSessionStorage, metering.UnitSTokens, metering.MeasurementTiktokenO200kBase
+	case metering.MCPBandwidthIngress():
+		return metering.MeterMCPBandwidthIngress, metering.UnitBytes, metering.MeasurementHTTPBodyBytes
+	case metering.MCPBandwidthEgress():
+		return metering.MeterMCPBandwidthEgress, metering.UnitBytes, metering.MeasurementHTTPBodyBytes
+	default:
+		require.FailNow(t, "unknown meter definition")
+		return "", "", ""
+	}
+}
+
+func TestMeterReadingCHWriterPersistsBandwidthMeasurementMethod(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	message, reading := usageMessage(t, metering.UsageInput{
+		Meter:       metering.MCPBandwidthIngress(),
+		Scope:       metering.ProjectScope("org-"+uuid.NewString(), uuid.New()),
+		OperationID: "mcp-http-exchange:" + uuid.NewString(),
+		Value:       4096,
+		OccurredAt:  now,
+		ProducedAt:  now,
+		Source:      "test",
+		Attributes:  nil,
+	})
+	capture := &captureReadingInserter{}
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture)
+
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil))
+	require.Len(t, capture.rows, 1)
+	require.Equal(t, reading.ID(), capture.rows[0].ID)
+	require.Equal(t, string(metering.MeterMCPBandwidthIngress), capture.rows[0].MeterID)
+	require.Equal(t, string(metering.UnitBytes), capture.rows[0].Unit)
+	require.Equal(t, string(metering.MeasurementHTTPBodyBytes), capture.rows[0].MeasurementMethod)
+	require.Equal(t, int64(4096), capture.rows[0].Value)
+	require.NotContains(t, capture.rows[0].Attributes, "codec")
 }
 
 func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
@@ -128,6 +172,32 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), capture.rows[0].Attributes["codec"])
 	require.Equal(t, "refreshed", capture.rows[0].Attributes["revision"])
 	require.Equal(t, updatedInput.ProducedAt, capture.rows[0].ProducedAt)
+}
+
+func TestMeterReadingCHWriterRejectsUnregisteredMeasurementContracts(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	valid, _ := usageMessage(t, metering.UsageInput{
+		Meter:       metering.MCPBandwidthIngress(),
+		Scope:       metering.ProjectScope("org-"+uuid.NewString(), uuid.New()),
+		OperationID: "mcp-http-exchange:" + uuid.NewString(),
+		Value:       1024,
+		OccurredAt:  now,
+		ProducedAt:  now,
+		Source:      "test",
+		Attributes:  nil,
+	})
+	invalidUnit, ok := proto.Clone(valid).(*meteringv1.MeterReading)
+	require.True(t, ok)
+	invalidUnit.SetUnit("kilobytes")
+	invalidMethod, ok := proto.Clone(valid).(*meteringv1.MeterReading)
+	require.True(t, ok)
+	invalidMethod.SetMeasurementMethod("estimated_bytes")
+	capture := &captureReadingInserter{}
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture)
+
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{invalidUnit, invalidMethod}, nil))
+	require.Empty(t, capture.rows)
 }
 
 func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {

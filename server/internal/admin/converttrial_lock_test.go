@@ -391,13 +391,17 @@ func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCache
 		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%AcquireOpenRouterBillingLock%")
 	}, "conversion did not reach the key lock after acquiring feature locks")
 
-	featureWriter, err := conn.Acquire(ctx)
-	require.NoError(t, err)
-	defer featureWriter.Release()
 	require.NotEmpty(t, productfeatures.TrialRuntimeFeatures)
 	feature := productfeatures.TrialRuntimeFeatures[0]
 	written := make(chan error, 1)
 	go func() {
+		featureWriter, acquireErr := conn.Acquire(ctx)
+		if acquireErr != nil {
+			written <- acquireErr
+			return
+		}
+		// The writer owns the connection until its deferred unlock completes.
+		defer featureWriter.Release()
 		q := featurerepo.New(featureWriter)
 		params := featurerepo.AcquireFeatureCacheLockParams{OrganizationID: orgID, FeatureName: string(feature)}
 		if lockErr := q.AcquireFeatureCacheLock(ctx, params); lockErr != nil {

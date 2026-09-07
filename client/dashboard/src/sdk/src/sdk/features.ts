@@ -6,7 +6,7 @@ import { featuresGet } from "../funcs/featuresGet.js";
 import { featuresSet } from "../funcs/featuresSet.js";
 import { featuresSetRemoteSessionAutoRefreshPolicy } from "../funcs/featuresSetRemoteSessionAutoRefreshPolicy.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
+import { ProductFeatures } from "../models/components/productfeatures.js";
 import {
   GetProductFeaturesRequest,
   GetProductFeaturesSecurity,
@@ -32,7 +32,7 @@ export class Features extends ClientSDK {
     request: GetProductFeaturesRequest,
     security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<GetProductFeaturesResponseBody> {
+  ): Promise<ProductFeatures> {
     return unwrapAsync(featuresGet(
       this,
       request,

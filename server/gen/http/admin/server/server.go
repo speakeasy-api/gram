@@ -18,32 +18,39 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts                       []*MountPoint
-	Login                        http.Handler
-	Callback                     http.Handler
-	Logout                       http.Handler
-	GetProject                   http.Handler
-	UpdateOrganization           http.Handler
-	BulkUpdateAccountType        http.Handler
-	DisableOrganization          http.Handler
-	EnableOrganization           http.Handler
-	GetOrganization              http.Handler
-	ListOrganizationMembers      http.Handler
-	ListOrganizationProjects     http.Handler
-	ListOrganizationActivity     http.Handler
-	ListOrganizations            http.Handler
-	ExtendTrial                  http.Handler
-	CreateOrganization           http.Handler
-	RearmTrial                   http.Handler
-	GetOrganizationStats         http.Handler
-	GetInferenceKeys             http.Handler
-	SetInferenceKeyMonthlyLimit  http.Handler
-	GetInferenceSpendHistory     http.Handler
-	GetPaygBillingSummary        http.Handler
-	GetStripeSubscription        http.Handler
-	CancelStripeSubscription     http.Handler
-	ResumeStripeSubscription     http.Handler
-	MarkEnterpriseTrialConverted http.Handler
+	Mounts                              []*MountPoint
+	Login                               http.Handler
+	Callback                            http.Handler
+	Logout                              http.Handler
+	GetSession                          http.Handler
+	GetOrganizationFeatures             http.Handler
+	SetOrganizationFeature              http.Handler
+	GetOrganizationChatAnalysisSettings http.Handler
+	SetOrganizationChatAnalysisSettings http.Handler
+	TriggerOrganizationChatAnalysis     http.Handler
+	OpenOrganizationInDashboard         http.Handler
+	GetProject                          http.Handler
+	UpdateOrganization                  http.Handler
+	BulkUpdateAccountType               http.Handler
+	DisableOrganization                 http.Handler
+	EnableOrganization                  http.Handler
+	GetOrganization                     http.Handler
+	ListOrganizationMembers             http.Handler
+	ListOrganizationProjects            http.Handler
+	ListOrganizationActivity            http.Handler
+	ListOrganizations                   http.Handler
+	ExtendTrial                         http.Handler
+	CreateOrganization                  http.Handler
+	RearmTrial                          http.Handler
+	GetOrganizationStats                http.Handler
+	GetInferenceKeys                    http.Handler
+	SetInferenceKeyMonthlyLimit         http.Handler
+	GetInferenceSpendHistory            http.Handler
+	GetPaygBillingSummary               http.Handler
+	GetStripeSubscription               http.Handler
+	CancelStripeSubscription            http.Handler
+	ResumeStripeSubscription            http.Handler
+	MarkEnterpriseTrialConverted        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -76,6 +83,13 @@ func New(
 			{"Login", "GET", "/admin/auth.login"},
 			{"Callback", "GET", "/admin/auth.callback"},
 			{"Logout", "POST", "/admin/auth.logout"},
+			{"GetSession", "GET", "/admin/session.get"},
+			{"GetOrganizationFeatures", "GET", "/admin/organization.features"},
+			{"SetOrganizationFeature", "POST", "/admin/organization.features"},
+			{"GetOrganizationChatAnalysisSettings", "GET", "/admin/organization.chatAnalysisSettings"},
+			{"SetOrganizationChatAnalysisSettings", "POST", "/admin/organization.chatAnalysisSettings"},
+			{"TriggerOrganizationChatAnalysis", "POST", "/admin/organization.chatAnalysisTrigger"},
+			{"OpenOrganizationInDashboard", "POST", "/admin/organization.open-dashboard"},
 			{"GetProject", "GET", "/admin/project.get"},
 			{"UpdateOrganization", "POST", "/admin/organization.update"},
 			{"BulkUpdateAccountType", "POST", "/admin/organizations.bulkUpdateAccountType"},
@@ -99,31 +113,38 @@ func New(
 			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 			{"MarkEnterpriseTrialConverted", "POST", "/admin/trial.convert"},
 		},
-		Login:                        NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		Callback:                     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Logout:                       NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		GetProject:                   NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		UpdateOrganization:           NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
-		BulkUpdateAccountType:        NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
-		DisableOrganization:          NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
-		EnableOrganization:           NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
-		GetOrganization:              NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationMembers:      NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationProjects:     NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationActivity:     NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizations:            NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
-		ExtendTrial:                  NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
-		CreateOrganization:           NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
-		RearmTrial:                   NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationStats:         NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceKeys:             NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
-		SetInferenceKeyMonthlyLimit:  NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceSpendHistory:     NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
-		GetPaygBillingSummary:        NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscription:        NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		CancelStripeSubscription:     NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ResumeStripeSubscription:     NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		MarkEnterpriseTrialConverted: NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		Login:                               NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:                            NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:                              NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetSession:                          NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationFeatures:             NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationFeature:              NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationChatAnalysisSettings: NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationChatAnalysisSettings: NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		TriggerOrganizationChatAnalysis:     NewTriggerOrganizationChatAnalysisHandler(e.TriggerOrganizationChatAnalysis, mux, decoder, encoder, errhandler, formatter),
+		OpenOrganizationInDashboard:         NewOpenOrganizationInDashboardHandler(e.OpenOrganizationInDashboard, mux, decoder, encoder, errhandler, formatter),
+		GetProject:                          NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateOrganization:                  NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
+		BulkUpdateAccountType:               NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
+		DisableOrganization:                 NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
+		EnableOrganization:                  NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
+		GetOrganization:                     NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationMembers:             NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationProjects:            NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationActivity:            NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizations:                   NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ExtendTrial:                         NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
+		CreateOrganization:                  NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
+		RearmTrial:                          NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationStats:                NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceKeys:                    NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
+		SetInferenceKeyMonthlyLimit:         NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:            NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:               NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:               NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:            NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:            NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -135,6 +156,13 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Login = m(s.Login)
 	s.Callback = m(s.Callback)
 	s.Logout = m(s.Logout)
+	s.GetSession = m(s.GetSession)
+	s.GetOrganizationFeatures = m(s.GetOrganizationFeatures)
+	s.SetOrganizationFeature = m(s.SetOrganizationFeature)
+	s.GetOrganizationChatAnalysisSettings = m(s.GetOrganizationChatAnalysisSettings)
+	s.SetOrganizationChatAnalysisSettings = m(s.SetOrganizationChatAnalysisSettings)
+	s.TriggerOrganizationChatAnalysis = m(s.TriggerOrganizationChatAnalysis)
+	s.OpenOrganizationInDashboard = m(s.OpenOrganizationInDashboard)
 	s.GetProject = m(s.GetProject)
 	s.UpdateOrganization = m(s.UpdateOrganization)
 	s.BulkUpdateAccountType = m(s.BulkUpdateAccountType)
@@ -167,6 +195,13 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLoginHandler(mux, h.Login)
 	MountCallbackHandler(mux, h.Callback)
 	MountLogoutHandler(mux, h.Logout)
+	MountGetSessionHandler(mux, h.GetSession)
+	MountGetOrganizationFeaturesHandler(mux, h.GetOrganizationFeatures)
+	MountSetOrganizationFeatureHandler(mux, h.SetOrganizationFeature)
+	MountGetOrganizationChatAnalysisSettingsHandler(mux, h.GetOrganizationChatAnalysisSettings)
+	MountSetOrganizationChatAnalysisSettingsHandler(mux, h.SetOrganizationChatAnalysisSettings)
+	MountTriggerOrganizationChatAnalysisHandler(mux, h.TriggerOrganizationChatAnalysis)
+	MountOpenOrganizationInDashboardHandler(mux, h.OpenOrganizationInDashboard)
 	MountGetProjectHandler(mux, h.GetProject)
 	MountUpdateOrganizationHandler(mux, h.UpdateOrganization)
 	MountBulkUpdateAccountTypeHandler(mux, h.BulkUpdateAccountType)
@@ -332,6 +367,382 @@ func NewLogoutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "logout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSessionHandler configures the mux to serve the "admin" service
+// "getSession" endpoint.
+func MountGetSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/session.get", f)
+}
+
+// NewGetSessionHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "getSession" endpoint.
+func NewGetSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSessionRequest(mux, decoder)
+		encodeResponse = EncodeGetSessionResponse(encoder)
+		encodeError    = EncodeGetSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationFeaturesHandler configures the mux to serve the "admin"
+// service "getOrganizationFeatures" endpoint.
+func MountGetOrganizationFeaturesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.features", f)
+}
+
+// NewGetOrganizationFeaturesHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationFeatures"
+// endpoint.
+func NewGetOrganizationFeaturesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationFeaturesRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationFeaturesResponse(encoder)
+		encodeError    = EncodeGetOrganizationFeaturesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationFeatures")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationFeatureHandler configures the mux to serve the "admin"
+// service "setOrganizationFeature" endpoint.
+func MountSetOrganizationFeatureHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.features", f)
+}
+
+// NewSetOrganizationFeatureHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setOrganizationFeature" endpoint.
+func NewSetOrganizationFeatureHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationFeatureRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationFeatureResponse(encoder)
+		encodeError    = EncodeSetOrganizationFeatureError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationFeature")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationChatAnalysisSettingsHandler configures the mux to serve
+// the "admin" service "getOrganizationChatAnalysisSettings" endpoint.
+func MountGetOrganizationChatAnalysisSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.chatAnalysisSettings", f)
+}
+
+// NewGetOrganizationChatAnalysisSettingsHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "getOrganizationChatAnalysisSettings" endpoint.
+func NewGetOrganizationChatAnalysisSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationChatAnalysisSettingsRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationChatAnalysisSettingsResponse(encoder)
+		encodeError    = EncodeGetOrganizationChatAnalysisSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationChatAnalysisSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationChatAnalysisSettingsHandler configures the mux to serve
+// the "admin" service "setOrganizationChatAnalysisSettings" endpoint.
+func MountSetOrganizationChatAnalysisSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.chatAnalysisSettings", f)
+}
+
+// NewSetOrganizationChatAnalysisSettingsHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "setOrganizationChatAnalysisSettings" endpoint.
+func NewSetOrganizationChatAnalysisSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationChatAnalysisSettingsRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationChatAnalysisSettingsResponse(encoder)
+		encodeError    = EncodeSetOrganizationChatAnalysisSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationChatAnalysisSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTriggerOrganizationChatAnalysisHandler configures the mux to serve the
+// "admin" service "triggerOrganizationChatAnalysis" endpoint.
+func MountTriggerOrganizationChatAnalysisHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.chatAnalysisTrigger", f)
+}
+
+// NewTriggerOrganizationChatAnalysisHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "triggerOrganizationChatAnalysis" endpoint.
+func NewTriggerOrganizationChatAnalysisHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTriggerOrganizationChatAnalysisRequest(mux, decoder)
+		encodeResponse = EncodeTriggerOrganizationChatAnalysisResponse(encoder)
+		encodeError    = EncodeTriggerOrganizationChatAnalysisError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "triggerOrganizationChatAnalysis")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountOpenOrganizationInDashboardHandler configures the mux to serve the
+// "admin" service "openOrganizationInDashboard" endpoint.
+func MountOpenOrganizationInDashboardHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.open-dashboard", f)
+}
+
+// NewOpenOrganizationInDashboardHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "openOrganizationInDashboard"
+// endpoint.
+func NewOpenOrganizationInDashboardHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeOpenOrganizationInDashboardRequest(mux, decoder)
+		encodeResponse = EncodeOpenOrganizationInDashboardResponse(encoder)
+		encodeError    = EncodeOpenOrganizationInDashboardError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "openOrganizationInDashboard")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

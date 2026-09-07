@@ -339,13 +339,24 @@ ON CONFLICT (plugin_id, principal_urn) DO UPDATE
 RETURNING *;
 
 -- name: ListPluginAssignments :many
-SELECT *
-FROM plugin_assignments
-WHERE plugin_id = @plugin_id;
+SELECT pa.*
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id;
 
 -- name: RemoveAllPluginAssignments :execrows
-DELETE FROM plugin_assignments
-WHERE plugin_id = @plugin_id;
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id;
 
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with

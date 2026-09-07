@@ -197,7 +197,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const restoreConversionFocus = (): void => {
     // Controlled dialogs can skip close-autofocus when Presence unmounts. This
     // second path runs after React disconnects the focused dialog control.
-    setTimeout(() => focusConversionTarget());
+    setTimeout(() => {
+      focusConversionTarget();
+    });
   };
 
   const restoreConversionFocusFromDialog = (event: Event): void => {

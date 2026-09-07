@@ -591,6 +591,7 @@ trackedFiles:
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
   src/funcs/toolsetsSetUserSessionIssuer.ts: {}
   src/funcs/toolsetsUpdateBySlug.ts: {}
+  src/funcs/toolsetsUpdateExternalOAuthServer.ts: {}
   src/funcs/triggersCreate.ts: {}
   src/funcs/triggersDelete.ts: {}
   src/funcs/triggersGet.ts: {}
@@ -914,7 +915,6 @@ trackedFiles:
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
-  src/models/components/getproductfeaturesresponsebody.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
@@ -1230,6 +1230,7 @@ trackedFiles:
   src/models/components/policybypassredemption.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
+  src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
@@ -1524,6 +1525,7 @@ trackedFiles:
   src/models/components/updatedestinationrequestbody.ts: {}
   src/models/components/updatedomainrequestbody.ts: {}
   src/models/components/updateenvironmentrequestbody.ts: {}
+  src/models/components/updateexternaloauthserverrequestbody.ts: {}
   src/models/components/updategcpiamcredentialrequestbody.ts: {}
   src/models/components/updategcpiamplatformcredentialrequestbody.ts: {}
   src/models/components/updategcpkmskeyrequestbody.ts: {}
@@ -2169,6 +2171,7 @@ trackedFiles:
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
+  src/models/operations/updateexternaloauthserver.ts: {}
   src/models/operations/updategcpiamcredential.ts: {}
   src/models/operations/updategcpiamplatformcredential.ts: {}
   src/models/operations/updategcpkmskey.ts: {}
@@ -3052,6 +3055,7 @@ trackedFiles:
   src/react-query/updateDeviceAgentConfiguration.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
+  src/react-query/updateExternalOAuthServer.ts: {}
   src/react-query/updateGcpIamCredential.ts: {}
   src/react-query/updateGcpIamPlatformCredential.ts: {}
   src/react-query/updateGcpKmsKey.ts: {}
@@ -3264,7 +3268,7 @@ examples:
         query:
           slug: "<value>"
       requestBody:
-        application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
+        application/json: {"external_oauth_server": {}}
       responses:
         "200":
           application/json: {"account_type": "<value>", "created_at": "2024-08-30T03:23:36.997Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 29048}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [], "toolset_version": 920071, "updated_at": "2025-07-24T13:29:21.934Z"}
@@ -5152,7 +5156,7 @@ examples:
         application/json: {"issuer": "discover"}
       responses:
         "200":
-          application/json: {"client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "jcb", "oidc": true, "passthrough": true}
+          application/json: {"authorization_response_iss_parameter_supported": true, "client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "jcb", "oidc": true, "passthrough": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5185,7 +5189,7 @@ examples:
         application/json: {"issuer": "american_express"}
       responses:
         "200":
-          application/json: {"client_id_metadata_document_supported": true, "discovery_warnings": ["<value 1>", "<value 2>"], "issuer": "american_express", "oidc": true, "passthrough": false}
+          application/json: {"authorization_response_iss_parameter_supported": true, "client_id_metadata_document_supported": true, "discovery_warnings": ["<value 1>", "<value 2>"], "issuer": "american_express", "oidc": true, "passthrough": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5196,7 +5200,7 @@ examples:
         application/json: {"issuer": "jcb"}
       responses:
         "200":
-          application/json: {"client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "discover", "oidc": true, "passthrough": false}
+          application/json: {"authorization_response_iss_parameter_supported": false, "client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "discover", "oidc": true, "passthrough": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -9956,6 +9960,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateExternalOAuthServer:
+    speakeasy-default-update-external-O-auth-server:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-02-10T19:26:01.706Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 613606}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [], "toolset_version": 38578, "updated_at": "2025-03-20T19:08:01.858Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateGcpIamCredential:
     speakeasy-default-update-gcp-iam-credential:
       requestBody:

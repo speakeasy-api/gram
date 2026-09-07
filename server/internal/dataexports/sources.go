@@ -7,17 +7,15 @@ const (
 	DataSourceRiskFindings     = "risk_findings"
 )
 
-type dataSource string
-
-var validDataSources = map[dataSource]struct{}{
+var validDataSources = map[string]struct{}{
 	DataSourceProductTelemetry: {},
 	DataSourceRiskFindings:     {},
 }
 
-func parseDataSource(value string) (dataSource, error) {
-	source := dataSource(value)
-	if _, ok := validDataSources[source]; !ok {
+// NormalizeDataSource validates and returns a supported data export source.
+func NormalizeDataSource(value string) (string, error) {
+	if _, ok := validDataSources[value]; !ok {
 		return "", fmt.Errorf("unsupported data source %q", value)
 	}
-	return source, nil
+	return value, nil
 }

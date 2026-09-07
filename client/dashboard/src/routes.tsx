@@ -1,7 +1,7 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -42,7 +42,6 @@ import Home from "./pages/home/Home";
 import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
-import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
@@ -111,7 +110,6 @@ import {
 import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
-import PlatformAdminFeatures from "./pages/platform-admin/Features";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
@@ -161,6 +159,11 @@ const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
+const SetupWizard = React.lazy(() =>
+  import("./pages/setup/components/onboarding-wizard").then((module) => ({
+    default: module.SetupWizard,
+  })),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -236,7 +239,7 @@ const ROUTE_STRUCTURE = {
   register: {
     title: "Register",
     url: "/register",
-    component: Register,
+    component: () => <Navigate to="/sign-up" replace />,
     unauthenticated: true,
   },
   exploreDemo: {
@@ -1352,12 +1355,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "shield",
     component: PlatformAdminRbacOverride,
   },
-  platformAdminFeatures: {
-    title: "Platform Features",
-    url: "platform-admin/features",
-    icon: "sliders-horizontal",
-    component: PlatformAdminFeatures,
-  },
   platformAdminOnboarding: {
     title: "Enterprise Onboarding",
     url: "platform-admin/onboarding",
@@ -1428,6 +1425,15 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupBoard,
+    outsideMainLayout: true,
+  },
+  // The linear wizard walks one owner through setup step by step; the board at
+  // /setup is the default. SetupViewToggle swaps between the two.
+  setupWizard: {
+    title: "Setup wizard",
+    url: "setup/wizard",
+    icon: "list-checks",
+    component: SetupWizard,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

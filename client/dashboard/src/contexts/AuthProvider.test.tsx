@@ -155,7 +155,7 @@ describe("AuthProvider organization telemetry group", () => {
 
     renderGate();
 
-    // The expired gate lives on /talk-to-us, so this render only redirects.
+    // The expired gate lives on /trial-ended, so this render only redirects.
     expect(screen.queryByTestId("book-demo")).toBeNull();
     expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
   });

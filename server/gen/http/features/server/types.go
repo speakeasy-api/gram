@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -654,27 +655,27 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 
 // NewGetProductFeaturesResponseBody builds the HTTP response body from the
 // result of the "getProductFeatures" endpoint of the "features" service.
-func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
+func NewGetProductFeaturesResponseBody(res *featuresviews.ProductFeaturesView) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                             res.LogsEnabled,
-		ToolIoLogsEnabled:                       res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:                   res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled:            res.AuthzChallengeLoggingEnabled,
-		SsoEnabled:                              res.SsoEnabled,
-		ScimEnabled:                             res.ScimEnabled,
-		HooksBrowserLoginEnabled:                res.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:                    res.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:                  res.CustomModelKeysEnabled,
-		SkillsEnabled:                           res.SkillsEnabled,
-		SkillCaptureMetadataOnly:                res.SkillCaptureMetadataOnly,
-		AiPlatformPushIntegrationsEnabled:       res.AiPlatformPushIntegrationsEnabled,
-		PlatformMcpEnabled:                      res.PlatformMcpEnabled,
-		CustomerManagedEncryptionKeysEnabled:    res.CustomerManagedEncryptionKeysEnabled,
-		RemoteSessionAutoRefreshEnabled:         res.RemoteSessionAutoRefreshEnabled,
-		RemoteSessionAutoRefreshEnforcedEnabled: res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             res.ConsentToolFilteringEnabled,
-		SessionPortabilityEnabled:               res.SessionPortabilityEnabled,
-		DeviceAgent:                             res.DeviceAgent,
+		LogsEnabled:                             *res.LogsEnabled,
+		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            *res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              *res.SsoEnabled,
+		ScimEnabled:                             *res.ScimEnabled,
+		HooksBrowserLoginEnabled:                *res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    *res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  *res.CustomModelKeysEnabled,
+		SkillsEnabled:                           *res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                *res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       *res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      *res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
+		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
 }
@@ -1137,7 +1138,7 @@ func NewGetProductFeaturesPayload(organizationID string, sessionToken *string) *
 func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
 		OrganizationID: *body.OrganizationID,
-		FeatureName:    *body.FeatureName,
+		FeatureName:    features.ProductFeatureName(*body.FeatureName),
 		Enabled:        *body.Enabled,
 	}
 	v.SessionToken = sessionToken

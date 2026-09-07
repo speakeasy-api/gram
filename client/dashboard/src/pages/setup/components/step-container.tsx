@@ -1,6 +1,32 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+const StepSupportContext = createContext<(() => void) | undefined>(undefined);
+
+export function StepSupportButton(): JSX.Element | null {
+  const onSupport = useContext(StepSupportContext);
+
+  return onSupport ? (
+    <Button variant="secondary" onClick={onSupport}>
+      Get support
+    </Button>
+  ) : null;
+}
+
+export function StepSupportProvider({
+  onSupport,
+  children,
+}: {
+  onSupport: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <StepSupportContext.Provider value={onSupport}>
+      {children}
+    </StepSupportContext.Provider>
+  );
+}
 
 interface StepContainerProps {
   icon: ReactNode;
@@ -70,6 +96,7 @@ export function StepContainer({
               {skipLabel}
             </Button>
           )}
+          <StepSupportButton />
           <Button
             onClick={onContinue}
             disabled={!canContinue || isLoading}

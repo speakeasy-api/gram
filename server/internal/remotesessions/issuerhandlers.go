@@ -67,7 +67,8 @@ type rfc8414Document struct {
 	// (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414: whether
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
 	// pre-flight outbound CIMD opt-in.
-	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+	ClientIDMetadataDocumentSupported          bool `json:"client_id_metadata_document_supported"`
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414

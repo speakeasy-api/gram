@@ -9,6 +9,7 @@ import {
   InstrumentAgentsStep,
   PlatformMCPSetupStep,
 } from "./steps";
+import { StepSupportProvider } from "./step-container";
 
 type SetupTaskContentProps = {
   taskKey: string;
@@ -16,6 +17,7 @@ type SetupTaskContentProps = {
   onComplete: () => void;
   onSkip: () => void;
   onBack: () => void;
+  onSupport: () => void;
 };
 
 export function SetupTaskContent({
@@ -24,44 +26,60 @@ export function SetupTaskContent({
   onComplete,
   onSkip,
   onBack,
+  onSupport,
 }: SetupTaskContentProps): JSX.Element | null {
+  let step: JSX.Element | null;
   switch (taskKey) {
     case "connect-idp":
-      return (
+      step = (
         <ConnectIdpStep
           onComplete={onComplete}
           onSkip={onSkip}
           onBack={onBack}
         />
       );
+      break;
     case "directory-sync":
-      return <DirectorySyncStep onComplete={onComplete} onBack={onBack} />;
+      step = (
+        <DirectorySyncStep
+          onComplete={onComplete}
+          onSkip={onSkip}
+          onBack={onBack}
+        />
+      );
+      break;
     case "create-marketplace":
-      return <CreateMarketplaceStep onComplete={onComplete} onBack={onBack} />;
+      step = <CreateMarketplaceStep onComplete={onComplete} onBack={onBack} />;
+      break;
     case "instrument-agents":
-      return <InstrumentAgentsStep onComplete={onComplete} onBack={onBack} />;
+      step = <InstrumentAgentsStep onComplete={onComplete} onBack={onBack} />;
+      break;
     case "additional-agent-config":
-      return (
+      step = (
         <AdditionalAgentConfigStep
           onComplete={onComplete}
           onSkip={onSkip}
           onBack={onBack}
         />
       );
+      break;
     case "confirm-traffic":
-      return <ConfirmTrafficStep onComplete={onComplete} onBack={onBack} />;
+      step = <ConfirmTrafficStep onComplete={onComplete} onBack={onBack} />;
+      break;
     case "distribute-servers":
-      return (
+      step = (
         <DistributeServersStep
           onComplete={onComplete}
           onSkip={onSkip}
           onBack={onBack}
         />
       );
+      break;
     case "configure-policies":
-      return <ConfigurePoliciesStep onComplete={onComplete} onBack={onBack} />;
+      step = <ConfigurePoliciesStep onComplete={onComplete} onBack={onBack} />;
+      break;
     case "platform-mcp":
-      return (
+      step = (
         <PlatformMCPSetupStep
           onComplete={onComplete}
           onSkip={onSkip}
@@ -70,7 +88,12 @@ export function SetupTaskContent({
           continueLabel="Complete task"
         />
       );
+      break;
     default:
-      return null;
+      step = null;
   }
+
+  return step ? (
+    <StepSupportProvider onSupport={onSupport}>{step}</StepSupportProvider>
+  ) : null;
 }

@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -700,6 +701,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		// Unavailable addresses are terminal, never the legacy behavior.
 		return true, err
 	}
+	attributeMCPBandwidthServer(ctx, mcpServer, metaServer, mcpSlug)
 
 	// Meta-backed endpoints hold no upstream session and no proxied GET/SSE
 	// stream; the caller's legacy behavior (install page or 405) applies.
@@ -789,6 +791,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	switch {
 	case err == nil:
+		attributeMCPBandwidthServer(ctx, mcpServer, metaServer, mcpSlug)
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
 		}
@@ -813,6 +816,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeDirectToolset, toolset.ID.String(), mcpSlug)
 	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackServePublic)
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
@@ -1055,6 +1059,19 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
+				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
+			}
+			if authCtx.ProjectID == nil {
+				// Organization-wide keys gain execution context only after project
+				// access is authorized. Copy the context so sibling calls cannot
+				// inherit this request's project binding.
+				projectAuth := *authCtx
+				projectAuth.ProjectID = &toolset.ProjectID
+				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
+			}
+		}
 	}
 
 	// Decode the raw body first to check for batch requests

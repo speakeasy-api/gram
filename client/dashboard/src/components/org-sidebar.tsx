@@ -109,7 +109,6 @@ export function OrgSidebar({
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
-    orgRoutes.platformAdminFeatures,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
     orgRoutes.platformRemoteIdentityProviders,
@@ -148,7 +147,6 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
-    orgRoutes.platformAdminFeatures,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
     orgRoutes.platformRemoteIdentityProviders,
@@ -304,10 +302,6 @@ export function OrgSidebar({
                         {
                           item: orgRoutes.platformAdminRbac,
                           label: "RBAC Override",
-                        },
-                        {
-                          item: orgRoutes.platformAdminFeatures,
-                          label: "Features",
                         },
                         {
                           item: orgRoutes.platformAdminOnboarding,

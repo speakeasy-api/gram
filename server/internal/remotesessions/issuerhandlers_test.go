@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
+	remotesessionissuersserver "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -1186,6 +1187,26 @@ func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {
 	require.NotNil(t, draft.JwksURI)
 	require.NotNil(t, draft.RegistrationEndpoint)
 	require.Empty(t, draft.DiscoveryWarnings)
+}
+
+func TestFetchRemoteSessionIssuerMetadata_EmitsUnsupportedAuthorizationResponseIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["authorization_response_iss_parameter_supported"] = false
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
+	require.NoError(t, err)
+
+	body := remotesessionissuersserver.NewFetchRemoteSessionIssuerMetadataResponseBody(draft)
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(raw, &response))
+	require.Contains(t, response, "authorization_response_iss_parameter_supported")
+	require.Equal(t, false, response["authorization_response_iss_parameter_supported"])
 }
 
 func TestFetchRemoteSessionIssuerMetadata_WithWarnings(t *testing.T) {

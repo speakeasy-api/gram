@@ -120,7 +120,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
 
 	return ctx, &testInstance{
 		service:   svc,

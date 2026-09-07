@@ -201,6 +201,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:update",
+  "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
   "trigger-instance:create",
   "trigger-instance:delete",
@@ -666,6 +667,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected an external OAuth server to";
     case "toolset:detach_external_oauth":
       return "disconnected an external OAuth server from";
+    case "toolset:update_external_oauth_issuer":
+      return "updated the external OAuth issuer for";
     case "toolset:attach_oauth_proxy":
       return "attached an OAuth proxy to";
     case "toolset:update_oauth_proxy":

@@ -2,14 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationActivity,
   invalidateOrganizationStats,
-  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
   projectQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import type {
   AdminOrganization,
   AdminProjectDetail,
@@ -54,45 +55,19 @@ describe("organizationsListQuery", () => {
   });
 });
 
-describe("organizationActivityQuery", () => {
-  it("uses one organization-scoped key and forwards opaque cursors", async () => {
-    const fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ logs: [], next_cursor: "next" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-    vi.stubGlobal("fetch", fetch);
-    const first = organizationActivityQuery("org_1");
-    const second = organizationActivityQuery("org_2");
+describe("invalidateOrganizationActivity", () => {
+  it("invalidates only the generated query for the changed organization", () => {
+    const qc = new QueryClient();
+    const invalidate = vi
+      .spyOn(qc, "invalidateQueries")
+      .mockResolvedValue(undefined);
 
-    expect(first.queryKey).not.toEqual(second.queryKey);
-    expect(first.initialPageParam).toBeUndefined();
-    if (typeof first.queryFn !== "function") {
-      throw new Error("activity query has no query function");
-    }
-    await first.queryFn({ pageParam: undefined } as never);
-    expect(fetch.mock.calls[0]?.[0]).toContain("organization_id=org_1");
-    expect(fetch.mock.calls[0]?.[0]).not.toContain("cursor=");
+    invalidateOrganizationActivity(qc, "org_1");
 
-    await first.queryFn({ pageParam: "opaque+/=" } as never);
-    expect(fetch.mock.calls[1]?.[0]).toContain(
-      "organization_id=org_1&cursor=opaque%2B%2F%3D",
-    );
-    expect(
-      first.getNextPageParam?.(
-        { logs: [], next_cursor: "next" },
-        [],
-        undefined,
-        [],
-      ),
-    ).toBe("next");
-    expect(
-      first.getNextPageParam?.({ logs: [] }, [], undefined, []),
-    ).toBeUndefined();
-    vi.unstubAllGlobals();
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: organizationActivityQuery("org_1").queryKey,
+      exact: true,
+    });
   });
 });
 

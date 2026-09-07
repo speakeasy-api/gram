@@ -520,6 +520,7 @@ SELECT
   , s.consecutive_failures
   , s.auto_paused_at
   , s.last_push_digest
+  , s.last_poll_success_at
 FROM device_integration_syncs s
 JOIN device_integration_schedules sch
   ON sch.id = s.device_integration_schedule_id
@@ -599,7 +600,7 @@ RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused;
 -- the insert a zero-row no-op, so stale-credential inventory never merges
 -- into the newly saved config.
 
--- name: UpsertMdmDevice :execrows
+-- name: UpsertMdmDevice :one
 INSERT INTO mdm_devices (
     device_integration_config_id
   , organization_id
@@ -642,7 +643,11 @@ ON CONFLICT (device_integration_config_id, external_id) DO UPDATE SET
     raw = EXCLUDED.raw,
     last_seen_at = clock_timestamp(),
     missing_since = NULL,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+-- xmax is zero on a freshly inserted row and non-zero on one this statement
+-- updated, which is the only way to tell a first sighting from a re-sighting:
+-- the row count is 1 for both. A guard failure returns no row at all.
+RETURNING (xmax = 0) AS inserted;
 
 -- MarkDevicesMissing stamps devices absent from the snapshot that started at
 -- @sync_started_at. INVARIANT: only ever called in the same transaction that

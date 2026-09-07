@@ -16,6 +16,7 @@ import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolSchemaStaticValuesResult } from "../models/components/listtoolschemastaticvaluesresult.js";
@@ -74,6 +75,10 @@ import {
   SetToolsetUserSessionIssuerRequest,
   SetToolsetUserSessionIssuerSecurity,
 } from "../models/operations/settoolsetusersessionissuer.js";
+import {
+  UpdateExternalOAuthServerRequest,
+  UpdateExternalOAuthServerSecurity,
+} from "../models/operations/updateexternaloauthserver.js";
 import {
   UpdateToolsetRequest,
   UpdateToolsetSecurity,
@@ -340,6 +345,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateExternalOAuthServer toolsets
+   *
+   * @remarks
+   * Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+   */
+  async updateExternalOAuthServer(
+    request: UpdateExternalOAuthServerRequest,
+    security?: UpdateExternalOAuthServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Toolset> {
+    return unwrapAsync(toolsetsUpdateExternalOAuthServer(
       this,
       request,
       security,

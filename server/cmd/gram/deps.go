@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -46,6 +47,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -603,7 +605,7 @@ func newStripeMeterEventClient(
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
-	if !c.Bool(stripeTUMMeterStreamingFlagName) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
 
@@ -621,6 +623,7 @@ func newStripeMeterEventClient(
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 	tumMeterEventName := c.String("stripe-meter-event-name")
 	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
+	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
 	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
 		switch definition {
 		case metering.AgentSessionStorage():
@@ -631,6 +634,16 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", errors.New("stripe TUM meter event name is not configured")
 			}
 			return tumMeterEventName, nil
+		case metering.MCPBandwidthIngress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-ingress"), nil
+		case metering.MCPBandwidthEgress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}
@@ -1227,9 +1240,9 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
 
-	// The telemetry shadow dual-write is best-effort and must stay bounded
-	// during a Pub/Sub outage: cap how long a publish may take and fail fast
-	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	// Request-path telemetry and meter publishing must stay bounded during a
+	// Pub/Sub outage: cap how long a publish may take and fail fast at enqueue
+	// once the buffer fills instead of buffering unboundedly.
 	telemetryPublishSettings := pubsub.DefaultPublishSettings
 	telemetryPublishSettings.Timeout = 10 * time.Second
 	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
@@ -1243,6 +1256,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
+
+	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
 
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
@@ -1317,6 +1338,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
+		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,
@@ -1385,4 +1407,16 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		}
 		return client, nil
 	}, nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }

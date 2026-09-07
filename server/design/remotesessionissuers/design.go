@@ -721,9 +721,10 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.")
+	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer advertises the RFC 9207 authorization response iss parameter.")
 	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered during discovery.")
 
-	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "discovery_warnings")
+	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "authorization_response_iss_parameter_supported", "discovery_warnings")
 })
 
 var RemoteSessionIssuerRefresh = Type("RemoteSessionIssuerRefresh", func() {

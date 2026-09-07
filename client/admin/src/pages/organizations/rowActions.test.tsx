@@ -3,11 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  organizationActivityQuery,
-  organizationQuery,
-  organizationsListQuery,
-} from "@/lib/adminQueries";
+import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import {
   TRIAL_STATES,
   type AdminOrganization,
@@ -132,9 +129,9 @@ describe("audited organization lifecycle mutations", () => {
       const detail = organizationQuery(DEMOTED_ORG.slug);
       qc.setQueryData(detail.queryKey, DEMOTED_ORG);
       qc.setQueryData(activity.queryKey, {
-        pages: [{ logs: [] }],
+        pages: [{ result: { logs: [] } }],
         pageParams: [undefined],
-      });
+      } as never);
       const { result } = renderHook(
         () => ({
           disable: useDisableOrganization(),

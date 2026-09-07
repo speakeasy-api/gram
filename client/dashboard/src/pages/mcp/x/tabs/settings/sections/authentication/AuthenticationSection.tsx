@@ -12,6 +12,7 @@ import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMod
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { AuthRow } from "./AuthRow";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
@@ -319,12 +320,20 @@ function IdentityProviderSetupField({
       label="Identity provider"
       hint="Nobody can be identified here until a provider vouches for them."
     >
-      <AuthenticationSetupActions
-        probeStatus={probeStatus}
-        hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
-        onUseDiscovered={onUseDiscovered}
-        onStartManual={onStartManual}
-        additionalAction={additionalAction}
+      <InlineEmptyState
+        icon="key-round"
+        heading="Set up authentication"
+        description="Require MCP clients to authenticate through an upstream identity provider before reaching this server."
+        className="py-8"
+        action={
+          <AuthenticationSetupActions
+            probeStatus={probeStatus}
+            hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
+            onUseDiscovered={onUseDiscovered}
+            onStartManual={onStartManual}
+            additionalAction={additionalAction}
+          />
+        }
       />
     </AuthRow>
   );

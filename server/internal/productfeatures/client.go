@@ -145,36 +145,6 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 	})
 }
 
-// SetRemoteSessionAutoRefreshEnabled maps the standalone admin's binary control
-// to the existing tri-state policy. Either choice clears the enforced state so
-// the displayed value and runtime behavior cannot disagree.
-func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organizationID string, enabled bool) error {
-	return c.withFeatureCacheLocks(ctx, organizationID, []Feature{
-		FeatureRemoteSessionAutoRefresh, FeatureRemoteSessionAutoRefreshEnforced,
-	}, func(conn *pgxpool.Conn) error {
-		tx, err := conn.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin remote session auto-refresh update: %w", err)
-		}
-		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-
-		queries := repo.New(tx)
-		if err := setFeatureEnabled(ctx, queries, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false); err != nil {
-			return err
-		}
-		if err := setFeatureEnabled(ctx, queries, organizationID, FeatureRemoteSessionAutoRefresh, enabled); err != nil {
-			return err
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit remote session auto-refresh update: %w", err)
-		}
-
-		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
-		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
-		return nil
-	})
-}
-
 // UpdateFeatureCache reloads the durable feature state and refreshes the cache
 // under the same lock used by cache fills and writes. Call this after writing
 // the feature flag from a code path that bypasses this client.

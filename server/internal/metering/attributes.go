@@ -10,6 +10,22 @@ const (
 	// AttributeWorkloadSource identifies the product path responsible for the workload.
 	AttributeWorkloadSource = "workload_source"
 
+	// AttributeRequestPath identifies the HTTP request path that carried the workload.
+	AttributeRequestPath = "request_path"
+
+	// AttributeCustomDomain identifies the validated custom domain carrying the workload.
+	AttributeCustomDomain = "custom_domain"
+
+	// AttributeMCPServerType identifies the resolved MCP server implementation.
+	AttributeMCPServerType = "mcp_server_type"
+
+	// AttributeMCPServerID identifies the resolved server within its type-specific namespace.
+	AttributeMCPServerID = "mcp_server_id"
+
+	// AttributeMCPServerSlug identifies the resolved server's canonical slug,
+	// or its stable route slug when the server type has no persisted slug.
+	AttributeMCPServerSlug = "mcp_server_slug"
+
 	// AttributeModel identifies the model that produced or received the message.
 	AttributeModel = "model"
 

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -71,6 +72,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").LogError(ctx, s.logger)
 	}
+	metering.AttributeMCPBandwidth(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, slug, slug)
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
 		return err

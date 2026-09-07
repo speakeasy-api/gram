@@ -238,3 +238,67 @@ func TestEventCreatedAtCountsOnlyImportTimeFallbacks(t *testing.T) {
 	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
 	require.Equal(t, 2, source.progress.TimestampFallbacks)
 }
+
+// A NUL in a message body and a conversation title must be dropped, not fail the sync.
+const chatgptConversationNULFixture = `{"event_id":"evt_nul_1","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T11:00:00Z","previous_message_id":"","message":{"id":"msg_nul_1","created_at":"2026-07-27T11:00:00Z","author":{"type":"user","client_type":"desktop_web"},"content":{"type":"text","value":"before\u0000after"}},"conversation":{"id":"conv_nul","title":"NUL\u0000title","created_at":"2026-07-27T10:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+{"event_id":"evt_nul_2","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T11:00:05Z","previous_message_id":"msg_nul_1","message":{"id":"msg_nul_2","created_at":"2026-07-27T11:00:05Z","author":{"type":"assistant","client_type":"desktop_web"},"content":{"type":"text","value":"clean reply"}},"conversation":{"id":"conv_nul","title":"NUL\u0000title","created_at":"2026-07-27T10:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+` + `{"event_id":"evt_nul_3","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T11:00:10Z","previous_message_id":"msg_nul_2","message":{"id":"msg_nul_3","created_at":"2026-07-27T11:00:10Z","author":{"type":"user","client_type":"desktop_web"},"content":{"type":"text","value":"literal \\` + `u0000 text"}},"conversation":{"id":"conv_nul","title":"","created_at":"2026-07-27T10:59:58Z","is_pinned":false,"is_temporary_chat":false}}` + "\n"
+
+func TestChatGPTConversationProcessPageStoresMessagesContainingNUL(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "ChatGPT NUL Import Test Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+	cfg := created.Config
+	cfg.ProjectID = project.ID
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	file := chatgptFixtureFile(chatgptConversationNULFixture)
+	src := &chatgptConversationSource{
+		client: &stubCodexComplianceClient{
+			listPages:  nil,
+			listParams: nil,
+			downloads:  map[string][]byte{file.ID: []byte(chatgptConversationNULFixture)},
+		},
+		svc:        svc,
+		cfg:        cfg,
+		pageLimit:  chatgptCompliancePageLimit,
+		users:      newConnectedUserResolver(conn, orgID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &ChatGPTConversationSyncProgress{},
+	}
+
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
+	require.Equal(t, int64(3), src.progress.MessagesWritten)
+
+	chatID, ok := src.chatIDs["conv_nul"]
+	require.True(t, ok, "conversation must be upserted")
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, "NULtitle", chatRow.Title.String)
+
+	messages, err := chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+	require.Equal(t, "beforeafter", messages[0].Content)
+	// content_raw is optional and dropped; readers fall back to content.
+	require.Empty(t, messages[0].ContentRaw)
+	require.Equal(t, "clean reply", messages[1].Content)
+	require.JSONEq(t, `"clean reply"`, string(messages[1].ContentRaw))
+	// An escaped backslash before u0000 is text, not NUL: only the raw copy is dropped.
+	require.Equal(t, "literal "+`\u`+"0000 text", messages[2].Content)
+	require.Empty(t, messages[2].ContentRaw)
+}

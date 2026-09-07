@@ -99,6 +99,79 @@ func TestBoundedReadCloserRejectsOverflow(t *testing.T) {
 	require.ErrorIs(t, err, errResponseTooLarge)
 }
 
+func TestNormalizedProbeFailureDistinguishesResponseSizeByStage(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		stage        probeStage
+		wantState    platformmcp.ReadinessState
+		wantEvidence string
+	}{
+		{name: "initialize", stage: probeStageInitialize, wantState: platformmcp.ReadinessUnsupported, wantEvidence: "initialize_response_too_large"},
+		{name: "tools list", stage: probeStageToolsList, wantState: platformmcp.ReadinessDegraded, wantEvidence: "tools_list_response_too_large"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			roundTripper := &authorizationRoundTripper{}
+			roundTripper.responseTooLarge.Store(true)
+			state, evidence := normalizedProbeFailure(errResponseTooLarge, roundTripper, test.stage)
+			require.Equal(t, test.wantState, state)
+			require.Equal(t, test.wantEvidence, evidence)
+		})
+	}
+}
+
+func TestNormalizedProbeFailureKeepsTransientPrecedenceOverResponseSize(t *testing.T) {
+	t.Parallel()
+
+	roundTripper := &authorizationRoundTripper{}
+	roundTripper.transientResponse.Store(true)
+	roundTripper.responseTooLarge.Store(true)
+	state, evidence := normalizedProbeFailure(errResponseTooLarge, roundTripper, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessDegraded, state)
+	require.Equal(t, "probe_temporarily_unavailable", evidence)
+}
+
+func TestTransientProbeStatusIncludesRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, transientProbeStatus(http.StatusRequestTimeout))
+	require.False(t, transientProbeStatus(http.StatusBadRequest))
+}
+
+func TestNormalizedProbeFailureKeepsAuthorizationRejectionPrecedence(t *testing.T) {
+	t.Parallel()
+
+	roundTripper := &authorizationRoundTripper{}
+	roundTripper.authorizationRejected.Store(true)
+	roundTripper.transientResponse.Store(true)
+	state, evidence := normalizedProbeFailure(errors.New("private HTTP detail"), roundTripper, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessUnauthorized, state)
+	require.Equal(t, "provider_authorization_rejected", evidence)
+}
+
+func TestNormalizedProbeFailureClassifiesHTTPProtocolAndTransportFailures(t *testing.T) {
+	t.Parallel()
+
+	response := &authorizationRoundTripper{}
+	response.responseReceived.Store(true)
+	state, evidence := normalizedProbeFailure(errors.New("private SDK detail"), response, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessUnsupported, state)
+	require.Equal(t, "invalid_mcp_response", evidence)
+
+	state, evidence = normalizedProbeFailure(errors.New("private transport detail"), &authorizationRoundTripper{}, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessUnreachable, state)
+	require.Equal(t, "probe_failed", evidence)
+
+	transient := &authorizationRoundTripper{}
+	transient.responseReceived.Store(true)
+	transient.transientResponse.Store(true)
+	state, evidence = normalizedProbeFailure(errors.New("private HTTP detail"), transient, probeStageInitialize)
+	require.Equal(t, platformmcp.ReadinessDegraded, state)
+	require.Equal(t, "probe_temporarily_unavailable", evidence)
+}
+
 func TestAuthorizationRoundTripperRejectsChunkedOverflow(t *testing.T) {
 	t.Parallel()
 

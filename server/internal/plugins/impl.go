@@ -33,7 +33,6 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -42,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -50,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -410,7 +409,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
 
-	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	assignments, err := s.repo.ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
@@ -625,7 +624,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
 
-	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	assignments, err := s.repo.ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
@@ -685,7 +684,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").LogError(ctx, s.logger)
 	}
 
-	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
+	if _, err := txRepo.RemoveAllPluginAssignments(ctx, repo.RemoveAllPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove plugin assignments").LogError(ctx, s.logger)
 	}
 
@@ -1102,54 +1101,20 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, err
 	}
 
-	directoryService := directory.NewService(s.db)
-	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
+	audiences, err := ResolveAudiences(ctx, s.db, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles for plugin assignments").LogError(ctx, s.logger)
-	}
-	groups, err := directoryService.ListActiveGroups(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list directory groups for plugin assignments").LogError(ctx, s.logger)
-	}
-	attributes, err := directoryService.ListActiveAttributeValues(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values for plugin assignments").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin audience options").LogError(ctx, s.logger)
 	}
 
-	result := &gen.ListAudiencesResult{
-		Audiences: make([]*gen.PluginAudience, 0, 1+len(roles)+len(groups)+len(attributes)),
-	}
-	result.Audiences = append(result.Audiences, &gen.PluginAudience{
-		Kind:         "everyone",
-		DisplayName:  "Everyone",
-		MemberCount:  nil,
-		PrincipalUrn: urn.PrincipalWildcard,
-	})
-	for _, role := range roles {
+	result := &gen.ListAudiencesResult{Audiences: make([]*gen.PluginAudience, 0, len(audiences))}
+	for _, audience := range audiences {
 		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "role",
-			DisplayName:  role.WorkosName,
-			MemberCount:  &role.MemberCount,
-			PrincipalUrn: role.RoleUrn,
+			Kind:         audience.Kind,
+			DisplayName:  audience.DisplayName,
+			MemberCount:  audience.MemberCount,
+			PrincipalUrn: audience.PrincipalURN,
 		})
 	}
-	for _, group := range groups {
-		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "directory_group",
-			DisplayName:  group.Name,
-			MemberCount:  &group.MemberCount,
-			PrincipalUrn: directory.GroupPrincipal(group.ID),
-		})
-	}
-	for _, attribute := range attributes {
-		result.Audiences = append(result.Audiences, &gen.PluginAudience{
-			Kind:         "directory_attribute",
-			DisplayName:  fmt.Sprintf("%s: %s", attribute.Key, attribute.Value),
-			MemberCount:  &attribute.MemberCount,
-			PrincipalUrn: directory.AttributePrincipal(attribute.Key, attribute.Value),
-		})
-	}
-
 	return result, nil
 }
 
@@ -1167,29 +1132,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
-
-	// Verify the plugin belongs to this project.
-	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").LogError(ctx, s.logger)
-	}
-
-	principals := make([]pluginAssignmentPrincipal, 0, len(payload.PrincipalUrns))
-	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
-	for _, raw := range payload.PrincipalUrns {
-		principal, err := s.parsePluginAssignmentPrincipal(ctx, ac.ActiveOrganizationID, raw)
-		if err != nil {
-			return nil, err
-		}
-
-		if _, ok := seenURNs[principal.URN]; ok {
-			continue
-		}
-		seenURNs[principal.URN] = struct{}{}
-		principals = append(principals, principal)
+	if pluginID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, pluginassignments.ErrInvalid, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -1198,95 +1142,40 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	txRepo := s.repo.WithTx(tx)
-	directoryService := directory.NewService(tx)
-	existingAssignments, err := txRepo.ListPluginAssignments(ctx, pluginID)
+	locked, err := pluginassignments.Lock(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
+	if errors.Is(err, pluginassignments.ErrNotFound) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list existing assignments").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock plugin assignments target").LogError(ctx, s.logger)
 	}
-	existingPrincipalURNs := make(map[string]struct{}, len(existingAssignments))
-	for _, assignment := range existingAssignments {
-		existingPrincipalURNs[assignment.PrincipalUrn] = struct{}{}
-		if attribute, err := directory.ParseAttributePrincipal(assignment.PrincipalUrn); err == nil {
-			existingPrincipalURNs[directory.AttributePrincipal(attribute.Key, attribute.Value)] = struct{}{}
-		}
-	}
-	for _, principal := range principals {
-		switch principal.Type {
-		case pluginAssignmentPrincipalStandard:
-			continue
-		case pluginAssignmentPrincipalDirectoryGroup:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
-				continue
-			}
-			groupID, err := directory.ParseGroupPrincipal(principal.URN)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.URN)
-			}
-			exists, err := directoryService.GroupExists(ctx, ac.ActiveOrganizationID, groupID)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
-			}
-			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.URN)
-			}
-		case pluginAssignmentPrincipalDirectoryAttribute:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
-				continue
-			}
-			attribute, err := directory.ParseAttributePrincipal(principal.URN)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.URN)
-			}
-			exists, err := directoryService.AttributeValueExists(ctx, ac.ActiveOrganizationID, attribute)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
-			}
-			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.URN)
-			}
-		}
-	}
-
-	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").LogError(ctx, s.logger)
-	}
-
-	assignments := make([]*gen.PluginAssignment, 0, len(principals))
-	for _, principal := range principals {
-		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
-			PluginID:       pluginID,
-			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   principal.URN,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").LogError(ctx, s.logger)
-		}
-		assignments = append(assignments, pluginAssignmentToGen(row))
-	}
-	principalURNs := make([]string, 0, len(principals))
-	for _, principal := range principals {
-		principalURNs = append(principalURNs, principal.URN)
-	}
-
-	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+	result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
+		PluginID:         pluginID,
+		PrincipalURNs:    payload.PrincipalUrns,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-		PluginID:         plugin.ID,
-		PluginName:       plugin.Name,
-		PluginSlug:       plugin.Slug,
-		PrincipalURNs:    principalURNs,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").LogError(ctx, s.logger)
+	}, nil)
+	if err != nil {
+		switch {
+		case errors.Is(err, pluginassignments.ErrNotFound):
+			return nil, oops.C(oops.CodeNotFound)
+		case errors.Is(err, pluginassignments.ErrInvalid):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin assignment")
+		default:
+			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
+		}
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	assignments := make([]*gen.PluginAssignment, 0, len(result.Assignments))
+	for _, assignment := range result.Assignments {
+		assignments = append(assignments, pluginAssignmentToGen(assignment))
+	}
 	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
 }
 

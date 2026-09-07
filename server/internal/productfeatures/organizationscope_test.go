@@ -51,7 +51,7 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: targetOrganizationID,
-		FeatureName:    string(productfeatures.FeatureLogs),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureLogs),
 		Enabled:        true,
 	}))
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -66,7 +66,7 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: targetOrganizationID,
-		FeatureName:    string(productfeatures.FeatureLogs),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureLogs),
 		Enabled:        false,
 	}))
 	activeEnabled, err = client.IsFeatureEnabled(ctx, activeOrganizationID, productfeatures.FeatureLogs)
@@ -151,7 +151,7 @@ func TestProductFeaturesService_AuthorizesBeforeOrganizationLookup(t *testing.T)
 	_, err := ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: targetOrganizationID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	adminActiveOnly := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, activeOrganizationID))
-	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: targetOrganizationID, FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
+	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: targetOrganizationID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureLogs), Enabled: true})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: targetOrganizationID, Policy: "enforced"})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -159,7 +159,7 @@ func TestProductFeaturesService_AuthorizesBeforeOrganizationLookup(t *testing.T)
 	unknownOrganizationID := uuid.NewString()
 	_, err = ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: unknownOrganizationID})
 	requireOopsCode(t, err, oops.CodeForbidden, "unauthorized unknown target must not be enumerable")
-	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: unknownOrganizationID, FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
+	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: unknownOrganizationID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureLogs), Enabled: true})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: unknownOrganizationID, Policy: "enforced"})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -174,7 +174,7 @@ func TestProductFeaturesService_HooksFailOpenAuditTargetsRequestedOrganization(t
 	seedRequestedOrganizationRole(t, ctx, ti, targetOrganizationID, authz.SystemRoleAdmin)
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: targetOrganizationID,
-		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureHooksFailOpen),
 		Enabled:        true,
 	}))
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationHooksFailOpenEnabled)

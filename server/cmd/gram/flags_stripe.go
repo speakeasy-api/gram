@@ -38,7 +38,19 @@ func stripeFlags() []cli.Flag {
 			Name:    "stripe-meter-event-name",
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",
-			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME", "STRIPE_METER_EVENT_NAME_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-mcp-bandwidth-ingress",
+			Aliases: []string{"stripe.meter_event_name_mcp_bandwidth_ingress"},
+			Usage:   "The Stripe MCP bandwidth ingress meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_MCP_BANDWIDTH_INGRESS"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-mcp-bandwidth-egress",
+			Aliases: []string{"stripe.meter_event_name_mcp_bandwidth_egress"},
+			Usage:   "The Stripe MCP bandwidth egress meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_MCP_BANDWIDTH_EGRESS"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-portal-configuration-id",

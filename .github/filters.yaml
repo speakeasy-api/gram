@@ -44,16 +44,30 @@ tsframework:
   - "ts-framework/**"
 
 sdk:
+  - "client/admin/src/sdk/**"
   - "client/dashboard/src/sdk/**"
   - "package.json"
   - "pnpm-lock.yaml"
 
 sdk-gen:
+  - ".mise-tasks/gen/**"
+  - ".mise-tasks/test/gen-resolve.sh"
+  - ".mise-tasks/test/sdk-overlays.sh"
+  - ".speakeasy/out.admin.openapi.yaml"
   - ".speakeasy/workflow.yaml"
+  - "client/admin/src/sdk/**"
   - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
   - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
+  - "server/design/**"
+  - "server/internal/constants/accounts.go"
+  - "server/internal/constants/auth.go"
+  - "server/internal/constants/spend_cap.go"
+  - "server/internal/constants/trials.go"
+  - "server/internal/conv/from.go"
+  - "server/internal/oops/codes.go"
+  - "server/internal/productfeatures/features.go"
   - "server/gen/http/openapi3.yaml"
 
 migrations:

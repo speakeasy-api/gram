@@ -635,7 +635,7 @@ var dynamicExecuteToolSchema = json.RawMessage(`{
 		"properties": {
 			"name": {
 				"type": "string",
-				"description": "Exact name of the tool to execute."
+				"description": "Exact name of the tool to execute. The key is name, not tool."
 			},
 			"arguments": {
 				"description": "JSON payload to forward to the tool as its arguments."
@@ -661,7 +661,7 @@ func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw js
 
 	name := strings.TrimSpace(args.Name)
 	if name == "" {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").LogError(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool: pass the tool's exact name as \"name\"").LogError(ctx, logger)
 	}
 
 	payload := args.Arguments
