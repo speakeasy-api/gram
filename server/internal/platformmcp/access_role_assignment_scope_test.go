@@ -45,10 +45,12 @@ func TestAccessRoleAssignmentRulesDescribeCompleteScope(t *testing.T) {
 	role := &accessgen.Role{Grants: accessRoleRulesToGenGrants([]normalizedMCPAccessRoleRule{
 		{MCPID: mcp}, {MCPID: mcp, Tool: "list_tasks", Disposition: authz.DispositionReadOnly},
 		{MCPID: mcp, Tool: "*"}, {MCPID: mcp, Tool: "*", Disposition: authz.DispositionReadOnly},
+		{MCPID: mcp, Disposition: authz.DispositionReadOnly},
 	}, project)}
 	require.Equal(t, []AccessRoleAssignmentRule{
 		{AllTools: true}, {Tool: "list_tasks", Disposition: authz.DispositionReadOnly},
 		{AllTools: true}, {Disposition: authz.DispositionReadOnly},
+		{AllTools: false, Disposition: authz.DispositionReadOnly},
 	}, accessRoleAssignmentRules(role, project.String(), mcp))
 	role.Grants = append(role.Grants, &accessgen.RoleGrant{Scope: string(authz.ScopeProjectRead)})
 	require.Nil(t, accessRoleAssignmentRules(role, project.String(), mcp))

@@ -2,8 +2,11 @@ package access
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/mock"
@@ -14,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -292,6 +297,85 @@ func TestRoleManager_AddMemberRoleRepairsNullLinkWithoutReplacingRoles(t *testin
 	roles, err := queries.ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{OrganizationID: orgID, UserID: "local_user_1"})
 	require.NoError(t, err)
 	require.Len(t, roles, 2)
+}
+
+// Target resolution uses Query; the first QueryRow is the relationship lock.
+// Interleave a committed membership change at that exact boundary.
+type memberAssignmentRaceTx struct {
+	pgx.Tx
+	once       sync.Once
+	beforeLock func()
+}
+
+func (tx *memberAssignmentRaceTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	tx.once.Do(tx.beforeLock)
+	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // forwards SQLc SQL while synchronizing a membership-change regression
+}
+
+func TestRoleManager_BulkAssignmentRevalidatesLockedMembership(t *testing.T) {
+	t.Parallel()
+	for _, change := range []string{"deleted membership", "deleted user", "new membership"} {
+		t.Run(change, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			orgID := authCtx.ActiveOrganizationID
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_custom", "Custom", "custom", ""))
+			seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_1", "u1@example.test", "User 1", "user_1", "membership_1")
+			tx := testenv.BeginTx(t, ctx, ti.conn)
+			defer func() { _ = tx.Rollback(ctx) }()
+			raceTx := &memberAssignmentRaceTx{Tx: tx, beforeLock: func() {
+				switch change {
+				case "deleted membership":
+					require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, orgID))
+				case "deleted user":
+					require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUser(ctx, "local_user_1"))
+				case "new membership":
+					require.NoError(t, orgrepo.New(ti.conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+						OrganizationID: orgID, UserID: conv.ToPGText("local_user_1"), WorkosUserID: conv.ToPGText("user_1"),
+						WorkosMembershipID: conv.ToPGText("membership_2"), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now()), WorkosLastEventID: conv.ToPGText("event_fixture"),
+					}))
+				}
+			}}
+			assigned, syncs, err := ti.service.roleMgr.assignMembersToRoleTx(ctx, raceTx, orgID, "custom", []string{"local_user_1"})
+			if change != "new membership" {
+				require.Error(t, err)
+				require.Zero(t, assigned)
+				require.Empty(t, syncs)
+				records, readErr := accessrepo.New(tx).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{OrganizationID: orgID, WorkosUserID: "user_1"})
+				require.NoError(t, readErr)
+				require.Empty(t, records)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, 1, assigned)
+			records, err := accessrepo.New(tx).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{OrganizationID: orgID, WorkosUserID: "user_1"})
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			require.Equal(t, "membership_2", records[0].WorkosMembershipID.String)
+			require.Equal(t, "local_user_1", records[0].UserID.String)
+			require.NoError(t, tx.Commit(ctx))
+			ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"custom"}).Return(nil, nil).Once()
+			for _, send := range syncs {
+				send(ctx)
+			}
+		})
+	}
+}
+
+func TestRoleManager_LegacyDeletedAssignmentsDoNotAuthorizeSync(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_custom", "Custom", "custom", ""))
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom"))
+	_, err := accessrepo.New(ti.conn).SoftDeleteAllRoleAssignmentsByWorkosUser(ctx, accessrepo.SoftDeleteAllRoleAssignmentsByWorkosUserParams{OrganizationID: orgID, WorkosUserID: "user_1"})
+	require.NoError(t, err)
+	ti.service.roleMgr.memberRoleSync(MemberRoleReconciliation{organizationID: orgID, workosUserID: "user_1", membershipID: "membership_1"})(ctx)
+	ti.roles.AssertNotCalled(t, "UpdateMemberRoles", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestRoleManager_RunWorkOSSyncsDetachesCancellationWithDeadline(t *testing.T) {

@@ -1340,8 +1340,20 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 	workosSyncs := make([]workosSync, 0, len(targets))
 	for _, target := range targets {
 		if target.WorkosUserID != "" && roleSlug != "" {
-			if _, err := repo.New(dbtx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: target.WorkosUserID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			member, err := repo.New(dbtx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: target.WorkosUserID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				if target.UserID != "" || target.MembershipID == "" {
+					return 0, nil, oops.E(oops.CodeNotFound, nil, "member has no current organization linkage").LogError(ctx, r.logger)
+				}
+			case err != nil:
 				return 0, nil, oops.E(oops.CodeUnexpected, err, "lock member for role assignment").LogError(ctx, r.logger)
+			default:
+				if member.Deleted || member.UserDeleted || !member.WorkosMembershipID.Valid || member.WorkosMembershipID.String == "" {
+					return 0, nil, oops.E(oops.CodeNotFound, nil, "member has no current organization linkage").LogError(ctx, r.logger)
+				}
+				target.UserID = conv.FromPGTextOrEmpty[string](member.UserID)
+				target.MembershipID = member.WorkosMembershipID.String
 			}
 			inserted, err := repo.New(dbtx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 				OrganizationID:     gramOrgID,

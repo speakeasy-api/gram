@@ -61,9 +61,9 @@ func (s *AccessRoleAssignmentService) validateAssignmentRole(ctx context.Context
 }
 
 type AccessRoleAssignmentRule struct {
-	AllTools    bool   `json:"all_tools"`
-	Tool        string `json:"tool,omitempty"`
-	Disposition string `json:"disposition,omitempty"`
+	AllTools    bool   `json:"all_tools" jsonschema:"true only for unrestricted current and future tool access, with neither a named tool nor a disposition constraint"`
+	Tool        string `json:"tool,omitempty" jsonschema:"exact named tool restriction; when disposition is also present both restrictions apply"`
+	Disposition string `json:"disposition,omitempty" jsonschema:"restricts access to matching tools, including future matching tools; alone this is not unrestricted all_tools access"`
 }
 
 func accessRoleAssignmentRules(role *accessgen.Role, projectID, mcpID string) []AccessRoleAssignmentRule {
