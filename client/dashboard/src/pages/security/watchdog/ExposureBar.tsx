@@ -6,6 +6,7 @@ import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
 import { getRiskCategoryChartColor } from "../riskTrendChartData";
 
 const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
+const INACTIVE_GREY = "hsl(0, 0%, 75%)";
 
 function categoryLabel(category: string): string {
   return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
@@ -59,48 +60,73 @@ export function ExposureBar({
       </div>
       <div className="space-y-3">
         <div className="border-border flex h-3 w-full overflow-hidden rounded-full border">
-          {visible.map((slice) => (
-            <button
-              key={slice.category}
-              type="button"
-              aria-pressed={active.has(slice.category)}
-              aria-label={`Filter by ${categoryLabel(slice.category)}`}
-              title={`${categoryLabel(slice.category)} · ${Math.round(slice.share * 100)}%`}
-              onClick={() => onToggleCategory(slice.category)}
-              className={cn(
-                "cursor-pointer transition-opacity hover:opacity-80",
-                isDimmed(slice.category) && "opacity-30",
-              )}
-              style={{
-                width: `${Math.max(slice.share * 100, 1)}%`,
-                backgroundColor: sliceColor(slice.category),
-              }}
-            />
-          ))}
+          {visible.map((slice) => {
+            const dimmed = isDimmed(slice.category);
+            return (
+              <button
+                key={slice.category}
+                type="button"
+                aria-pressed={active.has(slice.category)}
+                aria-label={`Filter by ${categoryLabel(slice.category)}`}
+                title={`${categoryLabel(slice.category)} · ${Math.round(slice.share * 100)}%`}
+                onClick={() => onToggleCategory(slice.category)}
+                className="cursor-pointer transition-colors hover:opacity-80"
+                style={{
+                  width: `${Math.max(slice.share * 100, 1)}%`,
+                  backgroundColor: dimmed
+                    ? INACTIVE_GREY
+                    : sliceColor(slice.category),
+                }}
+              />
+            );
+          })}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {visible.map((slice) => (
-            <button
-              key={slice.category}
-              type="button"
-              aria-pressed={active.has(slice.category)}
-              onClick={() => onToggleCategory(slice.category)}
-              className={cn(
-                "text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition-opacity",
-                isDimmed(slice.category) && "opacity-40",
-                active.has(slice.category) && "text-foreground font-medium",
-              )}
-            >
-              <span
-                className="size-2 rounded-full"
-                style={{ backgroundColor: sliceColor(slice.category) }}
-              />
-              {categoryLabel(slice.category)}
-              <span className="text-foreground font-medium tabular-nums">
-                {Math.round(slice.share * 100)}%
-              </span>
-            </button>
-          ))}
+          {visible.map((slice) => {
+            const dimmed = isDimmed(slice.category);
+            const isActive = active.has(slice.category);
+            const dotColor = dimmed
+              ? INACTIVE_GREY
+              : sliceColor(slice.category);
+            return (
+              <button
+                key={slice.category}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onToggleCategory(slice.category)}
+                className={cn(
+                  "text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition-opacity",
+                  dimmed && "opacity-50",
+                  isActive && "text-foreground font-medium",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full transition-shadow",
+                    isActive && "ring-2 ring-offset-1",
+                  )}
+                  style={{
+                    backgroundColor: dotColor,
+                    // Subtle ring in the category's color for active items
+                    ...(isActive && {
+                      ["--tw-ring-color" as string]: sliceColor(slice.category),
+                    }),
+                  }}
+                />
+                {categoryLabel(slice.category)}
+                <span
+                  className={cn(
+                    "tabular-nums",
+                    dimmed
+                      ? "text-muted-foreground"
+                      : "text-foreground font-medium",
+                  )}
+                >
+                  {Math.round(slice.share * 100)}%
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
