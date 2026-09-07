@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMode(t *testing.T) {
+func TestParse(t *testing.T) {
 	t.Parallel()
 
 	for _, mode := range []Mode{ModePublicOnly, ModeDual, ModePrivateOnly} {
@@ -17,6 +17,10 @@ func TestMode(t *testing.T) {
 	}
 	_, err := Parse("other")
 	require.Error(t, err)
+}
+
+func TestEffective(t *testing.T) {
+	t.Parallel()
 
 	mode, err := Effective(pgtype.Text{})
 	require.NoError(t, err)
@@ -30,9 +34,17 @@ func TestMode(t *testing.T) {
 	_, err = Effective(pgtype.Text{String: "future_mode", Valid: true})
 	require.ErrorContains(t, err, "parse persisted network access mode")
 	require.Equal(t, ModePublicOnly, EffectiveForView(pgtype.Text{String: "future_mode", Valid: true}))
+}
+
+func TestStorage(t *testing.T) {
+	t.Parallel()
 
 	require.False(t, Storage(ModePublicOnly).Valid)
 	require.Equal(t, pgtype.Text{String: string(ModePrivateOnly), Valid: true}, Storage(ModePrivateOnly))
+}
+
+func TestAllows(t *testing.T) {
+	t.Parallel()
 
 	require.True(t, ModePublicOnly.Allows(SurfacePublic))
 	require.False(t, ModePublicOnly.Allows(SurfacePrivate))
@@ -40,6 +52,10 @@ func TestMode(t *testing.T) {
 	require.True(t, ModeDual.Allows(SurfacePrivate))
 	require.False(t, ModePrivateOnly.Allows(SurfacePublic))
 	require.True(t, ModePrivateOnly.Allows(SurfacePrivate))
+}
+
+func TestParseRequested(t *testing.T) {
+	t.Parallel()
 
 	type requestedMode string
 	requested := requestedMode(ModeDual)
