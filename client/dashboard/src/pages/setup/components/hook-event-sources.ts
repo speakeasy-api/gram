@@ -1,9 +1,12 @@
-/** Hook events Claude Cowork reports, under either of its source names. */
-export function isCoworkSource(source: string): boolean {
-  return source === "cowork" || source === "claude-cowork";
+/**
+ * Hook events from Anthropic products: Claude Code, Claude Desktop, and
+ * Claude Cowork (which reports under either of its two source names).
+ */
+export function isAnthropicSource(source: string): boolean {
+  return source.startsWith("claude") || source === "cowork";
 }
 
-/** Everything the device agent or manual hooks cover: not Cowork. */
-export function isNotCoworkSource(source: string): boolean {
-  return !isCoworkSource(source);
+/** Everything the other-platforms card covers: not an Anthropic source. */
+export function isNotAnthropicSource(source: string): boolean {
+  return !isAnthropicSource(source);
 }

@@ -27,7 +27,7 @@ interface MarketplaceSectionProps {
 
 // Publishing the plugin marketplace is a mechanical prerequisite rather than
 // an outcome of its own, so it drops into the front of whichever card needs
-// it (Anthropic Enterprise, Instrument agents, Distribute MCP servers) instead
+// it (Anthropic observability, other platforms, Distribute MCP servers) instead
 // of being a card. It only needs doing once per project; every later card
 // just sees the published state.
 export function MarketplaceSection({

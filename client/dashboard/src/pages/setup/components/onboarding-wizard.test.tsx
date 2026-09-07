@@ -45,7 +45,7 @@ vi.mock("./onboarding-stepper", () => ({
 }));
 vi.mock("./steps", () => ({
   IdentityProviderStep: () => null,
-  AnthropicEnterpriseStep: () => null,
+  AnthropicObservabilityStep: () => null,
   DistributeServersStep: () => null,
   InstrumentAgentsStep: () => null,
   AdditionalAgentConfigStep: () => null,
@@ -85,12 +85,12 @@ describe("SetupWizard", () => {
     );
   });
 
-  it("resumes at anthropic-enterprise after the marketplace is published", () => {
+  it("resumes at anthropic-observability after the marketplace is published", () => {
     publishStatus.current = { data: { connected: true }, isLoading: false };
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("anthropic-enterprise");
+    expect(resumedStep()).toBe("anthropic-observability");
   });
 
   it("stays on identity-provider when only SSO is configured", () => {
@@ -104,7 +104,7 @@ describe("SetupWizard", () => {
     expect(resumedStep()).toBe("identity-provider");
   });
 
-  it("resumes at anthropic-enterprise after directory sync is configured", () => {
+  it("resumes at anthropic-observability after directory sync is configured", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: true },
       isLoading: false,
@@ -112,6 +112,6 @@ describe("SetupWizard", () => {
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("anthropic-enterprise");
+    expect(resumedStep()).toBe("anthropic-observability");
   });
 });

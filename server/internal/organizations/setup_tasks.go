@@ -44,8 +44,8 @@ type setupTaskDefinition struct {
 
 var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil},
-	{Key: "anthropic-enterprise", Title: "Set up Anthropic Enterprise", Description: "Publish the plugin marketplace, register it with Claude.ai for Claude Cowork, and confirm traffic arrives.", Prerequisites: nil},
-	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil},
+	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil},
 	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil},
 	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil},

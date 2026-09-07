@@ -12,7 +12,7 @@ import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
 import { StepSection } from "../step-section";
 import { MarketplaceSection } from "../marketplace-section";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
-import { isNotCoworkSource } from "../hook-event-sources";
+import { isNotAnthropicSource } from "../hook-event-sources";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -50,8 +50,8 @@ export function InstrumentAgentsStep({
           <Terminal className="text-foreground h-6 w-6" />
         </div>
       }
-      title="Instrument agents"
-      description="Publish your plugin marketplace, choose how your team's AI coding assistants get instrumented, and confirm their events arrive. Deploy the Speakeasy device agent to manage every platform centrally, or set up hooks per platform by hand."
+      title="Set up observability in other platforms"
+      description="Publish your plugin marketplace, choose how Cursor, Codex, and the rest of your team's coding assistants get instrumented, and confirm their events arrive. Claude Code and Claude Cowork are covered under Set up Anthropic observability. Deploy the Speakeasy device agent to manage every platform centrally, or set up hooks per platform by hand."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack
@@ -60,7 +60,7 @@ export function InstrumentAgentsStep({
       <div className="space-y-8">
         <MarketplaceSection
           index={1}
-          description="Claude Code and Cursor install the observability plugin from your marketplace, and servers you distribute later are published there too."
+          description="Cursor imports the observability plugin from your marketplace, and servers you distribute later are published there too."
         />
 
         <StepSection
@@ -167,7 +167,7 @@ export function InstrumentAgentsStep({
         <ConfirmTrafficSection
           index={3}
           description="Run any tool in an instrumented coding assistant. Its events show up here once the hooks are active."
-          matchesSource={isNotCoworkSource}
+          matchesSource={isNotAnthropicSource}
         />
       </div>
     </StepContainer>

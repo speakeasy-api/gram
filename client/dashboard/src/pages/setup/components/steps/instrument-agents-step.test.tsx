@@ -26,7 +26,7 @@ vi.mock("../confirm-traffic-section", () => ({
 afterEach(cleanup);
 
 describe("InstrumentAgentsStep", () => {
-  it("leaves Claude Cowork to the Anthropic Enterprise step", () => {
+  it("leaves Claude Code and Cowork to the Anthropic observability card", () => {
     render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
 
     // Radix tabs activate on mousedown, not click.
@@ -35,7 +35,8 @@ describe("InstrumentAgentsStep", () => {
     });
 
     expect(screen.queryByRole("button", { name: /Claude Cowork/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
-    expect(screen.getByText("Opened platform: claude")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Claude Code/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Cursor/ }));
+    expect(screen.getByText("Opened platform: cursor")).toBeTruthy();
   });
 });

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AnthropicEnterpriseStep } from "./anthropic-enterprise-step";
+import { AnthropicObservabilityStep } from "./anthropic-observability-step";
 
 const publishStatus = vi.hoisted(() => ({
   current: {
@@ -34,8 +34,14 @@ beforeEach(() => {
   publishStatus.current = { data: { connected: false }, isLoading: false };
 });
 
-describe("AnthropicEnterpriseStep", () => {
-  it("stacks marketplace, Cowork, and traffic sections in one card", () => {
+function renderStep() {
+  return render(
+    <AnthropicObservabilityStep onComplete={() => {}} onBack={() => {}} />,
+  );
+}
+
+describe("AnthropicObservabilityStep", () => {
+  it("covers Claude Code and Cowork with marketplace and traffic sections", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -44,24 +50,25 @@ describe("AnthropicEnterpriseStep", () => {
       isLoading: false,
     };
 
-    render(<AnthropicEnterpriseStep onComplete={() => {}} onBack={() => {}} />);
+    renderStep();
 
-    expect(screen.getByText("Set up Anthropic Enterprise")).toBeTruthy();
+    expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
     expect(screen.getByText("Confirm traffic section")).toBeTruthy();
+    expect(screen.getByText("0 of 2 connected")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Claude Cowork/ }));
-
-    expect(screen.getByText("Opened platform: claude-cowork")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
+    expect(screen.getByText("Opened platform: claude")).toBeTruthy();
   });
 
-  it("holds the Cowork instructions until the marketplace is published", () => {
-    render(<AnthropicEnterpriseStep onComplete={() => {}} onBack={() => {}} />);
+  it("holds both sets of instructions until the marketplace is published", () => {
+    renderStep();
 
-    const cowork = screen.getByRole("button", {
-      name: /Claude Cowork/,
-    }) as HTMLButtonElement;
-    expect(cowork.disabled).toBe(true);
+    const buttons = [
+      screen.getByRole("button", { name: /Claude Code/ }),
+      screen.getByRole("button", { name: /Claude Cowork/ }),
+    ] as HTMLButtonElement[];
+    expect(buttons.every((button) => button.disabled)).toBe(true);
     expect(
       screen.getByText(/Publish the marketplace above first/),
     ).toBeTruthy();

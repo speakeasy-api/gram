@@ -8,7 +8,7 @@ import { OnboardingStepper, type Step } from "./onboarding-stepper";
 import { SetupShell } from "./setup-shell";
 import {
   IdentityProviderStep,
-  AnthropicEnterpriseStep,
+  AnthropicObservabilityStep,
   DistributeServersStep,
   InstrumentAgentsStep,
   AdditionalAgentConfigStep,
@@ -23,14 +23,14 @@ const CORE_STEPS: Step[] = [
     description: "Connect SSO and sync users and roles",
   },
   {
-    id: "anthropic-enterprise",
-    title: "Set up Anthropic Enterprise",
-    description: "Connect Claude Cowork through Claude.ai",
+    id: "anthropic-observability",
+    title: "Set up Anthropic observability",
+    description: "Connect Claude Code and Cowork through Claude.ai",
   },
   {
     id: "instrument-agents",
-    title: "Instrument agents",
-    description: "Connect AI coding assistants",
+    title: "Set up observability in other platforms",
+    description: "Connect Cursor, Codex, and more",
   },
   {
     id: "additional-agent-config",
@@ -94,7 +94,7 @@ export function SetupWizard(): JSX.Element {
   // `publishStatus` says whether the plugin marketplace was published, which
   // only happens from a later card. Nothing after identity provider has a
   // signal of its own, so once either directory sync or the marketplace is
-  // done we land on anthropic-enterprise and let the user click forward.
+  // done we land on anthropic-observability and let the user click forward.
   // throwOnError: false so a failed resume check degrades to step 0 (as the
   // effect below assumes) instead of throwing to the page error boundary. The
   // QueryClient default only suppresses 401/403, so a 500 here would otherwise
@@ -112,7 +112,7 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected || onboardingStatus?.dsyncConfigured) {
-      resumeStep = indexOfStep(steps, "anthropic-enterprise");
+      resumeStep = indexOfStep(steps, "anthropic-observability");
     }
     setSearchParams(
       (prev) => {
@@ -224,9 +224,9 @@ export function SetupWizard(): JSX.Element {
     switch (steps[currentStep]?.id) {
       case "identity-provider":
         return <IdentityProviderStep onComplete={completeCurrentStep} />;
-      case "anthropic-enterprise":
+      case "anthropic-observability":
         return (
-          <AnthropicEnterpriseStep
+          <AnthropicObservabilityStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />

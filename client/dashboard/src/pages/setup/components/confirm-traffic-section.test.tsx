@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmTrafficSection } from "./confirm-traffic-section";
-import { isCoworkSource, isNotCoworkSource } from "./hook-event-sources";
+import { isAnthropicSource, isNotAnthropicSource } from "./hook-event-sources";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -48,7 +48,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isNotCoworkSource}
+        matchesSource={isNotAnthropicSource}
       />,
     );
     expect(screen.getByText("Waiting")).toBeTruthy();
@@ -58,7 +58,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isNotCoworkSource}
+        matchesSource={isNotAnthropicSource}
       />,
     );
 
@@ -70,7 +70,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isCoworkSource}
+        matchesSource={isAnthropicSource}
       />,
     );
 
@@ -79,7 +79,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isCoworkSource}
+        matchesSource={isAnthropicSource}
       />,
     );
 

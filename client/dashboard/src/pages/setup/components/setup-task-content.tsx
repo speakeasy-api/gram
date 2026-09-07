@@ -1,6 +1,6 @@
 import {
   AdditionalAgentConfigStep,
-  AnthropicEnterpriseStep,
+  AnthropicObservabilityStep,
   ConfigurePoliciesStep,
   DistributeServersStep,
   IdentityProviderStep,
@@ -31,9 +31,9 @@ export function SetupTaskContent({
     case "identity-provider":
       step = <IdentityProviderStep onComplete={onComplete} onBack={onBack} />;
       break;
-    case "anthropic-enterprise":
+    case "anthropic-observability":
       step = (
-        <AnthropicEnterpriseStep onComplete={onComplete} onBack={onBack} />
+        <AnthropicObservabilityStep onComplete={onComplete} onBack={onBack} />
       );
       break;
     case "instrument-agents":

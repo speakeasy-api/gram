@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS } from "./setup-data";
+import { AGENT_PLATFORMS, INSTRUMENT_AGENT_PLATFORMS } from "./setup-data";
 
 describe("AGENT_PLATFORMS", () => {
   it("follows the shared setup provider order", () => {
@@ -9,6 +9,14 @@ describe("AGENT_PLATFORMS", () => {
         ({ id }) => id,
       ),
     ).toEqual([...ACTIVE_AGENT_PROVIDER_IDS.setup]);
+  });
+
+  it("keeps the Anthropic platforms out of the other-platforms card", () => {
+    const ids = INSTRUMENT_AGENT_PLATFORMS.map(({ id }) => id);
+
+    expect(ids).not.toContain("claude");
+    expect(ids).not.toContain("claude-cowork");
+    expect(ids).toContain("cursor");
   });
 
   it("enables Claude OpenTelemetry traces", () => {

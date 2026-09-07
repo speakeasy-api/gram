@@ -78,9 +78,9 @@ interface ConfirmTrafficSectionProps {
   description: string;
   /**
    * Only events from matching sources count towards confirmation, so the
-   * Anthropic Enterprise card waits for Cowork specifically while Instrument
-   * agents waits for everything else. Pass a module-level function: the
-   * filter is an effect dependency.
+   * Anthropic observability card waits for Claude Code and Cowork while the
+   * other-platforms card waits for everything else. Pass a module-level
+   * function: the filter is an effect dependency.
    */
   matchesSource?: (source: string) => boolean;
 }
