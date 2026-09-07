@@ -153,6 +153,8 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
 	require.NotNil(t, entry.ActingSurface)
+	// The args carry no surface, standing in for a payload created before the
+	// field existed, so the worker derives one and finds nothing.
 	require.Equal(t, string(audit.SurfaceUnknown), *entry.ActingSurface)
 	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(
@@ -162,6 +164,53 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	))
 	require.Equal(t, "operation_internal_placeholder", generation.OperationID)
 	require.EqualValues(t, 75, generation.MonthlyCredits)
+}
+
+// TestSetOpenRouterSpendCapRecordsThreadedSurface covers the customer path.
+// usage.SetSpendCap is an authenticated handler that schedules this workflow
+// with BypassPolicy false, so the surface has to arrive in the payload: the
+// activity runs in a worker where that request's context is gone, and keying
+// off BypassPolicy would stamp a customer's own change as admin work.
+func TestSetOpenRouterSpendCapRecordsThreadedSurface(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 50)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 60 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 60,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(60, nil).Once()
+
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
+	args := spendCapActivityArgs("operation_threaded_placeholder", organizationID, 60)
+	args.ActingSurface = string(audit.SurfaceDashboard)
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(setter.Do)
+	_, err := env.ExecuteActivity(setter.Do, args)
+	require.NoError(t, err)
+	provisioner.AssertExpectations(t)
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceDashboard), *entry.ActingSurface)
 }
 
 func spendCapActivityArgs(operationID, organizationID string, limit int) activities.SetOpenRouterSpendCapArgs {

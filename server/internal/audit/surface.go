@@ -124,3 +124,18 @@ func actingIdentityFromContext(ctx context.Context) actingIdentity {
 		return actingIdentity{Surface: SurfaceUnknown, ClientID: clientID}
 	}
 }
+
+// SurfaceFromContext is how a request is acting, for callers that must carry
+// the surface across a boundary a context cannot cross.
+//
+// Audit normally derives this at the moment of the write, which is where the
+// signals are richest. Work handed to Temporal breaks that: the activity runs
+// in a worker with none of the request's context, so a caller that schedules
+// work on a user's behalf has to capture the surface at schedule time and pass
+// it through the workflow payload the way it already passes the actor.
+//
+// Prefer letting audit derive the surface wherever the write happens in the
+// request's own goroutine. Reach for this only at a handoff.
+func SurfaceFromContext(ctx context.Context) Surface {
+	return actingIdentityFromContext(ctx).Surface
+}
