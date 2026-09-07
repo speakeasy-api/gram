@@ -51,7 +51,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	}, meta, update)
 	addTool(reg, &mcp.Tool{
 		Name: operationAssignMCPAccessRole, Title: "Assign MCP Access Role",
-		Description: "Add one custom MCP access role to one masked member without removing any current roles. Requires fresh opaque member and role references, the member's current role version, explicit confirmation, and an idempotency key.",
+		Description: "When enabled for the selected project, add one custom role confined to the selected MCP without removing current member roles. New assignments require mcp_id, expected_role_version, fresh opaque member and role references, the member's expected_version, explicit confirmation of the complete role scope, and an idempotency key. Disabled projects return feature_unavailable without changing anything. Results describe committed local desired state, not verified provider convergence.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, meta, assign)
 }

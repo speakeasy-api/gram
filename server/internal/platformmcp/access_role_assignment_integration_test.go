@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -52,6 +53,23 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{},
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, AfterMcpID: uuid.NullUUID{}, QueryText: "", ReadinessState: pgtype.Text{}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	mcpID := rows[0].McpServerID.String()
+	selector := authz.NewSelector(authz.ScopeMCPConnect, mcpID)
+	selector[authz.SelectorKeyProjectID] = project.ID.String()
+	encoded, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: targetRole, Scope: string(authz.ScopeMCPConnect), Selectors: encoded,
+	})
+	require.NoError(t, err)
+
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
@@ -68,6 +86,10 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
 	require.NoError(t, err)
 	service, err := NewAccessRoleAssignmentService(roles)
+	require.NoError(t, err)
+	role, err := manager.GetRoleByID(ctx, principal.OrganizationID, strings.TrimPrefix(targetRole.ID, "organization:"))
+	require.NoError(t, err)
+	roleVersion, err := roles.roleVersion(role)
 	require.NoError(t, err)
 
 	members, err := reads.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member", Limit: 10})
@@ -87,7 +109,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 
 	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
-	input := AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MemberReference: member.Reference, RoleReference: roleReference, ExpectedVersion: member.Version, IdempotencyKey: "assign-member-role", Confirmed: true}
+	input := AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MCPID: mcpID, ExpectedRoleVersion: roleVersion, MemberReference: member.Reference, RoleReference: roleReference, ExpectedVersion: member.Version, IdempotencyKey: "assign-member-role", Confirmed: true}
 	assignCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	first, err := service.Assign(assignCtx, principal, input)
@@ -118,14 +140,14 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 			current = candidate
 		}
 	}
-	already, err := service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MemberReference: current.Reference, RoleReference: roleReference, ExpectedVersion: current.Version, IdempotencyKey: "already-assigned-member-role", Confirmed: true})
+	already, err := service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MCPID: mcpID, ExpectedRoleVersion: roleVersion, MemberReference: current.Reference, RoleReference: roleReference, ExpectedVersion: current.Version, IdempotencyKey: "already-assigned-member-role", Confirmed: true})
 	require.NoError(t, err)
 	require.Equal(t, "already_assigned", already.ResultCategory)
 	afterAlreadyAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
 	require.Equal(t, afterAudit, afterAlreadyAudit)
 
-	_, err = service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MemberReference: member.Reference, RoleReference: roleReference, ExpectedVersion: member.Version, IdempotencyKey: "stale-member-role", Confirmed: true})
+	_, err = service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MCPID: mcpID, ExpectedRoleVersion: roleVersion, MemberReference: member.Reference, RoleReference: roleReference, ExpectedVersion: member.Version, IdempotencyKey: "stale-member-role", Confirmed: true})
 	require.ErrorIs(t, err, ErrAccessRoleMutationConflict)
 	_, err = platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: operationAssignMCPAccessRole, IdempotencyKey: "stale-member-role", UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID)})
 	require.Error(t, err)
@@ -135,7 +157,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	adminRole := seedAccessRole(t, ctx, conn, principal.OrganizationID, "admin", "Admin")
 	adminReference, err := reads.references.Encode(principal, subjectKindAccessRole, strings.TrimPrefix(adminRole.ID, "organization:"), reads.now())
 	require.NoError(t, err)
-	_, err = service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MemberReference: current.Reference, RoleReference: adminReference, ExpectedVersion: current.Version, IdempotencyKey: "reject-system-role", Confirmed: true})
+	_, err = service.Assign(ctx, principal, AssignMCPAccessRoleInput{ProjectID: project.ID.String(), MCPID: mcpID, ExpectedRoleVersion: roleVersion, MemberReference: current.Reference, RoleReference: adminReference, ExpectedVersion: current.Version, IdempotencyKey: "reject-system-role", Confirmed: true})
 	require.ErrorIs(t, err, ErrAccessRoleMutationNotFound)
 	resolved, err = authz.ResolveUserPrincipals(ctx, conn, principal.OrganizationID, memberID)
 	require.NoError(t, err)
@@ -156,6 +178,84 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	active, err := accessrepo.New(conn).ListActiveRoleIDsByWorkosUser(ctx, accessrepo.ListActiveRoleIDsByWorkosUserParams{OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + memberID})
 	require.NoError(t, err)
 	require.Empty(t, active)
+
+	// A genuinely roleless member can receive their first role using the
+	// version returned by the SQL-backed read, despite nil query results.
+	roleless, err := reads.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member", Limit: 10})
+	require.NoError(t, err)
+	foundRoleless := false
+	for _, candidate := range roleless.Members {
+		id, decodeErr := reads.references.Decode(candidate.Reference, principal, subjectKindAccessMember, reads.now())
+		if decodeErr == nil && id == "assignment-member-b" {
+			foundRoleless = true
+			firstRole := input
+			firstRole.MemberReference, firstRole.ExpectedVersion, firstRole.IdempotencyKey = candidate.Reference, candidate.Version, "first-role"
+			_, err = service.Assign(ctx, principal, firstRole)
+			require.NoError(t, err)
+		}
+	}
+
+	require.True(t, foundRoleless)
+
+	// Scope confirmation is bound to the role version and fails closed for
+	// additional non-MCP grants even after refreshing the version.
+	projectGrant := authz.NewSelector(authz.ScopeProjectRead, project.ID.String())
+	projectGrantJSON, err := projectGrant.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: targetRole, Scope: string(authz.ScopeProjectRead), Selectors: projectGrantJSON,
+	})
+	require.NoError(t, err)
+	staleRole := input
+	staleRole.IdempotencyKey = "stale-role-version"
+	_, err = service.Assign(ctx, principal, staleRole)
+	require.ErrorIs(t, err, ErrAccessRoleMutationConflict)
+	role, err = manager.GetRoleByID(ctx, principal.OrganizationID, role.ID)
+	require.NoError(t, err)
+	staleRole.ExpectedRoleVersion, err = roles.roleVersion(role)
+	require.NoError(t, err)
+	_, err = service.Assign(ctx, principal, staleRole)
+	require.ErrorIs(t, err, ErrAccessRoleMutationInvalid)
+	legacyFresh := input
+	legacyFresh.MCPID, legacyFresh.ExpectedRoleVersion, legacyFresh.IdempotencyKey = "", "", "legacy-fresh"
+	_, err = service.Assign(ctx, principal, legacyFresh)
+	require.ErrorIs(t, err, ErrAccessRoleMutationInvalid)
+
+	// Recover the original v1 receipt shape without permitting legacy fresh writes.
+	legacyReceipt, err := service.receipts.Execute(ctx, principal, project, "legacy-receipt", normalizedAccessRoleAssignment{
+		ProjectID: project.ID.String(), MemberID: memberID, RoleID: role.ID, ExpectedVersion: input.ExpectedVersion,
+		MCPID: "", ExpectedRoleVersion: "",
+	}, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+		return AccessRoleAssignmentReceiptResult{MaskedIdentity: first.Member.MaskedIdentity, Roles: first.Member.Roles,
+			Version: first.Member.Version, AssignedRole: first.AssignedRole, ResultCategory: first.ResultCategory, Reconciliation: "pending"}, nil
+	})
+	require.NoError(t, err)
+	legacyFresh.IdempotencyKey = "legacy-receipt"
+
+	// Old handles retain only receipt-recovery authority, not fresh-write
+	// authority. A changed input must still conflict after handle expiration.
+	now := reads.now()
+	reads.now = func() time.Time { return now.Add(SubjectReferenceTTL + time.Second) }
+	replayed, err = service.Assign(ctx, principal, input)
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+	legacyReplay, err := service.Assign(ctx, principal, legacyFresh)
+	require.NoError(t, err)
+	require.Equal(t, legacyReceipt.ID.String(), legacyReplay.Receipt.ID)
+	require.True(t, legacyReplay.Receipt.Replayed)
+	otherPrincipal := principal
+	otherPrincipal.UserID = "another-user"
+	_, err = service.Assign(ctx, otherPrincipal, input)
+	require.Error(t, err)
+	expiredFresh := input
+	expiredFresh.IdempotencyKey = "expired-fresh"
+	_, err = service.Assign(ctx, principal, expiredFresh)
+	require.ErrorIs(t, err, ErrAccessRoleMutationNotFound)
+	changed := input
+	changed.MCPID = uuid.NewString()
+	_, err = service.Assign(ctx, principal, changed)
+	require.ErrorIs(t, err, ErrAccessRoleMutationConflict)
+	reads.now = func() time.Time { return now }
 
 	require.NoError(t, usersrepo.New(conn).OverwriteUserWorkosID(ctx, usersrepo.OverwriteUserWorkosIDParams{ID: memberID, WorkosID: pgtype.Text{}}))
 	replayed, err = service.Assign(ctx, principal, input)

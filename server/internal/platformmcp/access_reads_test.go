@@ -38,7 +38,7 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	keys := decodeKeys(t, access)
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
-		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "expires_at",
+		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at",
 	}, keys)
 	encoded, err := json.Marshal(access)
 	require.NoError(t, err)

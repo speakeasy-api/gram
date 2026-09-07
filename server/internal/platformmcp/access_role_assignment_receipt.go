@@ -65,8 +65,11 @@ func encodeAccessRoleAssignmentReceipt(result AccessRoleAssignmentReceiptResult)
 		return nil, accessRoleMutationUnavailable(errors.New("unsafe access role assignment receipt result"))
 	}
 	payload, err := json.Marshal(result)
-	if err != nil || len(payload) == 0 || len(payload) > maxAccessRoleAssignmentReceiptPayloadBytes {
+	if err != nil {
 		return nil, accessRoleMutationUnavailable(err)
+	}
+	if len(payload) == 0 || len(payload) > maxAccessRoleAssignmentReceiptPayloadBytes {
+		return nil, accessRoleMutationUnavailable(errors.New("access role assignment receipt payload exceeds size limit"))
 	}
 	return payload, nil
 }

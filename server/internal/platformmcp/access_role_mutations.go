@@ -572,6 +572,9 @@ func accessMemberRoleVersion(versionKey []byte, memberID string, roleIDs []strin
 		return "", ErrAccessRoleMutationInvalid
 	}
 	canonicalRoles := sortedStrings(roleIDs)
+	if canonicalRoles == nil {
+		canonicalRoles = []string{}
+	}
 	payload, err := json.Marshal(struct {
 		MemberID string   `json:"member_id"`
 		RoleIDs  []string `json:"role_ids"`

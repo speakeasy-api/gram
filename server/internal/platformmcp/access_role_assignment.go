@@ -16,12 +16,14 @@ import (
 )
 
 type AssignMCPAccessRoleInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID for the access workflow"`
-	MemberReference string `json:"member_reference" jsonschema:"opaque member reference returned by list_access_members"`
-	RoleReference   string `json:"role_reference" jsonschema:"opaque custom role reference returned by list_access_roles or get_mcp_access"`
-	ExpectedVersion string `json:"expected_version" jsonschema:"opaque member role version returned by list_access_members immediately before this write"`
-	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact assignment"`
-	Confirmed       bool   `json:"confirmed" jsonschema:"set true only after the user confirms the exact project, masked member, custom role, and effective MCP access"`
+	ProjectID           string `json:"project_id" jsonschema:"explicit project ID for the access workflow"`
+	MemberReference     string `json:"member_reference" jsonschema:"opaque member reference returned by list_access_members"`
+	RoleReference       string `json:"role_reference" jsonschema:"opaque custom role reference returned by list_access_roles or get_mcp_access"`
+	ExpectedVersion     string `json:"expected_version" jsonschema:"opaque member role version returned by list_access_members immediately before this write"`
+	MCPID               string `json:"mcp_id,omitempty" jsonschema:"required for new assignments: exact configured MCP selected from get_mcp_access"`
+	ExpectedRoleVersion string `json:"expected_role_version,omitempty" jsonschema:"required for new assignments: role version from the immediately preceding get_mcp_access response"`
+	IdempotencyKey      string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact assignment"`
+	Confirmed           bool   `json:"confirmed" jsonschema:"set true only after the user confirms the exact project, masked member, custom role, and effective MCP access"`
 }
 
 type AccessRoleAssignmentMember struct {
@@ -40,10 +42,12 @@ type AssignMCPAccessRoleOutput struct {
 }
 
 type normalizedAccessRoleAssignment struct {
-	ProjectID       string `json:"project_id"`
-	MemberID        string `json:"member_id"`
-	RoleID          string `json:"role_id"`
-	ExpectedVersion string `json:"expected_version"`
+	ProjectID           string `json:"project_id"`
+	MemberID            string `json:"member_id"`
+	RoleID              string `json:"role_id"`
+	ExpectedVersion     string `json:"expected_version"`
+	MCPID               string `json:"mcp_id,omitempty"`
+	ExpectedRoleVersion string `json:"expected_role_version,omitempty"`
 }
 
 type AccessRoleAssignmentService struct {
@@ -73,6 +77,8 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 	input.MemberReference = strings.TrimSpace(input.MemberReference)
 	input.RoleReference = strings.TrimSpace(input.RoleReference)
 	input.ExpectedVersion = strings.TrimSpace(input.ExpectedVersion)
+	input.MCPID = strings.TrimSpace(input.MCPID)
+	input.ExpectedRoleVersion = strings.TrimSpace(input.ExpectedRoleVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
 	if input.MemberReference == "" || input.RoleReference == "" || !validAccessRoleVersion(input.ExpectedVersion) || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
 		return AssignMCPAccessRoleOutput{}, accessRoleMutationInvalid("The access role assignment request is invalid.")
@@ -81,17 +87,28 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 	if err != nil {
 		return AssignMCPAccessRoleOutput{}, err
 	}
-	memberID, err := s.roles.reads.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.roles.reads.now())
+	memberID, err := s.roles.reads.references.decodeForReceiptLookup(input.MemberReference, principal, subjectKindAccessMember, s.roles.reads.now())
 	if err != nil {
 		return AssignMCPAccessRoleOutput{}, accessRoleMutationNotFound()
 	}
-	roleID, err := s.roles.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.roles.reads.now())
+	roleID, err := s.roles.reads.references.decodeForReceiptLookup(input.RoleReference, principal, subjectKindAccessRole, s.roles.reads.now())
 	if err != nil {
 		return AssignMCPAccessRoleOutput{}, accessRoleMutationNotFound()
 	}
-	normalized := normalizedAccessRoleAssignment{ProjectID: project.ID.String(), MemberID: memberID, RoleID: roleID, ExpectedVersion: input.ExpectedVersion}
+	// Omitted new fields preserve the v1 hash for recovery of legacy receipts,
+	// but the fresh callback below refuses that shape for a new assignment.
+	normalized := normalizedAccessRoleAssignment{ProjectID: project.ID.String(), MemberID: memberID, RoleID: roleID, ExpectedVersion: input.ExpectedVersion, MCPID: input.MCPID, ExpectedRoleVersion: input.ExpectedRoleVersion}
 	var reconciliation access.MemberRoleReconciliation
 	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+		if _, err := s.roles.reads.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.roles.reads.now()); err != nil {
+			return AccessRoleAssignmentReceiptResult{}, accessRoleMutationNotFound()
+		}
+		if _, err := s.roles.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.roles.reads.now()); err != nil {
+			return AccessRoleAssignmentReceiptResult{}, accessRoleMutationNotFound()
+		}
+		if err := s.validateAssignmentRole(ctx, tx, principal, project, roleID, input); err != nil {
+			return AccessRoleAssignmentReceiptResult{}, err
+		}
 		result, pending, err := s.roles.backend.AddMemberRoleTx(ctx, tx, principal.OrganizationID, memberID, roleID, access.RoleAuditActor{
 			Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil,
 		}, func(state access.MemberRoleState) error {
