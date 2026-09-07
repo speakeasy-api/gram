@@ -1,4 +1,7 @@
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import {
+  useIsDarkTheme,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { useState } from "react";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -7,7 +10,11 @@ import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
 import { getRiskCategoryChartColor } from "../riskTrendChartData";
 
 const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
-const INACTIVE_GREY = "hsl(0, 0%, 88%)";
+// The dimmed state has to recede on both canvases, so it takes a neutral per
+// theme: near-white behind the light ramp, near-black behind the lifted dark
+// one. A single fixed grey would out-glow the dark ramp's mid-tone hues.
+const INACTIVE_GREY_LIGHT = "hsl(0, 0%, 88%)";
+const INACTIVE_GREY_DARK = "hsl(0, 0%, 27%)";
 
 function categoryLabel(category: string): string {
   return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
@@ -35,6 +42,9 @@ export function ExposureBar({
   onToggleCategory: (category: string) => void;
 }): JSX.Element {
   const seriesColors = useSeriesColors();
+  const inactiveGrey = useIsDarkTheme()
+    ? INACTIVE_GREY_DARK
+    : INACTIVE_GREY_LIGHT;
   const [hovered, setHovered] = useState<string | null>(null);
   const sliceColor = (category: string) =>
     getRiskCategoryChartColor(category, seriesColors) ?? FALLBACK_SLICE_COLOR;
@@ -86,7 +96,7 @@ export function ExposureBar({
                 style={{
                   width: `${Math.max(slice.share * 100, 1)}%`,
                   backgroundColor: dimmed
-                    ? INACTIVE_GREY
+                    ? inactiveGrey
                     : sliceColor(slice.category),
                 }}
               />
@@ -97,9 +107,7 @@ export function ExposureBar({
           {visible.map((slice) => {
             const dimmed = isDimmed(slice.category);
             const isActive = active.has(slice.category);
-            const dotColor = dimmed
-              ? INACTIVE_GREY
-              : sliceColor(slice.category);
+            const dotColor = dimmed ? inactiveGrey : sliceColor(slice.category);
             return (
               <button
                 key={slice.category}
