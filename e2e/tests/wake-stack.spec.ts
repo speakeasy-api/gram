@@ -106,6 +106,28 @@ function alive(pid: number): boolean {
 
 test.describe.configure({ mode: "serial" });
 
+// `pause` and `wake` run detached and log to the git dir, so their output
+// reaches neither the terminal nor the CI job log -- even when they are the
+// thing that broke. Every failure below is otherwise one sentence about a
+// stack whose own account of itself nobody has seen.
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  for (const name of ["gram-stack-wake.log", "gram-stack-park.log"]) {
+    let body: string;
+    try {
+      body = fs.readFileSync(marker(name), "utf8");
+    } catch {
+      continue;
+    }
+    // The wake log is mostly redrawn progress spinners and runs to megabytes;
+    // what matters is how it ended.
+    await testInfo.attach(name, {
+      body: body.slice(-64 * 1024),
+      contentType: "text/plain",
+    });
+  }
+});
+
 test("a paused worktree serves the resume page and comes back from it", async ({
   page,
 }) => {

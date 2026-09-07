@@ -25,7 +25,9 @@ export default defineConfig({
   // Every retry would pay the pause/wake cost again, and a flake here is
   // usually a real stack problem worth reading the trace for.
   retries: 0,
-  reporter: [["list"]],
+  // The GitHub reporter annotates the failing line in the PR's Files tab; the
+  // list reporter keeps the job log readable on its own.
+  reporter: process.env["CI"] ? [["github"], ["list"]] : [["list"]],
   outputDir: "./.playwright",
   use: {
     baseURL: siteURL,
