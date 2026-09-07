@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ALL_POLICY_MESSAGE_TYPES } from "./policy-form";
 import {
+  acceptsDetectionScope,
   decodeKindScope,
   describePolicyScope,
-  detectionScopesForCategoryEdit,
+  policyScopeUpdateForCategoryEdit,
   effectivePolicyScopeKinds,
   effectiveScopeKinds,
   encodeKindScope,
@@ -49,6 +50,25 @@ describe("policy scope codec", () => {
     );
   });
 
+  it("decodes the empty kind list as nothing in scope", () => {
+    expect(decodeKindScope("kind in []")).toEqual([]);
+    expect(effectiveScopeKinds({ scopeInclude: "kind in []" })).toEqual({
+      kinds: new Set(),
+      custom: false,
+    });
+  });
+
+  it("stops reporting custom once nothing is in scope", () => {
+    // Include and exempt can only narrow, so an undecodable exemption cannot
+    // put anything back — reporting it as custom would hide an empty scope.
+    expect(
+      effectiveScopeKinds({
+        scopeInclude: "kind in []",
+        scopeExempt: PROMPT_INJECTION_EXEMPT,
+      }),
+    ).toEqual({ kinds: new Set(), custom: false });
+  });
+
   it("decodes non-canonical kind lists", () => {
     expect(decodeKindScope('kind in ["user_message","tool_request"]')).toEqual([
       "user_message",
@@ -70,7 +90,6 @@ describe("policy scope codec", () => {
 
   it("rejects kind lists that are not message kinds", () => {
     expect(decodeKindScope('kind in ["user_message","nonsense"]')).toBeNull();
-    expect(decodeKindScope("kind in []")).toBeNull();
     expect(decodeKindScope('kind in ["user_message"')).toBeNull();
   });
 
@@ -166,6 +185,7 @@ describe("effectivePolicyScopeKinds", () => {
       kinds: new Set(["tool_response"]),
       additionalKinds: new Set(),
       custom: false,
+      sessionScopedOnly: false,
     });
   });
 
@@ -181,6 +201,7 @@ describe("effectivePolicyScopeKinds", () => {
       kinds: new Set(["tool_response"]),
       additionalKinds: new Set(),
       custom: false,
+      sessionScopedOnly: false,
     });
   });
 
@@ -208,6 +229,7 @@ describe("effectivePolicyScopeKinds", () => {
       kinds: new Set(),
       additionalKinds: new Set(["prompt_attachment"]),
       custom: false,
+      sessionScopedOnly: false,
     });
   });
 
@@ -221,6 +243,7 @@ describe("effectivePolicyScopeKinds", () => {
       kinds: new Set(),
       additionalKinds: new Set(["prompt_attachment"]),
       custom: false,
+      sessionScopedOnly: false,
     });
 
     expect(
@@ -232,6 +255,7 @@ describe("effectivePolicyScopeKinds", () => {
       kinds: new Set(["tool_request"]),
       additionalKinds: new Set(["prompt_attachment"]),
       custom: false,
+      sessionScopedOnly: false,
     });
   });
 
@@ -248,6 +272,25 @@ describe("effectivePolicyScopeKinds", () => {
         messageTypes: ["prompt_attachment"],
       }).additionalKinds,
     ).toEqual(new Set());
+  });
+
+  it("reports a policy whose categories are all session-scoped", () => {
+    expect(
+      effectivePolicyScopeKinds({
+        categories: ["account_identity"],
+        categoryDefinitions,
+      }).sessionScopedOnly,
+    ).toBe(true);
+    expect(
+      effectivePolicyScopeKinds({
+        categories: ["account_identity", "secrets"],
+        categoryDefinitions,
+      }).sessionScopedOnly,
+    ).toBe(false);
+    expect(
+      effectivePolicyScopeKinds({ categories: [], categoryDefinitions })
+        .sessionScopedOnly,
+    ).toBe(false);
   });
 
   it("skips categories without message scopes", () => {
@@ -316,10 +359,15 @@ describe("narrowScopeToKinds", () => {
   });
 });
 
-describe("detectionScopesForCategoryEdit", () => {
+describe("policyScopeUpdateForCategoryEdit", () => {
   const categoryDefinitions = [
     {
       key: "secrets",
+      recommendedScopeApplicable: true,
+      recommendedScopeExempt: 'kind == "assistant_message"',
+    },
+    {
+      key: "pii",
       recommendedScopeApplicable: true,
       recommendedScopeExempt: 'kind == "assistant_message"',
     },
@@ -328,33 +376,37 @@ describe("detectionScopesForCategoryEdit", () => {
       recommendedScopeApplicable: true,
       recommendedScopeExempt: PROMPT_INJECTION_EXEMPT,
     },
+    { key: "custom", recommendedScopeApplicable: true },
     { key: "account_identity", recommendedScopeApplicable: false },
   ];
 
   it("writes only the edited category when nothing legacy is at stake", () => {
     expect(
-      detectionScopesForCategoryEdit({
+      policyScopeUpdateForCategoryEdit({
         category: "secrets",
         kinds: ["tool_request", "tool_response"],
         policyCategories: ["secrets", "pii"],
         categoryDefinitions,
       }),
-    ).toEqual([
-      {
-        category: "secrets",
-        scopeInclude: 'kind in ["tool_request","tool_response"]',
-      },
-    ]);
+    ).toEqual({
+      detectionScopes: [
+        {
+          category: "secrets",
+          scopeInclude: 'kind in ["tool_request","tool_response"]',
+        },
+      ],
+      messageTypes: [],
+    });
   });
 
   it("keeps the recommended predicate the kind list cannot express", () => {
     expect(
-      detectionScopesForCategoryEdit({
+      policyScopeUpdateForCategoryEdit({
         category: "prompt_injection",
         kinds: ["tool_response"],
         policyCategories: ["prompt_injection"],
         categoryDefinitions,
-      }),
+      }).detectionScopes,
     ).toEqual([
       {
         category: "prompt_injection",
@@ -368,25 +420,28 @@ describe("detectionScopesForCategoryEdit", () => {
     // message_types is cleared alongside this write, so pii would otherwise
     // silently widen from tool traffic to every surface.
     expect(
-      detectionScopesForCategoryEdit({
+      policyScopeUpdateForCategoryEdit({
         category: "secrets",
         kinds: ["user_message"],
         policyCategories: ["secrets", "pii", "account_identity"],
         categoryDefinitions,
         messageTypes: ["tool_request", "tool_response"],
       }),
-    ).toEqual([
-      {
-        category: "pii",
-        scopeInclude: 'kind in ["tool_request","tool_response"]',
-      },
-      { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
-    ]);
+    ).toEqual({
+      detectionScopes: [
+        {
+          category: "pii",
+          scopeInclude: 'kind in ["tool_request","tool_response"]',
+        },
+        { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+      ],
+      messageTypes: [],
+    });
   });
 
   it("pins the legacy narrowing through an existing category scope", () => {
     expect(
-      detectionScopesForCategoryEdit({
+      policyScopeUpdateForCategoryEdit({
         category: "secrets",
         kinds: ["user_message"],
         policyCategories: ["secrets", "prompt_injection"],
@@ -399,13 +454,62 @@ describe("detectionScopesForCategoryEdit", () => {
         ],
         categoryDefinitions,
         messageTypes: ["tool_request", "tool_response"],
-      }),
+      }).detectionScopes,
     ).toEqual([
       {
         category: "prompt_injection",
         scopeInclude: 'kind in ["tool_request"]',
         scopeExempt: PROMPT_INJECTION_EXEMPT,
       },
+      { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+    ]);
+  });
+
+  it("never puts a scope the API rejects on the wire", () => {
+    // `custom` and session-scoped categories have no recommendation to
+    // replace; a scope for either fails the whole update.
+    const update = policyScopeUpdateForCategoryEdit({
+      category: "secrets",
+      kinds: ["user_message"],
+      policyCategories: ["secrets", "custom", "account_identity"],
+      categoryDefinitions,
+      messageTypes: ["tool_request"],
+    });
+
+    expect(update.detectionScopes.map((scope) => scope.category)).toEqual([
+      "secrets",
+    ]);
+    expect(acceptsDetectionScope(categoryDefinitions[3])).toBe(false);
+    expect(acceptsDetectionScope(categoryDefinitions[4])).toBe(false);
+  });
+
+  it("keeps the legacy list when a covered category cannot be pinned", () => {
+    // Custom rules cannot carry a category scope, so clearing message_types
+    // would widen them; the list survives, gaining only the edited kinds.
+    expect(
+      policyScopeUpdateForCategoryEdit({
+        category: "secrets",
+        kinds: ["user_message"],
+        policyCategories: ["secrets", "custom"],
+        categoryDefinitions,
+        messageTypes: ["tool_request"],
+      }).messageTypes,
+    ).toEqual(["tool_request", "user_message"]);
+  });
+
+  it("preserves scopes for categories the policy no longer covers", () => {
+    expect(
+      policyScopeUpdateForCategoryEdit({
+        category: "secrets",
+        kinds: ["user_message"],
+        policyCategories: ["secrets"],
+        detectionScopes: [
+          { category: "custom", scopeInclude: 'kind in ["tool_request"]' },
+        ],
+        categoryDefinitions,
+      }).detectionScopes,
+    ).toEqual([
+      { category: "custom", scopeInclude: 'kind in ["tool_request"]' },
       { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
     ]);
   });
@@ -423,7 +527,7 @@ describe("detectionScopesForCategoryEdit", () => {
         messageTypes,
       });
 
-      const detectionScopes = detectionScopesForCategoryEdit({
+      const { detectionScopes } = policyScopeUpdateForCategoryEdit({
         category,
         kinds: [...hydrated.kinds],
         policyCategories: [category],
@@ -441,20 +545,99 @@ describe("detectionScopesForCategoryEdit", () => {
     },
   );
 
-  it("preserves scopes for categories the policy no longer covers", () => {
-    expect(
-      detectionScopesForCategoryEdit({
-        category: "secrets",
-        kinds: ["user_message"],
-        policyCategories: ["secrets"],
-        detectionScopes: [
-          { category: "custom", scopeInclude: 'kind in ["tool_request"]' },
-        ],
+  it.each([
+    ["a recommended", undefined, PROMPT_INJECTION_EXEMPT],
+    [
+      "an overridden",
+      [
+        {
+          category: "prompt_injection",
+          scopeInclude: 'kind in ["tool_request"]',
+          scopeExempt: PROMPT_INJECTION_EXEMPT,
+        },
+      ],
+      PROMPT_INJECTION_EXEMPT,
+    ],
+  ])(
+    "survives disable and re-enable with %s custom exemption",
+    (_label, detectionScopes, exempt) => {
+      // Unchecking every message type must not be a destructive rewrite: the
+      // read-only-tool exemption has to come back when a type is re-checked.
+      const disabled = policyScopeUpdateForCategoryEdit({
+        category: "prompt_injection",
+        kinds: [],
+        policyCategories: ["prompt_injection"],
+        detectionScopes: detectionScopes as never,
         categoryDefinitions,
-      }),
+      }).detectionScopes;
+
+      expect(disabled).toEqual([
+        {
+          category: "prompt_injection",
+          scopeInclude: "kind in []",
+          scopeExempt: exempt,
+        },
+      ]);
+      expect(
+        effectivePolicyScopeKinds({
+          categories: ["prompt_injection"],
+          detectionScopes: disabled,
+          categoryDefinitions,
+        }),
+      ).toEqual({
+        kinds: new Set(),
+        additionalKinds: new Set(),
+        custom: false,
+        sessionScopedOnly: false,
+      });
+
+      expect(
+        policyScopeUpdateForCategoryEdit({
+          category: "prompt_injection",
+          kinds: ["tool_request"],
+          policyCategories: ["prompt_injection"],
+          detectionScopes: disabled,
+          categoryDefinitions,
+        }).detectionScopes,
+      ).toEqual([
+        {
+          category: "prompt_injection",
+          scopeInclude: 'kind in ["tool_request"]',
+          scopeExempt: exempt,
+        },
+      ]);
+    },
+  );
+
+  it("keeps a custom include across an empty selection", () => {
+    const customInclude = 'tool_calls.exists(t, t.name == "Bash")';
+    const disabled = policyScopeUpdateForCategoryEdit({
+      category: "secrets",
+      kinds: [],
+      policyCategories: ["secrets"],
+      detectionScopes: [{ category: "secrets", scopeInclude: customInclude }],
+      categoryDefinitions,
+    }).detectionScopes;
+
+    expect(disabled).toEqual([
+      {
+        category: "secrets",
+        scopeInclude: `(${customInclude}) && kind in []`,
+      },
+    ]);
+    expect(
+      policyScopeUpdateForCategoryEdit({
+        category: "secrets",
+        kinds: ["tool_request"],
+        policyCategories: ["secrets"],
+        detectionScopes: disabled,
+        categoryDefinitions,
+      }).detectionScopes,
     ).toEqual([
-      { category: "custom", scopeInclude: 'kind in ["tool_request"]' },
-      { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+      {
+        category: "secrets",
+        scopeInclude: `(${customInclude}) && kind in ["tool_request"]`,
+      },
     ]);
   });
 });
@@ -468,6 +651,7 @@ describe("describePolicyScope", () => {
       kinds: new Set(kinds as never),
       additionalKinds: new Set(attachments ? ["prompt_attachment"] : []),
       custom,
+      sessionScopedOnly: false,
     });
 
   it("summarises whole-surface and tool-call scopes", () => {
@@ -488,6 +672,17 @@ describe("describePolicyScope", () => {
       tooltip: "No message types in scope",
     });
     expect(scope([], { custom: true }).summary).toBe("Custom scope");
+  });
+
+  it("labels session-scoped detection instead of an empty scope", () => {
+    expect(
+      describePolicyScope({
+        kinds: new Set(),
+        additionalKinds: new Set(),
+        custom: false,
+        sessionScopedOnly: true,
+      }).summary,
+    ).toBe("Session-scoped");
   });
 
   it("lists prompt attachments alongside message types", () => {

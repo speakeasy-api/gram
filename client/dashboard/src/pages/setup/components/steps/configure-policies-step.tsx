@@ -50,8 +50,9 @@ import {
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import { policyDetectionCategories } from "@/pages/security/policy-form";
 import {
+  acceptsDetectionScope,
   categoryRecommendationScope,
-  detectionScopesForCategoryEdit,
+  policyScopeUpdateForCategoryEdit,
   effectivePolicyScopeKinds,
   narrowScopeToKinds,
   type CategoryScopeRecommendation,
@@ -252,8 +253,12 @@ type ScopedPolicy = {
 
 /** Message types the server actually scans for `cat`: the category's own scope
  *  (or its recommendation) intersected with the policy's legacy message types
- *  and policy-level CEL. Null when a custom predicate leaves nothing the
- *  checkboxes can faithfully represent. */
+ *  and policy-level CEL.
+ *
+ *  Null when a CEL predicate we cannot decode is in play. The decoded kinds are
+ *  only an upper bound there, and checkboxes claim an exact selection — so the
+ *  picker steps aside and points at the Policy Center instead of inviting an
+ *  edit that would rewrite a scope we cannot read. */
 function scopeMessageTypesForCategory(
   policy: ScopedPolicy,
   cat: RuleCategory,
@@ -267,7 +272,7 @@ function scopeMessageTypesForCategory(
     scopeInclude: policy.scopeInclude,
     scopeExempt: policy.scopeExempt,
   });
-  return scope.kinds.size === 0 && scope.custom ? null : scope.kinds;
+  return scope.custom ? null : scope.kinds;
 }
 
 export function ConfigurePoliciesStep({
@@ -312,6 +317,20 @@ export function ConfigurePoliciesStep({
     return map;
   }, [policies]);
 
+  // Categories whose stored scope no checkbox set can express faithfully.
+  const customScopeCategories = useMemo(() => {
+    const cats = new Set<RuleCategory>();
+    if (!categoryDefinitions) return cats;
+    for (const [cat, policy] of policyForCategory) {
+      if (
+        scopeMessageTypesForCategory(policy, cat, categoryDefinitions) === null
+      ) {
+        cats.add(cat);
+      }
+    }
+    return cats;
+  }, [policyForCategory, categoryDefinitions]);
+
   const invalidatePolicies = () => {
     void invalidateAllRiskListPolicies(queryClient);
     void invalidateAllRiskPoliciesStatus(queryClient);
@@ -337,22 +356,23 @@ export function ConfigurePoliciesStep({
   ) => {
     const existing = policyForCategory.get(cat);
     if (!existing) return;
-    const scopeFields =
-      scope && categoryDefinitions
-        ? {
-            // An empty message_types list means "all types"; the category
-            // scopes below carry the narrowing it used to express.
-            messageTypes: [],
-            detectionScopes: detectionScopesForCategoryEdit({
-              category: cat,
-              kinds: [...nextCfg.messageTypes],
-              policyCategories: policyDetectionCategories(existing),
-              detectionScopes: existing.detectionScopes,
-              categoryDefinitions,
-              messageTypes: existing.messageTypes,
-            }),
-          }
-        : {};
+    const writesCategoryScope =
+      categoryDefinitions !== undefined &&
+      acceptsDetectionScope(categoryDefinitions.find((d) => d.key === cat));
+    const scopeFields = !scope
+      ? {}
+      : writesCategoryScope && categoryDefinitions
+        ? policyScopeUpdateForCategoryEdit({
+            category: cat,
+            kinds: [...nextCfg.messageTypes],
+            policyCategories: policyDetectionCategories(existing),
+            detectionScopes: existing.detectionScopes,
+            categoryDefinitions,
+            messageTypes: existing.messageTypes,
+          })
+        : // The API rejects a category scope it has no recommendation for;
+          // fall back to the legacy list, which it intersects with them.
+          { messageTypes: [...nextCfg.messageTypes] };
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -513,7 +533,7 @@ export function ConfigurePoliciesStep({
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
-    if (!categoryDefinitions) return;
+    if (!categoryDefinitions || customScopeCategories.has(cat)) return;
     let next: CategoryConfig | undefined;
     setConfigs((prev) => {
       const types = new Set(prev[cat].messageTypes);
@@ -537,6 +557,9 @@ export function ConfigurePoliciesStep({
     ? (CATEGORY_ICONS[activeCategory] ?? ShieldCheck)
     : ShieldCheck;
   const isShadowMcp = activeCategory === "shadow_mcp";
+  const activeScopeIsCustom = activeCategory
+    ? customScopeCategories.has(activeCategory)
+    : false;
   return (
     <StepContainer
       icon={
@@ -615,9 +638,11 @@ export function ConfigurePoliciesStep({
                       {meta.label}
                     </p>
                     <p className="text-muted-foreground mt-1 truncate text-xs">
-                      {cfg.enabled
-                        ? formatMessageTypes(cfg.messageTypes)
-                        : "Disabled"}
+                      {!cfg.enabled
+                        ? "Disabled"
+                        : customScopeCategories.has(cat)
+                          ? "Custom scope"
+                          : formatMessageTypes(cfg.messageTypes)}
                     </p>
                   </div>
                   <ActionPill action={cfg.enabled ? cfg.action : "off"} />
@@ -754,42 +779,58 @@ export function ConfigurePoliciesStep({
                   <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
                     Apply to
                   </p>
-                  <div className="space-y-2">
-                    {MESSAGE_TYPES.map((t) => {
-                      const meta = POLICY_MESSAGE_TYPE_META[t];
-                      const checked = activeConfig.messageTypes.has(t);
-                      const id = `msg-${activeCategory}-${t}`;
-                      return (
-                        <label
-                          key={t}
-                          htmlFor={id}
-                          className={cn(
-                            "border-border bg-secondary/20 flex items-start gap-3 border p-3",
-                            !activeConfig.enabled && "opacity-50",
-                          )}
-                        >
-                          <Checkbox
-                            id={id}
-                            checked={checked}
-                            disabled={
-                              !activeConfig.enabled || !categoryDefinitions
-                            }
-                            onCheckedChange={() =>
-                              toggleMessageType(activeCategory, t)
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <Label htmlFor={id} className="cursor-pointer">
-                              {meta.label}
-                            </Label>
-                            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                              {meta.description}
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  {activeScopeIsCustom ? (
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      This category runs on a custom scope that these checkboxes
+                      cannot describe. Review or change it in the{" "}
+                      <RouterLink
+                        to={policyCenterHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                      >
+                        Policy Center
+                      </RouterLink>
+                      .
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {MESSAGE_TYPES.map((t) => {
+                        const meta = POLICY_MESSAGE_TYPE_META[t];
+                        const checked = activeConfig.messageTypes.has(t);
+                        const id = `msg-${activeCategory}-${t}`;
+                        return (
+                          <label
+                            key={t}
+                            htmlFor={id}
+                            className={cn(
+                              "border-border bg-secondary/20 flex items-start gap-3 border p-3",
+                              !activeConfig.enabled && "opacity-50",
+                            )}
+                          >
+                            <Checkbox
+                              id={id}
+                              checked={checked}
+                              disabled={
+                                !activeConfig.enabled || !categoryDefinitions
+                              }
+                              onCheckedChange={() =>
+                                toggleMessageType(activeCategory, t)
+                              }
+                            />
+                            <div className="min-w-0 flex-1">
+                              <Label htmlFor={id} className="cursor-pointer">
+                                {meta.label}
+                              </Label>
+                              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                                {meta.description}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </section>
               </div>
 

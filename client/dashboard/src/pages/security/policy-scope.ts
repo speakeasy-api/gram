@@ -29,6 +29,9 @@ export type EffectivePolicyScope = {
   kinds: Set<PolicyMessageType>;
   additionalKinds: Set<AdditionalPolicyMessageType>;
   custom: boolean;
+  /** Every category the policy detects is session-scoped: it inspects the
+   *  session, not individual messages, so message scoping does not apply. */
+  sessionScopedOnly: boolean;
 };
 
 type EffectivePolicyScopeInput = Scope & {
@@ -65,11 +68,15 @@ export function replaceCategoryDetectionScope(
   ];
 }
 
-export function kindScopeForMessageTypes(types: PolicyMessageType[]): Scope {
-  if (types.length > 0) return { scopeInclude: encodeKindScope(types) };
+/** Scope predicate that matches no message at all. `kind in []` compiles on
+ *  the server (celenv) and decodes back to an empty kind list, so an empty
+ *  selection round-trips instead of needing an exempt-everything companion. */
+const NO_KINDS_SCOPE = "kind in []";
 
-  const allKinds = encodeKindScope(ALL_POLICY_MESSAGE_TYPES);
-  return { scopeInclude: allKinds, scopeExempt: allKinds };
+export function kindScopeForMessageTypes(types: PolicyMessageType[]): Scope {
+  return {
+    scopeInclude: types.length > 0 ? encodeKindScope(types) : NO_KINDS_SCOPE,
+  };
 }
 
 function isEffectivePolicyMessageType(
@@ -97,7 +104,7 @@ function decodeKindMembership(
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  if (!Array.isArray(parsed)) return null;
 
   const kinds = [...new Set(parsed)];
   return kinds.every(
@@ -186,7 +193,9 @@ export function effectiveScopeKinds({ scopeInclude, scopeExempt }: Scope): {
     }
   }
 
-  return { kinds, custom };
+  // Both predicates can only ever narrow, so an undecodable one tells us
+  // nothing once the scope is already empty.
+  return { kinds, custom: custom && kinds.size > 0 };
 }
 
 /** The recommended scope for a category, or undefined when the category has no
@@ -201,6 +210,21 @@ export function categoryRecommendationScope(
   return scopeInclude || scopeExempt
     ? { scopeInclude, scopeExempt }
     : undefined;
+}
+
+/** The API rejects a detection scope for a category its recommendation
+ *  registry does not carry: session-scoped categories reject message scoping
+ *  outright, and `custom` is deliberately absent — custom rules scope
+ *  themselves through their detection CEL. Writing either fails the whole
+ *  update, so never put one on the wire. */
+export function acceptsDetectionScope(
+  definition: CategoryScopeRecommendation | undefined,
+): boolean {
+  return (
+    definition !== undefined &&
+    definition.recommendedScopeApplicable &&
+    definition.key !== "custom"
+  );
 }
 
 function definitionsByKey(
@@ -224,10 +248,16 @@ export function effectivePolicyScopeKinds({
   const kinds = new Set<PolicyMessageType>();
   let promptAttachmentInCategoryScope = false;
   let custom = false;
+  let categoryCount = 0;
+  let sessionScopedCount = 0;
 
   for (const category of categories) {
+    categoryCount++;
     const definition = definitions.get(category);
-    if (definition?.recommendedScopeApplicable === false) continue;
+    if (definition?.recommendedScopeApplicable === false) {
+      sessionScopedCount++;
+      continue;
+    }
 
     const scope =
       scopesByCategory.get(category) ??
@@ -270,24 +300,44 @@ export function effectivePolicyScopeKinds({
     additionalKinds.add("prompt_attachment");
   }
 
-  return { kinds, additionalKinds, custom };
+  return {
+    kinds,
+    additionalKinds,
+    // An undecodable predicate can only narrow, so it says nothing once the
+    // scope is already empty.
+    custom: custom && (kinds.size > 0 || additionalKinds.size > 0),
+    sessionScopedOnly:
+      categoryCount > 0 && sessionScopedCount === categoryCount,
+  };
 }
 
 /** Rewrite `source` so it covers exactly `kinds`, keeping whatever the kind
  *  list cannot express: a custom include is intersected, a custom exemption is
  *  carried forward. Decodable predicates are dropped — the kind list already
- *  says everything they said, so keeping them would fight the user's pick. */
+ *  says everything they said, so keeping them would fight the user's pick.
+ *
+ *  An empty pick scopes to no kind at all rather than clearing the scope, so
+ *  disabling every message type and re-enabling one restores the custom
+ *  predicates instead of silently discarding them. */
+/** The part of an include predicate a kind list cannot express, or undefined
+ *  when the whole thing is one. Unwraps the `(custom) && kind in [...]` form
+ *  this function writes, so re-narrowing replaces the old kind list instead of
+ *  stacking a second one on top of it. */
+function customIncludePart(include: string | undefined): string | undefined {
+  if (!include || decodeEffectiveKindScope(include)) return undefined;
+
+  const composed = /^\((.*)\) && (kind (?:in|==) .*)$/s.exec(include.trim());
+  return composed && decodeEffectiveKindScope(composed[2]!)
+    ? composed[1]
+    : include;
+}
+
 export function narrowScopeToKinds(
   source: Scope | undefined,
   kinds: PolicyMessageType[],
 ): Scope {
-  if (kinds.length === 0) return kindScopeForMessageTypes([]);
-
-  const include = encodeKindScope(kinds);
-  const customInclude =
-    source?.scopeInclude && !decodeEffectiveKindScope(source.scopeInclude)
-      ? source.scopeInclude
-      : undefined;
+  const include = kinds.length > 0 ? encodeKindScope(kinds) : NO_KINDS_SCOPE;
+  const customInclude = customIncludePart(source?.scopeInclude);
   const customExempt =
     source?.scopeExempt && !decodeEffectiveKindScope(source.scopeExempt)
       ? source.scopeExempt
@@ -299,14 +349,15 @@ export function narrowScopeToKinds(
   };
 }
 
-/** Next `detection_scopes` for a policy whose `category` scope is being set to
- *  `kinds`.
+/** The scope half of an update for a policy whose `category` scope is being set
+ *  to `kinds`: the next `detection_scopes` and the next legacy `message_types`.
  *
- *  Writing a category scope clears the policy's legacy `message_types` (an
- *  empty list means "all types" on the wire), so any narrowing that list
- *  carried is first pinned onto the policy's other categories — otherwise they
- *  silently widen. */
-export function detectionScopesForCategoryEdit({
+ *  Writing a category scope wants the legacy `message_types` list gone (an
+ *  empty list means "all types" on the wire), so whatever narrowing it carried
+ *  is first pinned onto the policy's other categories. A category the API
+ *  refuses a scope for cannot be pinned, so the legacy list survives there,
+ *  widened only by the kinds the user just added. */
+export function policyScopeUpdateForCategoryEdit({
   category,
   kinds,
   policyCategories,
@@ -320,7 +371,7 @@ export function detectionScopesForCategoryEdit({
   detectionScopes?: CategoryScope[];
   categoryDefinitions?: CategoryScopeRecommendation[];
   messageTypes?: string[];
-}): CategoryScope[] {
+}): { detectionScopes: CategoryScope[]; messageTypes: string[] } {
   const definitions = definitionsByKey(categoryDefinitions);
   const scopesByCategory = new Map(
     (detectionScopes ?? []).map((scope) => [scope.category, scope]),
@@ -329,15 +380,23 @@ export function detectionScopesForCategoryEdit({
     scopesByCategory.get(cat) ??
     categoryRecommendationScope(definitions.get(cat));
 
-  let next = detectionScopes ?? [];
+  const siblings = [...policyCategories].filter((cat) => cat !== category);
+  // Session-scoped categories ignore message scoping entirely, so the legacy
+  // list was never narrowing them and they need no pin.
+  const unpinnable = siblings.filter(
+    (cat) =>
+      !acceptsDetectionScope(definitions.get(cat)) &&
+      definitions.get(cat)?.recommendedScopeApplicable !== false,
+  );
 
   const legacyKinds = new Set((messageTypes ?? []).filter(isPolicyMessageType));
   const legacyNarrows =
     legacyKinds.size > 0 && legacyKinds.size < ALL_POLICY_MESSAGE_TYPES.length;
+
+  let next = detectionScopes ?? [];
   if (legacyNarrows) {
-    for (const cat of policyCategories) {
-      if (cat === category) continue;
-      if (definitions.get(cat)?.recommendedScopeApplicable === false) continue;
+    for (const cat of siblings) {
+      if (!acceptsDetectionScope(definitions.get(cat))) continue;
 
       const source = scopeFor(cat);
       const effective = effectiveScopeKinds(source ?? {});
@@ -351,10 +410,18 @@ export function detectionScopesForCategoryEdit({
     }
   }
 
-  return replaceCategoryDetectionScope(next, {
+  next = replaceCategoryDetectionScope(next, {
     category,
     ...narrowScopeToKinds(scopeFor(category), kinds),
   });
+
+  return {
+    detectionScopes: next,
+    messageTypes:
+      legacyNarrows && unpinnable.length > 0
+        ? [...new Set([...(messageTypes ?? []), ...kinds])]
+        : [],
+  };
 }
 
 const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
@@ -397,7 +464,17 @@ export function describePolicyScope({
   kinds,
   additionalKinds,
   custom,
+  sessionScopedOnly,
 }: EffectivePolicyScope): { summary: string; tooltip: string } {
+  // Matches the per-category badge in the policy editor: these detectors read
+  // session state, so "no message types" is not the same as "nothing".
+  if (sessionScopedOnly) {
+    return {
+      summary: "Session-scoped",
+      tooltip: "Detected per session, not per message",
+    };
+  }
+
   const types = ALL_POLICY_MESSAGE_TYPES.filter((type) => kinds.has(type));
   const labels = [
     ...types.map((type) => POLICY_MESSAGE_TYPE_META[type].label),
