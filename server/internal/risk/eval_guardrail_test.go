@@ -193,7 +193,6 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 		ChatID: chatID.String(),
 		Prompt: "Flag destructive production changes.",
 		ModelConfig: &types.RiskPolicyModelConfig{
-			Model:       nil,
 			Temperature: nil,
 			FailOpen:    &failOpen,
 		},
