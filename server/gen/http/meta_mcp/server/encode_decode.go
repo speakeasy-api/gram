@@ -2097,6 +2097,7 @@ func marshalTypesMetaMcpServerToMetaMcpServerResponseBody(v *types.MetaMcpServer
 		Name:                v.Name,
 		UserSessionIssuerID: v.UserSessionIssuerID,
 		Visibility:          string(v.Visibility),
+		NetworkAccessMode:   string(v.NetworkAccessMode),
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
 		MemberCount:         v.MemberCount,

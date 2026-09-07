@@ -7,6 +7,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export const CreateMetaMcpServerFormNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export type CreateMetaMcpServerFormNetworkAccessMode = ClosedEnum<
+  typeof CreateMetaMcpServerFormNetworkAccessMode
+>;
+
+/**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
  */
 export const CreateMetaMcpServerFormVisibility = {
@@ -29,6 +44,10 @@ export type CreateMetaMcpServerForm = {
    */
   name: string;
   /**
+   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   */
+  networkAccessMode?: CreateMetaMcpServerFormNetworkAccessMode | undefined;
+  /**
    * The ID of the user session issuer used to authenticate callers. Omit for no issuer.
    */
   userSessionIssuerId?: string | undefined;
@@ -39,6 +58,12 @@ export type CreateMetaMcpServerForm = {
 };
 
 /** @internal */
+export const CreateMetaMcpServerFormNetworkAccessMode$outboundSchema:
+  z.ZodMiniEnum<typeof CreateMetaMcpServerFormNetworkAccessMode> = z.enum(
+    CreateMetaMcpServerFormNetworkAccessMode,
+  );
+
+/** @internal */
 export const CreateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
   typeof CreateMetaMcpServerFormVisibility
 > = z.enum(CreateMetaMcpServerFormVisibility);
@@ -46,6 +71,7 @@ export const CreateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type CreateMetaMcpServerForm$Outbound = {
   name: string;
+  network_access_mode?: string | undefined;
   user_session_issuer_id?: string | undefined;
   visibility?: string | undefined;
 };
@@ -57,11 +83,15 @@ export const CreateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     name: z.string(),
+    networkAccessMode: z.optional(
+      CreateMetaMcpServerFormNetworkAccessMode$outboundSchema,
+    ),
     userSessionIssuerId: z.optional(z.string()),
     visibility: z.optional(CreateMetaMcpServerFormVisibility$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      networkAccessMode: "network_access_mode",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -341,6 +342,10 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerOnlyToolsetBackendO
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 
 	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.NoError(t, err)
@@ -377,6 +382,10 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 
 	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
@@ -496,6 +505,10 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 
 	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
