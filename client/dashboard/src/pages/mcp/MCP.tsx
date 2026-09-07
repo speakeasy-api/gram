@@ -9,18 +9,10 @@ import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
-import {
-  indexMcpActivity,
-  lookupMcpActivity,
-  mcpActivityStatus,
-  type McpActivityTargetType,
-} from "@/components/mcp/mcp-activity";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -55,26 +47,6 @@ const BUILT_IN_SERVERS = [
     slug: "logs",
   },
 ];
-
-// A tunnelled mcp_servers row attributes its telemetry as "tunneled_mcp_server";
-// a remote-backed one attributes as "hosted_mcp_server" (same as hosted
-// toolsets). Deriving the type here lets the activity lookup disambiguate a
-// tunnelled server from a hosted toolset that happens to share its slug.
-// Unproxied servers have no matcher in this mechanism at all (the backend
-// correlates their usage separately, by canonical URL, via the dedicated
-// unproxied usage endpoints), so this returns undefined and callers skip the
-// lookup instead of misclassifying them as hosted.
-function mcpServerTargetType(server: {
-  tunneledMcpServerId?: string;
-  unproxiedMcpServerId?: string;
-}): McpActivityTargetType | undefined {
-  if (server.unproxiedMcpServerId) {
-    return undefined;
-  }
-  return server.tunneledMcpServerId
-    ? "tunneled_mcp_server"
-    : "hosted_mcp_server";
-}
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -126,7 +98,6 @@ function MCPOverview() {
     throwOnError: false,
   });
   const {
-    data: endpointsResult,
     isLoading: isLoadingEndpoints,
     isFetching: isFetchingEndpoints,
     isError: isEndpointsError,
@@ -156,53 +127,16 @@ function MCPOverview() {
     undefined,
     { throwOnError: false },
   );
-  // Per-server tool-call activity powers the subtle "never used" / "no recent
-  // calls" markers. It's purely decorative: the backend 404s when observability
-  // is disabled for the org, so a failed or absent fetch simply hides the
-  // markers rather than degrading the listing.
-  const {
-    data: activityResult,
-    isError: isActivityError,
-    isFetching: isFetchingActivity,
-    refetch: refetchActivity,
-  } = useGetMcpServerActivity(
-    { gramProject, getMcpServerActivityPayload: {} },
-    undefined,
-    { throwOnError: false },
-  );
-  const activityByTarget = useMemo(
-    () => indexMcpActivity(activityResult?.activity),
-    [activityResult],
-  );
-  const recentWindowDays = activityResult?.recentWindowDays ?? 14;
-  // Resolve a card's activity marker. Returns undefined (hide the marker) when
-  // the activity fetch hasn't resolved or errored (react-query keeps the last
-  // good `data` on error, so we must also gate on isError to avoid showing stale
-  // markers after observability is disabled), or when the server has no
-  // matchable identifier. We only flag a server once we can confirm its state.
-  const activityStatusFor = (
-    targetType: McpActivityTargetType | undefined,
-    targetId: string | undefined,
-  ) => {
-    if (isActivityError || !activityResult || !targetId || !targetType) {
-      return undefined;
-    }
-    return mcpActivityStatus(
-      lookupMcpActivity(activityByTarget, targetType, targetId),
-    );
-  };
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchEndpoints();
     void refetchPlugins();
-    void refetchActivity();
     if (gatewaysEnabled) void refetchGateways();
   };
   const isRefreshing =
     isFetchingMcpServers ||
     isFetchingEndpoints ||
-    isFetchingActivity ||
     isFetchingGateways ||
     toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
@@ -220,32 +154,6 @@ function MCPOverview() {
     () => gatewaysResult?.metaMcpServers ?? [],
     [gatewaysResult],
   );
-  const endpointCountByServerId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
-      // Meta-MCP-backed endpoints have no generic server to count against.
-      if (!endpoint.mcpServerId) continue;
-      counts.set(
-        endpoint.mcpServerId,
-        (counts.get(endpoint.mcpServerId) ?? 0) + 1,
-      );
-    }
-    return counts;
-  }, [endpointsResult]);
-  // Platform address per gateway, reusing the endpoints this page already
-  // loads. Custom-domain endpoints are skipped: their host isn't known here.
-  const gatewayUrlById = useMemo(() => {
-    const urls = new Map<string, string>();
-    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
-      if (!endpoint.metaMcpServerId || endpoint.customDomainId) continue;
-      if (urls.has(endpoint.metaMcpServerId)) continue;
-      urls.set(
-        endpoint.metaMcpServerId,
-        `${getServerURL()}/mcp/${endpoint.slug}`,
-      );
-    }
-    return urls;
-  }, [endpointsResult]);
 
   const isLoading =
     toolsets.isLoading ||
@@ -446,39 +354,13 @@ function MCPOverview() {
             ) : (
               <>
                 {filteredGateways.map((gateway) => (
-                  <GatewayCard
-                    key={gateway.id}
-                    gateway={gateway}
-                    url={gatewayUrlById.get(gateway.id)}
-                    activityStatus={activityStatusFor(
-                      "meta_mcp_server",
-                      gateway.id,
-                    )}
-                    recentWindowDays={recentWindowDays}
-                  />
+                  <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
                 {filteredToolsets.map((toolset) => (
-                  <MCPCard
-                    key={toolset.id}
-                    toolset={toolset}
-                    activityStatus={activityStatusFor(
-                      "hosted_mcp_server",
-                      toolset.slug,
-                    )}
-                    recentWindowDays={recentWindowDays}
-                  />
+                  <MCPCard key={toolset.id} toolset={toolset} />
                 ))}
                 {filteredMcpServers.map((server) => (
-                  <MCPServerCard
-                    key={server.id}
-                    server={server}
-                    endpointCount={endpointCountByServerId.get(server.id) ?? 0}
-                    activityStatus={activityStatusFor(
-                      mcpServerTargetType(server),
-                      server.slug,
-                    )}
-                    recentWindowDays={recentWindowDays}
-                  />
+                  <MCPServerCard key={server.id} server={server} />
                 ))}
               </>
             )}

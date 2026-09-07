@@ -36,6 +36,12 @@ function brandConfettiColors(): string[] {
   return colors;
 }
 
+// Every mounted card, so starting one can wipe the rest. Moving along a row
+// would otherwise leave a trail of cards still finishing their fall behind the
+// pointer — a pointer that has left is not a hover, and several at once reads
+// as stuck animation rather than a response to where you are now.
+const instances = new Set<{ clear: () => void }>();
+
 /**
  * Hover burst on the card's icon rail, fired through canvas-confetti so the
  * pieces get real physics — per-particle velocity, drift, gravity and tumble,
@@ -67,11 +73,32 @@ export function useIconConfetti(): {
     return fireRef.current;
   }, []);
 
+  // Identity for the registry above, stable for this card's lifetime.
+  const handleRef = useRef<{ clear: () => void } | null>(null);
+  if (!handleRef.current) {
+    handleRef.current = {
+      clear: () => {
+        if (fallTimerRef.current) {
+          clearInterval(fallTimerRef.current);
+          fallTimerRef.current = null;
+        }
+        // reset() cancels the animation but leaves the last frame painted, so
+        // the pieces would freeze mid-air instead of going away.
+        fireRef.current?.reset();
+        const canvas = canvasRef.current;
+        canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      },
+    };
+  }
+
   useEffect(() => {
+    const handle = handleRef.current;
+    if (handle) instances.add(handle);
     return () => {
       if (fallTimerRef.current) clearInterval(fallTimerRef.current);
       fireRef.current?.reset();
       fireRef.current = null;
+      if (handle) instances.delete(handle);
     };
   }, []);
 
@@ -80,11 +107,17 @@ export function useIconConfetti(): {
       clearInterval(fallTimerRef.current);
       fallTimerRef.current = null;
     }
+    // The pieces already in the air finish their fall: this card is simply no
+    // longer producing new ones.
   }, []);
 
   const start = useCallback(() => {
     const fire = getFire();
     if (!fire) return;
+
+    for (const other of instances) {
+      if (other !== handleRef.current) other.clear();
+    }
 
     // The opening burst.
     void fire({
