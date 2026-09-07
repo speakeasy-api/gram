@@ -67,8 +67,8 @@ func tokenRevokedAt(t *testing.T, ctx context.Context, inst *devidptest.Instance
 
 	var rows, revokedCount int
 	err := inst.DB.QueryRowContext(ctx,
-		"SELECT COUNT(*), COUNT(revoked_at) FROM tokens WHERE token = ? AND mode = ?",
-		token, devidptest.OAuth21Mode,
+		"SELECT COUNT(*), COUNT(revoked_at) FROM tokens WHERE token = ?",
+		token,
 	).Scan(&rows, &revokedCount)
 	require.NoError(t, err, "read token row from dev-idp")
 
@@ -98,7 +98,6 @@ func seedDevIdpRefreshToken(t *testing.T, ctx context.Context, inst *devidptest.
 
 	devidptest.CreateRefreshToken(t, ctx, inst.Repo, devidptest.RefreshTokenOpts{
 		Token:     token,
-		Mode:      devidptest.OAuth21Mode,
 		UserID:    inst.DefaultUser.ID,
 		ClientID:  devidptest.DefaultClientID,
 		Scope:     "openid",
@@ -114,7 +113,7 @@ func TestRevokeRemoteSession_E2E_DevIdpDropsRefreshToken(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: false, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 
 	// The Gram-side fixture derives its refresh-token string from the slug, so
 	// the dev-idp row has to use the same value to be the same credential.
@@ -141,7 +140,7 @@ func TestRevokeRemoteSession_E2E_DevIdpDropsAccessTokenForPublicClient(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: false, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 
 	slug := "e2e-devidp-access"
 	accessToken := slug + "-access"
@@ -167,7 +166,7 @@ func TestRevokeRemoteSession_E2E_DevIdpUnknownTokenStillRevokesLocally(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: false, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 
 	// Deliberately seed nothing into dev-idp: the session wraps a credential
 	// the AS has no record of.

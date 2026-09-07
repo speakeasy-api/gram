@@ -17,7 +17,8 @@ export const BACKEND_LABELS: Record<Backend, string> = {
 };
 
 export const BACKEND_SUBTITLES: Record<Backend, string> = {
-  local: "Fully offline. dev-idp emulates the WorkOS API against its own database.",
+  local:
+    "Fully offline. dev-idp emulates the WorkOS API against its own database.",
   workos: "Passes REST calls through to your real WorkOS environment.",
 };
 

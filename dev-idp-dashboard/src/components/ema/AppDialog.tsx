@@ -87,7 +87,11 @@ export function AppDialog({
       );
     } else {
       create.mutate(
-        { client_id: submittedClientID, name: name || undefined, ...credentials },
+        {
+          client_id: submittedClientID,
+          name: name || undefined,
+          ...credentials,
+        },
         { onSuccess: onClose },
       );
     }
@@ -223,8 +227,8 @@ function CIMDPane({ clientID }: { clientID: string }) {
       </p>
       <p>
         Rotation is the client republishing its document; this dev-idp re-reads
-        it within a minute. A document that publishes no keys describes a
-        public client, and the mint leg treats it as one.
+        it within a minute. A document that publishes no keys describes a public
+        client, and the mint leg treats it as one.
       </p>
     </div>
   );

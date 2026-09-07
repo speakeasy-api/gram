@@ -21,8 +21,7 @@ const DefaultClientID = "test-client"
 
 const defaultRefreshTTL = 30 * 24 * time.Hour
 
-// RefreshTokenOpts configures CreateRefreshToken. Token, Mode, and UserID
-// are required.
+// RefreshTokenOpts configures CreateRefreshToken. Token and UserID are required.
 type RefreshTokenOpts struct {
 	// Token is the opaque refresh-token string to insert. Whoever later
 	// presents this to /oauth2-1/token with grant_type=refresh_token will
