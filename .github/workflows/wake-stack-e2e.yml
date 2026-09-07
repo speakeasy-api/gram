@@ -100,6 +100,15 @@ jobs:
           CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
           TOML
 
+      # `mise run seed`, the last step of the boot, builds its local fixtures
+      # around whoever `git config user.email` says you are, and a runner is
+      # nobody. Any identity will do -- the suite logs in through dev-idp,
+      # which provisions on the spot.
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "wake-stack-e2e@example.com"
+          git config user.name "Wake Stack E2E"
+
       # The same command a developer or a cloud agent runs on a fresh checkout:
       # tools, deps, keys, TLS, infra, migrations, seed, then every daemon. The
       # suite needs a stack that has genuinely been through this, because what
