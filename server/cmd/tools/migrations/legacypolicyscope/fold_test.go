@@ -257,3 +257,42 @@ func TestFoldRejectsUnknownMessageType(t *testing.T) {
 
 	require.ErrorContains(t, err, "unsupported message type")
 }
+
+func TestFoldTreatsWhitespaceOnlyLegacyScopeAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	existing := []ra.DetectionScopeConfig{{Category: "secrets", ScopeInclude: `kind == "user_message"`, ScopeExempt: ""}}
+	got, err := legacypolicyscope.Fold(legacypolicyscope.Policy{
+		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
+		CustomRuleIDs: nil, MessageTypes: []string{"  "}, ScopeInclude: "   ", ScopeExempt: "\n\t",
+		DetectionScopes: existing,
+	})
+
+	require.NoError(t, err)
+	// Composing blank CEL would emit "(   ) && (...)", which the engine rejects
+	// and which would abort the run over a row that narrows nothing.
+	require.Equal(t, legacypolicyscope.DispositionNoop, got.Disposition)
+	require.Equal(t, existing, got.DetectionScopes)
+}
+
+func TestFoldTrimsPaddingAroundLegacyScope(t *testing.T) {
+	t.Parallel()
+
+	got, err := legacypolicyscope.Fold(legacypolicyscope.Policy{
+		Action: "block", PolicyType: "standard", Sources: []string{"gitleaks"},
+		CustomRuleIDs: nil, MessageTypes: nil,
+		ScopeInclude: "  " + `kind == "user_message"` + "  ", ScopeExempt: "  ",
+		DetectionScopes: nil,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, legacypolicyscope.DispositionPreserved, got.Disposition)
+	secrets := scopeFor(t, got.DetectionScopes, "secrets")
+	require.Equal(t, `kind == "user_message"`, secrets.ScopeInclude, "the padding is gone and the recommendation adds no include")
+	require.Equal(t, assistantExempt, secrets.ScopeExempt)
+
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	_, err = ra.CompileScope(eng, secrets.ScopeInclude, secrets.ScopeExempt)
+	require.NoError(t, err)
+}

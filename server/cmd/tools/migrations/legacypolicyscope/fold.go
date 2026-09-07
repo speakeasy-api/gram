@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -73,8 +74,25 @@ func (p Policy) hasLegacyScope() bool {
 	return len(p.MessageTypes) > 0 || p.ScopeInclude != "" || p.ScopeExempt != ""
 }
 
+// normalize trims the legacy CEL columns. A whitespace-only column narrows
+// nothing, but composing it produces an expression the engine rejects, which
+// would abort the whole run on a row that had nothing to fold.
+func (p Policy) normalize() Policy {
+	p.ScopeInclude = strings.TrimSpace(p.ScopeInclude)
+	p.ScopeExempt = strings.TrimSpace(p.ScopeExempt)
+	types := make([]string, 0, len(p.MessageTypes))
+	for _, t := range p.MessageTypes {
+		if trimmed := strings.TrimSpace(t); trimmed != "" {
+			types = append(types, trimmed)
+		}
+	}
+	p.MessageTypes = types
+	return p
+}
+
 // Fold computes the detection scopes that replace p's legacy policy scope.
 func Fold(p Policy) (Result, error) {
+	p = p.normalize()
 	if !p.hasLegacyScope() {
 		return Result{Disposition: DispositionNoop, DetectionScopes: p.DetectionScopes}, nil
 	}
@@ -207,6 +225,7 @@ func policyCategories(p Policy) []categories.Category {
 // intersectExprs ANDs two include predicates; an empty predicate admits
 // everything and so drops out of the conjunction.
 func intersectExprs(a, b string) string {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
 	switch {
 	case a == "":
 		return b
@@ -219,6 +238,7 @@ func intersectExprs(a, b string) string {
 
 // unionExprs ORs two exempt predicates; either one takes the message out.
 func unionExprs(a, b string) string {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
 	switch {
 	case a == "":
 		return b

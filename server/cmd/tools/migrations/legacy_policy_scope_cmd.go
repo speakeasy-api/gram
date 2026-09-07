@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -42,8 +43,6 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	environment := fs.String("environment", "", "explicit target environment")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for every write")
 	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")
-	confirmScopesEnforced := fs.Bool("confirm-recommended-scopes-enabled", false,
-		"assert risk-recommended-scopes is enabled for every project in this environment")
 	batchSize := fs.Int("batch-size", 100, "keyset batch size")
 	lockTimeout := fs.Duration("lock-timeout", 2*time.Second, "per-transaction lock timeout")
 	statementTimeout := fs.Duration("statement-timeout", 30*time.Second, "per-transaction statement timeout")
@@ -59,23 +58,26 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	if strings.TrimSpace(*environment) == "" {
 		return legacyPolicyScopeConfig{}, errors.New("environment is required")
 	}
+	target, known := canonicalEnvironment(*environment)
+	if !known {
+		return legacyPolicyScopeConfig{}, errors.New("unrecognized -environment (want local, dev, staging, or prod)")
+	}
 	if *batchSize <= 0 || *lockTimeout <= 0 || *statementTimeout <= 0 {
 		return legacyPolicyScopeConfig{}, errors.New("batch size and timeouts must be positive")
 	}
 	if *apply && *confirmEnvironment != *environment {
 		return legacyPolicyScopeConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
-	if *apply && *environment == "production" && *confirmProduction != "production" {
+	// The confirmation is keyed off the canonical name, not the literal one:
+	// GRAM_ENVIRONMENT spells production "prod", so an exact match on
+	// "production" would wave a real production run straight through.
+	if *apply && target == environmentProduction && *confirmProduction != environmentProduction {
 		return legacyPolicyScopeConfig{}, errors.New("production writes require -confirm-production=production")
 	}
-	// Both scanners ignore per-category detection scopes entirely while
-	// risk-recommended-scopes is off (risk_analysis.CategoryScope.InScope and
-	// CategoryScopes.Masks both short-circuit on it). Folding an enforcing
-	// policy into scopes nothing reads would drop its narrowing outright, so
-	// applying requires the operator to assert the flag is on.
-	if *apply && !*confirmScopesEnforced {
+	dbURL := getenv("GRAM_DATABASE_URL")
+	if *apply && target != environmentProduction && looksLikeProductionDSN(dbURL) {
 		return legacyPolicyScopeConfig{}, errors.New(
-			"writes require -confirm-recommended-scopes-enabled: folded scopes are not enforced while risk-recommended-scopes is off")
+			"refusing to write: $GRAM_DATABASE_URL points at a production host but -environment does not name production")
 	}
 
 	mode := legacypolicyscope.ModeDryRun
@@ -86,13 +88,52 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 		mode = legacypolicyscope.ModeValidate
 	}
 	cfg := legacyPolicyScopeConfig{
-		dbURL: getenv("GRAM_DATABASE_URL"), environment: *environment, mode: mode,
+		dbURL: dbURL, environment: target, mode: mode,
 		batchSize: *batchSize, lockTimeout: *lockTimeout, statementTimeout: *statementTimeout,
 	}
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing $GRAM_DATABASE_URL")
 	}
 	return cfg, nil
+}
+
+// environmentProduction is the canonical name every production alias maps to.
+const environmentProduction = "production"
+
+// canonicalEnvironment folds the operator-supplied target name to its
+// canonical form and reports whether it is one this tool recognizes. An
+// unrecognized name is rejected rather than assumed non-production.
+func canonicalEnvironment(name string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "local":
+		return "local", true
+	case "dev", "development":
+		return "dev", true
+	case "staging", "stage":
+		return "staging", true
+	case "prod", environmentProduction:
+		return environmentProduction, true
+	default:
+		return "", false
+	}
+}
+
+// looksLikeProductionDSN reports whether the connection target names a
+// production host, so a run declaring a lesser environment cannot quietly
+// write to production. It inspects the host only: a password or database name
+// containing "prod" says nothing about where the connection lands.
+func looksLikeProductionDSN(dsn string) bool {
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, label := range strings.FieldsFunc(host, func(r rune) bool { return r == '.' || r == '-' }) {
+		if label == "prod" || label == environmentProduction {
+			return true
+		}
+	}
+	return false
 }
 
 func runLegacyPolicyScope(args []string, stdout io.Writer, getenv func(string) string) int {
@@ -119,6 +160,8 @@ func runLegacyPolicyScope(args []string, stdout io.Writer, getenv func(string) s
 		BatchSize:        cfg.batchSize,
 		LockTimeout:      cfg.lockTimeout,
 		StatementTimeout: cfg.statementTimeout,
+		ApplyAttempts:    0,
+		RetryDelay:       0,
 	})
 	if err != nil {
 		log.Printf("build legacy-policy-scope runner: %v", err)

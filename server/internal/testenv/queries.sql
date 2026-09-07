@@ -806,6 +806,21 @@ INSERT INTO risk_policies (
 )
 RETURNING id;
 
+-- name: SetRiskPolicyAnalyzerConfigFixture :exec
+-- Test-only fixture: seeds analyzer_config on a risk policy, for exercising
+-- how the legacy-policy-scope fold rewrites it.
+UPDATE risk_policies
+SET analyzer_config = @analyzer_config::jsonb
+WHERE id = @id;
+
+-- name: LockRiskPolicyFixture :one
+-- Test-only fixture: takes a row lock on a risk policy so a test can hold it
+-- while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
+SELECT id
+FROM risk_policies
+WHERE id = @id
+FOR UPDATE;
+
 -- name: ReadRiskPolicyScopeFixture :one
 -- Test-only fixture: reads back the columns the legacy-policy-scope fold
 -- rewrites, so a test can assert on the folded row.

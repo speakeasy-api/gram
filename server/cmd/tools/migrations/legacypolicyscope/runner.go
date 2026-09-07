@@ -28,10 +28,30 @@ const (
 // ErrValidationFailed reports rows that still carry a legacy scope after apply.
 var ErrValidationFailed = errors.New("legacy policy scopes remain after fold")
 
+// ErrIncompleteApply reports an apply that finished with candidates left. The
+// batch query takes rows FOR UPDATE SKIP LOCKED, so a row another session holds
+// is passed over silently; reporting success would let the follow-up contract
+// migration run against a half-folded table.
+var ErrIncompleteApply = errors.New("legacy policy scopes remain after apply")
+
+// defaultApplyAttempts is how many times apply re-walks the candidate set
+// before giving up on rows that stayed locked.
+const defaultApplyAttempts = 3
+
+// defaultRetryDelay lets a competing writer's transaction finish before the
+// next attempt re-reads the rows it skipped.
+const defaultRetryDelay = 2 * time.Second
+
 type Options struct {
 	BatchSize        int
 	LockTimeout      time.Duration
 	StatementTimeout time.Duration
+	// ApplyAttempts bounds the retries an apply makes for rows SKIP LOCKED
+	// passed over. Zero means defaultApplyAttempts.
+	ApplyAttempts int
+	// RetryDelay is the pause between those attempts. Zero means
+	// defaultRetryDelay; negative means no pause at all.
+	RetryDelay time.Duration
 }
 
 // Summary is the per-run report, emitted as JSON by the command.
@@ -43,6 +63,7 @@ type Summary struct {
 	Noop      int64            `json:"noop"`
 	Updated   int64            `json:"updated"`
 	Batches   int64            `json:"batches"`
+	Attempts  int64            `json:"attempts"`
 	ByAction  map[string]int64 `json:"by_action"`
 	Remaining int64            `json:"remaining"`
 	Elapsed   time.Duration    `json:"-"`
@@ -63,17 +84,27 @@ func NewRunner(pool *pgxpool.Pool, logger *slog.Logger, options Options) (*Runne
 	if options.BatchSize <= 0 {
 		options.BatchSize = 100
 	}
+	if options.ApplyAttempts <= 0 {
+		options.ApplyAttempts = defaultApplyAttempts
+	}
+	if options.RetryDelay == 0 {
+		options.RetryDelay = defaultRetryDelay
+	}
 	return &Runner{pool: pool, logger: logger, engine: engine, options: options}, nil
 }
 
 // Run folds every policy carrying a legacy scope. Batches are keyset-paginated
 // and each batch commits on its own, so an interrupted run resumes by rerunning:
 // a folded row no longer matches the candidate predicate.
+//
+// Apply re-walks the candidate set while rows remain, because SKIP LOCKED
+// passes over rows another session holds, and fails if any survive the last
+// attempt.
 func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 	start := time.Now()
 	summary := Summary{
 		Mode: mode, Scanned: 0, Preserved: 0, Cleared: 0, Noop: 0, Updated: 0,
-		Batches: 0, ByAction: map[string]int64{}, Remaining: 0, Elapsed: 0,
+		Batches: 0, Attempts: 0, ByAction: map[string]int64{}, Remaining: 0, Elapsed: 0,
 	}
 
 	if mode == ModeValidate {
@@ -89,31 +120,80 @@ func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 		return summary, nil
 	}
 
+	attempts := 1
+	if mode == ModeApply {
+		attempts = r.options.ApplyAttempts
+	}
+
+	var remaining int64
+	for attempt := 1; attempt <= attempts; attempt++ {
+		summary.Attempts = int64(attempt)
+		if err := r.runPass(ctx, mode, &summary); err != nil {
+			return summary, err
+		}
+
+		var err error
+		remaining, err = r.remaining(ctx)
+		if err != nil {
+			return summary, err
+		}
+		if remaining == 0 || mode != ModeApply || attempt == attempts {
+			break
+		}
+		r.logger.WarnContext(ctx, "legacy policy scopes remain after apply pass, retrying",
+			attr.SlogRiskPolicyScopeFoldRemaining(remaining),
+			attr.SlogRiskPolicyScopeFoldAttempt(int64(attempt)),
+		)
+		if err := sleep(ctx, r.options.RetryDelay); err != nil {
+			return summary, err
+		}
+	}
+
+	summary.Remaining = remaining
+	summary.Elapsed = time.Since(start)
+	if mode == ModeApply && remaining > 0 {
+		return summary, fmt.Errorf("%w: %d (rows held by another session were skipped)", ErrIncompleteApply, remaining)
+	}
+	return summary, nil
+}
+
+// runPass walks the whole candidate set once.
+func (r *Runner) runPass(ctx context.Context, mode Mode, summary *Summary) error {
 	// Dry-run walks past rows it does not write, so it needs a moving cursor;
 	// apply re-reads from zero each batch because folded rows drop out of the
 	// candidate set.
 	after := uuid.Nil
 	for {
-		batch, err := r.runBatch(ctx, mode, after, &summary)
+		batch, err := r.runBatch(ctx, mode, after, summary)
 		if err != nil {
-			return summary, err
+			return err
 		}
 		if batch == uuid.Nil {
-			break
+			return nil
 		}
 		summary.Batches++
 		if mode == ModeDryRun {
 			after = batch
 		}
 	}
+}
 
-	remaining, err := r.remaining(ctx)
-	if err != nil {
-		return summary, err
+// sleep waits for d, returning early if ctx is done.
+func sleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait before retry: %w", err)
+		}
+		return nil
 	}
-	summary.Remaining = remaining
-	summary.Elapsed = time.Since(start)
-	return summary, nil
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait before retry: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
 }
 
 // runBatch folds one locked batch inside a transaction and returns the last id
@@ -195,7 +275,7 @@ func (r *Runner) foldRow(ctx context.Context, q *Queries, mode Mode, row LockLeg
 		}
 	}
 
-	config, err := ra.WithDetectionScopes(row.AnalyzerConfig, result.DetectionScopes)
+	config, err := withDetectionScopes(row.AnalyzerConfig, result.DetectionScopes)
 	if err != nil {
 		return fmt.Errorf("encode analyzer config: %w", err)
 	}

@@ -45,22 +45,34 @@ An enforcing policy whose categories cannot be resolved aborts the run
 (`ErrNoCategories`) rather than being folded, because folding it would drop its
 narrowing and silently widen enforcement.
 
-## Prerequisite: risk-recommended-scopes must be on
+## Prerequisite: legacy scope writers must be quiesced
 
-Both scan paths ignore per-category detection scopes entirely while the
-`risk-recommended-scopes` feature flag is off, which is still the rollout
-default: `CategoryScope.InScope` returns true before consulting them, and
-`CategoryScopes.Masks` returns an empty category mask. Only the legacy
-policy-level scope is honoured in that state.
+Both scan paths honour per-category detection scopes unconditionally, so the
+folded scopes take effect the moment they are written. What the fold cannot
+survive is a writer that keeps filling the legacy columns underneath it.
 
-Applying the fold to a project whose flag is off therefore does the opposite of
-what the preserve path intends: it moves an enforcing policy's narrowing into
-scopes nothing reads, and the policy widens to every message surface. Apply
-refuses to run without `-confirm-recommended-scopes-enabled` for this reason.
+`CreateRiskPolicy` and `UpdateRiskPolicy` still accept and persist
+`message_types`, `scope_include`, and `scope_exempt`, and Platform MCP writes
+them too. A policy created or edited through either surface after the fold
+lands re-acquires a legacy scope, which intersects with the detection scope the
+fold just wrote: the policy silently narrows to the conjunction of the two, and
+`-validate` starts failing again.
 
-Roll the flag out first, or land a scanner change that honours policy-specified
-detection scopes independently of the flag (the flag gates the recommendation
-registry, not a user's explicit scope).
+Before applying in an environment, confirm no writer can still set those
+columns there — the API fields rejected or ignored, and any operator scripts or
+Platform MCP callers updated. Apply, then `-validate`; a nonzero `remaining` on
+a later validate means a writer is still live, not that the fold missed rows.
+
+## Prerequisite: pick the target deliberately
+
+`-environment` is matched against a known set (`local`, `dev`, `staging`,
+`prod`/`production`) rather than taken literally, so the production
+confirmation cannot be dodged by spelling production the way
+`GRAM_ENVIRONMENT` does. Applying also refuses when `$GRAM_DATABASE_URL` names
+a production host while `-environment` claims something lesser. That check
+reads the host only, so it does not catch a tunnel or port-forward to
+production from localhost — a forwarded production connection still needs
+`-environment=prod` and its confirmations.
 
 ## Safety properties
 
@@ -73,6 +85,17 @@ registry, not a user's explicit scope).
 - Batches are keyset-paginated and commit individually with a lock timeout and
   `FOR UPDATE SKIP LOCKED`, so a run never blocks writers for long and an
   interrupted run resumes by rerunning.
+- `SKIP LOCKED` passes over rows another session holds. Apply therefore
+  re-walks the candidate set (3 attempts, 2s apart) and **exits nonzero** if any
+  candidate survives the last one, rather than reporting a half-folded table as
+  done. `attempts` and `remaining` in the summary say what happened; rerun once
+  the competing transaction is gone.
+- Members of `analyzer_config` the tool does not model are copied through
+  untouched, so an option written by a newer server is not destroyed by a bulk
+  rewrite. A config that does not decode as a JSON object aborts the run.
+- Whitespace-only legacy columns are treated as absent: they narrow nothing,
+  and composing them would emit CEL the engine rejects. They are cleared, not
+  folded.
 - Apply is idempotent: a folded row no longer matches the candidate predicate.
 
 ## Running it
@@ -85,8 +108,7 @@ go run ./server/cmd/tools/migrations legacy-policy-scope -environment=dev
 
 # 2. Apply.
 go run ./server/cmd/tools/migrations legacy-policy-scope \
-  -environment=dev -apply -confirm-environment=dev \
-  -confirm-recommended-scopes-enabled
+  -environment=dev -apply -confirm-environment=dev
 
 # 3. Prove the population is empty.
 go run ./server/cmd/tools/migrations legacy-policy-scope -environment=dev -validate
@@ -96,9 +118,8 @@ Production writes need the extra confirmation flag:
 
 ```bash
 go run ./server/cmd/tools/migrations legacy-policy-scope \
-  -environment=production -apply \
-  -confirm-environment=production -confirm-production=production \
-  -confirm-recommended-scopes-enabled
+  -environment=prod -apply \
+  -confirm-environment=prod -confirm-production=production
 ```
 
 Flags: `-batch-size` (default 100), `-lock-timeout` (default 2s),
@@ -125,6 +146,7 @@ up with.
     "noop": 0,
     "updated": 37,
     "batches": 1,
+    "attempts": 1,
     "by_action": { "block": 6, "flag": 31 },
     "remaining": 0
   }
@@ -133,19 +155,39 @@ up with.
 
 ## Recovery
 
-The legacy columns are cleared, not dropped, but they are cleared in place and
-this tool does not retain the old values. Capture them before applying if you
-want a data-level rollback:
+Apply rewrites `analyzer_config` and `version` as well as clearing the legacy
+columns, all in place, and this tool retains none of the old values. A backup
+that captures only the legacy columns cannot restore the row, so take the full
+set before applying:
 
 ```sql
 CREATE TABLE risk_policies_legacy_scope_backup AS
-SELECT id, message_types, scope_include, scope_exempt, version
+SELECT id, message_types, scope_include, scope_exempt, analyzer_config, version, updated_at
 FROM risk_policies
 WHERE deleted IS FALSE
   AND ((message_types IS NOT NULL AND cardinality(message_types) > 0)
        OR coalesce(scope_include, '') <> ''
        OR coalesce(scope_exempt, '') <> '');
 ```
+
+Restoring from it puts every folded row back exactly as it was:
+
+```sql
+UPDATE risk_policies AS p
+SET message_types = b.message_types,
+    scope_include = b.scope_include,
+    scope_exempt = b.scope_exempt,
+    analyzer_config = b.analyzer_config,
+    version = b.version,
+    updated_at = clock_timestamp()
+FROM risk_policies_legacy_scope_backup AS b
+WHERE p.id = b.id;
+```
+
+Rolling back `version` re-points findings at the version they were recorded
+under, so a rollback after a `cleared` fold leaves those findings addressable
+again. Drop the backup table once the fold is validated in the environment: it
+holds policy scope expressions and should not outlive the migration.
 
 ## Follow-up
 

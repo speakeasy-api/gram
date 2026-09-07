@@ -2,6 +2,7 @@ package legacypolicyscope
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -212,4 +213,104 @@ func TestRunnerValidateFailsWhileLegacyScopesRemain(t *testing.T) {
 
 	_, err = runner.Run(ctx, ModeValidate)
 	require.NoError(t, err)
+}
+
+// TestRunnerApplyFailsWhenRowsStayLocked pins the SKIP LOCKED hazard: a row
+// another session holds is passed over silently, so an apply that reported
+// success would leave the table half folded for the follow-up column drop.
+func TestRunnerApplyFailsWhenRowsStayLocked(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := testInfra.CloneTestDatabase(t, "legacyscope_locked")
+	require.NoError(t, err)
+
+	ids := seed(t, ctx, pool,
+		seedPolicy{action: "block", sources: []string{"gitleaks"},
+			messageTypes: []string{"tool_request"}, scopeInclude: "", scopeExempt: ""},
+		seedPolicy{action: "flag", sources: []string{"gitleaks"},
+			messageTypes: []string{"tool_request"}, scopeInclude: "", scopeExempt: ""},
+	)
+
+	//nolint:glint // notestingrawsql: the test must hold the row's transaction open while the runner scans
+	holder, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
+	_, err = testrepo.New(holder).LockRiskPolicyFixture(ctx, ids[0])
+	require.NoError(t, err)
+
+	runner, err := NewRunner(pool, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 0, StatementTimeout: 0,
+		ApplyAttempts: 2, RetryDelay: -1,
+	})
+	require.NoError(t, err)
+
+	summary, err := runner.Run(ctx, ModeApply)
+	require.ErrorIs(t, err, ErrIncompleteApply)
+	require.Equal(t, int64(1), summary.Remaining)
+	require.Equal(t, int64(2), summary.Attempts)
+
+	// The unlocked row is still folded; only the held one is left behind.
+	lockedRow, _ := readPolicy(t, ctx, pool, ids[0])
+	require.Equal(t, []string{"tool_request"}, lockedRow.MessageTypes)
+	freeRow, _ := readPolicy(t, ctx, pool, ids[1])
+	require.Empty(t, freeRow.MessageTypes)
+
+	// Once the holder releases, a rerun completes and validates.
+	require.NoError(t, holder.Rollback(ctx))
+	_, err = runner.Run(ctx, ModeApply)
+	require.NoError(t, err)
+	_, err = runner.Run(ctx, ModeValidate)
+	require.NoError(t, err)
+}
+
+func TestRunnerApplyPreservesUnknownAnalyzerConfigKeys(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := testInfra.CloneTestDatabase(t, "legacyscope_unknown_keys")
+	require.NoError(t, err)
+
+	ids := seed(t, ctx, pool, seedPolicy{
+		action: "block", sources: []string{"gitleaks"},
+		messageTypes: []string{"tool_request"}, scopeInclude: "", scopeExempt: "",
+	})
+	require.NoError(t, testrepo.New(pool).SetRiskPolicyAnalyzerConfigFixture(ctx, testrepo.SetRiskPolicyAnalyzerConfigFixtureParams{
+		ID:             ids[0],
+		AnalyzerConfig: []byte(`{"presidio":{"score_threshold":0.4},"future_scanner":{"mode":"strict"}}`),
+	}))
+
+	_, err = newRunner(t, pool).Run(ctx, ModeApply)
+	require.NoError(t, err)
+
+	row, scopes := readPolicy(t, ctx, pool, ids[0])
+	require.Len(t, scopes, 1)
+	var config map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(row.AnalyzerConfig, &config))
+	require.JSONEq(t, `{"mode":"strict"}`, string(config["future_scanner"]),
+		"the fold must not drop analyzer_config members it does not model")
+	require.JSONEq(t, `{"score_threshold":0.4}`, string(config["presidio"]))
+}
+
+// A whitespace-only legacy column narrows nothing but still matches the
+// candidate predicate, so the fold has to clear it rather than compose it into
+// CEL the engine would reject.
+func TestRunnerApplyClearsWhitespaceOnlyLegacyScope(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := testInfra.CloneTestDatabase(t, "legacyscope_whitespace")
+	require.NoError(t, err)
+
+	ids := seed(t, ctx, pool, seedPolicy{
+		action: "block", sources: []string{"gitleaks"},
+		messageTypes: nil, scopeInclude: "   ", scopeExempt: "",
+	})
+
+	summary, err := newRunner(t, pool).Run(ctx, ModeApply)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), summary.Noop)
+	require.Equal(t, int64(0), summary.Remaining)
+
+	row, scopes := readPolicy(t, ctx, pool, ids[0])
+	require.False(t, row.ScopeInclude.Valid)
+	require.Empty(t, scopes, "nothing to compose, so no category scope is invented")
+	require.Equal(t, int64(1), row.Version, "a behaviour-identical fold keeps findings addressable")
 }
