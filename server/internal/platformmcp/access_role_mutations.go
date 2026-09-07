@@ -29,6 +29,7 @@ import (
 const (
 	operationCreateMCPAccessRole = "create_mcp_access_role"
 	operationUpdateMCPAccessRole = "update_mcp_access_role"
+	operationAssignMCPAccessRole = "assign_mcp_access_role"
 
 	maxAccessRoleMutationRules       = 100
 	maxAccessRoleMutationNameRunes   = 128
@@ -108,7 +109,10 @@ type AccessRoleMutationBackend interface {
 	GetRoleByIDTx(context.Context, pgx.Tx, string, string) (*accessgen.Role, error)
 	CreateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.CreateRolePayload) (access.RoleCreateResult, access.RoleReconciliation, error)
 	UpdateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.UpdateRolePayload) (access.RoleUpdateResult, access.RoleReconciliation, error)
+	AddMemberRoleTx(context.Context, pgx.Tx, string, string, string, access.RoleAuditActor, access.MemberRoleValidation) (access.MemberRoleAddResult, access.MemberRoleReconciliation, error)
+	CurrentMemberRoleReconciliationTx(context.Context, pgx.Tx, string, string) (access.MemberRoleReconciliation, error)
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
+	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
 }
 
 type normalizedMCPAccessRoleRule struct {
@@ -561,6 +565,24 @@ func overlappingAccessRoleRules(add, remove []normalizedMCPAccessRoleRule) bool 
 		}
 	}
 	return false
+}
+
+func accessMemberRoleVersion(versionKey []byte, memberID string, roleIDs []string) (string, error) {
+	if len(versionKey) != sha256.Size || strings.TrimSpace(memberID) == "" {
+		return "", ErrAccessRoleMutationInvalid
+	}
+	canonicalRoles := sortedStrings(roleIDs)
+	payload, err := json.Marshal(struct {
+		MemberID string   `json:"member_id"`
+		RoleIDs  []string `json:"role_ids"`
+	}{MemberID: memberID, RoleIDs: canonicalRoles})
+	if err != nil {
+		return "", fmt.Errorf("encode access member role version: %w", err)
+	}
+	mac := hmac.New(sha256.New, versionKey)
+	_, _ = mac.Write([]byte("platform-mcp-access-member-role-version-v1\x00"))
+	_, _ = mac.Write(payload)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func validAccessRoleVersion(value string) bool {

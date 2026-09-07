@@ -134,6 +134,39 @@ func TestAccessRoleRemovalDoesNotRequireCurrentCatalog(t *testing.T) {
 	require.Equal(t, []normalizedMCPAccessRoleRule{{MCPID: mcpID, Tool: "retired_tool", Disposition: ""}}, rules)
 }
 
+func TestAccessMemberRoleVersionIsCanonical(t *testing.T) {
+	t.Parallel()
+
+	key := make([]byte, 32)
+	memberID := "member-1"
+	first, err := accessMemberRoleVersion(key, memberID, []string{"role-b", "role-a", "role-a"})
+	require.NoError(t, err)
+	second, err := accessMemberRoleVersion(key, memberID, []string{"role-a", "role-b"})
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	changed, err := accessMemberRoleVersion(key, memberID, []string{"role-a"})
+	require.NoError(t, err)
+	require.NotEqual(t, first, changed)
+}
+
+func TestAccessRoleAssignmentReceiptIsClosed(t *testing.T) {
+	t.Parallel()
+
+	result := AccessRoleAssignmentReceiptResult{MaskedIdentity: "m***@example.com", Roles: []string{"Operators"}, Version: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", AssignedRole: "Operators", ResultCategory: "assigned", Reconciliation: "pending"}
+	payload, err := encodeAccessRoleAssignmentReceipt(result)
+	require.NoError(t, err)
+	decoded, err := decodeAccessRoleAssignmentReceipt(payload)
+	require.NoError(t, err)
+	require.Equal(t, result, decoded)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(payload, &raw))
+	raw["member_id"] = "private"
+	unsafe, err := json.Marshal(raw)
+	require.NoError(t, err)
+	require.False(t, validAccessRoleAssignmentReceiptPayload(unsafe))
+}
+
 func TestAccessRoleMutationOutputsExposeNoRawIdentifiersOrSelectors(t *testing.T) {
 	t.Parallel()
 

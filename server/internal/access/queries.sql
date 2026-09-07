@@ -443,6 +443,17 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY ora.workos_user_id;
 
+-- name: LockOrganizationUserRelationship :one
+-- Serializes AddMemberRoleTx and UpdateMemberRoles on the stable membership row.
+-- Role create/update member assignment and provider event ingestion do not yet
+-- participate in this lock; this is not a lock for all assignment writers.
+SELECT id
+FROM organization_user_relationships
+WHERE organization_id = @organization_id
+  AND user_id = sqlc.arg(user_id)::text
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetOrganizationRoleAssignmentByWorkosUser :one
 SELECT
   our.user_id,

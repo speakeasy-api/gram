@@ -18,6 +18,7 @@ type accessRoleMutationRefusal struct {
 func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutationService) {
 	create := unavailableAccessRoleMutationHandler[CreateMCPAccessRoleInput, CreateMCPAccessRoleOutput]()
 	update := unavailableAccessRoleMutationHandler[UpdateMCPAccessRoleInput, UpdateMCPAccessRoleOutput]()
+	assign := unavailableAccessRoleMutationHandler[AssignMCPAccessRoleInput, AssignMCPAccessRoleOutput]()
 	if mutations != nil && mutations.valid() {
 		create = func(ctx context.Context, _ *mcp.CallToolRequest, input CreateMCPAccessRoleInput) (*mcp.CallToolResult, CreateMCPAccessRoleOutput, error) {
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (CreateMCPAccessRoleOutput, error) {
@@ -28,6 +29,13 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (UpdateMCPAccessRoleOutput, error) {
 				return mutations.Update(ctx, principal, input)
 			})
+		}
+		if assignments, err := NewAccessRoleAssignmentService(mutations); err == nil {
+			assign = func(ctx context.Context, _ *mcp.CallToolRequest, input AssignMCPAccessRoleInput) (*mcp.CallToolResult, AssignMCPAccessRoleOutput, error) {
+				return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (AssignMCPAccessRoleOutput, error) {
+					return assignments.Assign(ctx, principal, input)
+				})
+			}
 		}
 	}
 	meta := ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
@@ -41,6 +49,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 		Description: "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Requires explicit confirmation and an idempotency key.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
 	}, meta, update)
+	addTool(reg, &mcp.Tool{
+		Name: operationAssignMCPAccessRole, Title: "Assign MCP Access Role",
+		Description: "Add one custom MCP access role to one masked member without removing any current roles. Requires fresh opaque member and role references, the member's current role version, explicit confirmation, and an idempotency key.",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+	}, meta, assign)
 }
 
 func unavailableAccessRoleMutationHandler[In, Out any]() mcp.ToolHandlerFor[In, Out] {

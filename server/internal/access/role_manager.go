@@ -671,6 +671,32 @@ type memberRoleUpdateContext struct {
 	After        *gen.AccessMember
 }
 
+// MemberRoleState is the privacy-safe, complete state exposed to an optimistic
+// validation callback while the member's relationship row is locked.
+type MemberRoleState struct {
+	MemberID string
+	RoleIDs  []string
+}
+
+// MemberRoleValidation runs after the member and role are resolved in the
+// current organization and after the complete active role set is read under lock.
+type MemberRoleValidation func(MemberRoleState) error
+
+// MemberRoleAddResult is the safe local result of an additive role assignment.
+type MemberRoleAddResult struct {
+	After   MemberRoleState
+	Member  *gen.AccessMember
+	Changed bool
+}
+
+// MemberRoleReconciliation is an opaque desired-state WorkOS update. Invoke it
+// only after the transaction passed to AddMemberRoleTx commits, including when
+// replaying a previously committed operation receipt.
+type MemberRoleReconciliation struct {
+	membershipID string
+	roleSlugs    []string
+}
+
 // UpdateMemberRoles replaces all of a member's local role assignments atomically, then best-effort syncs WorkOS after commit.
 func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID string, roleIDs []string, actor accessAuditActor) (memberRoleUpdateContext, error) {
 	tx, err := r.db.Begin(ctx)
@@ -687,6 +713,15 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			return memberRoleUpdateContext{}, err
 		}
 		roles = append(roles, role)
+	}
+
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{
+		OrganizationID: gramOrgID,
+		UserID:         userID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return memberRoleUpdateContext{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "lock member for role update").LogError(ctx, r.logger)
 	}
 
 	connectedUser, err := connectedUser(ctx, tx, gramOrgID, userID)
@@ -851,6 +886,215 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 	})
 
 	return result, nil
+}
+
+// AddMemberRoleTx adds one active custom organization role to one connected
+// member while preserving every existing active role assignment. It neither
+// commits tx nor contacts WorkOS.
+func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, userID, roleID string, actor RoleAuditActor, validate MemberRoleValidation) (MemberRoleAddResult, MemberRoleReconciliation, error) {
+	roleUUID, err := uuid.Parse(roleID)
+	if err != nil || roleUUID == uuid.Nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	}
+	roleRow, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{OrganizationID: gramOrgID, ID: roleUUID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock role for member assignment").LogError(ctx, r.logger)
+	}
+	role, err := r.getLocalRoleByIDTx(ctx, tx, gramOrgID, roleRow.String())
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+	}
+	if isSystemRole(role.Slug) {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	}
+
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{
+		OrganizationID: gramOrgID,
+		UserID:         userID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock member for role assignment").LogError(ctx, r.logger)
+	}
+
+	connected, err := connectedUser(ctx, tx, gramOrgID, userID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member").LogError(ctx, r.logger)
+	}
+	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
+	}
+
+	existing, err := repo.New(tx).GetOrganizationRoleAssignmentByWorkosUser(ctx, repo.GetOrganizationRoleAssignmentByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member not found").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load member role assignment").LogError(ctx, r.logger)
+	}
+	membershipID := conv.FromPGTextOrEmpty[string](existing.WorkosMembershipID)
+	if membershipID == "" {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	}
+
+	roleIDs, err := repo.New(tx).ListActiveRoleIDsByWorkosUser(ctx, repo.ListActiveRoleIDsByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member roles").LogError(ctx, r.logger)
+	}
+	slices.Sort(roleIDs)
+	if validate != nil {
+		state := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(roleIDs)}
+		if err := validate(state); err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+		}
+	}
+
+	rolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list member roles for workos sync").LogError(ctx, r.logger)
+	}
+	roleSlugs := make([]string, 0, len(rolePrincipals)+1)
+	for _, principal := range rolePrincipals {
+		roleSlugs = append(roleSlugs, principal.RoleSlug)
+	}
+	slices.Sort(roleSlugs)
+
+	alreadyAssigned := slices.Contains(roleIDs, role.ID)
+	afterRoleIDs := slices.Clone(roleIDs)
+	if !alreadyAssigned {
+		inserted, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     gramOrgID,
+			WorkosUserID:       connected.WorkosID.String,
+			WorkosRoleSlug:     role.Slug,
+			UserID:             conv.ToPGTextEmpty(connected.ID),
+			WorkosMembershipID: conv.ToPGTextEmpty(membershipID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		})
+		if err != nil {
+			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "insert role assignment").LogError(ctx, r.logger)
+		}
+		if inserted == 0 {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, nil, "insert role assignment").LogError(ctx, r.logger)
+		}
+		afterRoleIDs = append(afterRoleIDs, role.ID)
+		slices.Sort(afterRoleIDs)
+		roleSlugs = append(roleSlugs, role.Slug)
+		slices.Sort(roleSlugs)
+	}
+
+	memberName := conv.Default(connected.DisplayName, connected.Email)
+	after := &gen.AccessMember{
+		ID:           connected.ID,
+		PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:         memberName,
+		Email:        connected.Email,
+		PhotoURL:     conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:      afterRoleIDs,
+		JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:   nil,
+		Groups:       nil,
+	}
+	safeAfter := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(afterRoleIDs)}
+	reconciliation := MemberRoleReconciliation{membershipID: membershipID, roleSlugs: slices.Clone(roleSlugs)}
+	if alreadyAssigned {
+		return MemberRoleAddResult{After: safeAfter, Member: after, Changed: false}, reconciliation, nil
+	}
+
+	before := *after
+	before.RoleIds = slices.Clone(roleIDs)
+	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
+		OrganizationID:       gramOrgID,
+		Actor:                actor.Principal,
+		ActorDisplayName:     actor.DisplayName,
+		ActorSlug:            nil,
+		MemberID:             connected.ID,
+		MemberName:           memberName,
+		MemberEmail:          connected.Email,
+		MemberSnapshotBefore: &before,
+		MemberSnapshotAfter:  after,
+	}); err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access member role update").LogError(ctx, r.logger)
+	}
+
+	return MemberRoleAddResult{After: safeAfter, Member: after, Changed: true}, reconciliation, nil
+}
+
+// CurrentMemberRoleReconciliationTx returns the member's complete current
+// desired WorkOS role state without changing local assignments or auditing.
+// Receipt replays use it so provider convergence cannot resurrect a role that
+// a later dashboard action removed.
+func (r *RoleManager) CurrentMemberRoleReconciliationTx(ctx context.Context, tx pgx.Tx, gramOrgID, userID string) (MemberRoleReconciliation, error) {
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{OrganizationID: gramOrgID, UserID: userID}); errors.Is(err, pgx.ErrNoRows) {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock member for role reconciliation").LogError(ctx, r.logger)
+	}
+	connected, err := connectedUser(ctx, tx, gramOrgID, userID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member for role reconciliation").LogError(ctx, r.logger)
+	}
+	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
+	}
+	existing, err := repo.New(tx).GetOrganizationRoleAssignmentByWorkosUser(ctx, repo.GetOrganizationRoleAssignmentByWorkosUserParams{OrganizationID: gramOrgID, WorkosUserID: connected.WorkosID.String})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load member role reconciliation state").LogError(ctx, r.logger)
+	}
+	membershipID := conv.FromPGTextOrEmpty[string](existing.WorkosMembershipID)
+	if membershipID == "" {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	}
+	roles, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{OrganizationID: gramOrgID, WorkosUserID: connected.WorkosID.String})
+	if err != nil {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list current member roles for workos sync").LogError(ctx, r.logger)
+	}
+	roleSlugs := make([]string, 0, len(roles))
+	for _, role := range roles {
+		roleSlugs = append(roleSlugs, role.RoleSlug)
+	}
+	slices.Sort(roleSlugs)
+	return MemberRoleReconciliation{membershipID: membershipID, roleSlugs: roleSlugs}, nil
+}
+
+// ReconcileMemberRoles starts a bounded, detached desired-state WorkOS sync.
+func (r *RoleManager) ReconcileMemberRoles(ctx context.Context, reconciliation MemberRoleReconciliation) {
+	if r == nil || r.roles == nil || reconciliation.membershipID == "" {
+		return
+	}
+	membershipID := reconciliation.membershipID
+	roleSlugs := slices.Clone(reconciliation.roleSlugs)
+	r.runWorkOSSyncs(ctx, []workosSync{func(ctx context.Context) {
+		r.syncWorkOS(ctx, "reconcile member roles in workos", func() error {
+			_, err := r.roles.UpdateMemberRoles(ctx, membershipID, roleSlugs)
+			if err != nil {
+				return fmt.Errorf("reconcile member roles in workos: %w", err)
+			}
+			return nil
+		})
+	}})
 }
 
 // MemberRolePrincipals returns role slug and principal URN for each role assigned to a WorkOS user in this org.

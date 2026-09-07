@@ -86,6 +86,7 @@ type AccessMember struct {
 	MaskedIdentity string   `json:"masked_identity"`
 	Roles          []string `json:"roles"`
 	Reference      string   `json:"reference"`
+	Version        string   `json:"version"`
 }
 
 type ListAccessMembersOutput struct {
@@ -289,10 +290,15 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 			}
 		}
 		slices.Sort(names)
+		version, err := accessMemberRoleVersion(s.versionKey, row.ID, row.RoleIds)
+		if err != nil {
+			return ListAccessMembersOutput{}, fmt.Errorf("version access member roles: %w", err)
+		}
 		output.Members = append(output.Members, AccessMember{
 			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
 			Roles:          slices.Compact(names),
 			Reference:      reference,
+			Version:        version,
 		})
 	}
 	return output, nil

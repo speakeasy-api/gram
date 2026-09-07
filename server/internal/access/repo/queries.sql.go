@@ -1634,6 +1634,30 @@ func (q *Queries) LockOrganizationRoleByID(ctx context.Context, arg LockOrganiza
 	return id, err
 }
 
+const lockOrganizationUserRelationship = `-- name: LockOrganizationUserRelationship :one
+SELECT id
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = $2::text
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+// Serializes AddMemberRoleTx and UpdateMemberRoles on the stable membership row.
+// Role create/update member assignment and provider event ingestion do not yet
+// participate in this lock; this is not a lock for all assignment writers.
+func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg LockOrganizationUserRelationshipParams) (int64, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,

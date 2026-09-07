@@ -6,11 +6,13 @@ import (
 	"time"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestRoleManager_ListRoles(t *testing.T) {
@@ -109,6 +111,26 @@ func TestRoleManager_AssignMembersToRoleAcceptsConnectedMemberWithoutAssignment(
 	assigned, _, err := ti.service.roleMgr.assignMembersToRoleTx(ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
 	require.NoError(t, err)
 	require.Equal(t, 1, assigned)
+}
+
+func TestRoleManager_ReconcileMemberRolesAllowsEmptyDesiredState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "u1@example.test", "User 1", "user_1", "membership_1")
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	defer func() { _ = tx.Rollback(ctx) }()
+	reconciliation, err := ti.service.roleMgr.CurrentMemberRoleReconciliationTx(ctx, tx, authCtx.ActiveOrganizationID, "local_user_1")
+	require.NoError(t, err)
+	require.Equal(t, "membership_1", reconciliation.membershipID)
+	require.Empty(t, reconciliation.roleSlugs)
+	require.NoError(t, tx.Commit(ctx))
+
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{}).Return(nil, nil).Once()
+	ti.service.roleMgr.ReconcileMemberRoles(ctx, reconciliation)
+	ti.service.roleMgr.ReconcileMemberRoles(ctx, MemberRoleReconciliation{})
 }
 
 func TestRoleManager_RunWorkOSSyncsDetachesCancellationWithDeadline(t *testing.T) {

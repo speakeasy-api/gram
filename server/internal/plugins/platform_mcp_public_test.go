@@ -21,6 +21,8 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 		"LICENSE",
 		"speakeasy/.mcp.json",
 		"speakeasy/.claude-plugin/plugin.json",
+		"speakeasy/skills/manage-mcp-access/SKILL.md",
+		"agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md",
 		"cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json",
 		"speakeasy-codex/.codex-plugin/plugin.json",
 	} {
@@ -37,6 +39,15 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
 	require.Equal(t, PublicMarketplaceName, codex.Name)
 	require.Len(t, codex.Plugins, 1)
+
+	claudeSkill := files["speakeasy/skills/manage-mcp-access/SKILL.md"]
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md"])
+	for _, tool := range []string{"get_mcp_access", "list_access_roles", "list_access_members", "create_mcp_access_role", "update_mcp_access_role", "assign_mcp_access_role"} {
+		require.Contains(t, string(claudeSkill), tool)
+	}
+	for _, forbidden := range []string{"API key", "client secret", "password", "Gram"} {
+		require.NotContains(t, string(claudeSkill), forbidden)
+	}
 
 	require.Contains(t, string(files["LICENSE"]), "MIT License")
 	require.Contains(t, string(files["LICENSE"]), "Speakeasy Development, Inc.")
