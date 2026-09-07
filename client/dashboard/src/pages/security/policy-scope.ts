@@ -1,6 +1,5 @@
 import {
   ALL_POLICY_MESSAGE_TYPES,
-  POLICY_MESSAGE_TYPE_META,
   type PolicyMessageType,
 } from "./policy-data";
 
@@ -422,88 +421,4 @@ export function policyScopeUpdateForCategoryEdit({
         ? [...new Set([...(messageTypes ?? []), ...kinds])]
         : [],
   };
-}
-
-const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
-  "tool_request",
-  "tool_response",
-]);
-
-function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
-  return (
-    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
-    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
-  );
-}
-
-function messageTypesSummary(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): string {
-  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
-    return "All types";
-  }
-
-  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
-    return "Tool Calls";
-  }
-
-  if (
-    selectedMessageTypes.size === 1 &&
-    selectedMessageTypes.has("tool_request")
-  ) {
-    return "Tool Requests";
-  }
-
-  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
-}
-
-/** One-line scope description for the policy list. */
-export function describePolicyScope({
-  kinds,
-  additionalKinds,
-  custom,
-  sessionScopedOnly,
-}: EffectivePolicyScope): { summary: string; tooltip: string } {
-  // Matches the per-category badge in the policy editor: these detectors read
-  // session state, so "no message types" is not the same as "nothing".
-  if (sessionScopedOnly) {
-    return {
-      summary: "Session-scoped",
-      tooltip: "Detected per session, not per message",
-    };
-  }
-
-  const types = ALL_POLICY_MESSAGE_TYPES.filter((type) => kinds.has(type));
-  const labels = [
-    ...types.map((type) => POLICY_MESSAGE_TYPE_META[type].label),
-    ...(additionalKinds.has("prompt_attachment") ? ["Prompt Attachments"] : []),
-  ];
-
-  // A CEL predicate we could not decode may narrow or widen at scan time, so
-  // the decoded kinds are an upper bound and must never be shown as the scope.
-  if (custom) {
-    return {
-      summary: "Custom scope",
-      tooltip: labels.length
-        ? `Custom CEL scope. At most: ${labels.join(", ")}`
-        : "Custom CEL scope",
-    };
-  }
-
-  if (labels.length === 0) {
-    return {
-      summary: "Nothing in scope",
-      tooltip: "No message types in scope",
-    };
-  }
-
-  const typeSet = new Set(types);
-  const summary =
-    additionalKinds.size === 0 &&
-    (typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
-      hasOnlyToolCallMessageTypes(typeSet))
-      ? messageTypesSummary(typeSet)
-      : labels.join(", ");
-
-  return { summary, tooltip: labels.join(", ") };
 }

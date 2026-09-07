@@ -57,7 +57,6 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
-import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import {
   invalidateAllRiskListPolicies,
   useRiskListPolicies,
@@ -92,11 +91,7 @@ import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
-import {
-  ACTION_OPTIONS,
-  categoriesToPayload,
-  policyDetectionCategories,
-} from "./policy-form";
+import { ACTION_OPTIONS, categoriesToPayload } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
   getPolicyDeleteRuleListItems,
@@ -107,7 +102,6 @@ import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
-import { describePolicyScope, effectivePolicyScopeKinds } from "./policy-scope";
 import {
   togglePolicyEnabledVariables,
   useTogglePolicyEnabled,
@@ -592,11 +586,6 @@ function PolicyCenterContent() {
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const {
-    data: categoriesData,
-    isLoading: categoriesLoading,
-    isError: categoriesError,
-  } = useRiskCategories();
-  const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
     isError: quarantinesError,
@@ -854,48 +843,6 @@ function PolicyCenterContent() {
           <SeverityBadge score={row.policy.score} />
         </span>
       ),
-    },
-    {
-      key: "messageTypes",
-      header: "Applies To",
-      // Narrower than the column #6128 removed for crowding out the row's
-      // kebab menu; the summary is a short phrase with detail in the tooltip.
-      width: "1.2fr",
-      render: (row) => {
-        // Category recommendations decide the scope, so a failed or pending
-        // fetch must not render partial data as if it were the whole answer.
-        if (categoriesError) {
-          return (
-            <span className="text-muted-foreground text-sm">
-              Scope unavailable
-            </span>
-          );
-        }
-        if (!categoriesData) {
-          return (
-            <span className="text-muted-foreground text-sm">
-              {categoriesLoading ? "Loading scope..." : "Scope unavailable"}
-            </span>
-          );
-        }
-
-        const { summary, tooltip } = describePolicyScope(
-          effectivePolicyScopeKinds({
-            categories: policyDetectionCategories(row.policy),
-            detectionScopes: row.policy.detectionScopes,
-            categoryDefinitions: categoriesData.categories,
-            messageTypes: row.policy.messageTypes,
-            scopeInclude: row.policy.scopeInclude,
-            scopeExempt: row.policy.scopeExempt,
-          }),
-        );
-
-        return (
-          <SimpleTooltip tooltip={tooltip}>
-            <span className="text-muted-foreground text-sm">{summary}</span>
-          </SimpleTooltip>
-        );
-      },
     },
     {
       key: "audience",

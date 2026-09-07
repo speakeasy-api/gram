@@ -3,7 +3,6 @@ import { ALL_POLICY_MESSAGE_TYPES } from "./policy-data";
 import {
   acceptsDetectionScope,
   decodeKindScope,
-  describePolicyScope,
   policyScopeUpdateForCategoryEdit,
   effectivePolicyScopeKinds,
   effectiveScopeKinds,
@@ -639,55 +638,5 @@ describe("policyScopeUpdateForCategoryEdit", () => {
         scopeInclude: `(${customInclude}) && kind in ["tool_request"]`,
       },
     ]);
-  });
-});
-
-describe("describePolicyScope", () => {
-  const scope = (
-    kinds: string[],
-    { custom = false, attachments = false } = {},
-  ) =>
-    describePolicyScope({
-      kinds: new Set(kinds as never),
-      additionalKinds: new Set(attachments ? ["prompt_attachment"] : []),
-      custom,
-      sessionScopedOnly: false,
-    });
-
-  it("summarises whole-surface and tool-call scopes", () => {
-    expect(scope(ALL_POLICY_MESSAGE_TYPES).summary).toBe("All types");
-    expect(scope(["tool_request", "tool_response"]).summary).toBe("Tool Calls");
-  });
-
-  it("never presents a custom CEL scope as a kind list", () => {
-    const described = scope(ALL_POLICY_MESSAGE_TYPES, { custom: true });
-
-    expect(described.summary).toBe("Custom scope");
-    expect(described.tooltip).toContain("At most");
-  });
-
-  it("reports an empty scope as such", () => {
-    expect(scope([])).toEqual({
-      summary: "Nothing in scope",
-      tooltip: "No message types in scope",
-    });
-    expect(scope([], { custom: true }).summary).toBe("Custom scope");
-  });
-
-  it("labels session-scoped detection instead of an empty scope", () => {
-    expect(
-      describePolicyScope({
-        kinds: new Set(),
-        additionalKinds: new Set(),
-        custom: false,
-        sessionScopedOnly: true,
-      }).summary,
-    ).toBe("Session-scoped");
-  });
-
-  it("lists prompt attachments alongside message types", () => {
-    expect(scope(["tool_request"], { attachments: true }).summary).toBe(
-      "Tool Requests, Prompt Attachments",
-    );
   });
 });
