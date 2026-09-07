@@ -86,6 +86,8 @@ database-changes:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
   - "server/clickhouse/schema.sql"
+  - "server/clickhouse/mart.sql"
+  - "local/clickhouse/initdb/**"
 
 db-migrations:
   - "server/migrations/**"
