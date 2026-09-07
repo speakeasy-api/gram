@@ -187,8 +187,9 @@ func TestActingIdentityFromContext_ClientIDOnlyFromOAuthClient(t *testing.T) {
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 7)
+	require.Len(t, knownSurfaces, 8)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
+	require.Contains(t, knownSurfaces, SurfaceSystem)
 	require.Contains(t, knownSurfaces, SurfaceAdmin)
 	require.Contains(t, knownSurfaces, SurfacePlatformBreakGlass)
 }
