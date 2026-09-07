@@ -305,6 +305,7 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
+	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
 	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
 	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
@@ -1562,6 +1563,9 @@ func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParam
 
 func IngressName(v string) attribute.KeyValue { return IngressNameKey.String(v) }
 func SlogIngressName(v string) slog.Attr      { return slog.String(string(IngressNameKey), v) }
+
+func NetworkIngressID(v string) attribute.KeyValue { return NetworkIngressIDKey.String(v) }
+func SlogNetworkIngressID(v string) slog.Attr      { return slog.String(string(NetworkIngressIDKey), v) }
 
 func NetworkSurface[V ~string](v V) attribute.KeyValue {
 	return NetworkSurfaceKey.String(string(v))
