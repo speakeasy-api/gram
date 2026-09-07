@@ -19,9 +19,6 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskRecommendedScopes gates per-project composition of recommended
-	// per-category detection scopes. Default off during rollout.
-	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 

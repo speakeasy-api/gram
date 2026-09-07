@@ -104,7 +104,6 @@ type CategoryScopes struct {
 	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
 	metrics   *riskMetrics
 }
 
@@ -114,12 +113,11 @@ type CategoryScopeMasks struct {
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool, metrics *riskMetrics) CategoryScopes {
+func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, metrics *riskMetrics) CategoryScopes {
 	return CategoryScopes{
 		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
 		metrics:   metrics,
 	}
 }
@@ -131,17 +129,15 @@ type CategoryScope struct {
 	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
 }
 
 // NewCategoryScope builds a single-message category scope. Its zero value is
 // policy scope only.
-func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool) CategoryScope {
+func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScope {
 	return CategoryScope{
 		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
 	}
 }
 
@@ -149,9 +145,6 @@ func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[ca
 func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
 	if !s.policyIncludes(view) {
 		return false
-	}
-	if !s.enabled {
-		return true
 	}
 	scope, ok := effectiveScope(s.rec, s.specified, cat)
 	if !ok {
@@ -205,7 +198,7 @@ func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) Catego
 		policyOut:   s.policyExclusions(messages),
 		categoryOut: map[categories.Category][]bool{},
 	}
-	if !s.enabled || (len(s.rec.scopes) == 0 && len(s.specified) == 0) {
+	if len(s.rec.scopes) == 0 && len(s.specified) == 0 {
 		return masks
 	}
 
