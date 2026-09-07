@@ -2,25 +2,10 @@
 -- Keep it view-only. Never expose raw identifiers, free-form customer content,
 -- customer-defined names, or monetary values here. Every published row must
 -- represent at least ten distinct identified users.
-CREATE DATABASE IF NOT EXISTS marts ENGINE = Atomic;
-
--- Atlas currently ignores access-control statements when loading SQL desired
--- state. Keep them here as the complete contract and include explicit grants
--- in migrations after creating each approved view.
-CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
-    readonly = 1 CONST,
-    max_execution_time = 30 CONST,
-    max_memory_usage = 2000000000 CONST,
-    max_rows_to_read = 100000000 CONST,
-    max_bytes_to_read = 5000000000 CONST,
-    max_threads = 4 CONST,
-    max_result_rows = 10000 CONST,
-    max_result_bytes = 10000000 CONST,
-    result_overflow_mode = 'throw' CONST,
-    max_concurrent_queries_for_user = 4 CONST;
-
-CREATE USER IF NOT EXISTS marts_definer HOST NONE;
-
+-- The database, access principals, and reader limits are provisioned
+-- outside schema migrations: Terraform in Cloud, local/clickhouse/initdb locally.
+-- Atlas uses the same bootstrap as its development database baseline.
+-- Atlas ignores grants in desired state; keep matching grants in migrations.
 GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 
 -- Last 12 completed UTC weeks only. Counts span all organizations and are per surface:

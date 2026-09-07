@@ -78,11 +78,16 @@ migrations:
   - "server/clickhouse/migrations/**"
   - "server/clickhouse/local/golang_migrate/**"
   - "server/clickhouse/schema.sql"
+  - "server/clickhouse/mart.sql"
+  - "server/atlas.hcl"
+  - "local/clickhouse/initdb/**"
 
 database-changes:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
   - "server/clickhouse/schema.sql"
+  - "server/clickhouse/mart.sql"
+  - "local/clickhouse/initdb/**"
 
 db-migrations:
   - "server/migrations/**"

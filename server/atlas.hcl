@@ -29,6 +29,7 @@ docker "clickhouse" "dev" {
   // Keep server scope for marts, but replay unqualified application DDL in gram.
   baseline = <<SQL
     CREATE DATABASE gram;
+    ${file("../local/clickhouse/initdb/01-marts-definer.sql")}
     USE gram;
   SQL
 }
