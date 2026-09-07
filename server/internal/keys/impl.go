@@ -140,11 +140,27 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "error generating api key").LogError(ctx, s.logger)
 	}
 
+	// Binding is explicit: ambient request project context must not turn an
+	// organization-wide key into a project-bound key.
 	var projectID uuid.NullUUID
-	if authCtx.ProjectID != nil {
-		projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
-	} else {
-		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
+	if payload.ProjectID != nil {
+		id, err := uuid.Parse(*payload.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID")
+		}
+		project, err := s.projectRepo.GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{
+			ID: id, OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "project not found")
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load key project").LogError(ctx, s.logger)
+		}
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+			return nil, err
+		}
+		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
 	}
 
 	dbtx, err := s.db.Begin(ctx)

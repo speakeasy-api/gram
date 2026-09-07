@@ -3,12 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateKeyForm = {
   /**
    * The name of the key
    */
   name: string;
+  /**
+   * Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
+   */
+  projectId?: string | undefined;
   /**
    * The scopes of the key that determines its permissions.
    */
@@ -18,6 +23,7 @@ export type CreateKeyForm = {
 /** @internal */
 export type CreateKeyForm$Outbound = {
   name: string;
+  project_id?: string | undefined;
   scopes: Array<string>;
 };
 
@@ -25,10 +31,18 @@ export type CreateKeyForm$Outbound = {
 export const CreateKeyForm$outboundSchema: z.ZodMiniType<
   CreateKeyForm$Outbound,
   CreateKeyForm
-> = z.object({
-  name: z.string(),
-  scopes: z.array(z.string()),
-});
+> = z.pipe(
+  z.object({
+    name: z.string(),
+    projectId: z.optional(z.string()),
+    scopes: z.array(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      projectId: "project_id",
+    });
+  }),
+);
 
 export function createKeyFormToJSON(createKeyForm: CreateKeyForm): string {
   return JSON.stringify(CreateKeyForm$outboundSchema.parse(createKeyForm));
