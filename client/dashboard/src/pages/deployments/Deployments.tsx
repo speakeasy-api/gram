@@ -1,5 +1,7 @@
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
+import { cn } from "@/lib/utils";
+import { McpTabs } from "@/pages/mcp/McpTabs";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -10,6 +12,7 @@ import {
   type RedeployDeploymentMutationVariables,
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useMutationState } from "@tanstack/react-query";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -20,32 +23,19 @@ import {
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { Table, TableProps } from "@/components/ui/Table";
-import { Suspense, useState } from "react";
+import { cloneElement, Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
 export default function DeploymentsPage(): JSX.Element {
-  const routes = useRoutes();
-  const { data: activeDeployment } = useActiveDeployment();
-
-  const viewActiveDeploymentButton = activeDeployment ? (
-    <routes.deployments.deployment.Link params={[activeDeployment.id]}>
-      <Button variant="secondary" size="sm">
-        <Button.LeftIcon>
-          <Icon name="radio" className="size-4" />
-        </Button.LeftIcon>
-        <Button.Text>View Active Deployment</Button.Text>
-      </Button>
-    </routes.deployments.deployment.Link>
-  ) : undefined;
-
   return (
     <ResourceListPage
       scope={["project:read", "project:write"]}
-      title="Recent Deployments"
-      primaryAction={viewActiveDeploymentButton}
+      title="Deployments"
+      description="Each push deploys every source in the project together, so a deployment is the version its sources and tools arrive in."
+      belowHeader={<McpTabs active="deployments" />}
     >
       <Suspense fallback={<div>Loading...</div>}>
         <DeploymentsTable />
@@ -224,9 +214,24 @@ function DeploymentsTable() {
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
     {
+      key: "id",
+      header: "ID",
+      width: "220px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <DeploymentLink id={row.id} />
+          {activeDeployment === row && (
+            <Badge variant="success" className="px-1.5 py-0.25">
+              Active
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
       key: "status",
-      header: "",
-      width: "90px",
+      header: "Status",
+      width: "120px",
       render: (row) => {
         // Mono status word: muted green for success, red for failed,
         // neutral ink for everything in flight.
@@ -247,25 +252,14 @@ function DeploymentsTable() {
       },
     },
     {
-      key: "id",
-      header: "ID",
-      render: (row) => {
-        const createdAt = relativeTime(row.createdAt);
-
-        return (
-          <div>
-            <DeploymentLink id={row.id} />
-            <div className="flex gap-2">
-              <p className="text-muted-foreground text-sm">{createdAt}</p>
-              {activeDeployment === row && (
-                <Badge variant="success" className="px-1.5 py-0.25">
-                  Active
-                </Badge>
-              )}
-            </div>
-          </div>
-        );
-      },
+      key: "createdAt",
+      header: "Deployed",
+      width: "150px",
+      render: (row) => (
+        <span className="text-muted-foreground text-sm">
+          {relativeTime(row.createdAt)}
+        </span>
+      ),
     },
     {
       key: "assetCount",
@@ -283,20 +277,22 @@ function DeploymentsTable() {
         row.openapiv3ToolCount +
         row.functionsToolCount +
         row.externalMcpToolCount,
-      width: "0.5fr",
+      width: "120px",
     },
     {
       key: "actions",
       header: "",
       render: (row) => {
         return (
-          <DeploymentActionsDropdown
-            deployment={row}
-            latest={deployments[0] === row}
-          />
+          <div className="flex w-full justify-end">
+            <DeploymentActionsDropdown
+              deployment={row}
+              latest={deployments[0] === row}
+            />
+          </div>
         );
       },
-      width: "auto",
+      width: "1fr",
     },
   ];
 
@@ -315,7 +311,11 @@ function DeploymentsTable() {
             deployment={row}
             latest={deployments[0] === row}
           >
-            {rowElement}
+            {/* Only one deployment is serving; the others are history, and
+                read that way. The class goes on the row itself: a wrapper
+                would be a div inside <tbody>, and `display: contents`
+                generates no box for the opacity to apply to. */}
+            {activeDeployment === row ? rowElement : dimmed(rowElement)}
           </DeploymentRowContextMenu>
         )}
       />
@@ -323,18 +323,21 @@ function DeploymentsTable() {
   );
 }
 
+/** The row, marked as history rather than the deployment in force. */
+function dimmed(rowElement: React.ReactElement): React.ReactElement {
+  const row = rowElement as React.ReactElement<{ className?: string }>;
+  return cloneElement(row, {
+    className: cn(row.props.className, "opacity-70"),
+  });
+}
+
 function DeploymentsExplainer() {
   return (
-    <div className="bg-card border-border mb-6 space-y-2 border p-6">
-      <p className="text-muted-foreground text-sm">
-        Each time you add a new source or update an existing source a new
-        deployment is created.
-      </p>
-      <p className="text-muted-foreground text-sm">
-        For each deployment all sources are analyzed in the project to generate
-        or update the corresponding tool definitions.
-      </p>
-    </div>
+    <Alert variant="info" dismissible={false} className="mb-6 text-sm">
+      Adding or updating a source creates a deployment: every source in the
+      project is analyzed, and the tool definitions they produce are generated
+      or updated together.
+    </Alert>
   );
 }
 
@@ -342,7 +345,9 @@ function DeploymentLink({ id }: { id: string }) {
   const routes = useRoutes();
   return (
     <routes.deployments.deployment.Link params={[id]}>
-      {id}
+      <span className="font-mono" title={id}>
+        {id.slice(0, 8)}
+      </span>
     </routes.deployments.deployment.Link>
   );
 }

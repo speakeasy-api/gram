@@ -237,7 +237,7 @@ export function EmptyState({
 
   const CTA: React.ReactNode = nonEmptyProjectCTA ?? (
     <Button asChild size="sm">
-      <Link to={routes.catalog.href()}>Browse catalog</Link>
+      <Link to={routes.mcp.add.catalog.href()}>Browse catalog</Link>
     </Button>
   );
 
