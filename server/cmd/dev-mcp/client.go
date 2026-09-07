@@ -14,7 +14,10 @@ import (
 	"sync"
 )
 
-const sessionCookieName = "gram_refresh"
+const (
+	sessionCookieName = "gram_refresh"
+	accessCookieName  = "gram_session"
+)
 
 // apiClient is a session-authenticated client for the local server's
 // management API. Sessions are minted lazily by walking the dashboard's OIDC
@@ -52,19 +55,13 @@ func newAPIClient(base *url.URL, origin string, insecure bool, logger *slog.Logg
 		origin: origin,
 		logger: logger,
 		hc: &http.Client{
-			Jar:       jar,
+			Jar:       &authCookieJar{CookieJar: jar, base: base},
 			Transport: transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// net/http does not recognize this custom header as a credential.
-				// Keep access tokens on the original API origin across redirects.
-				if len(via) > 0 && (req.URL.Scheme != via[0].URL.Scheme || req.URL.Host != via[0].URL.Host) {
-					req.Header.Del("Gram-Session")
-				}
-				// The login chain ends at /rpc/auth.callback, which sets the
-				// session cookie and then redirects to the dashboard. The
-				// dashboard may not be running, so stop there.
-				if len(via) > 0 && via[len(via)-1].URL.Path == "/rpc/auth.callback" {
-					return http.ErrUseLastResponse
+				// Cookies are host-scoped, not port-scoped. Stop before the jar
+				// can attach credentials to a different origin's request.
+				if !sameOrigin(req.URL, base) {
+					return fmt.Errorf("cross-origin API redirect blocked")
 				}
 				if len(via) >= 10 {
 					return fmt.Errorf("stopped after 10 redirects")
@@ -93,7 +90,23 @@ func (c *apiClient) login(ctx context.Context) error {
 		return fmt.Errorf("build login request: %w", err)
 	}
 
-	resp, err := c.hc.Do(req)
+	// Only login may cross origins to visit the IDP. Its shared jar still
+	// confines dashboard credentials to the API origin, including the port.
+	loginClient := *c.hc
+	loginClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		// Re-populate cookies from the origin-aware jar, rather than copying
+		// the initial request's Cookie header across a same-host port change.
+		req.Header.Del("Cookie")
+		if len(via) > 0 && sameOrigin(via[len(via)-1].URL, c.base) && via[len(via)-1].URL.Path == "/rpc/auth.callback" {
+			// The callback has stored the cookie; the dashboard need not run.
+			return http.ErrUseLastResponse
+		}
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		return nil
+	}
+	resp, err := loginClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("walk login flow: %w", err)
 	}
@@ -228,4 +241,38 @@ func (c *apiClient) doOnce(ctx context.Context, method, path string, query url.V
 		return nil, resp.StatusCode, fmt.Errorf("read response body: %w", err)
 	}
 	return raw, resp.StatusCode, nil
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	aOrigin, aErr := canonicalOrigin(a)
+	bOrigin, bErr := canonicalOrigin(b)
+	return aErr == nil && bErr == nil && aOrigin == bOrigin
+}
+
+// Go's cookie jar ignores ports. Login must visit the IDP, but must neither
+// send dashboard credentials there nor accept dashboard cookies set by it.
+type authCookieJar struct {
+	http.CookieJar
+	base *url.URL
+}
+
+func (j *authCookieJar) Cookies(u *url.URL) []*http.Cookie {
+	return j.filter(u, j.CookieJar.Cookies(u))
+}
+
+func (j *authCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	j.CookieJar.SetCookies(u, j.filter(u, cookies))
+}
+
+func (j *authCookieJar) filter(u *url.URL, cookies []*http.Cookie) []*http.Cookie {
+	if sameOrigin(u, j.base) {
+		return cookies
+	}
+	filtered := make([]*http.Cookie, 0, len(cookies))
+	for _, cookie := range cookies {
+		if cookie.Name != sessionCookieName && cookie.Name != accessCookieName {
+			filtered = append(filtered, cookie)
+		}
+	}
+	return filtered
 }

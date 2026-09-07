@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessioncookies"
 )
 
-const refreshCookieName = "gram_refresh"
-const refreshCookiePath = "/rpc/auth.refresh"
-const logoutCookiePath = "/rpc/auth.logout"
+const refreshCookieName = sessioncookies.RefreshCookieName
+const refreshCookiePath = sessioncookies.RefreshCookiePath
+const logoutCookiePath = sessioncookies.LogoutCookiePath
 
 type browserSessionKey struct{}
 type browserSessionTransport struct {
@@ -52,59 +53,29 @@ func requestCookie(r *http.Request, name string) string {
 	return cookie.Value
 }
 
-func browserCookie(name, value, path string, expires time.Time, sameSite http.SameSite) *http.Cookie {
-	maxAge := int(time.Until(expires).Seconds())
-	if maxAge <= 0 {
-		maxAge = -1
-	}
-	//nolint:exhaustruct // Set only the security and lifetime attributes; Domain must remain empty (host-only).
-	return &http.Cookie{
-		Name: name, Value: value, Path: path,
-		Secure: true, HttpOnly: true, SameSite: sameSite,
-		Expires: expires, MaxAge: maxAge,
-	}
-}
-
 func writeBrowserSession(ctx context.Context, secret string, session sessions.Session) {
 	transport, ok := ctx.Value(browserSessionKey{}).(browserSessionTransport)
 	if !ok {
 		return
 	}
-	WriteBrowserSessionCookies(transport.writer, secret, session)
+	sessioncookies.WriteBrowserSessionCookies(transport.writer, secret, session)
 }
 
-// WriteBrowserSessionCookies emits access and endpoint-scoped refresh cookies.
-// Call only after CreateRefreshSession or Refresh succeeds.
-func WriteBrowserSessionCookies(w http.ResponseWriter, secret string, session sessions.Session) {
-	expires := time.Now().Add(sessions.RefreshIdleLifetime)
-	if !session.SupportExpiresAt.IsZero() && session.SupportExpiresAt.Before(expires) {
-		expires = session.SupportExpiresAt
-	}
-	// RPC names use dots, so /rpc/auth is not a matching cookie path.
-	// Duplicate the same secret only onto the two endpoints that consume it.
-	for _, path := range []string{refreshCookiePath, logoutCookiePath} {
-		http.SetCookie(w, browserCookie(refreshCookieName, secret, path, expires, http.SameSiteStrictMode))
-	}
-	http.SetCookie(w, browserCookie(constants.SessionCookie, session.SessionID, "/", session.ExpiresAt, http.SameSiteLaxMode))
-	w.Header().Set(constants.SessionHeader, session.SessionID)
-	w.Header().Set("Cache-Control", "no-store")
-}
-
-func (s *Service) Refresh(ctx context.Context) error {
+func (s *Service) Refresh(ctx context.Context) (*gen.RefreshResult, error) {
 	transport, err := s.browserTransport(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	secret := requestCookie(transport.request, refreshCookieName)
 	session, err := s.sessions.Refresh(ctx, secret)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return oops.C(oops.CodeUnauthorized)
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "error refreshing browser session")
+		return nil, oops.E(oops.CodeUnavailable, err, "error refreshing browser session")
 	}
 	writeBrowserSession(ctx, secret, session)
-	return nil
+	return &gen.RefreshResult{SessionToken: session.SessionID}, nil
 }
 
 func (s *Service) logoutBrowserSession(ctx context.Context) error {
@@ -135,9 +106,7 @@ func (s *Service) logoutBrowserSession(ctx context.Context) error {
 			return oops.E(oops.CodeUnavailable, err, "error clearing access session")
 		}
 	}
-	for _, path := range []string{refreshCookiePath, logoutCookiePath} {
-		http.SetCookie(transport.writer, browserCookie(refreshCookieName, "", path, time.Unix(1, 0), http.SameSiteStrictMode))
-	}
+	sessioncookies.ClearRefreshCookies(transport.writer)
 	// The generated logout response clears the access cookie at /.
 	transport.writer.Header().Set("Clear-Site-Data", `"cache", "cookies", "storage"`)
 	return nil

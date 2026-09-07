@@ -22,18 +22,13 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import {
-  LogoutRequest,
-  LogoutResponse,
-  LogoutSecurity,
-} from "../models/operations/logout.js";
+import { LogoutRequest, LogoutResponse } from "../models/operations/logout.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type LogoutMutationVariables = {
   request?: LogoutRequest | undefined;
-  security?: LogoutSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -54,7 +49,7 @@ export type LogoutMutationError =
  * logout auth
  *
  * @remarks
- * Logs out the current user by clearing their session.
+ * Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.
  */
 export function useLogoutMutation(
   options?: MutationHookOptions<
@@ -91,7 +86,6 @@ export function buildLogoutMutation(
     mutationKey: mutationKeyLogout(),
     mutationFn: function logoutMutationFn({
       request,
-      security,
       options,
     }): Promise<LogoutMutationData> {
       const mergedOptions = {
@@ -109,7 +103,6 @@ export function buildLogoutMutation(
       return unwrapAsync(authLogout(
         client$,
         request,
-        security,
         mergedOptions,
       ));
     },

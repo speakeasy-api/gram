@@ -36,7 +36,7 @@ it("resolves actual SDK logout through its normal RPC endpoint and runs producti
     expect(new URL(request.url).pathname).toBe("/rpc/auth.logout");
     expect(request.method).toBe("POST");
     expect(request.credentials).toBe("include");
-    expect(request.headers.has("Gram-Session")).toBe(false);
+    expect(request.headers.get("Gram-Session")).toBe("fresh-access");
     // Simulate Clear-Site-Data before the SDK response hook. The beforeRequest
     // hook must already have captured preferences to restore after logout.
     localStorage.clear();

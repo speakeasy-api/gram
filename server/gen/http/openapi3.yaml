@@ -12512,6 +12512,12 @@ paths:
             responses:
                 "204":
                     description: No Content response.
+                    headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                description: Session header
+                                type: string
                 "400":
                     content:
                         application/json:

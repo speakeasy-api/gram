@@ -9586,11 +9586,6 @@ paths:
               schema:
                 description: The URL to redirect to after authentication
                 type: string
-            Set-Cookie:
-              description: The authentication session
-              schema:
-                description: The authentication session
-                type: string
         "400":
           content:
             application/json:
@@ -9671,11 +9666,6 @@ paths:
               description: Session header
               schema:
                 description: Session header
-                type: string
-            Set-Cookie:
-              description: The authentication session
-              schema:
-                description: The authentication session
                 type: string
         "400":
           content:
@@ -9764,11 +9754,6 @@ paths:
               description: Session header
               schema:
                 description: Session header
-                type: string
-            Set-Cookie:
-              description: The authentication session
-              schema:
-                description: The authentication session
                 type: string
         "400":
           content:
@@ -9937,7 +9922,7 @@ paths:
         disabled: true
   /rpc/auth.logout:
     post:
-      description: Logs out the current user by clearing their session.
+      description: Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.
       operationId: logout
       parameters:
         - allowEmptyValue: true
@@ -10010,15 +9995,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
       summary: logout auth
       tags:
         - auth
       x-speakeasy-name-override: logout
       x-speakeasy-react-hook:
         name: Logout
+  /rpc/auth.refresh:
+    post:
+      description: Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.
+      operationId: authRefresh
+      responses:
+        "204":
+          description: No Content response.
+          headers:
+            Gram-Session:
+              description: Session header
+              schema:
+                description: Session header
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: refresh auth
+      tags:
+        - auth
+      x-speakeasy-name-override: refresh
+      x-speakeasy-react-hook:
+        disabled: true
   /rpc/auth.register:
     post:
       description: Register a new org for a user with their session information.
@@ -10137,11 +10192,6 @@ paths:
               description: Session header
               schema:
                 description: Session header
-                type: string
-            Set-Cookie:
-              description: The authentication session
-              schema:
-                description: The authentication session
                 type: string
         "400":
           content:

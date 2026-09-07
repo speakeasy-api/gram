@@ -69,7 +69,7 @@ it("survives StrictMode canceling bootstrap before the shared refresh completes"
     );
   });
   expect(await screen.findByText("authenticated")).toBeTruthy();
-  expect(fetcher).toHaveBeenCalledTimes(3);
-  expect((fetcher.mock.calls[1]![0] as Request).signal.aborted).toBe(true);
-  expect((fetcher.mock.calls[2]![0] as Request).signal.aborted).toBe(false);
+  // StrictMode's canceled bootstrap never reaches the network.
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect((fetcher.mock.calls[1]![0] as Request).signal.aborted).toBe(false);
 });

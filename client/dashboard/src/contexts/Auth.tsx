@@ -230,7 +230,7 @@ export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
     clearLegacyUserStorage();
 
-    if (!user || !import.meta.env.PROD) {
+    if (!user?.id || !import.meta.env.PROD) {
       return;
     }
     const email = user.email;

@@ -77,11 +77,99 @@ describe("SessionTokenStore", () => {
     controller.abort();
     const second = store.fetch(`${BASE}/rpc/auth.info`);
     const secondResult = expect(second).resolves.toHaveProperty("status", 204);
-    pending.resolve(refreshed());
     expect(await first).toBeInstanceOf(DOMException);
+    expect(fetcher).toHaveBeenCalledOnce();
+    pending.resolve(refreshed());
     await secondResult;
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(2);
     expect(store.getSnapshot()).toBe("access-1");
+  });
+
+  it.each([
+    "/rpc/tools.create",
+    "/chat/turnstream",
+    "/rpc/auth.info",
+    "/rpc/auth.switchScopes",
+    "/rpc/auth.logout",
+  ])("aborts %s promptly without canceling shared refresh", async (path) => {
+    const pending = deferred<Response>();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    const refresh = store.refresh();
+    const controller = new AbortController();
+    const canceled = store.fetch(`${BASE}${path}`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(canceled).rejects.toBe(controller.signal.reason);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+    const survivor = store.fetch(`${BASE}/rpc/tools.create`, {
+      method: "POST",
+    });
+    pending.resolve(refreshed());
+    await Promise.all([refresh, survivor]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      (fetcher.mock.calls[1]![0] as Request).headers.get("Gram-Session"),
+    ).toBe("access-1");
+  });
+
+  it("aborts queued callers without releasing the mutation ordering barrier", async () => {
+    const pending = deferred<Response>();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(refreshed())
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    const scope = store.fetch(`${BASE}/rpc/auth.switchScopes`, {
+      method: "POST",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const controller = new AbortController();
+    const queued = store.fetch(`${BASE}/rpc/auth.info`, {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(queued).rejects.toBe(controller.signal.reason);
+    const writeController = new AbortController();
+    const canceledWrite = store.fetch(`${BASE}/rpc/tools.create`, {
+      method: "POST",
+      signal: writeController.signal,
+    });
+    writeController.abort();
+    await expect(canceledWrite).rejects.toBe(writeController.signal.reason);
+    const survivor = store.fetch(`${BASE}/rpc/tools.create`, {
+      method: "POST",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    pending.resolve(refreshed("scoped-token"));
+    await Promise.all([scope, survivor]);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      (fetcher.mock.calls[2]![0] as Request).headers.get("Gram-Session"),
+    ).toBe("scoped-token");
+  });
+
+  it("does not start refresh for an already aborted request", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      store.fetch(`${BASE}/rpc/tools.create`, {
+        method: "POST",
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(controller.signal.reason);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("still rejects callers of the same failed refresh without dispatching their writes", async () => {
@@ -192,6 +280,86 @@ describe("SessionTokenStore", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("never dispatches expired access during refresh failure cooldowns", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(refreshed());
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    vi.advanceTimersByTime(9 * 60_000 + 50_000);
+    fetcher.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(store.refresh()).rejects.toThrow("offline");
+    fetcher.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(10_000);
+    await expect(
+      store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" }),
+    ).rejects.toThrow("Session access token expired");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(store.getSnapshot()).toBe("access-1");
+    vi.advanceTimersByTime(20_000);
+    fetcher.mockRejectedValueOnce(new TypeError("offline again"));
+    await expect(store.refresh()).rejects.toThrow("offline again");
+    await expect(
+      store.fetch(`${BASE}/chat/turnstream`, { method: "POST" }),
+    ).rejects.toThrow("Session access token expired");
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    vi.advanceTimersByTime(30_000);
+    fetcher
+      .mockResolvedValueOnce(refreshed("access-2"))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" });
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(
+      (fetcher.mock.calls[5]![0] as Request).headers.get("Gram-Session"),
+    ).toBe("access-2");
+  });
+
+  it("does not extend hard expiry when auth.info returns a token", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(refreshed());
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    vi.advanceTimersByTime(9 * 60_000 + 50_000);
+    fetcher.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(store.refresh()).rejects.toThrow("offline");
+    fetcher.mockResolvedValueOnce(refreshed("info-token"));
+    await store.fetch(`${BASE}/rpc/auth.info`);
+    expect(store.getSnapshot()).toBe("info-token");
+    vi.advanceTimersByTime(10_000);
+    await expect(
+      store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" }),
+    ).rejects.toThrow("Session access token expired");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("starts a scope token's lifetime at dispatch, not response arrival", async () => {
+    const pending = deferred<Response>();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(refreshed())
+      .mockReturnValueOnce(pending.promise);
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    vi.advanceTimersByTime(8 * 60_000);
+    const scope = store.fetch(`${BASE}/rpc/auth.switchScopes`, {
+      method: "POST",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(2 * 60_000);
+    pending.resolve(refreshed("scoped-token"));
+    await scope;
+    fetcher.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(7 * 60_000 + 50_000);
+    fetcher.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(store.refresh()).rejects.toThrow("offline");
+    vi.advanceTimersByTime(10_000);
+    await expect(
+      store.fetch(`${BASE}/rpc/tools.create`, { method: "POST" }),
+    ).rejects.toThrow("Session access token expired");
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
   it("clears the shared token when refresh itself confirms expiration", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -279,11 +447,37 @@ describe("SessionTokenStore", () => {
     expect(request.url).toBe(`${BASE}/rpc/auth.logout`);
     expect(request.method).toBe("POST");
     expect(request.credentials).toBe("include");
-    expect(request.headers.has("Gram-Session")).toBe(false);
+    expect(request.headers.get("Gram-Session")).toBe("expired-access");
     expect(response.status).toBe(200);
     expect(store.getSnapshot()).toBe("");
     await store.refresh(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the canonical header for logout even after hard expiry", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(refreshed("current"))
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    vi.advanceTimersByTime(11 * 60_000);
+    await store.fetch(`${BASE}/rpc/auth.logout`, {
+      method: "POST",
+      headers: { "Gram-Session": "captured" },
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      (fetcher.mock.calls[1]![0] as Request).headers.get("Gram-Session"),
+    ).toBe("current");
+    // Once explicitly cleared, neither the canonical nor captured token is sent.
+    await store.fetch(`${BASE}/rpc/auth.logout`, {
+      method: "POST",
+      headers: { "Gram-Session": "captured" },
+    });
+    expect(
+      (fetcher.mock.calls[2]![0] as Request).headers.has("Gram-Session"),
+    ).toBe(false);
   });
 
   it.each([

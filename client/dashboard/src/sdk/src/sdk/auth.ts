@@ -7,6 +7,7 @@ import { authEnterDemo } from "../funcs/authEnterDemo.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
+import { authRefresh } from "../funcs/authRefresh.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -18,16 +19,13 @@ import {
   AuthLoginRequest,
   AuthLoginResponse,
 } from "../models/operations/authlogin.js";
+import { AuthRefreshResponse } from "../models/operations/authrefresh.js";
 import {
   EnterDemoRequest,
   EnterDemoResponse,
   EnterDemoSecurity,
 } from "../models/operations/enterdemo.js";
-import {
-  LogoutRequest,
-  LogoutResponse,
-  LogoutSecurity,
-} from "../models/operations/logout.js";
+import { LogoutRequest, LogoutResponse } from "../models/operations/logout.js";
 import {
   RegisterRequest,
   RegisterSecurity,
@@ -121,17 +119,30 @@ export class Auth extends ClientSDK {
    * logout auth
    *
    * @remarks
-   * Logs out the current user by clearing their session.
+   * Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.
    */
   async logout(
     request?: LogoutRequest | undefined,
-    security?: LogoutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
       this,
       request,
-      security,
+      options,
+    ));
+  }
+
+  /**
+   * refresh auth
+   *
+   * @remarks
+   * Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.
+   */
+  async refresh(
+    options?: RequestOptions,
+  ): Promise<AuthRefreshResponse | undefined> {
+    return unwrapAsync(authRefresh(
+      this,
       options,
     ));
   }

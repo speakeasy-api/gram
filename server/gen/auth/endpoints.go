@@ -122,7 +122,7 @@ func NewEnterDemoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 // "refresh" of service "auth".
 func NewRefreshEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return nil, s.Refresh(ctx)
+		return s.Refresh(ctx)
 	}
 }
 

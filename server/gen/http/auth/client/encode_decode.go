@@ -1012,7 +1012,20 @@ func DecodeRefreshResponse(decoder func(*http.Response) goahttp.Decoder, restore
 		}
 		switch resp.StatusCode {
 		case http.StatusNoContent:
-			return nil, nil
+			var (
+				sessionToken string
+				err          error
+			)
+			sessionTokenRaw := resp.Header.Get("Gram-Session")
+			if sessionTokenRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
+			}
+			sessionToken = sessionTokenRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refresh", err)
+			}
+			res := NewRefreshResultNoContent(sessionToken)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
 				body RefreshUnauthorizedResponseBody

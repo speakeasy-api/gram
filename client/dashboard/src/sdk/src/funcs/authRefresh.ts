@@ -4,11 +4,9 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
-import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -26,27 +24,24 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  LogoutRequest,
-  LogoutRequest$outboundSchema,
-  LogoutResponse,
-  LogoutResponse$inboundSchema,
-} from "../models/operations/logout.js";
+  AuthRefreshResponse,
+  AuthRefreshResponse$inboundSchema,
+} from "../models/operations/authrefresh.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * logout auth
+ * refresh auth
  *
  * @remarks
- * Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.
+ * Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.
  */
-export function authLogout(
+export function authRefresh(
   client: GramCore,
-  request?: LogoutRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    LogoutResponse | undefined,
+    AuthRefreshResponse | undefined,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -60,19 +55,17 @@ export function authLogout(
 > {
   return new APIPromise($do(
     client,
-    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request?: LogoutRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      LogoutResponse | undefined,
+      AuthRefreshResponse | undefined,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -86,31 +79,16 @@ async function $do(
     APICall,
   ]
 > {
-  const parsed = safeParse(
-    request,
-    (value) => z.parse(z.optional(LogoutRequest$outboundSchema), value),
-    "Input validation failed",
-  );
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/auth.logout")();
+  const path = pathToFunc("/rpc/auth.refresh")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "logout",
+    operationID: "authRefresh",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -127,7 +105,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
@@ -153,7 +130,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    LogoutResponse | undefined,
+    AuthRefreshResponse | undefined,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -164,7 +141,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.optional(LogoutResponse$inboundSchema), { hdrs: true }),
+    M.nil(204, z.optional(AuthRefreshResponse$inboundSchema), { hdrs: true }),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

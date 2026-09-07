@@ -39,9 +39,14 @@ func TestSessionTTLUsesFixedAccessLifetime(t *testing.T) {
 func TestSupportSessionTTLUsesAbsoluteExpiry(t *testing.T) {
 	t.Parallel()
 
-	expiresAt := time.Now().Add(time.Hour)
-	ttl := (Session{SupportExpiresAt: expiresAt}).TTL()
-	require.InDelta(t, AccessLifetime, ttl, float64(time.Second))
+	for _, remaining := range []time.Duration{5 * time.Minute, time.Hour} {
+		t.Run(remaining.String(), func(t *testing.T) {
+			t.Parallel()
+			expiresAt := time.Now().Add(remaining)
+			ttl := (Session{SupportExpiresAt: expiresAt}).TTL()
+			require.InDelta(t, min(AccessLifetime, remaining), ttl, float64(time.Second))
+		})
+	}
 }
 
 func TestNewSessionID(t *testing.T) {

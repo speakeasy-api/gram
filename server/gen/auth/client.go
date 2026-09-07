@@ -140,9 +140,13 @@ func (c *Client) EnterDemo(ctx context.Context, p *EnterDemoPayload) (res *Enter
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Refresh(ctx context.Context) (err error) {
-	_, err = c.RefreshEndpoint(ctx, nil)
-	return
+func (c *Client) Refresh(ctx context.Context) (res *RefreshResult, err error) {
+	var ires any
+	ires, err = c.RefreshEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*RefreshResult), nil
 }
 
 // Logout calls the "logout" endpoint of the "auth" service.

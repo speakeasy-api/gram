@@ -8,10 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type LogoutSecurity = {
-  sessionHeaderGramSession?: string | undefined;
-};
-
 export type LogoutRequest = {
   /**
    * Session header
@@ -22,30 +18,6 @@ export type LogoutRequest = {
 export type LogoutResponse = {
   headers: { [k: string]: Array<string> };
 };
-
-/** @internal */
-export type LogoutSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const LogoutSecurity$outboundSchema: z.ZodMiniType<
-  LogoutSecurity$Outbound,
-  LogoutSecurity
-> = z.pipe(
-  z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function logoutSecurityToJSON(logoutSecurity: LogoutSecurity): string {
-  return JSON.stringify(LogoutSecurity$outboundSchema.parse(logoutSecurity));
-}
 
 /** @internal */
 export type LogoutRequest$Outbound = {

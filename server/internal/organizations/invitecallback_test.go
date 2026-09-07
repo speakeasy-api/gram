@@ -21,6 +21,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -498,7 +499,8 @@ func TestInviteCallback_AdminInviteNotifiesTrialAdminAdded(t *testing.T) {
 		}
 	}
 	require.NotNil(t, sessionCookie)
-	require.Equal(t, constants.SessionCookieMaxAgeSeconds, sessionCookie.MaxAge)
+	require.InDelta(t, int(sessions.AccessLifetime/time.Second), sessionCookie.MaxAge, 2)
+	require.WithinDuration(t, time.Now().Add(sessions.AccessLifetime), sessionCookie.Expires, 2*time.Second)
 	refreshCookies := make(map[string]*http.Cookie)
 	for _, cookie := range recorder.Result().Cookies() {
 		if cookie.Name == "gram_refresh" {
@@ -515,7 +517,7 @@ func TestInviteCallback_AdminInviteNotifiesTrialAdminAdded(t *testing.T) {
 		require.True(t, refreshCookie.Secure)
 		require.True(t, refreshCookie.HttpOnly)
 		require.Equal(t, http.SameSiteStrictMode, refreshCookie.SameSite)
-		require.Equal(t, int((72*time.Hour)/time.Second), refreshCookie.MaxAge)
+		require.InDelta(t, int(sessions.RefreshIdleLifetime/time.Second), refreshCookie.MaxAge, 2)
 	}
 	require.Equal(t, refreshCookies["/rpc/auth.refresh"].Value, refreshCookies["/rpc/auth.logout"].Value)
 	require.Equal(t, sessionCookie.Value, recorder.Header().Get(constants.SessionHeader))

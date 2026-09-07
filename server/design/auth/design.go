@@ -151,9 +151,15 @@ var _ = Service("auth", func() {
 	Method("refresh", func() {
 		Description("Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.")
 		NoSecurity()
+		Result(func() {
+			Attribute("session_token", String, "The renewed authentication session")
+			Required("session_token")
+		})
 		HTTP(func() {
 			POST("/rpc/auth.refresh")
-			Response(StatusNoContent)
+			Response(StatusNoContent, func() {
+				security.SessionHeader()
+			})
 		})
 		Meta("openapi:operationId", "authRefresh")
 		Meta("openapi:extension:x-speakeasy-name-override", "refresh")

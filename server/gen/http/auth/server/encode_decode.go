@@ -815,6 +815,8 @@ func EncodeEnterDemoError(encoder func(context.Context, http.ResponseWriter) goa
 // refresh endpoint.
 func EncodeRefreshResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*auth.RefreshResult)
+		w.Header().Set("Gram-Session", res.SessionToken)
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}

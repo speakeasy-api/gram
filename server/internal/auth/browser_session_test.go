@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/sessioncookies"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -146,7 +147,7 @@ func TestBrowserRefreshCookieEndpointIsolation(t *testing.T) {
 	secret, session, err := service.sessions.CreateRefreshSession(t.Context(), "access")
 	require.NoError(t, err)
 	initial := httptest.NewRecorder()
-	WriteBrowserSessionCookies(initial, secret, session)
+	sessioncookies.WriteBrowserSessionCookies(initial, secret, session)
 	refreshed := browserRequest(handler, refreshCookiePath, service.siteOrigin, secret, session.SessionID)
 	require.Equal(t, http.StatusNoContent, refreshed.Code)
 	for _, response := range []*httptest.ResponseRecorder{initial, refreshed} {

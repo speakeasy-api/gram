@@ -26,6 +26,7 @@ func TestSessionResponseEncodersKeepCredentialsOutOfBodies(t *testing.T) {
 		{name: "callback", encode: authserver.EncodeCallbackResponse(goahttp.ResponseEncoder), result: &gen.CallbackResult{Location: "https://dashboard.example.com", SessionToken: token}, status: http.StatusTemporaryRedirect},
 		{name: "scope", encode: authserver.EncodeSwitchScopesResponse(goahttp.ResponseEncoder), result: &gen.SwitchScopesResult{SessionToken: token}, status: http.StatusOK},
 		{name: "demo", encode: authserver.EncodeEnterDemoResponse(goahttp.ResponseEncoder), result: &gen.EnterDemoResult{SessionToken: token}, status: http.StatusOK},
+		{name: "refresh", encode: authserver.EncodeRefreshResponse(goahttp.ResponseEncoder), result: &gen.RefreshResult{SessionToken: token}, status: http.StatusNoContent},
 		{name: "info", encode: authserver.EncodeInfoResponse(goahttp.ResponseEncoder), result: &gen.InfoResult{UserID: "user", UserEmail: "user@example.com", ActiveOrganizationID: "org", SessionToken: token}, status: http.StatusOK},
 	}
 	for _, tt := range tests {
@@ -36,8 +37,13 @@ func TestSessionResponseEncodersKeepCredentialsOutOfBodies(t *testing.T) {
 			require.Equal(t, tt.status, recorder.Code)
 			require.Equal(t, token, recorder.Header().Get(constants.SessionHeader))
 			require.NotContains(t, recorder.Body.String(), token)
-			require.NotContains(t, recorder.Body.String(), "session_cookie")
-			require.NotContains(t, recorder.Body.String(), "session_token")
+			require.NotContains(t, recorder.Body.String(), constants.SessionCookie)
+			require.NotContains(t, recorder.Body.String(), refreshCookieName)
+			require.NotContains(t, recorder.Body.String(), constants.SessionHeader)
+			require.NotContains(t, recorder.Body.String(), "SessionToken")
+			if tt.status == http.StatusNoContent {
+				require.Empty(t, recorder.Body.String())
+			}
 			require.Empty(t, recorder.Header().Values("Set-Cookie"), "only explicit browser session issuance writes cookies")
 		})
 	}

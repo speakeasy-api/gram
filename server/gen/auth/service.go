@@ -28,7 +28,7 @@ type Service interface {
 	// Renews a browser session using only the HttpOnly refresh cookie. Requires
 	// the configured dashboard Origin. Access credentials retain a fixed
 	// ten-minute expiry.
-	Refresh(context.Context) (err error)
+	Refresh(context.Context) (res *RefreshResult, err error)
 	// Logs out the current user, including an expired browser access session.
 	// Browser cookies require the configured dashboard Origin; header-only clients
 	// require a valid Gram-Session credential.
@@ -172,6 +172,12 @@ type ProjectEntry struct {
 	Name string
 	// The slug of the project
 	Slug types.Slug
+}
+
+// RefreshResult is the result type of the auth service refresh method.
+type RefreshResult struct {
+	// The renewed authentication session
+	SessionToken string
 }
 
 // RegisterPayload is the payload type of the auth service register method.

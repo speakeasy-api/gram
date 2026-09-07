@@ -3,12 +3,36 @@ import { getApiBaseURL, getServerURL } from "@/lib/utils";
 // Access tokens live only in memory. The browser alone handles gram_refresh,
 // two HttpOnly cookies scoped to /rpc/auth.refresh and /rpc/auth.logout.
 // Access tokens last ten minutes.
+const ACCESS_LIFETIME_MS = 10 * 60_000;
 const REFRESH_AFTER_MS = 9 * 60_000;
 const FAILURE_COOLDOWN_MS = 30_000;
+
+// Cancel only this caller's wait, never shared refresh or mutation work.
+function waitFor<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(signal.reason);
+    };
+    if (signal.aborted) aborted();
+    else signal.addEventListener("abort", aborted, { once: true });
+    pending.then(
+      (value) => {
+        signal.removeEventListener("abort", aborted);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", aborted);
+        reject(error);
+      },
+    );
+  });
+}
 
 export class SessionTokenStore {
   private token: string | null = null;
   private refreshAt = 0;
+  private accessExpiresAt = 0;
   private revision = 0;
   private loggedOut = false;
   private inFlight: Promise<string | null> | null = null;
@@ -34,9 +58,20 @@ export class SessionTokenStore {
     };
   };
 
-  private publish(token: string, refreshAt: number) {
+  private requireLiveAccess() {
+    if (this.token && Date.now() >= this.accessExpiresAt) {
+      throw new Error("Session access token expired");
+    }
+  }
+
+  private publish(
+    token: string,
+    refreshAt: number,
+    accessExpiresAt = this.accessExpiresAt,
+  ) {
     this.token = token;
     this.refreshAt = refreshAt;
+    this.accessExpiresAt = accessExpiresAt;
     this.revision++;
     this.listeners.forEach((listener) => listener());
   }
@@ -49,7 +84,11 @@ export class SessionTokenStore {
     if (this.mutation) await this.mutation.catch(() => {});
     if (this.loggedOut) return this.token;
     if (this.inFlight) return this.inFlight;
-    if (!force && Date.now() < this.refreshAt) return this.token;
+    if (!force && Date.now() < this.refreshAt) {
+      // A failure cooldown is not an extension of the access token's lifetime.
+      this.requireLiveAccess();
+      return this.token;
+    }
 
     this.inFlight = (async () => {
       const startedAt = Date.now();
@@ -70,7 +109,11 @@ export class SessionTokenStore {
         const token = response.headers.get("Gram-Session");
         if (!token)
           throw new Error("Session refresh did not return an access token");
-        this.publish(token, startedAt + REFRESH_AFTER_MS);
+        this.publish(
+          token,
+          startedAt + REFRESH_AFTER_MS,
+          startedAt + ACCESS_LIFETIME_MS,
+        );
         return token;
       } catch (error) {
         // A network error is not a logout. Never replay the caller's request.
@@ -90,6 +133,7 @@ export class SessionTokenStore {
     init?: RequestInit,
   ): Promise<Response> => {
     const request = new Request(input, init);
+    request.signal.throwIfAborted();
     const path = new URL(request.url).pathname;
     const logout = path === "/rpc/auth.logout";
     const switchScope =
@@ -97,14 +141,16 @@ export class SessionTokenStore {
     const sessionInfo = path === "/rpc/auth.info";
 
     const send = async () => {
+      request.signal.throwIfAborted();
+      // Logout can revoke a session even after its access token expires.
+      if (!logout) this.requireLiveAccess();
+      const startedAt = Date.now();
       const revision = this.revision;
       const headers = new Headers(request.headers);
       if (this.token !== null) {
         headers.delete("Gram-Session");
         if (this.token) headers.set("Gram-Session", this.token);
       }
-      // Logout authenticates from cookies, including an expired access cookie.
-      if (logout) headers.delete("Gram-Session");
       const response = await this.fetcher(
         new Request(request, {
           headers,
@@ -127,7 +173,8 @@ export class SessionTokenStore {
         ) {
           this.publish(
             token,
-            switchScope ? Date.now() + REFRESH_AFTER_MS : this.refreshAt,
+            switchScope ? startedAt + REFRESH_AFTER_MS : this.refreshAt,
+            switchScope ? startedAt + ACCESS_LIFETIME_MS : this.accessExpiresAt,
           );
         }
       }
@@ -148,14 +195,15 @@ export class SessionTokenStore {
         return send();
       })();
       this.mutation = mutation;
-      try {
-        return await mutation;
-      } finally {
+      const clearMutation = () => {
+        // Keep the barrier until the work settles, even if its caller aborts.
         if (this.mutation === mutation) this.mutation = null;
-      }
+      };
+      void mutation.then(clearMutation, clearMutation);
+      return waitFor(mutation, request.signal);
     }
 
-    await this.refresh();
+    await waitFor(this.refresh(), request.signal);
     return send();
   };
 

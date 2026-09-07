@@ -2152,6 +2152,15 @@ func NewEnterDemoGatewayError(body *EnterDemoGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewRefreshResultNoContent builds a "auth" service "refresh" endpoint result
+// from a HTTP "NoContent" response.
+func NewRefreshResultNoContent(sessionToken string) *auth.RefreshResult {
+	v := &auth.RefreshResult{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewRefreshUnauthorized builds a auth service refresh endpoint unauthorized
 // error.
 func NewRefreshUnauthorized(body *RefreshUnauthorizedResponseBody) *goa.ServiceError {
