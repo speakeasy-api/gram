@@ -118,7 +118,7 @@ export function UnproxiedMcpOverviewTab({
           <Heading variant="h4">Tool calls over time</Heading>
           <Text small muted className="mt-1">
             Sourced from Shadow MCP activity in the last {USAGE_WINDOW_DAYS}{" "}
-            days. This requires the Gram hook integration to be installed, and
+            days. This requires the Speakeasy hook integration to be installed, and
             only reflects calls made from hook-instrumented sessions. A freshly
             added or rarely used server may show no data even when it's working
             correctly.
