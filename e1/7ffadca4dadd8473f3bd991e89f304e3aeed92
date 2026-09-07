@@ -1,0 +1,48 @@
+server/internal/mcpapproval/decision_core.go
+  h_9630b74bdac540 1-192
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 288-296
+server/internal/platformmcp/shadow_decision_integration_test.go
+  h_9630b74bdac540 1-78
+server/internal/mcpapproval/decision_core_test.go
+  h_9630b74bdac540 1-44
+server/internal/feature/flags.go
+  h_9630b74bdac540 49-52
+server/internal/mcpapproval/record_decision_adapter.go
+  h_9630b74bdac540 1-76
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 203,210
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 666-670
+server/internal/platformmcp/shadow_decision_test.go
+  h_9630b74bdac540 1-87
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 38-39,74-75
+server/internal/platformmcp/shadow_inventory.go
+  h_9630b74bdac540 81,135,144-147,153,158,232-242,246-250,262,264,267,281,287-290,347
+server/internal/platformmcp/shadow_inventory_test.go
+  h_9630b74bdac540 62-63,67,107-108,113,145,147
+server/internal/platformmcp/tool_shadow_decision.go
+  h_9630b74bdac540 1-51
+.changeset/platform-mcp-decide-shadow-access.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/shadow_decision_version.go
+  h_9630b74bdac540 1-45
+server/internal/mcpapproval/platform_read.go
+  h_9630b74bdac540 56,103-112,147
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 299,315,319-323
+server/internal/platformmcp/shadow_decision.go
+  h_9630b74bdac540 1-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e17ffadca4dadd8473f3bd991e89f304e3aeed92",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
