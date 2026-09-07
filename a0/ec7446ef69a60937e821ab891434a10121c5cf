@@ -1,0 +1,21 @@
+.changeset/policy-scope-dashboard.md
+  s_d32de0b0e2b253::t_32c13e702b5ade 5
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_d32de0b0e2b253::t_86c4eb4d07d10f 94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a0ec7446ef69a60937e821ab891434a10121c5cf",
+  "prompts": {},
+  "sessions": {
+    "s_d32de0b0e2b253": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c4ca134-6d21-4756-a37e-e1180d485004",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
