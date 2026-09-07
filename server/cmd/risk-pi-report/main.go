@@ -1153,9 +1153,9 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 		OrgID: benchOrgID, ProjectID: benchProjectID, Model: model, Messages: messages,
 		Temperature: &temp, UsageSource: billing.ModelUsageSourceGram, KeyType: openrouter.KeyTypeInternal,
 		KeySlot: "", ChatID: uuid.Nil, UserID: "", ExternalUserID: "", UserEmail: "",
-		HTTPMetadata: nil, APIKeyID: "", Tools: nil, Stream: false, JSONSchema: &schema,
+		HTTPMetadata: nil, APIKeyID: "", Tools: nil, ToolChoice: nil, Stream: false, JSONSchema: &schema,
 		Reasoning:    &openrouter.Reasoning{Effort: reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
-		CacheControl: nil, NormalizeOutboundMessages: false,
+		CacheControl: nil, NormalizeOutboundMessages: false, WebSearch: nil, DisableResponseHealing: false,
 	})
 	observation := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: nil}
 	if err != nil {

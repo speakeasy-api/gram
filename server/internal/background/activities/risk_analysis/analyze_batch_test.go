@@ -455,7 +455,9 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 	recentUntrustedContent := "latest tool result:" + strings.Repeat("t", 4100)
 	insert("user", priorUserRequest)
 	insert("tool", recentUntrustedContent)
-	currentID := insert("assistant", "current event")
+	// The current event must be a write tool call: the recommended PI scope
+	// exempts plain assistant text and all-read-only tool-call batches.
+	currentID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "echo current event"})
 
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(
