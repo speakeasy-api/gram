@@ -1610,6 +1610,59 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 	return items, nil
 }
 
+const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.member-role-sync', $1::text, $2::text)::text, 0
+))
+`
+
+type LockMemberRoleSyncParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+// Cross-process serialization of RoleManager sends, including legacy unlinked members.
+func (q *Queries) LockMemberRoleSync(ctx context.Context, arg LockMemberRoleSyncParams) error {
+	_, err := q.db.Exec(ctx, lockMemberRoleSync, arg.OrganizationID, arg.WorkosUserID)
+	return err
+}
+
+const lockMemberRoleSyncRelationship = `-- name: LockMemberRoleSyncRelationship :one
+SELECT our.user_id, our.workos_membership_id, our.deleted,
+  (users.deleted_at IS NOT NULL)::boolean AS user_deleted
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND users.workos_id = $2::text
+FOR UPDATE OF our
+`
+
+type LockMemberRoleSyncRelationshipParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+type LockMemberRoleSyncRelationshipRow struct {
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	Deleted            bool
+	UserDeleted        bool
+}
+
+// Keep a connected member's desired roles stable across the read and provider send.
+// Deleted relationships are returned so they cannot fall back to legacy assignments.
+func (q *Queries) LockMemberRoleSyncRelationship(ctx context.Context, arg LockMemberRoleSyncRelationshipParams) (LockMemberRoleSyncRelationshipRow, error) {
+	row := q.db.QueryRow(ctx, lockMemberRoleSyncRelationship, arg.OrganizationID, arg.WorkosUserID)
+	var i LockMemberRoleSyncRelationshipRow
+	err := row.Scan(
+		&i.UserID,
+		&i.WorkosMembershipID,
+		&i.Deleted,
+		&i.UserDeleted,
+	)
+	return i, err
+}
+
 const lockOrganizationRoleByID = `-- name: LockOrganizationRoleByID :one
 SELECT id
 FROM organization_roles
@@ -1648,9 +1701,9 @@ type LockOrganizationUserRelationshipParams struct {
 	UserID         string
 }
 
-// Serializes AddMemberRoleTx and UpdateMemberRoles on the stable membership row.
-// Role create/update member assignment and provider event ingestion do not yet
-// participate in this lock; this is not a lock for all assignment writers.
+// Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
+// Bulk role assignment and deletion lock the same rows by WorkOS user ID.
+// Provider event ingestion does not participate; not a lock for all writers.
 func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg LockOrganizationUserRelationshipParams) (int64, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
 	var id int64
@@ -1729,6 +1782,37 @@ type MarkOrganizationRoleDeletedLocallyParams struct {
 
 func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg MarkOrganizationRoleDeletedLocallyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markOrganizationRoleDeletedLocally, arg.OrganizationID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows
+UPDATE organization_role_assignments
+SET user_id = $1::text, updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND workos_user_id = $3
+  AND role_urn = $4::text
+  AND user_id IS NULL
+  AND deleted_at IS NULL
+`
+
+type RepairOrganizationRoleAssignmentUserLinkParams struct {
+	UserID         string
+	OrganizationID string
+	WorkosUserID   string
+	RoleUrn        string
+}
+
+// Repair only linkage; preserve roles and provider event/version metadata.
+func (q *Queries) RepairOrganizationRoleAssignmentUserLink(ctx context.Context, arg RepairOrganizationRoleAssignmentUserLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repairOrganizationRoleAssignmentUserLink,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+		arg.RoleUrn,
+	)
 	if err != nil {
 		return 0, err
 	}

@@ -551,6 +551,20 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	// Match assignment/update lock order: role first, then member rows.
+	roleUUID, err := uuid.Parse(currentRole.ID)
+	if err != nil {
+		return localRole{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
+	}
+	if _, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{OrganizationID: gramOrgID, ID: roleUUID}); errors.Is(err, pgx.ErrNoRows) {
+		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	} else if err != nil {
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "lock role for deletion").LogError(ctx, r.logger)
+	}
+	currentRole, err = r.getLocalRoleByIDTx(ctx, tx, gramOrgID, roleID)
+	if err != nil {
+		return localRole{}, err
+	}
 	rows, err := repo.New(tx).ListOrganizationRoleAssignmentsBySlug(ctx, repo.ListOrganizationRoleAssignmentsBySlugParams{
 		OrganizationID: gramOrgID,
 		WorkosRoleSlug: currentRole.Slug,
@@ -564,6 +578,9 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	for _, row := range rows {
 		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
 		if row.WorkosUserID != "" {
+			if _, err := repo.New(tx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: row.WorkosUserID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return localRole{}, oops.E(oops.CodeUnexpected, err, "lock member for role deletion").LogError(ctx, r.logger)
+			}
 			// Soft-delete only this role's assignment; other roles for the user are preserved.
 			if _, err := repo.New(tx).SoftDeleteRoleAssignmentsBySlug(ctx, repo.SoftDeleteRoleAssignmentsBySlugParams{
 				OrganizationID: gramOrgID,
@@ -582,14 +599,8 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 			if err != nil {
 				return localRole{}, oops.E(oops.CodeUnexpected, err, "list remaining role assignments").LogError(ctx, r.logger)
 			}
-			remainingSlugs := make([]string, 0, len(remaining))
-			for _, r := range remaining {
-				remainingSlugs = append(remainingSlugs, r.RoleSlug)
-			}
-
 			// If user has no remaining roles, assign the default member role locally.
-			if len(remainingSlugs) == 0 {
-				remainingSlugs = []string{authz.SystemRoleMember}
+			if len(remaining) == 0 {
 				if _, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 					OrganizationID:     gramOrgID,
 					WorkosUserID:       row.WorkosUserID,
@@ -604,15 +615,9 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 				}
 			}
 
-			workosSyncs = append(workosSyncs, func(ctx context.Context) {
-				r.syncWorkOS(ctx, "sync member roles after role deletion in workos", func() error {
-					_, err := r.roles.UpdateMemberRoles(ctx, membershipID, remainingSlugs)
-					if err == nil {
-						return nil
-					}
-					return fmt.Errorf("sync member roles after role deletion in workos: %w", err)
-				})
-			})
+			workosSyncs = append(workosSyncs, r.memberRoleSync(MemberRoleReconciliation{
+				organizationID: gramOrgID, workosUserID: row.WorkosUserID, membershipID: membershipID,
+			}))
 		}
 	}
 
@@ -689,12 +694,13 @@ type MemberRoleAddResult struct {
 	Changed bool
 }
 
-// MemberRoleReconciliation is an opaque desired-state WorkOS update. Invoke it
-// only after the transaction passed to AddMemberRoleTx commits, including when
-// replaying a previously committed operation receipt.
+// MemberRoleReconciliation identifies a WorkOS membership, never a role snapshot.
+// Invoke it only after the originating transaction commits. Roles are read again
+// under a cross-process send lock, including on receipt replay.
 type MemberRoleReconciliation struct {
-	membershipID string
-	roleSlugs    []string
+	organizationID string
+	workosUserID   string
+	membershipID   string
 }
 
 // UpdateMemberRoles replaces all of a member's local role assignments atomically, then best-effort syncs WorkOS after commit.
@@ -873,16 +879,8 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
 	}
 
-	r.runWorkOSSyncs(ctx, []workosSync{
-		func(ctx context.Context) {
-			r.syncWorkOS(ctx, "update member roles in workos", func() error {
-				_, err := r.roles.UpdateMemberRoles(ctx, result.MembershipID, result.RoleSlugs)
-				if err == nil {
-					return nil
-				}
-				return fmt.Errorf("update member roles in workos: %w", err)
-			})
-		},
+	r.ReconcileMemberRoles(ctx, MemberRoleReconciliation{
+		organizationID: gramOrgID, workosUserID: result.WorkosUserID, membershipID: result.MembershipID,
 	})
 
 	return result, nil
@@ -961,20 +959,20 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		}
 	}
 
-	rolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
-		OrganizationID: gramOrgID,
-		WorkosUserID:   connected.WorkosID.String,
-	})
-	if err != nil {
-		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list member roles for workos sync").LogError(ctx, r.logger)
-	}
-	roleSlugs := make([]string, 0, len(rolePrincipals)+1)
-	for _, principal := range rolePrincipals {
-		roleSlugs = append(roleSlugs, principal.RoleSlug)
-	}
-	slices.Sort(roleSlugs)
-
 	alreadyAssigned := slices.Contains(roleIDs, role.ID)
+	linkRepaired := false
+	if alreadyAssigned {
+		repaired, err := repo.New(tx).RepairOrganizationRoleAssignmentUserLink(ctx, repo.RepairOrganizationRoleAssignmentUserLinkParams{
+			OrganizationID: gramOrgID,
+			WorkosUserID:   connected.WorkosID.String,
+			RoleUrn:        role.PrincipalURN,
+			UserID:         connected.ID,
+		})
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "repair member role linkage").LogError(ctx, r.logger)
+		}
+		linkRepaired = repaired > 0
+	}
 	afterRoleIDs := slices.Clone(roleIDs)
 	if !alreadyAssigned {
 		inserted, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
@@ -995,8 +993,6 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		}
 		afterRoleIDs = append(afterRoleIDs, role.ID)
 		slices.Sort(afterRoleIDs)
-		roleSlugs = append(roleSlugs, role.Slug)
-		slices.Sort(roleSlugs)
 	}
 
 	memberName := conv.Default(connected.DisplayName, connected.Email)
@@ -1012,8 +1008,8 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		Groups:       nil,
 	}
 	safeAfter := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(afterRoleIDs)}
-	reconciliation := MemberRoleReconciliation{membershipID: membershipID, roleSlugs: slices.Clone(roleSlugs)}
-	if alreadyAssigned {
+	reconciliation := MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}
+	if alreadyAssigned && !linkRepaired {
 		return MemberRoleAddResult{After: safeAfter, Member: after, Changed: false}, reconciliation, nil
 	}
 
@@ -1036,10 +1032,9 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	return MemberRoleAddResult{After: safeAfter, Member: after, Changed: true}, reconciliation, nil
 }
 
-// CurrentMemberRoleReconciliationTx returns the member's complete current
-// desired WorkOS role state without changing local assignments or auditing.
-// Receipt replays use it so provider convergence cannot resurrect a role that
-// a later dashboard action removed.
+// CurrentMemberRoleReconciliationTx resolves the member's current sync target
+// without changing local assignments or auditing. Desired roles are read later,
+// under the send lock, rather than captured by this transaction.
 func (r *RoleManager) CurrentMemberRoleReconciliationTx(ctx context.Context, tx pgx.Tx, gramOrgID, userID string) (MemberRoleReconciliation, error) {
 	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{OrganizationID: gramOrgID, UserID: userID}); errors.Is(err, pgx.ErrNoRows) {
 		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
@@ -1067,16 +1062,7 @@ func (r *RoleManager) CurrentMemberRoleReconciliationTx(ctx context.Context, tx 
 	if membershipID == "" {
 		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
 	}
-	roles, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{OrganizationID: gramOrgID, WorkosUserID: connected.WorkosID.String})
-	if err != nil {
-		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list current member roles for workos sync").LogError(ctx, r.logger)
-	}
-	roleSlugs := make([]string, 0, len(roles))
-	for _, role := range roles {
-		roleSlugs = append(roleSlugs, role.RoleSlug)
-	}
-	slices.Sort(roleSlugs)
-	return MemberRoleReconciliation{membershipID: membershipID, roleSlugs: roleSlugs}, nil
+	return MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}, nil
 }
 
 // ReconcileMemberRoles starts a bounded, detached desired-state WorkOS sync.
@@ -1084,17 +1070,82 @@ func (r *RoleManager) ReconcileMemberRoles(ctx context.Context, reconciliation M
 	if r == nil || r.roles == nil || reconciliation.membershipID == "" {
 		return
 	}
-	membershipID := reconciliation.membershipID
-	roleSlugs := slices.Clone(reconciliation.roleSlugs)
-	r.runWorkOSSyncs(ctx, []workosSync{func(ctx context.Context) {
-		r.syncWorkOS(ctx, "reconcile member roles in workos", func() error {
-			_, err := r.roles.UpdateMemberRoles(ctx, membershipID, roleSlugs)
+	r.runWorkOSSyncs(ctx, []workosSync{r.memberRoleSync(reconciliation)})
+}
+
+// memberRoleSync serializes RoleManager sends across processes. The relationship
+// lock also excludes connected-member mutations while reading and sending. This
+// does not order external provider events or requests that outlive cancellation.
+func (r *RoleManager) memberRoleSync(target MemberRoleReconciliation) workosSync {
+	return func(ctx context.Context) {
+		if target.organizationID == "" || target.workosUserID == "" || target.membershipID == "" {
+			return
+		}
+		tx, err := r.db.Begin(ctx)
+		if err != nil {
+			r.logger.ErrorContext(ctx, "begin member role sync", attr.SlogError(err))
+			return
+		}
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+			defer cancel()
+			o11y.NoLogDefer(func() error { return tx.Rollback(cleanupCtx) })
+		}()
+		queries := repo.New(tx)
+		if err := queries.LockMemberRoleSync(ctx, repo.LockMemberRoleSyncParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID}); err != nil {
+			r.logger.ErrorContext(ctx, "lock member role sync", attr.SlogError(err))
+			return
+		}
+		member, err := queries.LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Older assignment-only members have no relationship row to lock.
+			// Validate the expected linkage rather than reviving a stale target.
+			records, err := queries.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, repo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
 			if err != nil {
-				return fmt.Errorf("reconcile member roles in workos: %w", err)
+				r.logger.ErrorContext(ctx, "load legacy member role sync linkage", attr.SlogError(err))
+				return
+			}
+			linked := false
+			for _, record := range records {
+				if record.DeletedAt.Valid {
+					continue
+				}
+				if record.UserID.Valid || conv.FromPGTextOrEmpty[string](record.WorkosMembershipID) != target.membershipID {
+					return
+				}
+				linked = true
+			}
+			if !linked {
+				return
+			}
+		case err != nil:
+			r.logger.ErrorContext(ctx, "lock member role sync relationship", attr.SlogError(err))
+			return
+		default:
+			if member.Deleted || member.UserDeleted || conv.FromPGTextOrEmpty[string](member.WorkosMembershipID) != target.membershipID {
+				return
+			}
+		}
+		r.syncWorkOS(ctx, "reconcile member roles in workos", func() error {
+			// Read on every attempt: never retry a captured pre-commit role set.
+			roles, err := queries.ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
+			if err != nil {
+				return fmt.Errorf("read current member roles: %w", err)
+			}
+			slugs := make([]string, 0, len(roles))
+			for _, role := range roles {
+				slugs = append(slugs, role.RoleSlug)
+			}
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("member role sync canceled: %w", err)
+			}
+			if _, err := r.roles.UpdateMemberRoles(ctx, target.membershipID, slugs); err != nil {
+				return fmt.Errorf("update current member roles in workos: %w", err)
 			}
 			return nil
 		})
-	}})
+	}
 }
 
 // MemberRolePrincipals returns role slug and principal URN for each role assigned to a WorkOS user in this org.
@@ -1284,10 +1335,14 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 		return 0, nil, err
 	}
 
+	slices.SortFunc(targets, func(a, b memberAssignmentTarget) int { return strings.Compare(a.WorkosUserID, b.WorkosUserID) })
 	assignedCount := 0
 	workosSyncs := make([]workosSync, 0, len(targets))
 	for _, target := range targets {
 		if target.WorkosUserID != "" && roleSlug != "" {
+			if _, err := repo.New(dbtx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: target.WorkosUserID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return 0, nil, oops.E(oops.CodeUnexpected, err, "lock member for role assignment").LogError(ctx, r.logger)
+			}
 			inserted, err := repo.New(dbtx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 				OrganizationID:     gramOrgID,
 				WorkosUserID:       target.WorkosUserID,
@@ -1306,29 +1361,9 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 				return 0, nil, oops.E(oops.CodeUnexpected, nil, "upsert local role assignment record").LogError(ctx, r.logger)
 			}
 
-			// Collect all current role slugs for WorkOS sync.
-			allRoles, err := repo.New(dbtx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
-				OrganizationID: gramOrgID,
-				WorkosUserID:   target.WorkosUserID,
-			})
-			if err != nil {
-				return 0, nil, oops.E(oops.CodeUnexpected, err, "list member roles for workos sync").LogError(ctx, r.logger)
-			}
-			allSlugs := make([]string, 0, len(allRoles))
-			for _, r := range allRoles {
-				allSlugs = append(allSlugs, r.RoleSlug)
-			}
-
-			membershipID := target.MembershipID
-			workosSyncs = append(workosSyncs, func(ctx context.Context) {
-				r.syncWorkOS(ctx, "assign member to role in workos", func() error {
-					_, err := r.roles.UpdateMemberRoles(ctx, membershipID, allSlugs)
-					if err == nil {
-						return nil
-					}
-					return fmt.Errorf("assign member to role in workos: %w", err)
-				})
-			})
+			workosSyncs = append(workosSyncs, r.memberRoleSync(MemberRoleReconciliation{
+				organizationID: gramOrgID, workosUserID: target.WorkosUserID, membershipID: target.MembershipID,
+			}))
 		}
 		assignedCount++
 	}
@@ -1372,8 +1407,8 @@ func (r *RoleManager) ReconcileRoleIdentity(ctx context.Context, workosOrgID, sl
 }
 
 // runWorkOSSyncs starts best-effort WorkOS writes after the local transaction
-// commits. It detaches request cancellation but bounds the entire batch so a
-// stalled provider cannot retain background work indefinitely.
+// commits. It detaches request cancellation and gives the entire batch a shared
+// deadline, including lock waits and sends. Providers must honor cancellation.
 func (r *RoleManager) runWorkOSSyncs(ctx context.Context, syncs []workosSync) {
 	if len(syncs) == 0 {
 		return
