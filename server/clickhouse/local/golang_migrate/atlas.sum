@@ -1,4 +1,4 @@
-h1:MhpqfJ7zpqJFHj8tTSuf/LSR4G8nAb1BhTzjluF9PCM=
+h1:NzF6q7JfrEh+8ha2xdpFENcCcsRxZdd5WAhqYtvsvlg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -99,3 +99,8 @@ h1:MhpqfJ7zpqJFHj8tTSuf/LSR4G8nAb1BhTzjluF9PCM=
 20260902193942_openclaw-usage-rows.up.sql h1:FLrJnV85T8U/HUgIeHFhfyTFEKaRBMwxudBpFNu+RG8=
 20260904141331_tenant-reporting-dimensions.up.sql h1:M529LrMZ0R04erQuo/ftTFMQostnvNFJpN50HZToSFE=
 20260904165443_mcp-bandwidth-meter-readings.up.sql h1:ve0lzIwI6dz2YM9yXqEwdvHKGX0TLvfk2OyzY7VFR5A=
+20260904182723_create-marts-access.up.sql h1:IG0J2L8i3afnP9MPyngvrn1jMtrh3TaZmPa3mW2etXY=
+20260905224913_create-marts-views.up.sql h1:elhiu4f2dz1S4Vuurk+/6ua8oe7C4QQxDj4M7SvglyA=
+20260907095727_bound-weekly-mart-lookback.up.sql h1:xA3V83baXYn7tH9O8oxolxe5mfqP/hdNuTlRtviy5Ik=
+20260907100046_normalize-mart-email-identities.up.sql h1:aFN3Rs1GqrcVFP/D4V4h7UXgNLzw7e80J4qfm14yCdU=
+20260907100756_include-supported-chat-surfaces.up.sql h1:tzHSCUuM6NxpcsgSTpDo4+wCCFK0ZVJ3O9kH65JewIA=
