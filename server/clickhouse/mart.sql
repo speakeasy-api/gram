@@ -23,7 +23,7 @@ CREATE USER IF NOT EXISTS marts_definer HOST NONE;
 
 GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 
--- Completed UTC weeks only. Counts span all organizations and are per surface:
+-- Last 12 completed UTC weeks only. Counts span all organizations and are per surface:
 -- a person using multiple surfaces counts in each, so rows are not additive.
 -- Unknown surface strings are never published verbatim.
 CREATE VIEW IF NOT EXISTS marts.weekly_ai_surface_adoption
@@ -39,6 +39,7 @@ SELECT
     uniqExactIf(user_email, user_email != '') AS active_users
 FROM gram.attribute_metrics_summaries
 WHERE is_active = 1
+  AND time_bucket >= toDateTime(toMonday(now('UTC')) - INTERVAL 12 WEEK, 'UTC')
   AND time_bucket < toDateTime(toMonday(now('UTC')), 'UTC')
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
 GROUP BY week_start, surface
