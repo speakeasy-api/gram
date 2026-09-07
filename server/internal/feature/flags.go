@@ -43,6 +43,10 @@ const (
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
+	// creating and updating custom MCP-only access roles through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

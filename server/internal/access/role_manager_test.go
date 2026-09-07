@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -108,6 +109,34 @@ func TestRoleManager_AssignMembersToRoleAcceptsConnectedMemberWithoutAssignment(
 	assigned, _, err := ti.service.roleMgr.assignMembersToRoleTx(ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
 	require.NoError(t, err)
 	require.Equal(t, 1, assigned)
+}
+
+func TestRoleManager_RunWorkOSSyncsDetachesCancellationWithDeadline(t *testing.T) {
+	t.Parallel()
+
+	parent, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	type syncContext struct {
+		err         error
+		hasDeadline bool
+		remaining   time.Duration
+	}
+	observed := make(chan syncContext, 1)
+	(&RoleManager{}).runWorkOSSyncs(parent, []workosSync{func(ctx context.Context) {
+		deadline, hasDeadline := ctx.Deadline()
+		observed <- syncContext{err: ctx.Err(), hasDeadline: hasDeadline, remaining: time.Until(deadline)}
+	}})
+
+	select {
+	case got := <-observed:
+		require.NoError(t, got.err)
+		require.True(t, got.hasDeadline)
+		require.Positive(t, got.remaining)
+		require.LessOrEqual(t, got.remaining, workOSSyncTimeout)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for detached WorkOS sync")
+	}
 }
 
 func TestRoleManager_LocalRoleWritePreservesWorkOSLastEventID(t *testing.T) {

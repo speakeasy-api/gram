@@ -19,9 +19,9 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	roles := ListAccessRolesOutput{Roles: []AccessRole{{
 		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
 		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
-		Reference: "opaque-role",
+		Reference: "opaque-role", Version: "opaque-version",
 	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
-	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "reference", "expires_at"}, decodeKeys(t, roles))
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "reference", "version", "expires_at"}, decodeKeys(t, roles))
 
 	members := ListAccessMembersOutput{
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member"}},
@@ -32,13 +32,13 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	access := GetMCPAccessOutput{
 		ProjectID: uuid.NewString(),
 		MCP:       MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
-		Roles:     []MCPRoleCoverage{{Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
+		Roles:     []MCPRoleCoverage{{Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
 		ExpiresAt: "2026-09-04T12:10:00Z",
 	}
 	keys := decodeKeys(t, access)
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
-		"roles", "name", "type", "member_count", "reference", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "expires_at",
+		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "expires_at",
 	}, keys)
 	encoded, err := json.Marshal(access)
 	require.NoError(t, err)
