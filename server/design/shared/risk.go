@@ -47,13 +47,13 @@ func RiskPolicyTypeEnum() {
 	Enum("standard", "prompt_based")
 }
 
-// RiskPolicyModelConfig is the per-policy LLM-judge model configuration for
+// RiskPolicyModelConfig is the per-policy LLM-judge configuration for
 // `prompt_based` policies. All fields are optional; unset fields fall back to
-// judge defaults (default model, low temperature, fail-open on judge error).
+// judge defaults (low temperature, fail-open on judge error). The judge model
+// itself is not configurable - every policy runs on the one benchmarked model.
 var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("model", String, "OpenRouter model id the judge should use. Empty selects the default judge model.")
 	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
 	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
 })

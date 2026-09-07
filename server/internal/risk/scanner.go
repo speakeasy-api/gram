@@ -402,13 +402,6 @@ func (s *Scanner) ScanForEnforcement(
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
-	// Same once-per-scan resolution for the recommended-scopes flag: category
-	// detection scopes compose only when the project has opted in.
-	recommendedScopesOn := false
-	if len(applicablePolicies) > 0 {
-		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
-	}
-
 	var pubsubFindings map[string][]scanners.Finding
 	if len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub) {
 		pubsubFindings = s.dispatchEnforcement(ctx, organizationID, projectID, text, applicablePolicies)
@@ -431,7 +424,7 @@ func (s *Scanner) ScanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn, pubsubFindings)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, pubsubFindings)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -588,7 +581,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -622,7 +615,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	if err != nil {
 		return nil, fmt.Errorf("compile detection scopes: %w", err)
 	}
-	categoryScope := ra.NewCategoryScope(app, s.recommended, specified, recommendedScopesOn)
+	categoryScope := ra.NewCategoryScope(app, s.recommended, specified)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
