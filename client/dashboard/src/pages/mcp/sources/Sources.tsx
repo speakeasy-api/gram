@@ -67,14 +67,15 @@ export default function Sources(): JSX.Element {
       resourceId={project.id}
       title="Sources"
       description="The OpenAPI documents and functions this project deploys. Their tools are what an MCP server built from them starts with."
-      primaryAction={
-        <Button variant="primary" asChild>
+      belowHeader={<McpTabs active="sources" />}
+      toolbarActions={
+        // h-10 matches the toolbar's own controls, as on the servers tab.
+        <Button variant="primary" className="h-10" asChild>
           <routes.mcp.add.fromSource.Link>
             <Button.Text>Build a server</Button.Text>
           </routes.mcp.add.fromSource.Link>
         </Button>
       }
-      belowHeader={<McpTabs active="sources" />}
       search={{
         value: search,
         onChange: setSearch,

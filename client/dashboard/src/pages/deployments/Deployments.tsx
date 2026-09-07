@@ -277,14 +277,14 @@ function DeploymentsTable() {
         row.openapiv3ToolCount +
         row.functionsToolCount +
         row.externalMcpToolCount,
-      width: "0.5fr",
+      width: "120px",
     },
     {
       key: "actions",
       header: "",
       render: (row) => {
         return (
-          <div className="flex justify-end">
+          <div className="flex w-full justify-end">
             <DeploymentActionsDropdown
               deployment={row}
               latest={deployments[0] === row}
@@ -292,7 +292,7 @@ function DeploymentsTable() {
           </div>
         );
       },
-      width: "auto",
+      width: "1fr",
     },
   ];
 
