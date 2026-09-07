@@ -3,8 +3,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
+import { JourneyLayout } from "./journey-layout";
 import { SetupShell } from "./setup-shell";
 import {
   IdentityProviderStep,
@@ -284,39 +284,21 @@ export function SetupWizard(): JSX.Element {
 
   return (
     <SetupShell view="wizard">
-      <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
-        <div className="flex w-full max-w-5xl gap-24">
-          <div className="order-first hidden w-64 flex-shrink-0 md:block">
-            {resolvingResume ? (
-              <Skeleton>
-                {steps.map((step) => (
-                  <div key={step.id} className="h-8 w-full" />
-                ))}
-              </Skeleton>
-            ) : (
-              <OnboardingStepper
-                steps={steps}
-                currentStep={currentStep}
-                onStepClick={goToStep}
-                maxAllowedStep={maxAllowedStep}
-                allowJumpAhead
-              />
-            )}
-          </div>
-
-          <div className="order-last min-w-0 flex-1">
-            {resolvingResume ? (
-              <Skeleton>
-                <div className="h-12 w-2/3" />
-                <div className="h-5 w-full" />
-                <div className="h-64 w-full" />
-              </Skeleton>
-            ) : (
-              renderStep()
-            )}
-          </div>
-        </div>
-      </main>
+      <JourneyLayout
+        loading={resolvingResume}
+        skeletonRows={steps.length}
+        rail={
+          <OnboardingStepper
+            steps={steps}
+            currentStep={currentStep}
+            onStepClick={goToStep}
+            maxAllowedStep={maxAllowedStep}
+            allowJumpAhead
+          />
+        }
+      >
+        {renderStep()}
+      </JourneyLayout>
     </SetupShell>
   );
 }

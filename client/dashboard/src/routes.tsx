@@ -157,6 +157,7 @@ const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
+const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() =>
   import("./pages/setup/components/onboarding-wizard").then((module) => ({
     default: module.SetupWizard,
@@ -1474,6 +1475,15 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup/wizard",
     icon: "list-checks",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Each board card opens as its own page: the task's content in the
+  // wizard's linear frame, with a timeline of every task's status alongside.
+  setupTask: {
+    title: "Setup task",
+    url: "setup/task/:taskKey",
+    icon: "list-checks",
+    component: SetupTaskPage,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or
