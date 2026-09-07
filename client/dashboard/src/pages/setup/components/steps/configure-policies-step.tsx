@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateAllRiskListPolicies,
@@ -37,8 +38,6 @@ import { Label } from "@/components/ui/Label";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { StepContainer } from "../step-container";
 import {
   RULE_CATEGORY_META,
@@ -49,10 +48,13 @@ import {
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
+import { policyDetectionCategories } from "@/pages/security/policy-form";
 import {
-  effectiveScopeKinds,
-  kindScopeForMessageTypes,
-  replaceCategoryDetectionScope,
+  categoryRecommendationScope,
+  detectionScopesForCategoryEdit,
+  effectivePolicyScopeKinds,
+  narrowScopeToKinds,
+  type CategoryScopeRecommendation,
 } from "@/pages/security/policy-scope";
 import { cn } from "@/lib/utils";
 
@@ -230,16 +232,50 @@ function formatMessageTypes(types: Set<PolicyMessageType>): string {
     .join(", ");
 }
 
+function sameMessageTypes(
+  a: Set<PolicyMessageType>,
+  b: Set<PolicyMessageType>,
+): boolean {
+  return a.size === b.size && [...a].every((type) => b.has(type));
+}
+
+type ScopedPolicy = {
+  detectionScopes?: {
+    category: string;
+    scopeInclude?: string;
+    scopeExempt?: string;
+  }[];
+  messageTypes?: string[];
+  scopeInclude?: string;
+  scopeExempt?: string;
+};
+
+/** Message types the server actually scans for `cat`: the category's own scope
+ *  (or its recommendation) intersected with the policy's legacy message types
+ *  and policy-level CEL. Null when a custom predicate leaves nothing the
+ *  checkboxes can faithfully represent. */
+function scopeMessageTypesForCategory(
+  policy: ScopedPolicy,
+  cat: RuleCategory,
+  categoryDefinitions: CategoryScopeRecommendation[],
+): Set<PolicyMessageType> | null {
+  const scope = effectivePolicyScopeKinds({
+    categories: [cat],
+    detectionScopes: policy.detectionScopes,
+    categoryDefinitions,
+    messageTypes: policy.messageTypes,
+    scopeInclude: policy.scopeInclude,
+    scopeExempt: policy.scopeExempt,
+  });
+  return scope.kinds.size === 0 && scope.custom ? null : scope.kinds;
+}
+
 export function ConfigurePoliciesStep({
   onComplete,
   onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
-  const recommendedScopesFlag = useFeatureFlag(
-    FEATURE_FLAGS.riskRecommendedScopes,
-  );
-  const recommendedScopesEnabled = recommendedScopesFlag.status === "enabled";
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
@@ -261,6 +297,8 @@ export function ConfigurePoliciesStep({
 
   const queryClient = useQueryClient();
   const { data: policiesData } = useRiskListPolicies();
+  const { data: categoriesData } = useRiskCategories();
+  const categoryDefinitions = categoriesData?.categories;
   const policies = useMemo(() => policiesData?.policies ?? [], [policiesData]);
 
   const policyForCategory = useMemo(() => {
@@ -289,9 +327,32 @@ export function ConfigurePoliciesStep({
     onSuccess: invalidatePolicies,
   });
 
-  const persistConfigChange = (cat: RuleCategory, nextCfg: CategoryConfig) => {
+  // `scope: false` leaves every scope field out of the request: the API keeps
+  // the stored value for omitted fields, so an action-only edit never disturbs
+  // the policy's detection scopes.
+  const persistConfigChange = (
+    cat: RuleCategory,
+    nextCfg: CategoryConfig,
+    { scope }: { scope: boolean },
+  ) => {
     const existing = policyForCategory.get(cat);
     if (!existing) return;
+    const scopeFields =
+      scope && categoryDefinitions
+        ? {
+            // An empty message_types list means "all types"; the category
+            // scopes below carry the narrowing it used to express.
+            messageTypes: [],
+            detectionScopes: detectionScopesForCategoryEdit({
+              category: cat,
+              kinds: [...nextCfg.messageTypes],
+              policyCategories: policyDetectionCategories(existing),
+              detectionScopes: existing.detectionScopes,
+              categoryDefinitions,
+              messageTypes: existing.messageTypes,
+            }),
+          }
+        : {};
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -303,21 +364,7 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          ...(recommendedScopesEnabled
-            ? {
-                messageTypes: [],
-                detectionScopes: replaceCategoryDetectionScope(
-                  existing.detectionScopes,
-                  {
-                    category: cat,
-                    ...kindScopeForMessageTypes([...nextCfg.messageTypes]),
-                  },
-                ),
-              }
-            : {
-                messageTypes: [...nextCfg.messageTypes],
-                detectionScopes: [],
-              }),
+          ...scopeFields,
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -346,40 +393,25 @@ export function ConfigurePoliciesStep({
         const serverAction = isPolicyAction(existing.action)
           ? existing.action
           : next[cat].action;
-        const detectionScope = existing.detectionScopes?.find(
-          (scope) => scope.category === cat,
-        );
-        const effectiveScope = detectionScope
-          ? effectiveScopeKinds(detectionScope)
+        // Scope hydration needs the category recommendations; until they
+        // load, leave the local selection alone rather than showing a scope
+        // wider than the one the server applies.
+        const serverMessageTypes = categoryDefinitions
+          ? scopeMessageTypesForCategory(existing, cat, categoryDefinitions)
           : null;
-        let serverMessageTypes: Set<PolicyMessageType>;
-        if (recommendedScopesEnabled) {
-          serverMessageTypes =
-            effectiveScope === null || effectiveScope.custom
-              ? new Set(next[cat].messageTypes)
-              : new Set(effectiveScope.kinds);
-        } else if (existing.messageTypes?.length) {
-          serverMessageTypes = new Set(
-            existing.messageTypes.filter((type): type is PolicyMessageType =>
-              MESSAGE_TYPES.includes(type as PolicyMessageType),
-            ),
-          );
-        } else {
-          serverMessageTypes = new Set(MESSAGE_TYPES);
-        }
-        const messageTypesEqual =
-          formatMessageTypes(serverMessageTypes) ===
-          formatMessageTypes(next[cat].messageTypes);
+        const messageTypesChanged =
+          serverMessageTypes !== null &&
+          !sameMessageTypes(serverMessageTypes, next[cat].messageTypes);
         if (
           !next[cat].enabled ||
           next[cat].action !== serverAction ||
-          !messageTypesEqual
+          messageTypesChanged
         ) {
           next[cat] = {
             ...next[cat],
             enabled: true,
             action: serverAction,
-            messageTypes: serverMessageTypes,
+            messageTypes: serverMessageTypes ?? next[cat].messageTypes,
           };
           changed = true;
         }
@@ -392,7 +424,7 @@ export function ConfigurePoliciesStep({
         requestAnimationFrame(() => setAnimationsReady(true));
       });
     }
-  }, [policiesData, policyForCategory, recommendedScopesEnabled]);
+  }, [policiesData, policyForCategory, categoryDefinitions]);
 
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
@@ -409,16 +441,23 @@ export function ConfigurePoliciesStep({
             createRiskPolicyRequestBody: {
               enabled: true,
               ...buildPolicyPayload(cat),
-              ...(recommendedScopesEnabled
+              ...(categoryDefinitions
                 ? {
                     detectionScopes: [
                       {
                         category: cat,
-                        ...kindScopeForMessageTypes([...cfg.messageTypes]),
+                        ...narrowScopeToKinds(
+                          categoryRecommendationScope(
+                            categoryDefinitions.find((d) => d.key === cat),
+                          ),
+                          [...cfg.messageTypes],
+                        ),
                       },
                     ],
                   }
-                : { messageTypes: [...cfg.messageTypes] }),
+                : // Recommendations have not loaded: fall back to the legacy
+                  // list, which the server intersects with them.
+                  { messageTypes: [...cfg.messageTypes] }),
               action: cfg.action,
               autoName: true,
             },
@@ -470,22 +509,20 @@ export function ConfigurePoliciesStep({
       next = { ...prev[cat], ...patch };
       return { ...prev, [cat]: next };
     });
-    if (next) persistConfigChange(cat, next);
+    if (next) persistConfigChange(cat, next, { scope: false });
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
+    if (!categoryDefinitions) return;
     let next: CategoryConfig | undefined;
     setConfigs((prev) => {
       const types = new Set(prev[cat].messageTypes);
-      if (!recommendedScopesEnabled && types.has(t) && types.size === 1) {
-        return prev;
-      }
       if (types.has(t)) types.delete(t);
       else types.add(t);
       next = { ...prev[cat], messageTypes: types };
       return { ...prev, [cat]: next };
     });
-    if (next) persistConfigChange(cat, next);
+    if (next) persistConfigChange(cat, next, { scope: true });
   };
 
   const shadow = configs.shadow_mcp;
@@ -735,10 +772,7 @@ export function ConfigurePoliciesStep({
                             id={id}
                             checked={checked}
                             disabled={
-                              !activeConfig.enabled ||
-                              (!recommendedScopesEnabled &&
-                                checked &&
-                                activeConfig.messageTypes.size === 1)
+                              !activeConfig.enabled || !categoryDefinitions
                             }
                             onCheckedChange={() =>
                               toggleMessageType(activeCategory, t)

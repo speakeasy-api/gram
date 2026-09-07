@@ -80,28 +80,22 @@ import type { Role } from "@gram/client/models/components/role.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   RULE_FAMILY_OF,
   RULE_FAMILY_ORDER,
   type DetectionRule,
   type RuleCategory,
   type PolicyAction,
-  type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
-  ALL_POLICY_MESSAGE_TYPES,
-  PRESIDIO_CATEGORIES,
   categoriesToPayload,
-  policyToCategories,
+  policyDetectionCategories,
 } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
@@ -113,7 +107,7 @@ import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
-import { effectivePolicyScopeKinds } from "./policy-scope";
+import { describePolicyScope, effectivePolicyScopeKinds } from "./policy-scope";
 import {
   togglePolicyEnabledVariables,
   useTogglePolicyEnabled,
@@ -387,27 +381,6 @@ type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 
 const USER_SEARCH_RESULT_LIMIT = 10;
 
-const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
-  "tool_request",
-  "tool_response",
-]);
-
-function policyCategoriesForScope(policy: RiskPolicy): Set<RuleCategory> {
-  if (isPromptPolicy(policy)) return new Set(["prompt_policy"]);
-
-  const categories = policyToCategories(
-    policy.sources,
-    policy.presidioEntities,
-  );
-  if (policy.sources.includes("presidio") && !policy.presidioEntities?.length) {
-    for (const category of [...PRESIDIO_CATEGORIES, "off_policy" as const]) {
-      categories.add(category);
-    }
-  }
-  if (policy.customRuleIds?.length) categories.add("custom");
-  return categories;
-}
-
 function policyAudienceSummary(row: PolicyRow): string {
   if (row.kind === "prompt") {
     return "Everyone";
@@ -486,34 +459,6 @@ function compareMembersByName(a: AccessMember, b: AccessMember): number {
 
 function compareRolesByName(a: Role, b: Role): number {
   return a.name.localeCompare(b.name);
-}
-
-function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
-  return (
-    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
-    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
-  );
-}
-
-function messageTypesSummary(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): string {
-  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
-    return "All types";
-  }
-
-  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
-    return "Tool Calls";
-  }
-
-  if (
-    selectedMessageTypes.size === 1 &&
-    selectedMessageTypes.has("tool_request")
-  ) {
-    return "Tool Requests";
-  }
-
-  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
 function isPromptPolicy(policy: RiskPolicy): boolean {
@@ -658,10 +603,6 @@ function PolicyCenterContent() {
     refetch: refetchQuarantines,
   } = useRiskListSessionQuarantines();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  const recommendedScopesFlag = useFeatureFlag(
-    FEATURE_FLAGS.riskRecommendedScopes,
-  );
-  const recommendedScopesEnabled = recommendedScopesFlag.status === "enabled";
 
   const policyRows = useMemo(
     (): PolicyRow[] =>
@@ -919,62 +860,33 @@ function PolicyCenterContent() {
       header: "Applies To",
       width: "2.1fr",
       render: (row) => {
-        if (recommendedScopesEnabled && !categoriesData) {
+        // Category recommendations decide the scope, so a failed or pending
+        // fetch must not render partial data as if it were the whole answer.
+        if (categoriesError) {
           return (
             <span className="text-muted-foreground text-sm">
-              {categoriesLoading && !categoriesError
-                ? "Loading scope..."
-                : "Scope unavailable"}
+              Scope unavailable
+            </span>
+          );
+        }
+        if (!categoriesData) {
+          return (
+            <span className="text-muted-foreground text-sm">
+              {categoriesLoading ? "Loading scope..." : "Scope unavailable"}
             </span>
           );
         }
 
-        const scope = effectivePolicyScopeKinds({
-          categories: policyCategoriesForScope(row.policy),
-          detectionScopes: recommendedScopesEnabled
-            ? row.policy.detectionScopes
-            : undefined,
-          categoryDefinitions: recommendedScopesEnabled
-            ? categoriesData?.categories
-            : undefined,
-          messageTypes: row.policy.messageTypes,
-          scopeInclude: row.policy.scopeInclude,
-          scopeExempt: row.policy.scopeExempt,
-        });
-        const types = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
-          scope.kinds.has(type),
+        const { summary, tooltip } = describePolicyScope(
+          effectivePolicyScopeKinds({
+            categories: policyDetectionCategories(row.policy),
+            detectionScopes: row.policy.detectionScopes,
+            categoryDefinitions: categoriesData.categories,
+            messageTypes: row.policy.messageTypes,
+            scopeInclude: row.policy.scopeInclude,
+            scopeExempt: row.policy.scopeExempt,
+          }),
         );
-        const typeSet = new Set(types);
-        const labels = [
-          ...types.map((type) => POLICY_MESSAGE_TYPE_META[type].label),
-          ...[...scope.additionalKinds].map(() => "Prompt Attachments"),
-        ];
-        let summary: string;
-        if (labels.length === 0) {
-          summary = scope.custom ? "Custom scope" : "Nothing in scope";
-        } else if (
-          scope.additionalKinds.size === 0 &&
-          (typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
-            hasOnlyToolCallMessageTypes(typeSet))
-        ) {
-          summary = messageTypesSummary(typeSet);
-        } else {
-          summary = labels.join(", ");
-        }
-        if (scope.custom && labels.length > 0) summary += " + custom CEL";
-
-        let tooltipSummary = labels.join(", ");
-        if (labels.length === 0) {
-          tooltipSummary = scope.custom
-            ? "Additional or custom scope applies"
-            : "No message types in scope";
-        }
-        const tooltip = [
-          tooltipSummary,
-          ...(scope.custom && labels.length > 0
-            ? ["Custom CEL scope also applies"]
-            : []),
-        ].join(". ");
 
         return (
           <SimpleTooltip tooltip={tooltip}>

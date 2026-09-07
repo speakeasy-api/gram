@@ -14,7 +14,6 @@ export const FEATURE_FLAGS = {
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
-  riskRecommendedScopes: "risk-recommended-scopes",
   riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
   userSessionsDashboard: "user-sessions-dashboard",
