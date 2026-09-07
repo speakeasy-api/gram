@@ -33,7 +33,7 @@ WITH lowerUTF8(trimBoth(user_email)) AS normalized_email
 SELECT
     toMonday(time_bucket) AS week_start,
     if(
-        hook_source IN ('claude-code', 'codex', 'cowork', 'cursor', 'litellm', 'local', 'mcp', 'openclaw', 'opencode'),
+        hook_source IN ('claude-code', 'claude-chat', 'chatgpt', 'chatgpt-work', 'codex', 'cowork', 'cursor', 'litellm', 'local', 'mcp', 'openclaw', 'opencode'),
         hook_source,
         'other'
     ) AS surface,

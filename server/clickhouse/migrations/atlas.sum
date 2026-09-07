@@ -1,4 +1,4 @@
-h1:9Mm+x+RP0A9ZZTk3Pk1GoxNvavWbrH4LtaYTp+x1cnE=
+h1:zzLaTsFj2dbGEcBgtQEFN3jZL5Ep97rRsUOnCKZsSI4=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -108,3 +108,4 @@ h1:9Mm+x+RP0A9ZZTk3Pk1GoxNvavWbrH4LtaYTp+x1cnE=
 20260905224908_create-marts-views.sql h1:Cq78l25cB7g32mKdVJlqewc5Ws2qrFOubEHHgoT2a10=
 20260907095722_bound-weekly-mart-lookback.sql h1:HxQ+1/IxOJNYMlNdmeuHPl+iM7H5ELqYUYplap2QfSw=
 20260907100041_normalize-mart-email-identities.sql h1:62Ji5fnN/HSlahjbDWSeCq6J3rOGp/0S+aKYQGVmYKw=
+20260907100751_include-supported-chat-surfaces.sql h1:OZDuwSgm8qhbwYenvxm52/XkGk/vSbnHv2D2PTi8Eek=
