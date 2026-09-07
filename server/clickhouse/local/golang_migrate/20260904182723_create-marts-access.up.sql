@@ -1,5 +1,5 @@
 -- Create the view-only marts database.
-CREATE DATABASE `marts` ENGINE Atomic;
+CREATE DATABASE `marts`;
 -- Create the constrained reader role.
 CREATE ROLE IF NOT EXISTS `marts_reader` SETTINGS
   `readonly` = 1 CONST,
