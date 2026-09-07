@@ -2,9 +2,11 @@
 -- Keep it view-only. Never expose raw identifiers, free-form customer content,
 -- customer-defined names, or monetary values here. Every published row must
 -- represent at least ten distinct identified users.
--- The database, access principals, reader limits, and grants are provisioned
+-- The database, access principals, and reader limits are provisioned
 -- outside schema migrations: Terraform in Cloud, local/clickhouse/initdb locally.
 -- Atlas uses the same bootstrap as its development database baseline.
+-- Atlas ignores grants in desired state; keep matching grants in migrations.
+GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
 
 -- Last 12 completed UTC weeks only. Counts span all organizations and are per surface:
 -- a person using multiple surfaces counts in each, so rows are not additive.
@@ -28,3 +30,5 @@ WHERE is_active = 1
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
 GROUP BY week_start, surface
 HAVING active_users >= 10;
+
+GRANT SELECT ON marts.weekly_ai_surface_adoption TO marts_reader;

@@ -1,8 +1,7 @@
 -- Local prerequisites for marts views. Terraform owns these objects in Cloud.
 -- This bootstrap also runs in CI and the Atlas development database.
 -- Keep creation idempotent: local containers run bootstrap on every start.
--- The historical create-marts-access migrations are intentionally empty:
--- retain their versions without creating or dropping bootstrap-owned objects.
+-- Application migrations own the definer's source grant and reader view grants.
 CREATE DATABASE IF NOT EXISTS marts;
 
 CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
@@ -19,9 +18,3 @@ CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
 
 -- HOST NONE prevents this definer principal from logging in.
 CREATE USER IF NOT EXISTS marts_definer HOST NONE;
-
--- ClickHouse permits grants before the source table is created by migrations.
-GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
-
--- Grant only the approved view, never marts.* or the source table.
-GRANT SELECT ON marts.weekly_ai_surface_adoption TO marts_reader;
