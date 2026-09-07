@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -94,6 +96,11 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 	if p.publisher == nil {
 		return nil, fmt.Errorf("plugin publisher is not configured")
 	}
+
+	// Publishing runs from a Temporal activity, so nothing in the context
+	// identifies a request. Say so, rather than letting the audit log record
+	// this as a surface we failed to classify.
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
 	result, err := p.publisher.PublishProject(ctx, input)
 	if err != nil {

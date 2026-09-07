@@ -83,8 +83,13 @@ type setOpenRouterSpendCapHeartbeat struct {
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
+	// A bypass is an operator acting through the admin app; anything else is
+	// the reconciler running on its own, which is a surface in its own right
+	// rather than one we failed to identify.
 	if args.BypassPolicy {
 		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdmin))
+	} else {
+		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 	}
 
 	if args.OperationID == "" {

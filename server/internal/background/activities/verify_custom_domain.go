@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -154,6 +155,9 @@ func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args Ver
 // started for no longer exists — except legacy zero-ID workflows, whose row
 // this activity still creates.
 func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) (VerifyCustomDomainResult, error) {
+	// Verification runs from a Temporal activity, with no request behind it.
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+
 	var noResult VerifyCustomDomainResult
 
 	if err := customdomains.ValidateDomainName(args.Domain); err != nil {

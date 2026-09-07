@@ -113,6 +113,16 @@ func TestActingIdentityFromContext_Derivation(t *testing.T) {
 			},
 			surface: SurfacePlatformBreakGlass,
 		},
+		{
+			name: "background work marks itself system rather than falling to unknown",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				// A Temporal activity's context carries no request identity,
+				// so without the mark this would derive SurfaceUnknown.
+				return contextvalues.SetActingSurface(t.Context(), string(SurfaceSystem))
+			},
+			surface: SurfaceSystem,
+		},
 	}
 
 	for _, tt := range tests {
