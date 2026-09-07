@@ -219,8 +219,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Wrap Callback handler: read the binding cookie and inject it into the
 	// context so validateAuthNonce() can verify it.
 	server.Callback = sessionTransportMiddleware(callbackNonceBindingMiddleware(server.Callback))
-	server.RefreshSession = sessionTransportMiddleware(server.RefreshSession)
-	server.LogoutSession = sessionTransportMiddleware(server.LogoutSession)
+	server.Refresh = sessionTransportMiddleware(server.Refresh)
+	server.Logout = sessionTransportMiddleware(server.Logout)
 
 	// Wrap Logout handler: have the browser drop the origin's cached data,
 	// cookies, and client-side storage once the session has been invalidated server-side.
@@ -943,7 +943,14 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 }
 
 func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *gen.LogoutResult, err error) {
-	// Clears cookie and invalidates session
+	if _, ok := ctx.Value(browserSessionKey{}).(browserSessionTransport); ok {
+		if err := s.logoutBrowserSession(ctx); err != nil {
+			return nil, err
+		}
+		return &gen.LogoutResult{SessionCookie: ""}, nil
+	}
+
+	// Clears cookie and invalidates session for direct, authenticated callers.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)

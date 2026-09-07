@@ -52,7 +52,14 @@ it("survives StrictMode canceling bootstrap before the shared refresh completes"
       <Bootstrap />
     </StrictMode>,
   );
-  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+    "https://app.example.test/rpc/auth.refresh",
+    {
+      method: "POST",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    },
+  );
   await act(async () => {
     finishRefresh(
       new Response(null, {

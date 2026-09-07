@@ -43,7 +43,7 @@ describe("SessionTokenStore", () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]).toEqual([
-      `${BASE}/auth/session/refresh`,
+      `${BASE}/rpc/auth.refresh`,
       {
         method: "POST",
         credentials: "include",
@@ -266,46 +266,53 @@ describe("SessionTokenStore", () => {
     expect(store.getSnapshot()).toBe("scoped-token");
   });
 
-  it("posts logout to the cookie-scoped route without requiring a refresh", async () => {
+  it("posts logout to its RPC endpoint without requiring a refresh", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 204 }));
+      .mockResolvedValue(new Response(null, { status: 200 }));
     const store = new SessionTokenStore(() => BASE, fetcher);
-    await store.fetch(`${BASE}/rpc/auth.logout`, { method: "POST" });
+    const response = await store.fetch(`${BASE}/rpc/auth.logout`, {
+      method: "POST",
+      headers: { "Gram-Session": "expired-access" },
+    });
     const request = fetcher.mock.calls[0]![0] as Request;
-    expect(request.url).toBe(`${BASE}/auth/session/logout`);
+    expect(request.url).toBe(`${BASE}/rpc/auth.logout`);
     expect(request.method).toBe("POST");
     expect(request.credentials).toBe("include");
+    expect(request.headers.has("Gram-Session")).toBe(false);
+    expect(response.status).toBe(200);
     expect(store.getSnapshot()).toBe("");
     await store.refresh(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    ["/rpc/auth.logout", 204, 200],
-    ["/auth/session/logout", 204, 204],
-    ["/rpc/tools.create", 204, 204],
-    ["/rpc/auth.logout", 401, 401],
-  ])(
-    "normalizes only legacy logout success: %s %i to %i",
-    async (path, status, expected) => {
-      const fetcher = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(refreshed())
-        .mockResolvedValue(
-          new Response(null, {
-            status,
-            headers: { "X-Logout-Test": "preserved" },
-          }),
-        );
-      const store = new SessionTokenStore(() => BASE, fetcher);
-      await store.refresh();
-      const response = await store.fetch(`${BASE}${path}`, { method: "POST" });
-      expect(response.status).toBe(expected);
-      expect(response.headers.get("X-Logout-Test")).toBe("preserved");
-      expect(fetcher).toHaveBeenCalledTimes(2);
-    },
-  );
+    ["/rpc/auth.logout", 200],
+    ["/rpc/auth.logout", 204],
+    ["/rpc/tools.create", 204],
+    ["/rpc/auth.logout", 401],
+    ["/rpc/auth.logout", 500],
+  ])("returns responses unchanged: %s %i", async (path, status) => {
+    const original = new Response(status >= 400 ? "logout failed" : null, {
+      status,
+      headers: { "X-Logout-Test": "preserved" },
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(refreshed())
+      .mockResolvedValue(original);
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    await store.refresh();
+    const response = await store.fetch(`${BASE}${path}`, { method: "POST" });
+    expect(response).toBe(original);
+    expect(response.status).toBe(status);
+    expect(response.headers.get("X-Logout-Test")).toBe("preserved");
+    if (status >= 400) {
+      expect(await response.text()).toBe("logout failed");
+      expect(store.getSnapshot()).toBe("access-1");
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 
   it("dispatches the canonical newly rotated header instead of a still-live captured token", async () => {
     const fetcher = vi
@@ -329,7 +336,7 @@ describe("SessionTokenStore", () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("offline"))
-      .mockResolvedValue(new Response(null, { status: 204 }));
+      .mockResolvedValue(new Response(null, { status: 200 }));
     const store = new SessionTokenStore(() => BASE, fetcher);
     const refresh = store.refresh().catch(() => {});
     await store.fetch(`${BASE}/rpc/auth.logout`, { method: "POST" });

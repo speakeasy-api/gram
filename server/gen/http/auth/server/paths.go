@@ -27,14 +27,9 @@ func EnterDemoAuthPath() string {
 	return "/rpc/auth.enterDemo"
 }
 
-// RefreshSessionAuthPath returns the URL path to the auth service refreshSession HTTP endpoint.
-func RefreshSessionAuthPath() string {
-	return "/auth/session/refresh"
-}
-
-// LogoutSessionAuthPath returns the URL path to the auth service logoutSession HTTP endpoint.
-func LogoutSessionAuthPath() string {
-	return "/auth/session/logout"
+// RefreshAuthPath returns the URL path to the auth service refresh HTTP endpoint.
+func RefreshAuthPath() string {
+	return "/rpc/auth.refresh"
 }
 
 // LogoutAuthPath returns the URL path to the auth service logout HTTP endpoint.

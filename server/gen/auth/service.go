@@ -28,11 +28,10 @@ type Service interface {
 	// Renews a browser session using only the HttpOnly refresh cookie. Requires
 	// the configured dashboard Origin. Access credentials retain a fixed
 	// ten-minute expiry.
-	RefreshSession(context.Context) (err error)
-	// Invalidates the browser refresh session and current access session,
-	// including when access has expired. Requires the configured dashboard Origin.
-	LogoutSession(context.Context) (err error)
-	// Logs out the current user by clearing their session.
+	Refresh(context.Context) (err error)
+	// Logs out the current user, including an expired browser access session.
+	// Browser cookies require the configured dashboard Origin; header-only clients
+	// require a valid Gram-Session credential.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
 	// Register a new org for a user with their session information.
 	Register(context.Context, *RegisterPayload) (err error)
@@ -60,7 +59,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "refreshSession", "logoutSession", "logout", "register", "info"}
+var MethodNames = [8]string{"callback", "login", "switchScopes", "enterDemo", "refresh", "logout", "register", "info"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -143,6 +142,7 @@ type LoginResult struct {
 
 // LogoutPayload is the payload type of the auth service logout method.
 type LogoutPayload struct {
+	// Optional session credential for header-only clients
 	SessionToken *string
 }
 

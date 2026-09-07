@@ -1,7 +1,8 @@
 import { getApiBaseURL, getServerURL } from "@/lib/utils";
 
 // Access tokens live only in memory. The browser alone handles gram_refresh,
-// an HttpOnly cookie scoped to /auth/session. Access tokens last ten minutes.
+// two HttpOnly cookies scoped to /rpc/auth.refresh and /rpc/auth.logout.
+// Access tokens last ten minutes.
 const REFRESH_AFTER_MS = 9 * 60_000;
 const FAILURE_COOLDOWN_MS = 30_000;
 
@@ -54,7 +55,7 @@ export class SessionTokenStore {
       const startedAt = Date.now();
       try {
         const response = await this.fetcher(
-          `${this.baseURL()}/auth/session/refresh`,
+          `${this.baseURL()}/rpc/auth.refresh`,
           {
             method: "POST",
             credentials: "include",
@@ -90,8 +91,7 @@ export class SessionTokenStore {
   ): Promise<Response> => {
     const request = new Request(input, init);
     const path = new URL(request.url).pathname;
-    const legacyLogout = path === "/rpc/auth.logout";
-    const logout = legacyLogout || path === "/auth/session/logout";
+    const logout = path === "/rpc/auth.logout";
     const switchScope =
       path === "/rpc/auth.switchScopes" || path === "/rpc/auth.enterDemo";
     const sessionInfo = path === "/rpc/auth.info";
@@ -105,15 +105,8 @@ export class SessionTokenStore {
       }
       // Logout authenticates from cookies, including an expired access cookie.
       if (logout) headers.delete("Gram-Session");
-      const target = logout
-        ? new Request(`${this.baseURL()}/auth/session/logout`, {
-            method: "POST",
-            headers,
-            signal: request.signal,
-          })
-        : request;
       const response = await this.fetcher(
-        new Request(target, {
+        new Request(request, {
           headers,
           credentials: "include",
         }),
@@ -138,11 +131,7 @@ export class SessionTokenStore {
           );
         }
       }
-      // The generated legacy SDK accepts only 200. Preserve headers for its
-      // logout cleanup hooks; the new endpoint itself retains its 204 contract.
-      return legacyLogout && response.status === 204
-        ? new Response(null, { status: 200, headers: response.headers })
-        : response;
+      return response;
     };
 
     if (logout || switchScope || sessionInfo) {

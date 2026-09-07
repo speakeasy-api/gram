@@ -76,7 +76,7 @@ func newAPIClient(base *url.URL, origin string, insecure bool, logger *slog.Logg
 }
 
 func (c *apiClient) hasSessionCookie() bool {
-	for _, ck := range c.hc.Jar.Cookies(c.base.ResolveReference(&url.URL{Path: "/auth/session/refresh"})) {
+	for _, ck := range c.hc.Jar.Cookies(c.base.ResolveReference(&url.URL{Path: "/rpc/auth.refresh"})) {
 		if ck.Name == sessionCookieName && ck.Value != "" {
 			return true
 		}
@@ -137,7 +137,7 @@ func (c *apiClient) ensureSession(ctx context.Context) error {
 // refresh exchanges the path-scoped HttpOnly cookie without exposing its value.
 // The configured dashboard origin must match the API's CSRF allowlist.
 func (c *apiClient) refresh(ctx context.Context) (string, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base.JoinPath("/auth/session/refresh").String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base.JoinPath("/rpc/auth.refresh").String(), nil)
 	if err != nil {
 		return "", 0, fmt.Errorf("build refresh request: %w", err)
 	}

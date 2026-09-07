@@ -24,16 +24,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("resolves actual SDK logout through the new endpoint and runs production cleanup hooks", async () => {
+it("resolves actual SDK logout through its normal RPC endpoint and runs production cleanup hooks", async () => {
   const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
     const request = input instanceof Request ? input : new Request(input);
-    if (new URL(request.url).pathname === "/auth/session/refresh") {
+    if (new URL(request.url).pathname === "/rpc/auth.refresh") {
       return new Response(null, {
         status: 204,
         headers: { "Gram-Session": "fresh-access" },
       });
     }
-    expect(new URL(request.url).pathname).toBe("/auth/session/logout");
+    expect(new URL(request.url).pathname).toBe("/rpc/auth.logout");
     expect(request.method).toBe("POST");
     expect(request.credentials).toBe("include");
     expect(request.headers.has("Gram-Session")).toBe(false);
@@ -42,7 +42,7 @@ it("resolves actual SDK logout through the new endpoint and runs production clea
     localStorage.clear();
     sessionStorage.clear();
     return new Response(null, {
-      status: 204,
+      status: 200,
       headers: { "Clear-Site-Data": '"storage"', "X-Logout-Test": "preserved" },
     });
   });
@@ -63,6 +63,13 @@ it("resolves actual SDK logout through the new endpoint and runs production clea
   await act(async () => {
     await result.current.auth.logout();
   });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(
+    fetcher.mock.calls.map(
+      ([input]) =>
+        new URL(input instanceof Request ? input.url : String(input)).pathname,
+    ),
+  ).toEqual(["/rpc/auth.refresh", "/rpc/auth.logout"]);
   expect(mocks.stopSession).toHaveBeenCalledOnce();
   expect(mocks.clearUser).toHaveBeenCalledOnce();
   expect(mocks.reset).toHaveBeenCalledOnce();

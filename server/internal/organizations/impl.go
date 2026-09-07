@@ -1764,17 +1764,21 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	})
 	// Invite Magic Auth is also a browser login entry point. The dashboard
 	// bootstraps access through refresh, so an access cookie alone is insufficient.
-	//nolint:exhaustruct // only the secure host-only browser cookie attributes
-	http.SetCookie(w, &http.Cookie{
-		Name:     "gram_refresh",
-		Value:    refreshSecret,
-		MaxAge:   int(sessions.RefreshIdleLifetime / time.Second),
-		Expires:  time.Now().Add(sessions.RefreshIdleLifetime),
-		Path:     "/auth/session",
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	// Dotted RPC names need separate exact cookie paths: /rpc/auth is not
+	// a cookie-path prefix for /rpc/auth.refresh or /rpc/auth.logout.
+	for _, path := range []string{"/rpc/auth.refresh", "/rpc/auth.logout"} {
+		//nolint:exhaustruct // only the secure host-only browser cookie attributes
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gram_refresh",
+			Value:    refreshSecret,
+			MaxAge:   int(sessions.RefreshIdleLifetime / time.Second),
+			Expires:  time.Now().Add(sessions.RefreshIdleLifetime),
+			Path:     path,
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
+	}
 	w.Header().Set(constants.SessionHeader, browserSession.SessionID)
 	w.Header().Set("Cache-Control", "no-store")
 	span.AddEvent("invite.callback.cookie_set")

@@ -15,29 +15,27 @@ import (
 
 // Client is the "auth" service client.
 type Client struct {
-	CallbackEndpoint       goa.Endpoint
-	LoginEndpoint          goa.Endpoint
-	SwitchScopesEndpoint   goa.Endpoint
-	EnterDemoEndpoint      goa.Endpoint
-	RefreshSessionEndpoint goa.Endpoint
-	LogoutSessionEndpoint  goa.Endpoint
-	LogoutEndpoint         goa.Endpoint
-	RegisterEndpoint       goa.Endpoint
-	InfoEndpoint           goa.Endpoint
+	CallbackEndpoint     goa.Endpoint
+	LoginEndpoint        goa.Endpoint
+	SwitchScopesEndpoint goa.Endpoint
+	EnterDemoEndpoint    goa.Endpoint
+	RefreshEndpoint      goa.Endpoint
+	LogoutEndpoint       goa.Endpoint
+	RegisterEndpoint     goa.Endpoint
+	InfoEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "auth" service client given the endpoints.
-func NewClient(callback, login, switchScopes, enterDemo, refreshSession, logoutSession, logout, register, info goa.Endpoint) *Client {
+func NewClient(callback, login, switchScopes, enterDemo, refresh, logout, register, info goa.Endpoint) *Client {
 	return &Client{
-		CallbackEndpoint:       callback,
-		LoginEndpoint:          login,
-		SwitchScopesEndpoint:   switchScopes,
-		EnterDemoEndpoint:      enterDemo,
-		RefreshSessionEndpoint: refreshSession,
-		LogoutSessionEndpoint:  logoutSession,
-		LogoutEndpoint:         logout,
-		RegisterEndpoint:       register,
-		InfoEndpoint:           info,
+		CallbackEndpoint:     callback,
+		LoginEndpoint:        login,
+		SwitchScopesEndpoint: switchScopes,
+		EnterDemoEndpoint:    enterDemo,
+		RefreshEndpoint:      refresh,
+		LogoutEndpoint:       logout,
+		RegisterEndpoint:     register,
+		InfoEndpoint:         info,
 	}
 }
 
@@ -129,8 +127,8 @@ func (c *Client) EnterDemo(ctx context.Context, p *EnterDemoPayload) (res *Enter
 	return ires.(*EnterDemoResult), nil
 }
 
-// RefreshSession calls the "refreshSession" endpoint of the "auth" service.
-// RefreshSession may return the following errors:
+// Refresh calls the "refresh" endpoint of the "auth" service.
+// Refresh may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -142,26 +140,8 @@ func (c *Client) EnterDemo(ctx context.Context, p *EnterDemoPayload) (res *Enter
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) RefreshSession(ctx context.Context) (err error) {
-	_, err = c.RefreshSessionEndpoint(ctx, nil)
-	return
-}
-
-// LogoutSession calls the "logoutSession" endpoint of the "auth" service.
-// LogoutSession may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) LogoutSession(ctx context.Context) (err error) {
-	_, err = c.LogoutSessionEndpoint(ctx, nil)
+func (c *Client) Refresh(ctx context.Context) (err error) {
+	_, err = c.RefreshEndpoint(ctx, nil)
 	return
 }
 

@@ -499,21 +499,25 @@ func TestInviteCallback_AdminInviteNotifiesTrialAdminAdded(t *testing.T) {
 	}
 	require.NotNil(t, sessionCookie)
 	require.Equal(t, constants.SessionCookieMaxAgeSeconds, sessionCookie.MaxAge)
-	var refreshCookie *http.Cookie
+	refreshCookies := make(map[string]*http.Cookie)
 	for _, cookie := range recorder.Result().Cookies() {
 		if cookie.Name == "gram_refresh" {
-			refreshCookie = cookie
+			refreshCookies[cookie.Path] = cookie
 		}
 	}
-	require.NotNil(t, refreshCookie, "invitation login must support dashboard refresh bootstrap")
-	require.NotEmpty(t, refreshCookie.Value)
-	require.NotEqual(t, sessionCookie.Value, refreshCookie.Value)
-	require.Empty(t, refreshCookie.Domain)
-	require.Equal(t, "/auth/session", refreshCookie.Path)
-	require.True(t, refreshCookie.Secure)
-	require.True(t, refreshCookie.HttpOnly)
-	require.Equal(t, http.SameSiteStrictMode, refreshCookie.SameSite)
-	require.Equal(t, int((72*time.Hour)/time.Second), refreshCookie.MaxAge)
+	require.Len(t, refreshCookies, 2, "invitation login must support refresh and expired-access logout")
+	for _, path := range []string{"/rpc/auth.refresh", "/rpc/auth.logout"} {
+		refreshCookie := refreshCookies[path]
+		require.NotNil(t, refreshCookie)
+		require.NotEmpty(t, refreshCookie.Value)
+		require.NotEqual(t, sessionCookie.Value, refreshCookie.Value)
+		require.Empty(t, refreshCookie.Domain)
+		require.True(t, refreshCookie.Secure)
+		require.True(t, refreshCookie.HttpOnly)
+		require.Equal(t, http.SameSiteStrictMode, refreshCookie.SameSite)
+		require.Equal(t, int((72*time.Hour)/time.Second), refreshCookie.MaxAge)
+	}
+	require.Equal(t, refreshCookies["/rpc/auth.refresh"].Value, refreshCookies["/rpc/auth.logout"].Value)
 	require.Equal(t, sessionCookie.Value, recorder.Header().Get(constants.SessionHeader))
 	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
 	require.Equal(t, []adminAddedNotification{{

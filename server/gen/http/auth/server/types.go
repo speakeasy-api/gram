@@ -766,9 +766,9 @@ type EnterDemoGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionUnauthorizedResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "unauthorized" error.
-type RefreshSessionUnauthorizedResponseBody struct {
+// RefreshUnauthorizedResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "unauthorized" error.
+type RefreshUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -784,9 +784,9 @@ type RefreshSessionUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionForbiddenResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "forbidden" error.
-type RefreshSessionForbiddenResponseBody struct {
+// RefreshForbiddenResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "forbidden" error.
+type RefreshForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -802,9 +802,9 @@ type RefreshSessionForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionBadRequestResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "bad_request" error.
-type RefreshSessionBadRequestResponseBody struct {
+// RefreshBadRequestResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "bad_request" error.
+type RefreshBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -820,9 +820,9 @@ type RefreshSessionBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionNotFoundResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "not_found" error.
-type RefreshSessionNotFoundResponseBody struct {
+// RefreshNotFoundResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "not_found" error.
+type RefreshNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -838,9 +838,9 @@ type RefreshSessionNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionConflictResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "conflict" error.
-type RefreshSessionConflictResponseBody struct {
+// RefreshConflictResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "conflict" error.
+type RefreshConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -856,10 +856,9 @@ type RefreshSessionConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionUnsupportedMediaResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "unsupported_media"
-// error.
-type RefreshSessionUnsupportedMediaResponseBody struct {
+// RefreshUnsupportedMediaResponseBody is the type of the "auth" service
+// "refresh" endpoint HTTP response body for the "unsupported_media" error.
+type RefreshUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -875,9 +874,9 @@ type RefreshSessionUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionInvalidResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "invalid" error.
-type RefreshSessionInvalidResponseBody struct {
+// RefreshInvalidResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "invalid" error.
+type RefreshInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -893,10 +892,9 @@ type RefreshSessionInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionInvariantViolationResponseBody is the type of the "auth"
-// service "refreshSession" endpoint HTTP response body for the
-// "invariant_violation" error.
-type RefreshSessionInvariantViolationResponseBody struct {
+// RefreshInvariantViolationResponseBody is the type of the "auth" service
+// "refresh" endpoint HTTP response body for the "invariant_violation" error.
+type RefreshInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -912,9 +910,9 @@ type RefreshSessionInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionUnexpectedResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "unexpected" error.
-type RefreshSessionUnexpectedResponseBody struct {
+// RefreshUnexpectedResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "unexpected" error.
+type RefreshUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -930,191 +928,9 @@ type RefreshSessionUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RefreshSessionGatewayErrorResponseBody is the type of the "auth" service
-// "refreshSession" endpoint HTTP response body for the "gateway_error" error.
-type RefreshSessionGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionUnauthorizedResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "unauthorized" error.
-type LogoutSessionUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionForbiddenResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "forbidden" error.
-type LogoutSessionForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionBadRequestResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "bad_request" error.
-type LogoutSessionBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionNotFoundResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "not_found" error.
-type LogoutSessionNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionConflictResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "conflict" error.
-type LogoutSessionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionUnsupportedMediaResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "unsupported_media"
-// error.
-type LogoutSessionUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionInvalidResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "invalid" error.
-type LogoutSessionInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionInvariantViolationResponseBody is the type of the "auth"
-// service "logoutSession" endpoint HTTP response body for the
-// "invariant_violation" error.
-type LogoutSessionInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionUnexpectedResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "unexpected" error.
-type LogoutSessionUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LogoutSessionGatewayErrorResponseBody is the type of the "auth" service
-// "logoutSession" endpoint HTTP response body for the "gateway_error" error.
-type LogoutSessionGatewayErrorResponseBody struct {
+// RefreshGatewayErrorResponseBody is the type of the "auth" service "refresh"
+// endpoint HTTP response body for the "gateway_error" error.
+type RefreshGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2297,10 +2113,10 @@ func NewEnterDemoGatewayErrorResponseBody(res *goa.ServiceError) *EnterDemoGatew
 	return body
 }
 
-// NewRefreshSessionUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionUnauthorizedResponseBody(res *goa.ServiceError) *RefreshSessionUnauthorizedResponseBody {
-	body := &RefreshSessionUnauthorizedResponseBody{
+// NewRefreshUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "refresh" endpoint of the "auth" service.
+func NewRefreshUnauthorizedResponseBody(res *goa.ServiceError) *RefreshUnauthorizedResponseBody {
+	body := &RefreshUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2311,10 +2127,10 @@ func NewRefreshSessionUnauthorizedResponseBody(res *goa.ServiceError) *RefreshSe
 	return body
 }
 
-// NewRefreshSessionForbiddenResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionForbiddenResponseBody(res *goa.ServiceError) *RefreshSessionForbiddenResponseBody {
-	body := &RefreshSessionForbiddenResponseBody{
+// NewRefreshForbiddenResponseBody builds the HTTP response body from the
+// result of the "refresh" endpoint of the "auth" service.
+func NewRefreshForbiddenResponseBody(res *goa.ServiceError) *RefreshForbiddenResponseBody {
+	body := &RefreshForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2325,10 +2141,10 @@ func NewRefreshSessionForbiddenResponseBody(res *goa.ServiceError) *RefreshSessi
 	return body
 }
 
-// NewRefreshSessionBadRequestResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionBadRequestResponseBody(res *goa.ServiceError) *RefreshSessionBadRequestResponseBody {
-	body := &RefreshSessionBadRequestResponseBody{
+// NewRefreshBadRequestResponseBody builds the HTTP response body from the
+// result of the "refresh" endpoint of the "auth" service.
+func NewRefreshBadRequestResponseBody(res *goa.ServiceError) *RefreshBadRequestResponseBody {
+	body := &RefreshBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2339,10 +2155,10 @@ func NewRefreshSessionBadRequestResponseBody(res *goa.ServiceError) *RefreshSess
 	return body
 }
 
-// NewRefreshSessionNotFoundResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionNotFoundResponseBody(res *goa.ServiceError) *RefreshSessionNotFoundResponseBody {
-	body := &RefreshSessionNotFoundResponseBody{
+// NewRefreshNotFoundResponseBody builds the HTTP response body from the result
+// of the "refresh" endpoint of the "auth" service.
+func NewRefreshNotFoundResponseBody(res *goa.ServiceError) *RefreshNotFoundResponseBody {
+	body := &RefreshNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2353,10 +2169,10 @@ func NewRefreshSessionNotFoundResponseBody(res *goa.ServiceError) *RefreshSessio
 	return body
 }
 
-// NewRefreshSessionConflictResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionConflictResponseBody(res *goa.ServiceError) *RefreshSessionConflictResponseBody {
-	body := &RefreshSessionConflictResponseBody{
+// NewRefreshConflictResponseBody builds the HTTP response body from the result
+// of the "refresh" endpoint of the "auth" service.
+func NewRefreshConflictResponseBody(res *goa.ServiceError) *RefreshConflictResponseBody {
+	body := &RefreshConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2367,10 +2183,10 @@ func NewRefreshSessionConflictResponseBody(res *goa.ServiceError) *RefreshSessio
 	return body
 }
 
-// NewRefreshSessionUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshSessionUnsupportedMediaResponseBody {
-	body := &RefreshSessionUnsupportedMediaResponseBody{
+// NewRefreshUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "refresh" endpoint of the "auth" service.
+func NewRefreshUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshUnsupportedMediaResponseBody {
+	body := &RefreshUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2381,10 +2197,10 @@ func NewRefreshSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *Refre
 	return body
 }
 
-// NewRefreshSessionInvalidResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionInvalidResponseBody(res *goa.ServiceError) *RefreshSessionInvalidResponseBody {
-	body := &RefreshSessionInvalidResponseBody{
+// NewRefreshInvalidResponseBody builds the HTTP response body from the result
+// of the "refresh" endpoint of the "auth" service.
+func NewRefreshInvalidResponseBody(res *goa.ServiceError) *RefreshInvalidResponseBody {
+	body := &RefreshInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2395,10 +2211,10 @@ func NewRefreshSessionInvalidResponseBody(res *goa.ServiceError) *RefreshSession
 	return body
 }
 
-// NewRefreshSessionInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionInvariantViolationResponseBody(res *goa.ServiceError) *RefreshSessionInvariantViolationResponseBody {
-	body := &RefreshSessionInvariantViolationResponseBody{
+// NewRefreshInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "refresh" endpoint of the "auth" service.
+func NewRefreshInvariantViolationResponseBody(res *goa.ServiceError) *RefreshInvariantViolationResponseBody {
+	body := &RefreshInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2409,10 +2225,10 @@ func NewRefreshSessionInvariantViolationResponseBody(res *goa.ServiceError) *Ref
 	return body
 }
 
-// NewRefreshSessionUnexpectedResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionUnexpectedResponseBody(res *goa.ServiceError) *RefreshSessionUnexpectedResponseBody {
-	body := &RefreshSessionUnexpectedResponseBody{
+// NewRefreshUnexpectedResponseBody builds the HTTP response body from the
+// result of the "refresh" endpoint of the "auth" service.
+func NewRefreshUnexpectedResponseBody(res *goa.ServiceError) *RefreshUnexpectedResponseBody {
+	body := &RefreshUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2423,150 +2239,10 @@ func NewRefreshSessionUnexpectedResponseBody(res *goa.ServiceError) *RefreshSess
 	return body
 }
 
-// NewRefreshSessionGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the "auth" service.
-func NewRefreshSessionGatewayErrorResponseBody(res *goa.ServiceError) *RefreshSessionGatewayErrorResponseBody {
-	body := &RefreshSessionGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionUnauthorizedResponseBody(res *goa.ServiceError) *LogoutSessionUnauthorizedResponseBody {
-	body := &LogoutSessionUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionForbiddenResponseBody builds the HTTP response body from the
-// result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionForbiddenResponseBody(res *goa.ServiceError) *LogoutSessionForbiddenResponseBody {
-	body := &LogoutSessionForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionBadRequestResponseBody builds the HTTP response body from
-// the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionBadRequestResponseBody(res *goa.ServiceError) *LogoutSessionBadRequestResponseBody {
-	body := &LogoutSessionBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionNotFoundResponseBody builds the HTTP response body from the
-// result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionNotFoundResponseBody(res *goa.ServiceError) *LogoutSessionNotFoundResponseBody {
-	body := &LogoutSessionNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionConflictResponseBody builds the HTTP response body from the
-// result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionConflictResponseBody(res *goa.ServiceError) *LogoutSessionConflictResponseBody {
-	body := &LogoutSessionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *LogoutSessionUnsupportedMediaResponseBody {
-	body := &LogoutSessionUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionInvalidResponseBody builds the HTTP response body from the
-// result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionInvalidResponseBody(res *goa.ServiceError) *LogoutSessionInvalidResponseBody {
-	body := &LogoutSessionInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionInvariantViolationResponseBody(res *goa.ServiceError) *LogoutSessionInvariantViolationResponseBody {
-	body := &LogoutSessionInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionUnexpectedResponseBody builds the HTTP response body from
-// the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionUnexpectedResponseBody(res *goa.ServiceError) *LogoutSessionUnexpectedResponseBody {
-	body := &LogoutSessionUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLogoutSessionGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "logoutSession" endpoint of the "auth" service.
-func NewLogoutSessionGatewayErrorResponseBody(res *goa.ServiceError) *LogoutSessionGatewayErrorResponseBody {
-	body := &LogoutSessionGatewayErrorResponseBody{
+// NewRefreshGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "refresh" endpoint of the "auth" service.
+func NewRefreshGatewayErrorResponseBody(res *goa.ServiceError) *RefreshGatewayErrorResponseBody {
+	body := &RefreshGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

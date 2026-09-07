@@ -148,33 +148,24 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnterDemo"}`)
 	})
 
-	Method("refreshSession", func() {
+	Method("refresh", func() {
 		Description("Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.")
 		NoSecurity()
 		HTTP(func() {
-			POST("/auth/session/refresh")
+			POST("/rpc/auth.refresh")
 			Response(StatusNoContent)
 		})
-		Meta("openapi:operationId", "refreshSession")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
-	})
-
-	Method("logoutSession", func() {
-		Description("Invalidates the browser refresh session and current access session, including when access has expired. Requires the configured dashboard Origin.")
-		NoSecurity()
-		HTTP(func() {
-			POST("/auth/session/logout")
-			Response(StatusNoContent)
-		})
-		Meta("openapi:operationId", "logoutSession")
+		Meta("openapi:operationId", "authRefresh")
+		Meta("openapi:extension:x-speakeasy-name-override", "refresh")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 
 	Method("logout", func() {
-		Description("Logs out the current user by clearing their session.")
+		Description("Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.")
+		NoSecurity()
 
 		Payload(func() {
-			security.SessionPayload()
+			Attribute("session_token", String, "Optional session credential for header-only clients")
 		})
 
 		Result(func() {

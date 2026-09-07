@@ -16,15 +16,14 @@ import (
 
 // Endpoints wraps the "auth" service endpoints.
 type Endpoints struct {
-	Callback       goa.Endpoint
-	Login          goa.Endpoint
-	SwitchScopes   goa.Endpoint
-	EnterDemo      goa.Endpoint
-	RefreshSession goa.Endpoint
-	LogoutSession  goa.Endpoint
-	Logout         goa.Endpoint
-	Register       goa.Endpoint
-	Info           goa.Endpoint
+	Callback     goa.Endpoint
+	Login        goa.Endpoint
+	SwitchScopes goa.Endpoint
+	EnterDemo    goa.Endpoint
+	Refresh      goa.Endpoint
+	Logout       goa.Endpoint
+	Register     goa.Endpoint
+	Info         goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "auth" service with endpoints.
@@ -32,15 +31,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Callback:       NewCallbackEndpoint(s),
-		Login:          NewLoginEndpoint(s),
-		SwitchScopes:   NewSwitchScopesEndpoint(s, a.APIKeyAuth),
-		EnterDemo:      NewEnterDemoEndpoint(s, a.APIKeyAuth),
-		RefreshSession: NewRefreshSessionEndpoint(s),
-		LogoutSession:  NewLogoutSessionEndpoint(s),
-		Logout:         NewLogoutEndpoint(s, a.APIKeyAuth),
-		Register:       NewRegisterEndpoint(s, a.APIKeyAuth),
-		Info:           NewInfoEndpoint(s, a.APIKeyAuth),
+		Callback:     NewCallbackEndpoint(s),
+		Login:        NewLoginEndpoint(s),
+		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
+		EnterDemo:    NewEnterDemoEndpoint(s, a.APIKeyAuth),
+		Refresh:      NewRefreshEndpoint(s),
+		Logout:       NewLogoutEndpoint(s),
+		Register:     NewRegisterEndpoint(s, a.APIKeyAuth),
+		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -50,8 +48,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Login = m(e.Login)
 	e.SwitchScopes = m(e.SwitchScopes)
 	e.EnterDemo = m(e.EnterDemo)
-	e.RefreshSession = m(e.RefreshSession)
-	e.LogoutSession = m(e.LogoutSession)
+	e.Refresh = m(e.Refresh)
 	e.Logout = m(e.Logout)
 	e.Register = m(e.Register)
 	e.Info = m(e.Info)
@@ -121,41 +118,19 @@ func NewEnterDemoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 	}
 }
 
-// NewRefreshSessionEndpoint returns an endpoint function that calls the method
-// "refreshSession" of service "auth".
-func NewRefreshSessionEndpoint(s Service) goa.Endpoint {
+// NewRefreshEndpoint returns an endpoint function that calls the method
+// "refresh" of service "auth".
+func NewRefreshEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return nil, s.RefreshSession(ctx)
-	}
-}
-
-// NewLogoutSessionEndpoint returns an endpoint function that calls the method
-// "logoutSession" of service "auth".
-func NewLogoutSessionEndpoint(s Service) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		return nil, s.LogoutSession(ctx)
+		return nil, s.Refresh(ctx)
 	}
 }
 
 // NewLogoutEndpoint returns an endpoint function that calls the method
 // "logout" of service "auth".
-func NewLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewLogoutEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LogoutPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
 		return s.Logout(ctx, p)
 	}
 }

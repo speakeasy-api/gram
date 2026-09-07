@@ -32,13 +32,9 @@ type Client struct {
 	// endpoint.
 	EnterDemoDoer goahttp.Doer
 
-	// RefreshSession Doer is the HTTP client used to make requests to the
-	// refreshSession endpoint.
-	RefreshSessionDoer goahttp.Doer
-
-	// LogoutSession Doer is the HTTP client used to make requests to the
-	// logoutSession endpoint.
-	LogoutSessionDoer goahttp.Doer
+	// Refresh Doer is the HTTP client used to make requests to the refresh
+	// endpoint.
+	RefreshDoer goahttp.Doer
 
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
@@ -74,8 +70,7 @@ func NewClient(
 		LoginDoer:           doer,
 		SwitchScopesDoer:    doer,
 		EnterDemoDoer:       doer,
-		RefreshSessionDoer:  doer,
-		LogoutSessionDoer:   doer,
+		RefreshDoer:         doer,
 		LogoutDoer:          doer,
 		RegisterDoer:        doer,
 		InfoDoer:            doer,
@@ -183,39 +178,20 @@ func (c *Client) EnterDemo() goa.Endpoint {
 	}
 }
 
-// RefreshSession returns an endpoint that makes HTTP requests to the auth
-// service refreshSession server.
-func (c *Client) RefreshSession() goa.Endpoint {
+// Refresh returns an endpoint that makes HTTP requests to the auth service
+// refresh server.
+func (c *Client) Refresh() goa.Endpoint {
 	var (
-		decodeResponse = DecodeRefreshSessionResponse(c.decoder, c.RestoreResponseBody)
+		decodeResponse = DecodeRefreshResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRefreshSessionRequest(ctx, v)
+		req, err := c.BuildRefreshRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.RefreshSessionDoer.Do(req)
+		resp, err := c.RefreshDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "refreshSession", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// LogoutSession returns an endpoint that makes HTTP requests to the auth
-// service logoutSession server.
-func (c *Client) LogoutSession() goa.Endpoint {
-	var (
-		decodeResponse = DecodeLogoutSessionResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildLogoutSessionRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.LogoutSessionDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("auth", "logoutSession", err)
+			return nil, goahttp.ErrRequestError("auth", "refresh", err)
 		}
 		return decodeResponse(resp)
 	}

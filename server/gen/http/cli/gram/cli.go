@@ -114,7 +114,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
-		"auth (callback|login|switch-scopes|enter-demo|refresh-session|logout-session|logout|register|info)",
+		"auth (callback|login|switch-scopes|enter-demo|refresh|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -792,9 +792,7 @@ func ParseEndpoint(
 		authEnterDemoFlags            = flag.NewFlagSet("enter-demo", flag.ExitOnError)
 		authEnterDemoSessionTokenFlag = authEnterDemoFlags.String("session-token", "", "")
 
-		authRefreshSessionFlags = flag.NewFlagSet("refresh-session", flag.ExitOnError)
-
-		authLogoutSessionFlags = flag.NewFlagSet("logout-session", flag.ExitOnError)
+		authRefreshFlags = flag.NewFlagSet("refresh", flag.ExitOnError)
 
 		authLogoutFlags            = flag.NewFlagSet("logout", flag.ExitOnError)
 		authLogoutSessionTokenFlag = authLogoutFlags.String("session-token", "", "")
@@ -4032,8 +4030,7 @@ func ParseEndpoint(
 	authLoginFlags.Usage = authLoginUsage
 	authSwitchScopesFlags.Usage = authSwitchScopesUsage
 	authEnterDemoFlags.Usage = authEnterDemoUsage
-	authRefreshSessionFlags.Usage = authRefreshSessionUsage
-	authLogoutSessionFlags.Usage = authLogoutSessionUsage
+	authRefreshFlags.Usage = authRefreshUsage
 	authLogoutFlags.Usage = authLogoutUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
@@ -5287,11 +5284,8 @@ func ParseEndpoint(
 			case "enter-demo":
 				epf = authEnterDemoFlags
 
-			case "refresh-session":
-				epf = authRefreshSessionFlags
-
-			case "logout-session":
-				epf = authLogoutSessionFlags
+			case "refresh":
+				epf = authRefreshFlags
 
 			case "logout":
 				epf = authLogoutFlags
@@ -7625,10 +7619,8 @@ func ParseEndpoint(
 			case "enter-demo":
 				endpoint = c.EnterDemo()
 				data, err = authc.BuildEnterDemoPayload(*authEnterDemoSessionTokenFlag)
-			case "refresh-session":
-				endpoint = c.RefreshSession()
-			case "logout-session":
-				endpoint = c.LogoutSession()
+			case "refresh":
+				endpoint = c.Refresh()
 			case "logout":
 				endpoint = c.Logout()
 				data, err = authc.BuildLogoutPayload(*authLogoutSessionTokenFlag)
@@ -12149,9 +12141,8 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    login: Proxies to auth login through speakeasy oidc.`)
 	fmt.Fprintln(os.Stderr, `    switch-scopes: Switches the authentication scope to a different organization.`)
 	fmt.Fprintln(os.Stderr, `    enter-demo: Switches the current session into the shared read-only demo organization.`)
-	fmt.Fprintln(os.Stderr, `    refresh-session: Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.`)
-	fmt.Fprintln(os.Stderr, `    logout-session: Invalidates the browser refresh session and current access session, including when access has expired. Requires the configured dashboard Origin.`)
-	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
+	fmt.Fprintln(os.Stderr, `    refresh: Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.`)
+	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
 	fmt.Fprintln(os.Stderr)
@@ -12242,9 +12233,9 @@ func authEnterDemoUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth enter-demo --session-token \"abc123\"")
 }
 
-func authRefreshSessionUsage() {
+func authRefreshUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] auth refresh-session", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] auth refresh", os.Args[0])
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -12255,23 +12246,7 @@ func authRefreshSessionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth refresh-session")
-}
-
-func authLogoutSessionUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] auth logout-session", os.Args[0])
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Invalidates the browser refresh session and current access session, including when access has expired. Requires the configured dashboard Origin.`)
-
-	// Flags list
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth logout-session")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth refresh")
 }
 
 func authLogoutUsage() {
@@ -12282,7 +12257,7 @@ func authLogoutUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Logs out the current user by clearing their session.`)
+	fmt.Fprintln(os.Stderr, `Logs out the current user, including an expired browser access session. Browser cookies require the configured dashboard Origin; header-only clients require a valid Gram-Session credential.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

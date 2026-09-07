@@ -24,9 +24,11 @@ func TestAPIClientRefreshesExpiredAccessAndKeepsRefreshCookieScoped(t *testing.T
 			logins.Add(1)
 			http.Redirect(w, r, "/rpc/auth.callback", http.StatusFound)
 		case "/rpc/auth.callback":
-			http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "fabricated-refresh", Path: "/auth/session", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			for _, path := range []string{"/rpc/auth.refresh", "/rpc/auth.logout"} {
+				http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "fabricated-refresh", Path: path, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			}
 			http.Redirect(w, r, "/dashboard-not-running", http.StatusFound)
-		case "/auth/session/refresh":
+		case "/rpc/auth.refresh":
 			if r.Method != http.MethodPost || r.Header.Get("Origin") != origin {
 				http.Error(w, "invalid refresh request", http.StatusForbidden)
 				return
