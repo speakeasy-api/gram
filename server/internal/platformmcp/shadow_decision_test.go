@@ -31,6 +31,19 @@ func TestShadowDecisionRequiresConfirmationAndExplicitAllowAudience(t *testing.T
 	require.Equal(t, "invalid_request", decisionErr.Code)
 }
 
+func TestShadowDecisionValidRequestRequiresAvailableService(t *testing.T) {
+	t.Parallel()
+
+	service := &ShadowDecisionService{}
+	_, err := service.Decide(t.Context(), Principal{UserID: "user", OrganizationID: "organization"}, DecideShadowMCPAccessInput{
+		ProjectID: "project", TargetReference: "target", Decision: "deny", Rationale: "denied", ExpectedVersion: "version", IdempotencyKey: "key", Confirmed: true,
+	})
+	var decisionErr *ShadowDecisionError
+	require.ErrorAs(t, err, &decisionErr)
+	require.Equal(t, "feature_unavailable", decisionErr.Code)
+	require.ErrorIs(t, err, ErrShadowDecisionUnavailable)
+}
+
 func TestNormalizeShadowAudienceReferencesIsCanonical(t *testing.T) {
 	t.Parallel()
 
