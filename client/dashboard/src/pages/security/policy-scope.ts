@@ -429,16 +429,14 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_response",
 ]);
 
-export function hasOnlyToolCallMessageTypes(
-  types: Set<PolicyMessageType>,
-): boolean {
+function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
   return (
     types.size === TOOL_CALL_MESSAGE_TYPES.size &&
     [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
   );
 }
 
-export function messageTypesSummary(
+function messageTypesSummary(
   selectedMessageTypes: Set<PolicyMessageType>,
 ): string {
   if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
