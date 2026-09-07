@@ -32,6 +32,14 @@ type Client struct {
 	// endpoint.
 	EnterDemoDoer goahttp.Doer
 
+	// RefreshSession Doer is the HTTP client used to make requests to the
+	// refreshSession endpoint.
+	RefreshSessionDoer goahttp.Doer
+
+	// LogoutSession Doer is the HTTP client used to make requests to the
+	// logoutSession endpoint.
+	LogoutSessionDoer goahttp.Doer
+
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
 
@@ -66,6 +74,8 @@ func NewClient(
 		LoginDoer:           doer,
 		SwitchScopesDoer:    doer,
 		EnterDemoDoer:       doer,
+		RefreshSessionDoer:  doer,
+		LogoutSessionDoer:   doer,
 		LogoutDoer:          doer,
 		RegisterDoer:        doer,
 		InfoDoer:            doer,
@@ -168,6 +178,44 @@ func (c *Client) EnterDemo() goa.Endpoint {
 		resp, err := c.EnterDemoDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "enterDemo", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshSession returns an endpoint that makes HTTP requests to the auth
+// service refreshSession server.
+func (c *Client) RefreshSession() goa.Endpoint {
+	var (
+		decodeResponse = DecodeRefreshSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "refreshSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// LogoutSession returns an endpoint that makes HTTP requests to the auth
+// service logoutSession server.
+func (c *Client) LogoutSession() goa.Endpoint {
+	var (
+		decodeResponse = DecodeLogoutSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLogoutSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LogoutSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "logoutSession", err)
 		}
 		return decodeResponse(resp)
 	}

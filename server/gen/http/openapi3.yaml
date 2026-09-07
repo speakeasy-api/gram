@@ -2627,6 +2627,138 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /auth/session/logout:
+        post:
+            description: Invalidates the browser refresh session and current access session, including when access has expired. Requires the configured dashboard Origin.
+            operationId: logoutSession
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: logoutSession auth
+            tags:
+                - auth
+            x-speakeasy-react-hook:
+                disabled: true
+    /auth/session/refresh:
+        post:
+            description: Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.
+            operationId: refreshSession
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: refreshSession auth
+            tags:
+                - auth
+            x-speakeasy-react-hook:
+                disabled: true
     /otel/v1/logs:
         post:
             description: Endpoint to receive OTEL logs data from LLM providers and harnesses.
@@ -12092,11 +12224,6 @@ paths:
                             schema:
                                 description: The URL to redirect to after authentication
                                 type: string
-                        Set-Cookie:
-                            description: The authentication session
-                            schema:
-                                description: The authentication session
-                                type: string
                 "400":
                     content:
                         application/json:
@@ -12177,11 +12304,6 @@ paths:
                             description: Session header
                             schema:
                                 description: Session header
-                                type: string
-                        Set-Cookie:
-                            description: The authentication session
-                            schema:
-                                description: The authentication session
                                 type: string
                 "400":
                     content:
@@ -12269,11 +12391,6 @@ paths:
                             description: Session header
                             schema:
                                 description: Session header
-                                type: string
-                        Set-Cookie:
-                            description: The authentication session
-                            schema:
-                                description: The authentication session
                                 type: string
                 "400":
                     content:
@@ -12639,11 +12756,6 @@ paths:
                             description: Session header
                             schema:
                                 description: Session header
-                                type: string
-                        Set-Cookie:
-                            description: The authentication session
-                            schema:
-                                description: The authentication session
                                 type: string
                 "400":
                     content:

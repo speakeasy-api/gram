@@ -43,7 +43,7 @@ func TestIsPlatformAdminReadsCurrentDurableEntitlement(t *testing.T) {
 	require.False(t, isAdmin)
 }
 
-func TestAuthenticateRefreshesValidatedSession(t *testing.T) {
+func TestAuthenticateDoesNotRefreshValidatedSession(t *testing.T) {
 	t.Parallel()
 
 	userInfo := defaultMockUserInfo()
@@ -64,7 +64,7 @@ func TestAuthenticateRefreshesValidatedSession(t *testing.T) {
 	})
 	authenticatedCtx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
 	require.NoError(t, err)
-	require.Equal(t, session.SessionID, refreshedSessionID)
+	require.Empty(t, refreshedSessionID)
 	require.True(t, contextvalues.HasValidatedGramSession(authenticatedCtx))
 	require.False(t, contextvalues.IsLegacyImpersonatedSession(authenticatedCtx))
 }

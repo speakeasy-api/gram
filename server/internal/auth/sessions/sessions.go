@@ -62,14 +62,15 @@ type UserResolver interface {
 }
 
 type Manager struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	sessionCache cache.TypedCacheObject[Session]
-	idpClient    SessionRevoker
-	orgRepo      *orgRepo.Queries
-	userRepo     *userRepo.Queries
-	billingRepo  billing.Repository
-	identity     UserResolver
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	redis       *redis.Client
+	suffix      string
+	idpClient   SessionRevoker
+	orgRepo     *orgRepo.Queries
+	userRepo    *userRepo.Queries
+	billingRepo billing.Repository
+	identity    UserResolver
 }
 
 func NewManager(
@@ -85,14 +86,15 @@ func NewManager(
 	logger = logger.With(attr.SlogComponent("sessions"))
 
 	return &Manager{
-		logger:       logger,
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
-		idpClient:    idpClient,
-		orgRepo:      orgRepo.New(db),
-		userRepo:     userRepo.New(db),
-		billingRepo:  billingRepo,
-		identity:     identity,
+		logger:      logger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
+		redis:       redisClient,
+		suffix:      string(suffix),
+		idpClient:   idpClient,
+		orgRepo:     orgRepo.New(db),
+		userRepo:    userRepo.New(db),
+		billingRepo: billingRepo,
+		identity:    identity,
 	}
 }
 
@@ -107,7 +109,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
 	}
 
-	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
+	session, err := s.GetSession(ctx, key)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
@@ -159,9 +161,6 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 			authCtx.Email = &email
 			authCtx.IsAdmin = userInfo.Admin
 		}
-		if err := s.refreshSession(ctx, session); err != nil {
-			return ctx, err
-		}
 		ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 		return ctx, nil
 	}
@@ -202,10 +201,6 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 
-	if err := s.refreshSession(ctx, session); err != nil {
-		return ctx, err
-	}
-
 	ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 	if validatedSupportAdmin {
 		validatedAuthCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -213,18 +208,6 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	return ctx, nil
-}
-
-func (s *Manager) refreshSession(ctx context.Context, session Session) error {
-	refreshed, err := s.sessionCache.CompareAndSwap(ctx, session, session)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error refreshing session expiry").LogError(ctx, s.logger)
-	}
-	if !refreshed {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	contextvalues.RefreshSessionCookie(ctx, session.SessionID)
-	return nil
 }
 
 func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
@@ -251,60 +234,6 @@ func isCurrentPlatformAdmin(admin, deleted bool) bool {
 
 func (s *Manager) Billing() billing.Repository {
 	return s.billingRepo
-}
-
-func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, error) {
-	session, err := s.sessionCache.Get(ctx, SessionCacheKey(sessionID))
-	if err != nil {
-		return Session{}, fmt.Errorf("get session: %w", err)
-	}
-	return session, nil
-}
-
-func (s *Manager) StoreSession(ctx context.Context, session Session) error {
-	err := s.sessionCache.Store(ctx, session)
-	if err != nil {
-		return fmt.Errorf("store session: %w", err)
-	}
-
-	return nil
-}
-
-func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
-	updated, err := s.sessionCache.CompareAndSwap(ctx, expected, replacement)
-	if err != nil {
-		return fmt.Errorf("update session: %w", err)
-	}
-	if !updated {
-		return errors.New("update session: session changed or no longer exists")
-	}
-
-	return nil
-}
-
-func (s *Manager) ClearSession(ctx context.Context, session Session) error {
-	// Look up the full cached session to retrieve the WorkOS session ID
-	// before deleting it.
-	if stored, err := s.sessionCache.Get(ctx, SessionCacheKey(session.SessionID)); err == nil {
-		session = stored
-	}
-
-	// Revoke the WorkOS AuthKit session so the user is prompted to sign in
-	// again on next login rather than being auto-authenticated.
-	if session.WorkOSSessionID != "" && s.idpClient != nil {
-		if err := s.idpClient.RevokeSession(ctx, session.WorkOSSessionID); err != nil {
-			// Non-fatal: the Gram session is still cleared, and the WorkOS
-			// session will expire naturally.
-			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
-		}
-	}
-
-	err := s.sessionCache.Delete(ctx, session)
-	if err != nil {
-		return fmt.Errorf("clear session: %w", err)
-	}
-
-	return nil
 }
 
 // GetUserInfo delegates to the identity resolver.

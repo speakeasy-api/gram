@@ -25,6 +25,13 @@ type Service interface {
 	SwitchScopes(context.Context, *SwitchScopesPayload) (res *SwitchScopesResult, err error)
 	// Switches the current session into the shared read-only demo organization.
 	EnterDemo(context.Context, *EnterDemoPayload) (res *EnterDemoResult, err error)
+	// Renews a browser session using only the HttpOnly refresh cookie. Requires
+	// the configured dashboard Origin. Access credentials retain a fixed
+	// ten-minute expiry.
+	RefreshSession(context.Context) (err error)
+	// Invalidates the browser refresh session and current access session,
+	// including when access has expired. Requires the configured dashboard Origin.
+	LogoutSession(context.Context) (err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
 	// Register a new org for a user with their session information.
@@ -53,7 +60,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info"}
+var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "refreshSession", "logoutSession", "logout", "register", "info"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -69,8 +76,6 @@ type CallbackResult struct {
 	Location string
 	// The authentication session
 	SessionToken string
-	// The authentication session
-	SessionCookie string
 }
 
 // EnterDemoPayload is the payload type of the auth service enterDemo method.
@@ -82,8 +87,6 @@ type EnterDemoPayload struct {
 type EnterDemoResult struct {
 	// The authentication session
 	SessionToken string
-	// The authentication session
-	SessionCookie string
 }
 
 // InfoPayload is the payload type of the auth service info method.
@@ -116,8 +119,6 @@ type InfoResult struct {
 	Organizations []*OrganizationEntry
 	// The authentication session
 	SessionToken string
-	// The authentication session
-	SessionCookie string
 }
 
 // LoginPayload is the payload type of the auth service login method.
@@ -195,8 +196,6 @@ type SwitchScopesPayload struct {
 type SwitchScopesResult struct {
 	// The authentication session
 	SessionToken string
-	// The authentication session
-	SessionCookie string
 }
 
 type Trial struct {

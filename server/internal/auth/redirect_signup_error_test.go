@@ -29,7 +29,6 @@ func TestService_redirectSignupError(t *testing.T) {
 	require.NoError(t, err, "signup failures are reported by redirect, not by error")
 	require.Equal(t, "http://localhost:3000/dashboard/sign-up?signin_error=init_error", result.Location)
 	require.Empty(t, result.SessionToken)
-	require.Empty(t, result.SessionCookie)
 }
 
 // TestService_redirectSignupError_TrimsTrailingSlash confirms the redirect

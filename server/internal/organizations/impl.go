@@ -1711,9 +1711,17 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Create a Gram session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
-	sessionID := uuid.New().String()
+	sessionID, err := sessions.NewSessionID()
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to generate session", attr.SlogError(err))
+		span.RecordError(err)
+		redirectError("failed to create session")
+		return
+	}
 	session := sessions.Session{
 		SessionID:             sessionID,
+		RefreshHash:           "",
+		ExpiresAt:             time.Now().Add(sessions.AccessLifetime),
 		UserID:                gramUserID,
 		ActiveOrganizationID:  invite.OrganizationID,
 		WorkOSSessionID:       idpUser.WorkOSSessionID,
@@ -1723,6 +1731,13 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
+		span.RecordError(err)
+		redirectError("failed to create session")
+		return
+	}
+	refreshSecret, browserSession, err := s.sessions.CreateRefreshSession(ctx, sessionID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to create refresh session", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create session")
 		return
@@ -1747,6 +1762,21 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
+	// Invite Magic Auth is also a browser login entry point. The dashboard
+	// bootstraps access through refresh, so an access cookie alone is insufficient.
+	//nolint:exhaustruct // only the secure host-only browser cookie attributes
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gram_refresh",
+		Value:    refreshSecret,
+		MaxAge:   int(sessions.RefreshIdleLifetime / time.Second),
+		Expires:  time.Now().Add(sessions.RefreshIdleLifetime),
+		Path:     "/auth/session",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	w.Header().Set(constants.SessionHeader, browserSession.SessionID)
+	w.Header().Set("Cache-Control", "no-store")
 	span.AddEvent("invite.callback.cookie_set")
 	s.logger.InfoContext(ctx, "invite callback: complete",
 		attr.SlogUserID(gramUserID),

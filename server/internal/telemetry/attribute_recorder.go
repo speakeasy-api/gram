@@ -3,7 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"maps"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -44,6 +44,17 @@ func (h HTTPLogAttributes) RecordDuration(duration float64) {
 	h[attr.HTTPServerRequestDurationKey] = duration
 }
 
+// Session credentials are always fully redacted, regardless of the caller's
+// sensitivity flag. Cookie headers can contain more than one bearer secret.
+func isSessionCredentialHeader(header string) bool {
+	switch strings.ToLower(header) {
+	case "cookie", "set-cookie", "gram-session":
+		return true
+	default:
+		return false
+	}
+}
+
 func (h HTTPLogAttributes) RecordRequestHeaders(headers map[string]string, isSensitive bool) {
 	if len(headers) == 0 {
 		return
@@ -57,7 +68,9 @@ func (h HTTPLogAttributes) RecordRequestHeaders(headers map[string]string, isSen
 	}
 
 	for header, v := range headers {
-		if isSensitive {
+		if isSessionCredentialHeader(header) {
+			v = "[REDACTED]"
+		} else if isSensitive {
 			v = redactToken(v)
 		}
 		hMap[header] = v
@@ -78,7 +91,12 @@ func (h HTTPLogAttributes) RecordResponseHeaders(headers map[string]string) {
 		hMap = make(map[string]string, len(headers))
 	}
 
-	maps.Copy(hMap, headers)
+	for header, value := range headers {
+		if isSessionCredentialHeader(header) {
+			value = "[REDACTED]"
+		}
+		hMap[header] = value
+	}
 
 	h[attr.HTTPResponseHeadersKey] = hMap
 }

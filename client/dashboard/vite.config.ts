@@ -250,6 +250,7 @@ export default defineConfig(({ command }) => {
       proxy: devProxyTarget
         ? {
             "/rpc": devProxyTarget,
+            "/auth/session": devProxyTarget,
             "/otel": devProxyTarget,
             "/chat": devProxyTarget,
             "/mcp": devProxyTarget,

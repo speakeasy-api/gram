@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -22,20 +23,25 @@ import (
 )
 
 func main() {
-	serverURL := flag.String("server-url", "https://localhost:8080", "Base URL of the locally running server")
+	defaultServerURL := os.Getenv("GRAM_SERVER_URL")
+	if defaultServerURL == "" {
+		defaultServerURL = "https://localhost:8080"
+	}
+	serverURL := flag.String("server-url", defaultServerURL, "Base URL of the locally running server")
+	siteURL := flag.String("site-url", os.Getenv("GRAM_SITE_URL"), "Dashboard URL used as the refresh Origin (defaults to server URL)")
 	insecure := flag.Bool("insecure", false, "Skip TLS certificate verification for the server URL")
 	flag.Parse()
 
 	// stdout carries the MCP protocol; all logging goes to stderr.
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	if err := run(*serverURL, *insecure, logger); err != nil {
+	if err := run(*serverURL, *siteURL, *insecure, logger); err != nil {
 		logger.Error("dev-mcp exited", attr.SlogError(err))
 		os.Exit(1)
 	}
 }
 
-func run(serverURL string, insecure bool, logger *slog.Logger) error {
+func run(serverURL, siteURL string, insecure bool, logger *slog.Logger) error {
 	base, err := url.Parse(serverURL)
 	if err != nil {
 		return fmt.Errorf("parse server url: %w", err)
@@ -44,7 +50,21 @@ func run(serverURL string, insecure bool, logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	api := newAPIClient(base, insecure, logger)
+	if siteURL == "" {
+		siteURL = serverURL
+	}
+	site, err := url.Parse(siteURL)
+	if err != nil || site.Host == "" || (site.Scheme != "https" && site.Scheme != "http") {
+		return fmt.Errorf("invalid site URL")
+	}
+	// Match browser Origin serialization for explicit default ports.
+	if (site.Scheme == "https" && site.Port() == "443") || (site.Scheme == "http" && site.Port() == "80") {
+		site.Host = site.Hostname()
+		if strings.Contains(site.Host, ":") {
+			site.Host = "[" + site.Host + "]"
+		}
+	}
+	api := newAPIClient(base, site.Scheme+"://"+site.Host, insecure, logger)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "assistants-dev",

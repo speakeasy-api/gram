@@ -4,27 +4,31 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 const userInfoCacheExpiry = 15 * time.Minute
 
 var _ cache.CacheableObject[Session] = (*Session)(nil)
 
+const AccessLifetime = 10 * time.Minute
+const RefreshIdleLifetime = 72 * time.Hour
+
 type Session struct {
-	SessionID             string
-	ActiveOrganizationID  string
-	UserID                string
-	WorkOSSessionID       string
-	ImpersonatorEmail     string
-	SupportOrganizationID string
-	SupportExpiresAt      time.Time
+	// RefreshHash links the access record to refresh state, never its bearer secret.
+	RefreshHash           string    `json:"RefreshHash"`
+	ExpiresAt             time.Time `json:"ExpiresAt"`
+	SessionID             string    `json:"SessionID"`
+	ActiveOrganizationID  string    `json:"ActiveOrganizationID"`
+	UserID                string    `json:"UserID"`
+	WorkOSSessionID       string    `json:"WorkOSSessionID"`
+	ImpersonatorEmail     string    `json:"ImpersonatorEmail"`
+	SupportOrganizationID string    `json:"SupportOrganizationID"`
+	SupportExpiresAt      time.Time `json:"SupportExpiresAt"`
 }
 
 func SessionCacheKey(sessionID string) string {
-	// Version the namespace so sessions created under the previous, longer
-	// expiry policy cannot bypass the 72-hour idle timeout after rollout.
-	return "sessions:v2:" + sessionID
+	// Cut over from legacy long-lived access credentials.
+	return "sessions:v3:" + sessionID
 }
 
 func (s Session) CacheKey() string {
@@ -32,10 +36,14 @@ func (s Session) CacheKey() string {
 }
 
 func (s Session) TTL() time.Duration {
-	if !s.SupportExpiresAt.IsZero() {
-		return time.Until(s.SupportExpiresAt)
+	ttl := AccessLifetime
+	if !s.ExpiresAt.IsZero() {
+		ttl = min(ttl, time.Until(s.ExpiresAt))
 	}
-	return constants.SessionIdleTimeout
+	if !s.SupportExpiresAt.IsZero() {
+		ttl = min(ttl, time.Until(s.SupportExpiresAt))
+	}
+	return ttl
 }
 
 var _ cache.CacheableObject[CachedUserInfo] = (*CachedUserInfo)(nil)

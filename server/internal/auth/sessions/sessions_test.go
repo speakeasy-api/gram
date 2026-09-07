@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 func TestCurrentPlatformAdminRequiresDurableEntitlementAndLiveUser(t *testing.T) {
@@ -31,11 +29,11 @@ func TestValidSupportSessionRejectsExpiredSession(t *testing.T) {
 	require.False(t, validSupportSession(session, true, now))
 }
 
-func TestSessionTTLUsesIdleTimeout(t *testing.T) {
+func TestSessionTTLUsesFixedAccessLifetime(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, constants.SessionIdleTimeout, (Session{}).TTL())
-	require.Equal(t, "sessions:v2:session-id", SessionCacheKey("session-id"))
+	require.Equal(t, AccessLifetime, (Session{}).TTL())
+	require.Equal(t, "sessions:v3:session-id", SessionCacheKey("session-id"))
 }
 
 func TestSupportSessionTTLUsesAbsoluteExpiry(t *testing.T) {
@@ -43,7 +41,7 @@ func TestSupportSessionTTLUsesAbsoluteExpiry(t *testing.T) {
 
 	expiresAt := time.Now().Add(time.Hour)
 	ttl := (Session{SupportExpiresAt: expiresAt}).TTL()
-	require.InDelta(t, time.Hour, ttl, float64(time.Second))
+	require.InDelta(t, AccessLifetime, ttl, float64(time.Second))
 }
 
 func TestNewSessionID(t *testing.T) {

@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session-token";
 import { getServerURL } from "@/lib/utils";
 import type { UIMessage, UIMessageStreamWriter } from "ai";
 
@@ -171,7 +172,7 @@ export async function streamTurn(args: {
 
       let response: Response;
       try {
-        response = await fetch(url, {
+        response = await sessionFetch(url, {
           credentials: "include",
           signal: abortSignal,
           headers: {

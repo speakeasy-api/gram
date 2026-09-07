@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session-token";
 import { useProject, useSession } from "@/contexts/Auth";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -15,6 +16,7 @@ export const useModel = (
 
   const openrouter = createOpenRouter({
     apiKey: "this is required",
+    fetch: sessionFetch,
     baseURL: getPlaygroundMcpBaseURL(),
     headers: {
       "Gram-Session": session.session,

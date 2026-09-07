@@ -1,4 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
+import { sessionFetch } from "@/lib/session-token";
 import { getServerURL } from "@/lib/utils";
 import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
@@ -35,7 +36,7 @@ export default function UploadFileStep(): JSX.Element {
   async function handleUpload(uploadingFile: File) {
     setIsUploading(true);
     try {
-      const response = await fetch(
+      const response = await sessionFetch(
         `${getServerURL()}/rpc/assets.uploadOpenAPIv3`,
         {
           method: "POST",

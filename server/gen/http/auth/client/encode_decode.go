@@ -99,26 +99,10 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
 			}
 			sessionToken = sessionTokenRaw
-			var (
-				sessionCookie    string
-				sessionCookieRaw string
-
-				cookies = resp.Cookies()
-			)
-			for _, c := range cookies {
-				switch c.Name {
-				case "gram_session":
-					sessionCookieRaw = c.Value
-				}
-			}
-			if sessionCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
-			}
-			sessionCookie = sessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "callback", err)
 			}
-			res := NewCallbackResultTemporaryRedirect(location, sessionToken, sessionCookie)
+			res := NewCallbackResultTemporaryRedirect(location, sessionToken)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -593,26 +577,10 @@ func DecodeSwitchScopesResponse(decoder func(*http.Response) goahttp.Decoder, re
 				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
 			}
 			sessionToken = sessionTokenRaw
-			var (
-				sessionCookie    string
-				sessionCookieRaw string
-
-				cookies = resp.Cookies()
-			)
-			for _, c := range cookies {
-				switch c.Name {
-				case "gram_session":
-					sessionCookieRaw = c.Value
-				}
-			}
-			if sessionCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
-			}
-			sessionCookie = sessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "switchScopes", err)
 			}
-			res := NewSwitchScopesResultOK(sessionToken, sessionCookie)
+			res := NewSwitchScopesResultOK(sessionToken)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -839,26 +807,10 @@ func DecodeEnterDemoResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
 			}
 			sessionToken = sessionTokenRaw
-			var (
-				sessionCookie    string
-				sessionCookieRaw string
-
-				cookies = resp.Cookies()
-			)
-			for _, c := range cookies {
-				switch c.Name {
-				case "gram_session":
-					sessionCookieRaw = c.Value
-				}
-			}
-			if sessionCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
-			}
-			sessionCookie = sessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "enterDemo", err)
 			}
-			res := NewEnterDemoResultOK(sessionToken, sessionCookie)
+			res := NewEnterDemoResultOK(sessionToken)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1010,6 +962,408 @@ func DecodeEnterDemoResponse(decoder func(*http.Response) goahttp.Decoder, resto
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("auth", "enterDemo", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRefreshSessionRequest instantiates a HTTP request object with method
+// and path set to call the "auth" service "refreshSession" endpoint
+func (c *Client) BuildRefreshSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshSessionAuthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "refreshSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeRefreshSessionResponse returns a decoder for responses returned by the
+// auth refreshSession endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeRefreshSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+				}
+				err = ValidateRefreshSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+				}
+				return nil, NewRefreshSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+				}
+				err = ValidateRefreshSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+				}
+				return nil, NewRefreshSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "refreshSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "refreshSession", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildLogoutSessionRequest instantiates a HTTP request object with method and
+// path set to call the "auth" service "logoutSession" endpoint
+func (c *Client) BuildLogoutSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LogoutSessionAuthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "logoutSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeLogoutSessionResponse returns a decoder for responses returned by the
+// auth logoutSession endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeLogoutSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeLogoutSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body LogoutSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body LogoutSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body LogoutSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body LogoutSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body LogoutSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body LogoutSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body LogoutSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body LogoutSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+				}
+				err = ValidateLogoutSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+				}
+				return nil, NewLogoutSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body LogoutSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+				}
+				err = ValidateLogoutSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+				}
+				return nil, NewLogoutSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "logoutSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body LogoutSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutSession", err)
+			}
+			err = ValidateLogoutSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutSession", err)
+			}
+			return nil, NewLogoutSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "logoutSession", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1555,26 +1909,10 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
 			}
 			sessionToken = sessionTokenRaw
-			var (
-				sessionCookie    string
-				sessionCookieRaw string
-
-				cookies = resp.Cookies()
-			)
-			for _, c := range cookies {
-				switch c.Name {
-				case "gram_session":
-					sessionCookieRaw = c.Value
-				}
-			}
-			if sessionCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
-			}
-			sessionCookie = sessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "info", err)
 			}
-			res := NewInfoResultOK(&body, sessionToken, sessionCookie)
+			res := NewInfoResultOK(&body, sessionToken)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

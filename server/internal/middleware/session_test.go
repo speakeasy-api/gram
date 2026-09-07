@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-func TestSessionMiddlewareRefreshesAuthenticatedCookie(t *testing.T) {
+func TestSessionMiddlewareDoesNotRenewAuthenticatedCookie(t *testing.T) {
 	t.Parallel()
 
 	var observedSessionID string
@@ -29,18 +29,7 @@ func TestSessionMiddlewareRefreshesAuthenticatedCookie(t *testing.T) {
 
 	require.True(t, foundSession)
 	require.Equal(t, "session-id", observedSessionID)
-	var refreshed *http.Cookie
-	for _, cookie := range recorder.Result().Cookies() {
-		if cookie.Name == constants.SessionCookie && cookie.Path == "/" {
-			refreshed = cookie
-		}
-	}
-	require.NotNil(t, refreshed)
-	require.Equal(t, "session-id", refreshed.Value)
-	require.Equal(t, constants.SessionCookieMaxAgeSeconds, refreshed.MaxAge)
-	require.True(t, refreshed.Secure)
-	require.True(t, refreshed.HttpOnly)
-	require.Equal(t, http.SameSiteLaxMode, refreshed.SameSite)
+	require.Empty(t, recorder.Result().Cookies())
 }
 
 func TestSessionMiddlewareDoesNotRefreshDifferentSession(t *testing.T) {
@@ -61,11 +50,6 @@ func TestSessionMiddlewareDoesNotRefreshDifferentSession(t *testing.T) {
 func TestSessionMiddlewareDoesNotRefreshLogoutCookie(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, shouldRefreshSessionCookie("/rpc/auth.logout"))
-	require.False(t, shouldRefreshSessionCookie("/rpc/auth.info"))
-	require.False(t, shouldRefreshSessionCookie("/rpc/auth.switchScopes"))
-	require.False(t, shouldRefreshSessionCookie("/rpc/auth.enterDemo"))
-
 	handler := SessionMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		contextvalues.RefreshSessionCookie(r.Context(), "session-id")
 	}))
@@ -75,5 +59,23 @@ func TestSessionMiddlewareDoesNotRefreshLogoutCookie(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 
+	require.Empty(t, recorder.Result().Cookies())
+}
+
+func TestSessionMiddlewareNeverAuthenticatesRefreshCookie(t *testing.T) {
+	t.Parallel()
+	var token string
+	var found bool
+	handler := SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, found = contextvalues.GetSessionTokenFromContext(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/auth/session/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "gram_refresh", Value: "fabricated-refresh"})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	require.False(t, found)
+	require.Empty(t, token)
+	require.Equal(t, http.StatusNoContent, recorder.Code)
 	require.Empty(t, recorder.Result().Cookies())
 }

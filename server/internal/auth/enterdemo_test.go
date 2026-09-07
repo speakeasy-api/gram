@@ -149,7 +149,7 @@ func TestService_EnterDemo(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, constants.DemoOrganizationID, stored.ActiveOrganizationID)
 		require.Empty(t, stored.SupportOrganizationID)
-		require.True(t, stored.SupportExpiresAt.IsZero())
+		require.True(t, session.SupportExpiresAt.Equal(stored.SupportExpiresAt))
 
 		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err)

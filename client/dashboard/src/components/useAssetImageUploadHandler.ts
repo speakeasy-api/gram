@@ -1,4 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
+import { sessionFetch } from "@/lib/session-token";
 import { getServerURL } from "@/lib/utils";
 import { UploadImageResult } from "@gram/client/models/components/uploadimageresult.js";
 
@@ -42,11 +43,14 @@ export function useAssetImageUploadHandler(
       headers["gram-project"] = project.slug;
     }
 
-    const res = await fetch(`${getServerURL()}${UPLOAD_ENDPOINTS[tier]}`, {
-      method: "POST",
-      body: file,
-      headers,
-    });
+    const res = await sessionFetch(
+      `${getServerURL()}${UPLOAD_ENDPOINTS[tier]}`,
+      {
+        method: "POST",
+        body: file,
+        headers,
+      },
+    );
 
     if (!res.ok) {
       throw new Error("Upload failed");

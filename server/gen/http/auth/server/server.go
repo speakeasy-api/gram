@@ -18,14 +18,16 @@ import (
 
 // Server lists the auth service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	Callback     http.Handler
-	Login        http.Handler
-	SwitchScopes http.Handler
-	EnterDemo    http.Handler
-	Logout       http.Handler
-	Register     http.Handler
-	Info         http.Handler
+	Mounts         []*MountPoint
+	Callback       http.Handler
+	Login          http.Handler
+	SwitchScopes   http.Handler
+	EnterDemo      http.Handler
+	RefreshSession http.Handler
+	LogoutSession  http.Handler
+	Logout         http.Handler
+	Register       http.Handler
+	Info           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,17 +61,21 @@ func New(
 			{"Login", "GET", "/rpc/auth.login"},
 			{"SwitchScopes", "POST", "/rpc/auth.switchScopes"},
 			{"EnterDemo", "POST", "/rpc/auth.enterDemo"},
+			{"RefreshSession", "POST", "/auth/session/refresh"},
+			{"LogoutSession", "POST", "/auth/session/logout"},
 			{"Logout", "POST", "/rpc/auth.logout"},
 			{"Register", "POST", "/rpc/auth.register"},
 			{"Info", "GET", "/rpc/auth.info"},
 		},
-		Callback:     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Login:        NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		SwitchScopes: NewSwitchScopesHandler(e.SwitchScopes, mux, decoder, encoder, errhandler, formatter),
-		EnterDemo:    NewEnterDemoHandler(e.EnterDemo, mux, decoder, encoder, errhandler, formatter),
-		Logout:       NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		Register:     NewRegisterHandler(e.Register, mux, decoder, encoder, errhandler, formatter),
-		Info:         NewInfoHandler(e.Info, mux, decoder, encoder, errhandler, formatter),
+		Callback:       NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Login:          NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		SwitchScopes:   NewSwitchScopesHandler(e.SwitchScopes, mux, decoder, encoder, errhandler, formatter),
+		EnterDemo:      NewEnterDemoHandler(e.EnterDemo, mux, decoder, encoder, errhandler, formatter),
+		RefreshSession: NewRefreshSessionHandler(e.RefreshSession, mux, decoder, encoder, errhandler, formatter),
+		LogoutSession:  NewLogoutSessionHandler(e.LogoutSession, mux, decoder, encoder, errhandler, formatter),
+		Logout:         NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		Register:       NewRegisterHandler(e.Register, mux, decoder, encoder, errhandler, formatter),
+		Info:           NewInfoHandler(e.Info, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -82,6 +88,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Login = m(s.Login)
 	s.SwitchScopes = m(s.SwitchScopes)
 	s.EnterDemo = m(s.EnterDemo)
+	s.RefreshSession = m(s.RefreshSession)
+	s.LogoutSession = m(s.LogoutSession)
 	s.Logout = m(s.Logout)
 	s.Register = m(s.Register)
 	s.Info = m(s.Info)
@@ -96,6 +104,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLoginHandler(mux, h.Login)
 	MountSwitchScopesHandler(mux, h.SwitchScopes)
 	MountEnterDemoHandler(mux, h.EnterDemo)
+	MountRefreshSessionHandler(mux, h.RefreshSession)
+	MountLogoutSessionHandler(mux, h.LogoutSession)
 	MountLogoutHandler(mux, h.Logout)
 	MountRegisterHandler(mux, h.Register)
 	MountInfoHandler(mux, h.Info)
@@ -304,6 +314,98 @@ func NewEnterDemoHandler(
 			return
 		}
 		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshSessionHandler configures the mux to serve the "auth" service
+// "refreshSession" endpoint.
+func MountRefreshSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/auth/session/refresh", f)
+}
+
+// NewRefreshSessionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "auth" service "refreshSession" endpoint.
+func NewRefreshSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeRefreshSessionResponse(encoder)
+		encodeError    = EncodeRefreshSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountLogoutSessionHandler configures the mux to serve the "auth" service
+// "logoutSession" endpoint.
+func MountLogoutSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/auth/session/logout", f)
+}
+
+// NewLogoutSessionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "auth" service "logoutSession" endpoint.
+func NewLogoutSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeLogoutSessionResponse(encoder)
+		encodeError    = EncodeLogoutSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "logoutSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
+		var err error
+		res, err := endpoint(ctx, nil)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

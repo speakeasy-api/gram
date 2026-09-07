@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	authRepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -61,8 +62,6 @@ func TestService_Callback(t *testing.T) {
 
 		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 		require.NotEmpty(t, result.SessionToken)
-		require.NotEmpty(t, result.SessionCookie)
-		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
 	// Default org selection (fallback to first org) is covered by
@@ -150,6 +149,8 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "override-org-456", stored.SupportOrganizationID)
 		require.WithinDuration(t, time.Now().Add(time.Hour), stored.SupportExpiresAt, 5*time.Second)
+		require.NotEmpty(t, stored.RefreshHash, "callback must create hashed refresh state")
+		require.WithinDuration(t, time.Now().Add(sessions.AccessLifetime), stored.ExpiresAt, 5*time.Second)
 
 		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
@@ -192,7 +193,6 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Empty(t, result.SessionCookie)
 		require.Contains(t, result.Location, "support login intent does not match login nonce")
 
 		for _, orgID := range []string{supportTarget.ID, staleTarget.ID} {
@@ -283,7 +283,6 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Empty(t, result.SessionCookie)
 		require.Contains(t, result.Location, "organization support target is disabled")
 	})
 
@@ -399,7 +398,6 @@ func TestService_Callback(t *testing.T) {
 		require.NotContains(t, result.Location, "signin_error=", "auto-provision should not surface a signin error")
 		require.Contains(t, result.Location, "/projects/default/assistants/new?disposition=assistants", "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
 		require.NotEmpty(t, result.SessionToken)
-		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
 	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {
@@ -419,8 +417,6 @@ func TestService_Callback(t *testing.T) {
 
 		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 		require.NotEmpty(t, result.SessionToken)
-		require.NotEmpty(t, result.SessionCookie)
-		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
 	t.Run("empty code returns error", func(t *testing.T) {
@@ -737,7 +733,6 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 	require.NotEmpty(t, result.SessionToken)
-	require.Equal(t, result.SessionToken, result.SessionCookie)
 
 	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 	require.NoError(t, err, "load impersonation session after callback")

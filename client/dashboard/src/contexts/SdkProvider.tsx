@@ -5,6 +5,7 @@ import {
   clearStorageForLogout,
   type PreservedStorage,
 } from "@/lib/logout-storage";
+import { sessionFetch, sessionTokens } from "@/lib/session-token";
 import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
@@ -37,6 +38,8 @@ export const SdkProvider = ({
   const isPlatformAdminRef = useRef(false);
   const previousProjectSlug = useRef(projectSlug);
 
+  useEffect(() => sessionTokens.start(), []);
+
   // Memoize the httpClient and gram instances
   const gram = useMemo(() => {
     // Values held across the logout round-trip. The logout response tells the
@@ -64,7 +67,7 @@ export const SdkProvider = ({
           newRequest.headers.set("X-Gram-Scope-Override", scopeOverride);
         }
 
-        return fetch(newRequest);
+        return sessionFetch(newRequest);
       },
     });
 

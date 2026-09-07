@@ -3,9 +3,16 @@ import { OrganizationEntry } from "@gram/client/models/components/organizationen
 import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useLocation } from "react-router";
 import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
+import { sessionTokens } from "@/lib/session-token";
 import { clearLegacyUserStorage } from "@/lib/logout-storage";
 import {
   initializeFermat,
@@ -121,7 +128,15 @@ export const useSessionData = (): {
     throwOnError: false,
   });
 
-  const asSession = (sessionData: SessionInfoResponse): Session => {
+  const accessToken = useSyncExternalStore(
+    sessionTokens.subscribe,
+    sessionTokens.getSnapshot,
+  );
+
+  const asSession = (
+    sessionData: SessionInfoResponse,
+    token = accessToken,
+  ): Session => {
     const sessionId = sessionData?.headers["gram-session"]?.[0];
     const result = sessionData.result;
 
@@ -141,17 +156,27 @@ export const useSessionData = (): {
         displayName: result.userDisplayName,
         photoUrl: result.userPhotoUrl,
       },
-      session: sessionId ?? "",
+      session: token ?? sessionId ?? "",
       rawGramAccountType: result.gramAccountType,
       whitelisted: result.whitelisted,
       refetch: async () => {
         const newSession = await refetch();
-        return newSession.data ? asSession(newSession.data) : emptySession;
+        return newSession.data
+          ? asSession(newSession.data, sessionTokens.getSnapshot())
+          : emptySession;
       },
     };
   };
 
-  const session = sessionData ? asSession(sessionData) : null;
+  // A confirmed refresh rejection takes precedence over cached auth.info,
+  // including its user/org metadata and header. LoginCheck sees emptySession
+  // immediately, without waiting for a query refetch to evict stale data.
+  const session =
+    accessToken === ""
+      ? emptySession
+      : sessionData
+        ? asSession(sessionData)
+        : null;
 
   return { session, error, status };
 };

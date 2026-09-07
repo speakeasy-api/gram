@@ -14,23 +14,26 @@ import (
 	"sync"
 )
 
-const sessionCookieName = "gram_session"
+const sessionCookieName = "gram_refresh"
 
 // apiClient is a session-authenticated client for the local server's
 // management API. Sessions are minted lazily by walking the dashboard's OIDC
 // login flow — the local dev-idp auto-approves, so the whole redirect chain
 // completes without interaction — and the resulting cookie lives in the
-// client's jar for the life of the process.
+// client's jar for the life of the process. Short-lived access credentials are
+// exchanged from that cookie and sent only in the Gram-Session header.
 type apiClient struct {
 	base   *url.URL
+	origin string
 	hc     *http.Client
 	logger *slog.Logger
 
-	mu        sync.Mutex
-	sessionOK bool
+	mu          sync.Mutex
+	sessionOK   bool
+	accessToken string
 }
 
-func newAPIClient(base *url.URL, insecure bool, logger *slog.Logger) *apiClient {
+func newAPIClient(base *url.URL, origin string, insecure bool, logger *slog.Logger) *apiClient {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		// cookiejar.New with nil options never errors; keep the compiler honest.
@@ -46,11 +49,17 @@ func newAPIClient(base *url.URL, insecure bool, logger *slog.Logger) *apiClient 
 
 	return &apiClient{
 		base:   base,
+		origin: origin,
 		logger: logger,
 		hc: &http.Client{
 			Jar:       jar,
 			Transport: transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// net/http does not recognize this custom header as a credential.
+				// Keep access tokens on the original API origin across redirects.
+				if len(via) > 0 && (req.URL.Scheme != via[0].URL.Scheme || req.URL.Host != via[0].URL.Host) {
+					req.Header.Del("Gram-Session")
+				}
 				// The login chain ends at /rpc/auth.callback, which sets the
 				// session cookie and then redirects to the dashboard. The
 				// dashboard may not be running, so stop there.
@@ -67,7 +76,7 @@ func newAPIClient(base *url.URL, insecure bool, logger *slog.Logger) *apiClient 
 }
 
 func (c *apiClient) hasSessionCookie() bool {
-	for _, ck := range c.hc.Jar.Cookies(c.base) {
+	for _, ck := range c.hc.Jar.Cookies(c.base.ResolveReference(&url.URL{Path: "/auth/session/refresh"})) {
 		if ck.Name == sessionCookieName && ck.Value != "" {
 			return true
 		}
@@ -105,16 +114,54 @@ func (c *apiClient) ensureSession(ctx context.Context) error {
 	if c.sessionOK {
 		return nil
 	}
-	if err := c.login(ctx); err != nil {
+	if !c.hasSessionCookie() {
+		if err := c.login(ctx); err != nil {
+			return err
+		}
+	}
+	token, status, err := c.refresh(ctx)
+	if status == http.StatusUnauthorized {
+		if err := c.login(ctx); err != nil {
+			return err
+		}
+		token, _, err = c.refresh(ctx)
+	}
+	if err != nil {
 		return err
 	}
+	c.accessToken = token
 	c.sessionOK = true
 	return nil
 }
 
+// refresh exchanges the path-scoped HttpOnly cookie without exposing its value.
+// The configured dashboard origin must match the API's CSRF allowlist.
+func (c *apiClient) refresh(ctx context.Context) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base.JoinPath("/auth/session/refresh").String(), nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("build refresh request: %w", err)
+	}
+	req.Header.Set("Origin", c.origin)
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("refresh session: %w", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return "", resp.StatusCode, fmt.Errorf("refresh session: status %d", resp.StatusCode)
+	}
+	token := resp.Header.Get("Gram-Session")
+	if token == "" {
+		return "", resp.StatusCode, fmt.Errorf("refresh session: missing Gram-Session header")
+	}
+	return token, resp.StatusCode, nil
+}
+
 // call performs an authenticated JSON API call and returns the raw response
-// body. A 401 invalidates the cached session and retries once with a fresh
-// login. project sets the Gram-Project header when non-empty; when omitted
+// body. A 401 invalidates the cached access credential and retries once after
+// refresh (or a fresh local login when the refresh session has expired).
+// project sets the Gram-Project header when non-empty; when omitted
 // the server falls back to the organization's only project.
 func (c *apiClient) call(ctx context.Context, method, path string, query url.Values, project string, body any) (json.RawMessage, error) {
 	if err := c.ensureSession(ctx); err != nil {
@@ -165,6 +212,10 @@ func (c *apiClient) doOnce(ctx context.Context, method, path string, query url.V
 	if project != "" {
 		req.Header.Set("Gram-Project", project)
 	}
+
+	c.mu.Lock()
+	req.Header.Set("Gram-Session", c.accessToken)
+	c.mu.Unlock()
 
 	resp, err := c.hc.Do(req)
 	if err != nil {

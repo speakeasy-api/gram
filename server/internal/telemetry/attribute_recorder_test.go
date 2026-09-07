@@ -85,3 +85,28 @@ func TestRecordBodyContentDoesNotOverwrite(t *testing.T) {
 	val := h[attr.GenAIToolCallArgumentsKey]
 	require.Equal(t, "second", val, "second call should overwrite the first")
 }
+
+func TestRecordHeadersFullyRedactsSessionCredentials(t *testing.T) {
+	t.Parallel()
+	for _, sensitive := range []bool{false, true} {
+		h := HTTPLogAttributes{}
+		headers := map[string]string{
+			"Cookie":       "gram_refresh=fabricated-refresh; another=fabricated-secret",
+			"cOoKiE":       "short",
+			"Set-Cookie":   "gram_refresh=fabricated-refresh; Secure; HttpOnly; Path=/auth/session",
+			"sEt-CoOkIe":   "short",
+			"Gram-Session": "fabricated-access",
+			"gRaM-sEsSiOn": "short",
+		}
+		h.RecordRequestHeaders(headers, sensitive)
+		h.RecordResponseHeaders(headers)
+		for _, key := range []attr.Key{attr.HTTPRequestHeadersKey, attr.HTTPResponseHeadersKey} {
+			recorded, ok := h[key].(map[string]string)
+			require.True(t, ok)
+			for name := range headers {
+				require.Equal(t, "[REDACTED]", recorded[name], "header %s, sensitive=%v", name, sensitive)
+			}
+		}
+		require.Contains(t, headers["Cookie"], "fabricated-refresh", "recording must not mutate the input")
+	}
+}

@@ -40,7 +40,6 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 		Trial:                 nil,
 		Organizations:         nil,
 		SessionToken:          "session-token",
-		SessionCookie:         "session-cookie",
 	})
 
 	bodyJSON, err := json.Marshal(response)
@@ -51,7 +50,7 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 	require.NoError(t, json.Unmarshal(bodyJSON, &body))
 	require.NoError(t, authclient.ValidateInfoResponseBody(&body))
 
-	result := authclient.NewInfoResultOK(&body, "session-token", "session-cookie")
+	result := authclient.NewInfoResultOK(&body, "session-token")
 	require.Nil(t, result.Trial)
 	require.Nil(t, result.ImpersonatorEmail)
 }
@@ -240,7 +239,6 @@ func TestService_Info(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.Equal(t, session.SessionID, result.SessionToken)
-		require.Equal(t, session.SessionID, result.SessionCookie)
 		require.Equal(t, session.ActiveOrganizationID, result.ActiveOrganizationID)
 		require.Equal(t, userInfo.UserID, result.UserID)
 		require.Equal(t, userInfo.Email, result.UserEmail)

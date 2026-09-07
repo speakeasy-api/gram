@@ -1,0 +1,68 @@
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { StrictMode, useEffect, useState } from "react";
+import { afterEach, expect, it, vi } from "vitest";
+import { SessionTokenStore } from "@/lib/session-token";
+
+afterEach(cleanup);
+
+it("survives StrictMode canceling bootstrap before the shared refresh completes", async () => {
+  let finishRefresh!: (response: Response) => void;
+  const pendingRefresh = new Promise<Response>((resolve) => {
+    finishRefresh = resolve;
+  });
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockReturnValueOnce(pendingRefresh)
+    .mockImplementation(async (input) => {
+      const request = input as Request;
+      request.signal.throwIfAborted();
+      return new Response(null, {
+        status: 200,
+        headers: { "Gram-Session": "access-1" },
+      });
+    });
+  const store = new SessionTokenStore(
+    () => "https://app.example.test",
+    fetcher,
+  );
+
+  function Bootstrap() {
+    const [status, setStatus] = useState("pending");
+    useEffect(() => {
+      const controller = new AbortController();
+      void store
+        .fetch("https://app.example.test/rpc/auth.info", {
+          signal: controller.signal,
+        })
+        .then(() => {
+          setStatus("authenticated");
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setStatus("error");
+        });
+      return () => {
+        controller.abort();
+      };
+    }, []);
+    return <div>{status}</div>;
+  }
+
+  render(
+    <StrictMode>
+      <Bootstrap />
+    </StrictMode>,
+  );
+  expect(fetcher).toHaveBeenCalledOnce();
+  await act(async () => {
+    finishRefresh(
+      new Response(null, {
+        status: 204,
+        headers: { "Gram-Session": "access-1" },
+      }),
+    );
+  });
+  expect(await screen.findByText("authenticated")).toBeTruthy();
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect((fetcher.mock.calls[1]![0] as Request).signal.aborted).toBe(true);
+  expect((fetcher.mock.calls[2]![0] as Request).signal.aborted).toBe(false);
+});

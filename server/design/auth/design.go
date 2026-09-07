@@ -36,8 +36,7 @@ var _ = Service("auth", func() {
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to after authentication")
 			Attribute("session_token", String, "The authentication session")
-			Attribute("session_cookie", String, "The authentication session")
-			Required("location", "session_token", "session_cookie")
+			Required("location", "session_token")
 		})
 
 		HTTP(func() {
@@ -48,7 +47,6 @@ var _ = Service("auth", func() {
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
 				})
-				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
 		})
@@ -107,8 +105,7 @@ var _ = Service("auth", func() {
 
 		Result(func() {
 			Attribute("session_token", String, "The authentication session")
-			Attribute("session_cookie", String, "The authentication session")
-			Required("session_token", "session_cookie")
+			Required("session_token")
 		})
 
 		HTTP(func() {
@@ -117,7 +114,6 @@ var _ = Service("auth", func() {
 			Param("project_id")
 			security.SessionHeader()
 			Response(StatusOK, func() {
-				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
 		})
@@ -136,15 +132,13 @@ var _ = Service("auth", func() {
 
 		Result(func() {
 			Attribute("session_token", String, "The authentication session")
-			Attribute("session_cookie", String, "The authentication session")
-			Required("session_token", "session_cookie")
+			Required("session_token")
 		})
 
 		HTTP(func() {
 			POST("/rpc/auth.enterDemo")
 			security.SessionHeader()
 			Response(StatusOK, func() {
-				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
 		})
@@ -152,6 +146,28 @@ var _ = Service("auth", func() {
 		Meta("openapi:operationId", "enterDemo")
 		Meta("openapi:extension:x-speakeasy-name-override", "enterDemo")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnterDemo"}`)
+	})
+
+	Method("refreshSession", func() {
+		Description("Renews a browser session using only the HttpOnly refresh cookie. Requires the configured dashboard Origin. Access credentials retain a fixed ten-minute expiry.")
+		NoSecurity()
+		HTTP(func() {
+			POST("/auth/session/refresh")
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "refreshSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
+	Method("logoutSession", func() {
+		Description("Invalidates the browser refresh session and current access session, including when access has expired. Requires the configured dashboard Origin.")
+		NoSecurity()
+		HTTP(func() {
+			POST("/auth/session/logout")
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "logoutSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 
 	Method("logout", func() {
@@ -230,9 +246,8 @@ var _ = Service("auth", func() {
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")
-			Attribute("session_cookie", String, "The authentication session")
 
-			Required("user_id", "user_email", "is_admin", "organization_override", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription", "whitelisted")
+			Required("user_id", "user_email", "is_admin", "organization_override", "active_organization_id", "organizations", "session_token", "gram_account_type", "has_active_subscription", "whitelisted")
 		})
 
 		HTTP(func() {
@@ -240,7 +255,6 @@ var _ = Service("auth", func() {
 			security.SessionHeader()
 
 			Response(StatusOK, func() {
-				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
 		})

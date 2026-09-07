@@ -9,10 +9,11 @@ const (
 	FunctionTokenSecurityScheme = "function_token"
 	FunctionTokenHeader         = "Authorization"
 
-	SessionSecurityScheme      = "session"
-	SessionHeader              = "Gram-Session"
-	SessionCookie              = "gram_session"
-	SessionIdleTimeout         = 72 * time.Hour
+	SessionSecurityScheme = "session"
+	SessionHeader         = "Gram-Session"
+	SessionCookie         = "gram_session"
+	// SessionIdleTimeout is retained for compatibility; access expiry is fixed, not sliding.
+	SessionIdleTimeout         = 10 * time.Minute
 	SessionCookieMaxAgeSeconds = int(SessionIdleTimeout / time.Second)
 
 	ChatSessionsTokenSecurityScheme = "chat_sessions_token"

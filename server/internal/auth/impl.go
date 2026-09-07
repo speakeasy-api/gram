@@ -218,7 +218,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 	// Wrap Callback handler: read the binding cookie and inject it into the
 	// context so validateAuthNonce() can verify it.
-	server.Callback = callbackNonceBindingMiddleware(server.Callback)
+	server.Callback = sessionTransportMiddleware(callbackNonceBindingMiddleware(server.Callback))
+	server.RefreshSession = sessionTransportMiddleware(server.RefreshSession)
+	server.LogoutSession = sessionTransportMiddleware(server.LogoutSession)
 
 	// Wrap Logout handler: have the browser drop the origin's cached data,
 	// cookies, and client-side storage once the session has been invalidated server-side.
@@ -293,14 +295,29 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
+	// Only issue refresh state after all callback organization provisioning has
+	// succeeded. The secret goes directly to an HttpOnly cookie, never the API result.
+	defer func() {
+		if err != nil || res == nil || res.SessionToken == "" {
+			return
+		}
+		secret, session, createErr := s.sessions.CreateRefreshSession(ctx, res.SessionToken)
+		if createErr != nil {
+			_ = s.sessions.Logout(ctx, "", res.SessionToken)
+			res = nil
+			err = oops.E(oops.CodeUnexpected, createErr, "error creating refresh session")
+			return
+		}
+		writeBrowserSession(ctx, secret, session)
+	}()
+
 	logger := s.logger
 
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
-			SessionToken:  "",
-			SessionCookie: "",
+			Location:     fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			SessionToken: "",
 		}, nil
 	}
 
@@ -402,6 +419,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 	session := sessions.Session{
+		RefreshHash:           "",
+		ExpiresAt:             time.Time{},
 		SessionID:             sessionID,
 		UserID:                userID,
 		ActiveOrganizationID:  "",
@@ -433,9 +452,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			return redirectWithError(authErrInit, err)
 		}
 		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(ctx, payload),
-			SessionToken:  session.SessionID,
-			SessionCookie: session.SessionID,
+			Location:     s.callbackRedirectURL(ctx, payload),
+			SessionToken: session.SessionID,
 		}, nil
 	}
 
@@ -466,9 +484,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
 
 			return &gen.CallbackResult{
-				Location:      s.callbackRedirectURL(ctx, payload),
-				SessionToken:  session.SessionID,
-				SessionCookie: session.SessionID,
+				Location:     s.callbackRedirectURL(ctx, payload),
+				SessionToken: session.SessionID,
 			}, nil
 		}
 
@@ -478,9 +495,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				return redirectWithError(authErrInit, err)
 			}
 			return &gen.CallbackResult{
-				Location:      location,
-				SessionToken:  session.SessionID,
-				SessionCookie: session.SessionID,
+				Location:     location,
+				SessionToken: session.SessionID,
 			}, nil
 		}
 
@@ -489,9 +505,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(ctx, payload),
-			SessionToken:  session.SessionID,
-			SessionCookie: session.SessionID,
+			Location:     s.callbackRedirectURL(ctx, payload),
+			SessionToken: session.SessionID,
 		}, nil
 	}
 
@@ -535,9 +550,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location:      s.callbackRedirectURL(ctx, payload),
-		SessionToken:  session.SessionID,
-		SessionCookie: session.SessionID,
+		Location:     s.callbackRedirectURL(ctx, payload),
+		SessionToken: session.SessionID,
 	}, nil
 }
 
@@ -884,8 +898,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 
 	return &gen.SwitchScopesResult{
-		SessionToken:  *authCtx.SessionID,
-		SessionCookie: *authCtx.SessionID,
+		SessionToken: *authCtx.SessionID,
 	}, nil
 }
 
@@ -919,14 +932,13 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	// target would no longer match the active organization and the next
 	// authenticated request would reject the session.
 	updatedSession.SupportOrganizationID = ""
-	updatedSession.SupportExpiresAt = time.Time{}
+	// Preserve the original absolute deadline even after leaving support scope.
 	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
 	return &gen.EnterDemoResult{
-		SessionToken:  *authCtx.SessionID,
-		SessionCookie: *authCtx.SessionID,
+		SessionToken: *authCtx.SessionID,
 	}, nil
 }
 
@@ -942,6 +954,8 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
+		RefreshHash:           "",
+		ExpiresAt:             time.Time{},
 		SessionID:             *authCtx.SessionID,
 		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
 		UserID:                authCtx.UserID,
@@ -1079,7 +1093,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 
 	return &gen.InfoResult{
 		SessionToken:                  *authCtx.SessionID,
-		SessionCookie:                 *authCtx.SessionID,
 		ActiveOrganizationID:          authCtx.ActiveOrganizationID,
 		GramAccountType:               authCtx.AccountType,
 		HasActiveSubscription:         authCtx.HasActiveSubscription,
@@ -1366,9 +1379,8 @@ func (s *Service) redirectSignupError(ctx context.Context, payload *gen.Callback
 		location += "&redirect=" + url.QueryEscape(dest)
 	}
 	return &gen.CallbackResult{
-		Location:      location,
-		SessionToken:  "",
-		SessionCookie: "",
+		Location:     location,
+		SessionToken: "",
 	}, nil
 }
 

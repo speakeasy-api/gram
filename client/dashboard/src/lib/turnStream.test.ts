@@ -18,6 +18,10 @@ import { streamTurn } from "./turnStream";
 // reconstructs, the same way the runtime does.
 
 vi.mock("@/lib/utils", () => ({ getServerURL: () => "http://test.local" }));
+// Session refresh is covered separately; these tests exercise SSE framing.
+vi.mock("@/lib/session-token", () => ({
+  sessionFetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+}));
 
 const CHAT_ID = "chat-1";
 

@@ -45,6 +45,7 @@ import {
   type ToolUIPart,
   UIMessage,
 } from "ai";
+import { sessionFetch } from "@/lib/session-token";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
@@ -227,7 +228,7 @@ function ChatInner({
   const createToolExecutor =
     (tool: { toolUrn: string }, toolsetSlug: string) =>
     async (args: unknown) => {
-      const response = await fetch(
+      const response = await sessionFetch(
         `${getPlaygroundMcpBaseURL()}/rpc/instances.invoke/tool?tool_urn=${tool.toolUrn}&environment_slug=${
           configRef.current.environmentSlug
         }&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,

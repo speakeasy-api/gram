@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session-token";
 import { getServerURL } from "@/lib/utils";
 import { useSession } from "./Auth";
 import { useProject } from "./Auth";
@@ -9,7 +10,7 @@ export const useFetcher = (): {
   const { session } = useSession();
 
   const f = (endpoint: string, opts: RequestInit) =>
-    fetch(`${getServerURL()}${endpoint}`, {
+    sessionFetch(`${getServerURL()}${endpoint}`, {
       ...opts,
       headers: {
         ...(opts.headers as Record<string, string> | undefined),
