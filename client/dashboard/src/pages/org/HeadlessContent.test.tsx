@@ -34,6 +34,23 @@ const agentNames = (container: HTMLElement) =>
   );
 
 describe("HeadlessContent", () => {
+  it("describes the control-plane workflows available to the agent", () => {
+    render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Connect your agent" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Administer the control plane from the agent you already work in. Deploy and Manage MCP gateway servers, Review security policies and deep dive your AI usage data.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers a catch-all agent last", () => {
     const { container } = render(
       <MemoryRouter>
