@@ -52,6 +52,7 @@ function ModeSegment({
   icon,
   active,
   onInk,
+  shimmer,
   href,
   onSelect,
 }: {
@@ -59,6 +60,7 @@ function ModeSegment({
   icon: IconName;
   active: boolean;
   onInk: boolean;
+  shimmer: boolean;
   href: string;
   onSelect: (href: string) => void;
 }) {
@@ -92,7 +94,10 @@ function ModeSegment({
       style={{ width: `${SEGMENT_WIDTH_REM}rem` }}
     >
       <Icon name={icon} className="h-3 w-3" />
-      {label}
+      {/* The shimmer paints the label from a gradient clipped to the glyphs, so
+          it needs its own element — on the anchor it would swallow the icon
+          too. */}
+      <span className={shimmer ? "mode-shimmer" : undefined}>{label}</span>
     </a>
   );
 }
@@ -106,7 +111,7 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   const { orgSlug } = useSlugs();
   const location = useLocation();
-  const { switchTo, phase } = useModeSwitch();
+  const { switchTo, phase, to } = useModeSwitch();
   const enabled = useModeSwitcherEnabled();
   const path = location.pathname + location.search + location.hash;
 
@@ -125,7 +130,12 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
         : (rememberedCanvasPath(orgSlug) ?? orgRoutes.home.href()),
     headless: orgRoutes.headless.href(),
   };
-  const activeIndex = MODES.findIndex((entry) => entry.mode === mode);
+  // The route only swaps midway through the switch, so `mode` still names the
+  // mode being left for the first beat of it. The pill (and the type under it)
+  // follows the destination from the click instead, so it travels while the
+  // pane shrinks rather than jumping into place once the new route mounts.
+  const activeMode = to ?? mode;
+  const activeIndex = MODES.findIndex((entry) => entry.mode === activeMode);
   // Ink while a switch is in flight (the tab grid is behind it) and while
   // headless mode is mounted; light over the dashboard at rest.
   const onInk = mode === "headless" || phase !== "idle";
@@ -166,12 +176,14 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
           style={{
             width: `${SEGMENT_WIDTH_REM}rem`,
             transform: `translateX(${activeIndex * SEGMENT_WIDTH_REM}rem)`,
-            // Slow enough to read as the pill travelling between segments, on
-            // the same curve the pane animation uses.
+            // Slow enough to read as the pill travelling between segments.
+            // Symmetric ease rather than the panes' fast-out curve: over 120px
+            // that curve is two-thirds done in its first fifth, so the pill
+            // reads as snapping to the other tab instead of crossing to it.
             // The shorthand replaces the class-level transition-colors, so the
             // ink/light swap has to be listed here too or it snaps.
             transition:
-              "transform 620ms cubic-bezier(0.32, 0.72, 0, 1), background-color 500ms ease",
+              "transform 620ms cubic-bezier(0.65, 0.02, 0.28, 1), background-color 500ms ease",
           }}
         />
         {MODES.map((entry) => (
@@ -179,8 +191,12 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
             key={entry.mode}
             label={entry.label}
             icon={entry.icon}
-            active={entry.mode === mode}
+            active={entry.mode === activeMode}
             onInk={onInk}
+            // Headless is new, so its tab advertises itself until the user is
+            // actually in it — a still label next to the one they are reading
+            // never gets noticed.
+            shimmer={entry.mode === "headless" && activeMode !== "headless"}
             href={hrefs[entry.mode]}
             onSelect={(href) => switchTo(mode, entry.mode, href)}
           />

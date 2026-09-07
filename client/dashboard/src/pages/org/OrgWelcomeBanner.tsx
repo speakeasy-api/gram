@@ -112,7 +112,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const recommendedId = recommendedWelcomeCardId(cardIds);
 
   const projectRoutes = useRoutes({ projectSlug: startProject?.slug });
-  const platformMcpHref = `${orgRoutes.platformMcp.href()}?setup=1&entrySource=organization_home`;
+  const platformMcpHref = `${orgRoutes.headless.href()}?entrySource=organization_home`;
   const cards: RouteCard[] = cardIds.map((id, i) => {
     const recommended = id === recommendedId;
     const index = String(i + 1).padStart(2, "0");

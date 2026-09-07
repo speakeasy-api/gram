@@ -83,7 +83,6 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
-import PlatformMCP from "./pages/org/PlatformMCP";
 import HeadlessMode from "./pages/org/HeadlessMode";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
@@ -1195,13 +1194,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "skills",
     icon: "terminal",
     component: OrgSkills,
-  },
-  platformMcp: {
-    title: "Platform MCP",
-    url: "platform-mcp",
-    icon: "plug-zap",
-    stage: "preview",
-    component: PlatformMCP,
   },
   aiIntegrations: {
     title: "AI Integrations",

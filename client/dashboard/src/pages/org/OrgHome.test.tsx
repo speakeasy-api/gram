@@ -94,7 +94,7 @@ vi.mock("@/routes", () => ({
     // Used by the welcome banner's route cards.
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
-    platformMcp: { href: () => "/acme/platform-mcp" },
+    headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
