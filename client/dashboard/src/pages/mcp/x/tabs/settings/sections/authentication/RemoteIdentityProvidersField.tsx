@@ -1,6 +1,5 @@
 import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
 import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
@@ -9,7 +8,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
+import { AuthRow, ExplainerDialog } from "./AuthRow";
 
 export function RemoteIdentityProvidersField({
   associatedIssuers,
@@ -31,34 +30,28 @@ export function RemoteIdentityProvidersField({
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
 }): JSX.Element {
+  const addButton = (
+    <RequireScope scope="mcp:write" resourceId={projectId} level="component">
+      <Button variant="secondary" size="md" onClick={onAdd}>
+        <Button.LeftIcon>
+          <Plus className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>Add provider</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
       <Text muted small>
-        Loading...
+        Loading…
       </Text>
     );
   } else if (associatedIssuers.length === 0) {
-    providerControls = (
-      <SettingsInlineEmptyState
-        title="No remote identity providers"
-        description="Attach a provider if the upstream service requires users to sign in to access their data."
-        action={
-          <RequireScope
-            scope="mcp:write"
-            resourceId={projectId}
-            level="component"
-          >
-            <Button variant="secondary" onClick={onAdd}>
-              <Button.LeftIcon>
-                <Plus className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Attach Provider</Button.Text>
-            </Button>
-          </RequireScope>
-        }
-      />
-    );
+    // The button is the empty state: "None yet." beside it says nothing the
+    // absent list does not already say.
+    providerControls = addButton;
   } else {
     providerControls = (
       <div className="space-y-3">
@@ -71,33 +64,37 @@ export function RemoteIdentityProvidersField({
             onDelete={() => onDelete(issuer)}
           />
         ))}
-        {allowAdditionalProviders && (
-          <RequireScope
-            scope="mcp:write"
-            resourceId={projectId}
-            level="component"
-          >
-            <Button variant="secondary" onClick={onAdd}>
-              <Button.LeftIcon>
-                <Plus className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Attach Provider</Button.Text>
-            </Button>
-          </RequireScope>
-        )}
+        {allowAdditionalProviders && addButton}
       </div>
     );
   }
 
   return (
-    <Field>
-      <FieldLabel>Remote Identity Providers</FieldLabel>
+    <AuthRow
+      label="Connected services"
+      hint={
+        <>
+          Rarely needed — only when the upstream service makes each user sign in
+          there themselves.
+          <ExplainerDialog title="Connected services">
+            <Text muted small className="block">
+              Some servers act on a user&apos;s own data in another system —
+              their Ashby account, their Linear workspace. That system decides
+              whether this particular person may do it, so each user signs in
+              there once and Speakeasy keeps that authorization alongside their
+              session.
+            </Text>
+            <Text muted small className="block">
+              Add a provider only when the upstream service asks every user to
+              sign in for themselves. A server that reaches its API with one
+              shared credential needs none.
+            </Text>
+          </ExplainerDialog>
+        </>
+      }
+    >
       {providerControls}
-      <FieldDescription>
-        Upstream identity providers for services that require per-user
-        authorization.
-      </FieldDescription>
-    </Field>
+    </AuthRow>
   );
 }
 
@@ -161,7 +158,7 @@ function RemoteIdentityProviderRow({
               <Button.LeftIcon>
                 <Trash2 className="size-4" />
               </Button.LeftIcon>
-              <Button.Text>Delete</Button.Text>
+              <Button.Text>Remove</Button.Text>
             </Button>
           </div>
         </RequireScope>

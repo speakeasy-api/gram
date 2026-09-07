@@ -3,7 +3,6 @@ import {
   Field,
   FieldDescription,
   FieldError,
-  FieldGroup,
   FieldLabel,
 } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
@@ -13,7 +12,7 @@ import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMod
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
+import { AuthRow } from "./AuthRow";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
@@ -46,34 +45,25 @@ export function AuthenticationSection({
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
-    <>
-      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Authentication</SettingsSection.Title>
-          <SettingsSection.Description>
-            {isUnproxied
-              ? "Speakeasy doesn't manage authentication for unproxied servers."
-              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
-          </SettingsSection.Description>
-        </SettingsSection.Header>
+    <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Description>
+          {isUnproxied
+            ? "Speakeasy doesn't manage authentication for unproxied servers."
+            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            {isUnproxied ? (
-              <UnproxiedAuthenticationNotice />
-            ) : (
-              <AuthenticationSectionBody target={target} />
-            )}
+            <UnproxiedAuthenticationNotice />
           </SettingsSection.Body>
-          {isUnproxied ? null : (
-            <SettingsSection.Footer>
-              <SettingsSection.FooterHint>
-                Authentication changes apply to new client connections.
-              </SettingsSection.FooterHint>
-            </SettingsSection.Footer>
-          )}
         </SettingsSection.Panel>
-      </SettingsSection>
-    </>
+      ) : (
+        <AuthenticationSectionBody target={target} />
+      )}
+    </SettingsSection>
   );
 }
 
@@ -252,10 +242,11 @@ export function AuthenticationSectionBody({
         <CimdAdmissionModeField
           userSessionIssuer={userSessionIssuer}
           onDraftModeChange={setCimdDraftMode}
-        />
-        {admitsCustomUrls && (
-          <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
-        )}
+        >
+          {admitsCustomUrls && (
+            <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
+          )}
+        </CimdAdmissionModeField>
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
@@ -273,7 +264,11 @@ export function AuthenticationSectionBody({
 
   return (
     <>
-      <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
+      {/* No footer hint: the section description above already says these
+          changes take effect on new connections. */}
+      <SettingsSection.Panel>
+        <div className="divide-y">{authenticationFields}</div>
+      </SettingsSection.Panel>
 
       <AttachRemoteIdentityProviderSheet
         open={sheetOpen}
@@ -320,48 +315,38 @@ function IdentityProviderSetupField({
   additionalAction?: ReactNode;
 }) {
   return (
-    <Field>
-      <FieldLabel>Identity Provider</FieldLabel>
-      <SettingsInlineEmptyState
-        title="No authentication configured"
-        description="Configure an upstream identity provider so MCP clients authenticate before reaching this server."
-        action={
-          <AuthenticationSetupActions
-            probeStatus={probeStatus}
-            hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
-            onUseDiscovered={onUseDiscovered}
-            onStartManual={onStartManual}
-            additionalAction={additionalAction}
-          />
-        }
+    <AuthRow
+      label="Identity provider"
+      hint="Nobody can be identified here until a provider vouches for them."
+    >
+      <AuthenticationSetupActions
+        probeStatus={probeStatus}
+        hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
+        onUseDiscovered={onUseDiscovered}
+        onStartManual={onStartManual}
+        additionalAction={additionalAction}
       />
-      <FieldDescription>
-        Clients authenticate through this provider before they can use server
-        functionality.
-      </FieldDescription>
-    </Field>
+    </AuthRow>
   );
 }
 
 function AuthenticationLoadingField() {
   return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
+    <AuthRow label="Authentication">
       <Text muted small>
-        Loading authentication configuration...
+        Loading…
       </Text>
-    </Field>
+    </AuthRow>
   );
 }
 
 function AuthenticationLoadErrorField() {
   return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
+    <AuthRow label="Authentication">
       <FieldError>
         Failed to load the authentication configuration. Refresh the page to try
         again.
       </FieldError>
-    </Field>
+    </AuthRow>
   );
 }
