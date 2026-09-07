@@ -1670,6 +1670,7 @@ func newStartCommand() *cli.Command {
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				RecentToolCalls:         telemetryrepo.New(chDB),
 				EventFeed:               otelchrepo.New(chDB),
+				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
 				SessionCapture:          platformmcp.FeatureChecker(sessionCaptureEnabled),
 				SessionPortability:      platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:            platformFixture,

@@ -98,6 +98,10 @@ type platformMCPConfig struct {
 	// EventFeed reads the org-scoped OpenTelemetry event feed. Nil keeps the
 	// tool visible as unavailable rather than returning an empty list.
 	EventFeed platformmcp.EventFeedReader
+	// LogsEnabled is the same product-feature gate the dashboard Event Feed
+	// uses. Nil, or a false result for the caller's organization, withholds
+	// live organization-event reads.
+	LogsEnabled platformmcp.FeatureChecker
 
 	LocalFixture *platformMCPLocalFixtureConfig
 }
@@ -325,7 +329,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
@@ -661,7 +665,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)

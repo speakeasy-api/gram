@@ -3,6 +3,8 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -19,24 +21,32 @@ const (
 	maxOrganizationEventLimit     = 50
 )
 
+// errOrganizationEventsDisabled is returned when the organization does not
+// have Logs enabled. The dashboard Event Feed uses the same gate.
+var errOrganizationEventsDisabled = errors.New("platform mcp organization events disabled")
+
 // EventFeedReader is the org-scoped Event Feed page read used by Platform MCP.
 // It returns the merged log/span list; this tool never surfaces attributes.
 type EventFeedReader interface {
 	ListEventLog(ctx context.Context, arg chrepo.ListEventLogParams) ([]chrepo.EventLogRow, error)
 }
 
-// EventFeedReadService owns the Event Feed reader and trusted dashboard URL.
+// EventFeedReadService owns the Event Feed reader, the org Logs gate, and the
+// trusted dashboard URL.
 type EventFeedReadService struct {
 	events       EventFeedReader
+	logs         FeatureChecker
 	dashboardURL *url.URL
 	now          func() time.Time
 }
 
 // WithOrganizationEvents enables recent organization-scoped Event Feed summaries.
-func (r *PostgresReader) WithOrganizationEvents(events EventFeedReader, dashboardURL *url.URL) *PostgresReader {
-	if r != nil && r.db != nil && events != nil && validDashboardURL(dashboardURL) {
+// A missing Logs checker leaves the live tool unregistered: the dashboard Event
+// Feed is gated on that product feature, and a nil checker cannot enforce it.
+func (r *PostgresReader) WithOrganizationEvents(events EventFeedReader, logs FeatureChecker, dashboardURL *url.URL) *PostgresReader {
+	if r != nil && r.db != nil && events != nil && logs != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
-		r.eventFeed = &EventFeedReadService{events: events, dashboardURL: &copyURL, now: time.Now}
+		r.eventFeed = &EventFeedReadService{events: events, logs: logs, dashboardURL: &copyURL, now: time.Now}
 	}
 	return r
 }
@@ -64,8 +74,15 @@ type ListOrganizationEventsOutput struct {
 }
 
 func (r *PostgresReader) ListOrganizationEvents(ctx context.Context, principal Principal, input ListOrganizationEventsInput) (ListOrganizationEventsOutput, error) {
-	if r == nil || r.db == nil || r.eventFeed == nil || r.eventFeed.events == nil || r.eventFeed.now == nil {
+	if r == nil || r.db == nil || r.eventFeed == nil || r.eventFeed.events == nil || r.eventFeed.logs == nil || r.eventFeed.now == nil {
 		return ListOrganizationEventsOutput{}, ErrUnavailable
+	}
+	enabled, err := r.eventFeed.logs(ctx, principal.OrganizationID)
+	if err != nil {
+		return ListOrganizationEventsOutput{}, fmt.Errorf("resolve logs feature: %w", err)
+	}
+	if !enabled {
+		return ListOrganizationEventsOutput{}, errOrganizationEventsDisabled
 	}
 	kind := strings.ToLower(strings.TrimSpace(input.Kind))
 	if kind != "" && !validOrganizationEventKind(kind) {
@@ -149,8 +166,30 @@ func registerOrganizationEventTools(reg *Registrar, reader *PostgresReader) {
 			return nil, ListOrganizationEventsOutput{}, err
 		}
 		output, err := reader.ListOrganizationEvents(ctx, principal, input)
-		return nil, output, err
+		if err != nil {
+			if result, ok := organizationEventsToolResult(err); ok {
+				return result, ListOrganizationEventsOutput{}, nil
+			}
+			return nil, ListOrganizationEventsOutput{}, err
+		}
+		return nil, output, nil
 	})
+}
+
+func organizationEventsToolResult(err error) (*mcp.CallToolResult, bool) {
+	if !errors.Is(err, errOrganizationEventsDisabled) {
+		return nil, false
+	}
+	result := featureUnavailableResult{
+		Code:    unavailableCode,
+		Feature: "logs",
+		Message: "The Event Feed is not enabled for this organization.",
+	}
+	content, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
 func registerUnavailableOrganizationEventTools(reg *Registrar) {

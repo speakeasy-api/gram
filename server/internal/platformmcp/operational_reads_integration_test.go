@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -431,8 +432,20 @@ func TestOrganizationEventsRequirePostgres(t *testing.T) {
 	t.Parallel()
 
 	reader := NewPostgresReader(testenv.NewLogger(t), nil).
-		WithOrganizationEvents(&recordingEventFeedReader{}, mustParseURL(t, "https://app.getgram.test"))
+		WithOrganizationEvents(&recordingEventFeedReader{}, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 	_, err := reader.ListOrganizationEvents(t.Context(), Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
+	require.ErrorIs(t, err, ErrUnavailable)
+}
+
+func TestOrganizationEventsRequireLogsFeature(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_require_logs")
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(&recordingEventFeedReader{}, nil, mustParseURL(t, "https://app.getgram.test"))
+	_, err = reader.ListOrganizationEvents(ctx, Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
 }
 
@@ -457,7 +470,7 @@ func TestListOrganizationEventsUsesBoundedSafeProjection(t *testing.T) {
 		ResourceAttributes: `{"service.name":"payments","user.id":"private-user-key"}`,
 	}}}
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithOrganizationEvents(events, mustParseURL(t, "https://app.getgram.test"))
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 	reader.eventFeed.now = func() time.Time { return fixedNow }
 
 	output, err := reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{})
@@ -500,7 +513,7 @@ func TestListOrganizationEventsRejectsInvalidKindAndHonorsLimit(t *testing.T) {
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
 	events := &recordingEventFeedReader{}
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithOrganizationEvents(events, mustParseURL(t, "https://app.getgram.test"))
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 
 	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Kind: "trace"})
 	require.ErrorContains(t, err, "kind must be one of log, span")
@@ -509,6 +522,81 @@ func TestListOrganizationEventsRejectsInvalidKindAndHonorsLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{chrepo.EventKindSpan}, events.params.Kinds)
 	require.Equal(t, maxOrganizationEventLimit+1, events.params.Limit)
+}
+
+func TestListOrganizationEventsRefusesWhenLogsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_logs_disabled")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	events := &recordingEventFeedReader{rows: []chrepo.EventLogRow{{
+		TimeUnixNano:       time.Now().UnixNano(),
+		Kind:               chrepo.EventKindLog,
+		Source:             "payments",
+		Name:               "must-not-be-read",
+		BodyPreview:        "",
+		TraceID:            "",
+		SpanID:             "",
+		ProjectID:          "project-id",
+		Attributes:         `{"secret":"private-attr"}`,
+		ResourceAttributes: "",
+	}}}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysDisabledFeature, mustParseURL(t, "https://app.getgram.test"))
+
+	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{})
+	require.ErrorIs(t, err, errOrganizationEventsDisabled)
+	require.Empty(t, events.params.OrganizationID)
+
+	result, ok := organizationEventsToolResult(err)
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"feature_unavailable","feature":"logs","message":"The Event Feed is not enabled for this organization."}`, text.Text)
+}
+
+func TestListOrganizationEventsReportsMoreWhenPageOverflows(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_overflow")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	fixedNow := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	rows := make([]chrepo.EventLogRow, maxOrganizationEventLimit+1)
+	for i := range rows {
+		rows[i] = chrepo.EventLogRow{
+			TimeUnixNano:       fixedNow.Add(-time.Duration(i) * time.Minute).UnixNano(),
+			Kind:               chrepo.EventKindLog,
+			Source:             "payments",
+			Name:               fmt.Sprintf("event-%d", i),
+			BodyPreview:        "",
+			TraceID:            "",
+			SpanID:             "",
+			ProjectID:          "project-id",
+			Attributes:         `{"secret":"private-attr"}`,
+			ResourceAttributes: "",
+		}
+	}
+	events := &recordingEventFeedReader{rows: rows}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
+	reader.eventFeed.now = func() time.Time { return fixedNow }
+
+	output, err := reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Limit: maxOrganizationEventLimit})
+	require.NoError(t, err)
+	require.True(t, output.More)
+	require.Len(t, output.Events, maxOrganizationEventLimit)
+	require.Equal(t, "event-0", output.Events[0].Name)
+	require.Equal(t, fmt.Sprintf("event-%d", maxOrganizationEventLimit-1), output.Events[len(output.Events)-1].Name)
+	require.Equal(t, maxOrganizationEventLimit+1, events.params.Limit)
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-attr")
 }
 
 type recordingEventFeedReader struct {
@@ -520,4 +608,12 @@ type recordingEventFeedReader struct {
 func (r *recordingEventFeedReader) ListEventLog(_ context.Context, params chrepo.ListEventLogParams) ([]chrepo.EventLogRow, error) {
 	r.params = params
 	return r.rows, r.err
+}
+
+func alwaysEnabledFeature(context.Context, string) (bool, error) {
+	return true, nil
+}
+
+func alwaysDisabledFeature(context.Context, string) (bool, error) {
+	return false, nil
 }
