@@ -893,7 +893,7 @@ function PolicyCenterContent() {
     {
       key: "messageTypes",
       header: "Applies To",
-      width: "2.1fr",
+      width: "1.2fr",
       render: (row) => {
         const types = policyMessageTypesForDisplay(row.policy.messageTypes);
         const typeSet = new Set(types);
