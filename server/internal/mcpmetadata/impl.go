@@ -1054,6 +1054,8 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 			return nil, fmt.Errorf("load meta mcp organization: %w", err)
 		}
 		return &installContext{
+			toolset:      nil,
+			mcpServer:    nil,
 			metaServer:   metaServer,
 			mcpEndpoint:  endpoint,
 			organization: org,
@@ -1081,6 +1083,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return &installContext{
 			toolset:      bridgeToolset,
 			mcpServer:    server,
+			metaServer:   nil,
 			mcpEndpoint:  endpoint,
 			organization: org,
 		}, nil
@@ -1098,6 +1101,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	return &installContext{
 		toolset:      toolset,
 		mcpServer:    nil,
+		metaServer:   nil,
 		mcpEndpoint:  nil,
 		organization: org,
 	}, nil
