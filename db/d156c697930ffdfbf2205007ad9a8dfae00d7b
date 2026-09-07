@@ -1,0 +1,325 @@
+.agents/skills/clickhouse/SKILL.md
+  s_d32de0b0e2b253::t_a453a6f02350b3 3,13-43,46,57
+.changeset/age-3399-key-project-binding.md
+  s_d32de0b0e2b253::t_6c452fec9fd89d 1-6
+.changeset/mcp-authentication-settings-redesign.md
+  s_d32de0b0e2b253::t_836aea72740d8f 1-5
+.changeset/mcp-inventory-add-flow.md
+  s_d32de0b0e2b253::t_d34357b0737da9 1-8
+.changeset/watchdog-exposure-hover-isolation.md
+  s_d32de0b0e2b253::t_e5ea2174a515cb 1-5
+.github/filters.yaml
+  s_d32de0b0e2b253::t_559776a5d3308e 81-83,89-90
+.github/workflows/pr.yaml
+  s_d32de0b0e2b253::t_82c5c88698aadf 762,786-793,796,890,892,901,904,906-907,909-910,914,918-919,940,993-994,996-1000,1014-1016,1024-1026,1028-1029,1031-1032,1182-1183,1186-1187,1191-1192
+.github/workflows/wake-stack-e2e.yml
+  s_d32de0b0e2b253::t_07d6620f1cfe13 1-143
+.gitignore
+  s_d32de0b0e2b253::t_63193062fac9b5 102-104
+.mise-tasks/clickhouse/diff.sh
+  s_d32de0b0e2b253::t_7934d1a2b96a73 16,25
+.mise-tasks/clickhouse/down.sh
+  s_d32de0b0e2b253::t_c10dac63b670be 17
+.mise-tasks/test/wake-stack.sh
+  s_d32de0b0e2b253::t_4ec0b907860628 1-36
+.speakeasy/out.openapi.yaml
+  s_d32de0b0e2b253::t_33c448e73f39cf 66274-66277
+client/dashboard/package.json
+  s_d32de0b0e2b253::t_c9533182f745e8 34,36,67,104,114
+client/dashboard/src/App.css
+  s_d32de0b0e2b253::t_939f6e6cd56816 492-515
+client/dashboard/src/App.tsx
+  s_d32de0b0e2b253::t_1ec28f5b4d9bc1 3-13,407,471-495
+client/dashboard/src/components/app-layout.tsx
+  s_d32de0b0e2b253::t_2b73541df3d163 184-186
+client/dashboard/src/components/app-sidebar.tsx
+  s_d32de0b0e2b253::t_0026bc2ba3e60d 4,131-156,208,210,229-245,247,278
+client/dashboard/src/components/command-palette/ResourceResults.tsx
+  s_d32de0b0e2b253::t_19adccab1c7751 190
+client/dashboard/src/components/icon-confetti.tsx
+  s_d32de0b0e2b253::t_3be5aa39758d70 1-2,4-16,18,20-36,39-44,46-50,52-54,56-64,66-74,76-92,95-108,110-112,114-163
+client/dashboard/src/components/insights-dock.tsx
+  s_d32de0b0e2b253::t_0e855978aff501 880-883,905-906
+client/dashboard/src/components/mcp-detail-sidebar-nav.tsx
+  s_d32de0b0e2b253::t_6a06bac2a5756a 186-189,196,198,206,209
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  s_d32de0b0e2b253::t_2d2acf184c1182 14,127-128,310-313,319,321,325-326,332-333,343,346
+client/dashboard/src/components/mcp/GatewayCard.tsx
+  s_d32de0b0e2b253::t_267ecdb4f5f228 2,13-45,102,105-129,133-144,146-147
+client/dashboard/src/components/mcp/MCPCard.tsx
+  s_d32de0b0e2b253::t_b46cfad4bb2b39 1,8,16,18,50-60,63-74,76-123,126-155,158-159
+client/dashboard/src/components/mcp/MCPServerCard.tsx
+  s_d32de0b0e2b253::t_ebd49546537030 1,21,23,25-31,36-38,41-49,69-75,79-83
+client/dashboard/src/components/page-eyebrow.tsx
+  s_d32de0b0e2b253::t_04af1685df31d0 6
+client/dashboard/src/components/page-header.tsx
+  s_d32de0b0e2b253::t_a7f813e0da7aaf 8,30,47,57-65,107-113,164,179-183,188-207,210-214,223-224,310-311,314-316,318-333,349-352
+client/dashboard/src/components/page-layout.tsx
+  s_d32de0b0e2b253::t_13793a1f545bf4 240
+client/dashboard/src/components/page-templates/detail-page.tsx
+  s_d32de0b0e2b253::t_7768aba0e53f59 176
+client/dashboard/src/components/page-templates/resource-list-page.tsx
+  s_d32de0b0e2b253::t_c7d26c2b5ddc20 76,107-112,146-147
+client/dashboard/src/components/setup-guide/SetupGuideCallout.test.tsx
+  s_d32de0b0e2b253::t_506221573fe908 80-82
+client/dashboard/src/components/setup-guide/SetupGuideCallout.tsx
+  s_d32de0b0e2b253::t_e0f7357529dcd5 34-38,40-41,49,79-80
+client/dashboard/src/components/setup-guide/SetupGuidePanel.test.tsx
+  s_d32de0b0e2b253::t_b8c2b10e05b450 73
+client/dashboard/src/components/setup-guide/SetupGuidePanel.tsx
+  s_d32de0b0e2b253::t_e943c1f7dea2c0 140
+client/dashboard/src/components/side-panel/SidePanel.test.tsx
+  s_d32de0b0e2b253::t_44450aa9c1075c 16,23,53-61,69-79,230,233,235-237,240,244,246,249,253,255
+client/dashboard/src/components/side-panel/SidePanel.tsx
+  s_d32de0b0e2b253::t_10243515f7b6b2 4,6-7,24-28,38-42,61,63-65,76,95-108,117-118,125,131-135,171
+client/dashboard/src/components/side-panel/panel-kinds.tsx
+  s_d32de0b0e2b253::t_24dc935eeec4d0 2-5,22-42
+client/dashboard/src/components/side-panel/side-panel-context.ts
+  s_d32de0b0e2b253::t_419a50855e6c96 12,22-31,33-34
+client/dashboard/src/components/sources/SourceCard.tsx
+  s_d32de0b0e2b253::t_b2c2bb2cd8c39e 1,4
+client/dashboard/src/components/sources/SourceDetailPanel.tsx
+  s_d32de0b0e2b253::t_b5a8cade77c09d 2-3,5-17,20-32,34-56,58-62,64-67,69-81,83-94,96-114,116,119-137,139,143-150,154-166,168-174,176-187,189-193,195-213,217-297,299-343,348-405,409-470,472-488,493-507
+client/dashboard/src/components/sources/source-grid.tsx
+  s_d32de0b0e2b253::t_d4e97a7a7fbf53 1,5-7,9-28,30,32-49,51-56,58-98,100-101
+client/dashboard/src/components/sources/source-list.ts
+  s_d32de0b0e2b253::t_53520712df4c5d 1-2,5-9,11-23,25-49
+client/dashboard/src/components/status-banner.tsx
+  s_d32de0b0e2b253::t_22c2d31d927a08 8
+client/dashboard/src/components/ui/Card/index.tsx
+  s_d32de0b0e2b253::t_846afc9b2c4d58 241-242,258,280-283,295-297
+client/dashboard/src/components/ui/Toolbar/index.tsx
+  s_d32de0b0e2b253::t_64b89015bba8c5 236-238
+client/dashboard/src/hooks/useNavArea.ts
+  s_d32de0b0e2b253::t_29d9aa621ced4e 4-6,14-36
+client/dashboard/src/lib/sources.ts
+  s_d32de0b0e2b253::t_3fac36351ae8dd 87
+client/dashboard/src/pages/catalog/AddServerDialog.tsx
+  s_d32de0b0e2b253::t_cc9f51ba88ef0c 1258,1270
+client/dashboard/src/pages/catalog/Catalog.tsx
+  s_d32de0b0e2b253::t_179065702fcd12 166-170,225,232,236,242,259,263,295
+client/dashboard/src/pages/catalog/CatalogDetail.tsx
+  s_d32de0b0e2b253::t_354ff475d14630 222,226
+client/dashboard/src/pages/catalog/ServerCard.tsx
+  s_d32de0b0e2b253::t_4dda61463dce7c 1,3,7,17-18,34,37,48-54,57,67-68,70-83,117-127,129-133,136
+client/dashboard/src/pages/catalog/ServerTableRow.tsx
+  s_d32de0b0e2b253::t_dd459f66142098 6,17-18,25,40-41,99-115
+client/dashboard/src/pages/deployments/Deployments.tsx
+  s_d32de0b0e2b253::t_e874d26c639db9 3-4,15,26,36-38,216-230,233-234,255-262,280,287-292,295,314-318,326-333,336-340,348-350
+client/dashboard/src/pages/deployments/DeploymentsEmptyState.tsx
+  s_d32de0b0e2b253::t_65ccd39549d554 16
+client/dashboard/src/pages/integrations/Integrations.tsx
+  s_d32de0b0e2b253::t_50f1c5a567ba53 50-52
+client/dashboard/src/pages/mcp/MCP.tsx
+  s_d32de0b0e2b253::t_88cfe3e2b00a09 9,14,22,62-69,128,146,149,217-219,229-231,235,288-352
+client/dashboard/src/pages/mcp/MCPEmptyState.tsx
+  s_d32de0b0e2b253::t_867fe0f898f143 6-12,14-23
+client/dashboard/src/pages/mcp/McpTabs.tsx
+  s_d32de0b0e2b253::t_32ec1d77bea64f 1,3,5,7-17,19-27,29-43
+client/dashboard/src/pages/mcp/ToolsetAuthenticationSection.tsx
+  s_d32de0b0e2b253::t_ef5998c43c6913 39
+client/dashboard/src/pages/mcp/add/AddMcpServer.tsx
+  s_d32de0b0e2b253::t_bd7641340c6dc2 1-15,17-21,24,26-29,31-42,45-94,96-105,108-120,123-130,133-142,145-239,242-311
+client/dashboard/src/pages/mcp/add/CreateFromSource.tsx
+  s_d32de0b0e2b253::t_f1ae5a1ee0bdb2 5-9,11-14,16-19,22-31,33-36,38-53,55,57-60,62-75,77-95,97,101-103,105-106,108-129,136-138,146-210,213-214,217,220,223-225,227-229,232-237,241,243,248-253,258,263-264
+client/dashboard/src/pages/mcp/add/LegacyRedirects.tsx
+  s_d32de0b0e2b253::t_c1f80299fa4e3a 2,4-23,25-26,28-33,35-38,40-43,45-60,62-65,67-81
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.tsx
+  s_d32de0b0e2b253::t_0a8ebb0ecd778c 484
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.tsx
+  s_d32de0b0e2b253::t_bdf5ec7d16b6b6 198-200,203
+client/dashboard/src/pages/mcp/mcp-filter-schema.ts
+  s_d32de0b0e2b253::t_3db69ecb0a8daf 18
+client/dashboard/src/pages/mcp/sources/SourceDetail.tsx
+  s_d32de0b0e2b253::t_560833dda576ae 1-9,12-13,15-24,26-33,35-53,56-75,77-100
+client/dashboard/src/pages/mcp/sources/Sources.tsx
+  s_d32de0b0e2b253::t_99a77680ead4b2 1-7,10-18,20-24,26-32,34-35,38-47,49-51,53-62,65-118,120,122
+client/dashboard/src/pages/mcp/x/tabs/UnproxiedMcpOverviewTab.tsx
+  s_d32de0b0e2b253::t_75ce1f401aadb1 26,121-124
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  s_d32de0b0e2b253::t_b874d1d6d21e8e 16,71-76
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/HeadersSection.tsx
+  s_d32de0b0e2b253::t_803e8a765b03da 413
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/PublicRateLimitsSection.tsx
+  s_d32de0b0e2b253::t_4b8132af4b86ac 1-2,4-6,16-17,20-22,69-92,94,96,213
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AllowedClientsDialog.tsx
+  s_d32de0b0e2b253::t_22377065b7d163 1,4-11,14-15,19-32
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthRow.tsx
+  s_d32de0b0e2b253::t_d926af7aafab07 1-4,6,8-17,21-25,27,29-33,35-46,50-56,59-63,66-72,75-77,79-99
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.test.tsx
+  s_d32de0b0e2b253::t_6ee235ea3a1f78 95,98,108
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.tsx
+  s_d32de0b0e2b253::t_a39f1d8d4cbd34 16,49-58,61,64-67,88-90,247-251,269-273,320-323,339,345,347,349,355,360
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CimdAdmissionModeField.test.tsx
+  s_d32de0b0e2b253::t_8fcb7f132c5d19 126-128,132,158,160,162-164,170-171,186-187,200,203-205,207-210,212-214,223,225,230,253,255,261,264-268,271,275-276,278,280-282,285,290,293
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CimdAdmissionModeField.tsx
+  s_d32de0b0e2b253::t_d2757f7ba28246 3,18,20-21,31-33,37-38,40-42,46-48,52-54,61,67-68,71-72,131-144,146-167,169-170,176,179-190,194-215,218,220,229,237,241-242,246-248,250,252,254
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CimdCustomClientsField.test.tsx
+  s_d32de0b0e2b253::t_1331d78c67a213 15-19,54-61,170,179-188,195,202,204,208,213,233,238,247,261,272-274,280,283,285,291,294,304,309,311,316,335,340,353,371,390,392-394,400-402,405,407,409-410,414,419,427,439,453,466,472,474,478,485-512
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CimdCustomClientsField.tsx
+  s_d32de0b0e2b253::t_252ea8c8724647 3,5,7,10,20,33-39,81,163-165,167-183,185-230,233,237-254,257-259,261-271,273,275-288,290-354,356,358-359,362,364,366-367,369-379,381-383,386-392
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField.test.tsx
+  s_d32de0b0e2b253::t_eb70ed55aba36a 85,93,136
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField.tsx
+  s_d32de0b0e2b253::t_cfe9acb75d5f47 11,33-43,48,52-54,67,73-95,97,161
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/UserSessionDurationField.tsx
+  s_d32de0b0e2b253::t_6e528e37acec3d 2,17,20,108-113,120-124,130,142-147,149-169
+client/dashboard/src/pages/onboarding/UploadOpenAPI.tsx
+  s_d32de0b0e2b253::t_528efd2365fe3a 1-2,13-14,17,19-38,40-49,51-60,62-66,68-82
+client/dashboard/src/pages/org/OrgApiKeys.test.tsx
+  s_d32de0b0e2b253::t_15c557543d05f5 2-12,14-69,71-89,91-103,105-128,130-153,155-164,166-187,189-217,219-226,228-249,251-273,275-284,286-294,296-301
+client/dashboard/src/pages/org/OrgApiKeys.tsx
+  s_d32de0b0e2b253::t_b0da20c8d43100 23-30,34,40,46-57,96,110-111,147,169-176,273,285-287,322-356,413-418
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_d32de0b0e2b253::t_f14f2c9feaeead 861-863
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_d32de0b0e2b253::t_beae6a79aa61bf 377
+client/dashboard/src/pages/security/policy-data.ts
+  s_d32de0b0e2b253::t_91aa3579c8b12c 125-132
+client/dashboard/src/pages/security/policy-scope.test.ts
+  s_d32de0b0e2b253::t_f7f0de79323695 2
+client/dashboard/src/pages/security/policy-scope.ts
+  s_d32de0b0e2b253::t_733661799743d8 2
+client/dashboard/src/pages/security/riskTrendChartData.ts
+  s_d32de0b0e2b253::t_95c5fa17d91eac 2,13-15,32
+client/dashboard/src/pages/security/watchdog/ExposureBar.tsx
+  s_d32de0b0e2b253::t_981e1d082f1e66 1-5,13-17,29-30,45-48,53-54,56-58,81-104,107-153
+client/dashboard/src/pages/setup/components/steps/distribute-servers-step.test.tsx
+  s_d32de0b0e2b253::t_69bfa7bf18862f 67
+client/dashboard/src/pages/setup/components/steps/distribute-servers-step.tsx
+  s_d32de0b0e2b253::t_05a1824bb7139e 565,567
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  s_d32de0b0e2b253::t_7735ec9f073e4e 8,10-11,15,17-23,31-33,37,44-50,52-61,66-71,74-75,77-87,92,94,102,111,141,170-207,209,211,216-225,229-232,235-241,244-253,257-258
+client/dashboard/src/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton.tsx
+  s_d32de0b0e2b253::t_a938c631e70c59 1-2,11-34,36-41,43-57
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.ts
+  s_d32de0b0e2b253::t_27d6c7aa1cec8b 24-31,52,58
+client/dashboard/src/pages/sources/tunneled-mcp/CreateTunneledMcp.tsx
+  s_d32de0b0e2b253::t_d7cda6884d9671 45,125,236
+client/dashboard/src/routes.tsx
+  s_d32de0b0e2b253::t_682f23951b23a1 51-55,419-498,869-872,1000,1075-1088,1090,1113-1117,1121
+client/dashboard/src/sdk/src/models/components/createkeyform.ts
+  s_d32de0b0e2b253::t_947d4eecd98b11 6,13-16,26,34-45
+compose.yml
+  s_d32de0b0e2b253::t_c6ed1d85a6da92 67,71,79
+e2e/package.json
+  s_d32de0b0e2b253::t_c5bc5bb65ba01e 1-13
+e2e/playwright.config.ts
+  s_d32de0b0e2b253::t_fb1322cb6cbad9 1-43
+e2e/tests/wake-stack.spec.ts
+  s_d32de0b0e2b253::t_569132b08fc436 1-37,39,41-43,45-68,70-74,76-83,85-97,99-106,108-121,123,125-136,138-256
+e2e/tsconfig.json
+  s_d32de0b0e2b253::t_7a93a29ec182a2 1-14
+local/clickhouse/initdb/01-marts-definer.sql
+  s_d32de0b0e2b253::t_efbff78b3a7015 1-8,10-20,22-26
+mise.lock
+  s_d57c903c3bc12c::t_2b32b85ee37a04 38,42-43,46-47,50-51,54-55,58-59,62-63,66-67,346
+mise.toml
+  s_d32de0b0e2b253::t_00c076e4591dd2 15,90,93-94
+pnpm-lock.yaml
+  s_d32de0b0e2b253::t_1523bacf56c73a 315-317,451-453,579-587,619,2273-2277,3801-3803,4415-4417,5148-5152,6283-6292,8943-8946,10544-10545,11134-11135,11863-11865,13238-13245
+pnpm-workspace.yaml
+  s_d32de0b0e2b253::t_9633ecf81d60f9 14
+seed/demo/PAGES.md
+  s_d32de0b0e2b253::t_0bb968b807ecdd 52-57
+server/atlas.hcl
+  s_d32de0b0e2b253::t_1fd9709177ea4a 25-63
+server/clickhouse/local/golang_migrate/20260904182723_create-marts-access.down.sql
+  s_d32de0b0e2b253::t_f0e0d96815eaab 1
+server/clickhouse/local/golang_migrate/20260904182723_create-marts-access.up.sql
+  s_d32de0b0e2b253::t_02a975f73d63ee 1-2
+server/clickhouse/local/golang_migrate/20260905224913_create-marts-views.down.sql
+  s_d32de0b0e2b253::t_22b0f18f4e646b 1-3
+server/clickhouse/local/golang_migrate/20260905224913_create-marts-views.up.sql
+  s_d32de0b0e2b253::t_a9923bcafe7aa2 1-8
+server/clickhouse/local/golang_migrate/20260907095727_bound-weekly-mart-lookback.down.sql
+  s_d32de0b0e2b253::t_d4c46457b3175a 1-6
+server/clickhouse/local/golang_migrate/20260907095727_bound-weekly-mart-lookback.up.sql
+  s_d32de0b0e2b253::t_d9c69e47a865f8 1-6
+server/clickhouse/local/golang_migrate/20260907100046_normalize-mart-email-identities.down.sql
+  s_d32de0b0e2b253::t_6d597f5f34ddfa 1-6
+server/clickhouse/local/golang_migrate/20260907100046_normalize-mart-email-identities.up.sql
+  s_d32de0b0e2b253::t_64d4d392be1ac1 1-6
+server/clickhouse/local/golang_migrate/20260907100756_include-supported-chat-surfaces.down.sql
+  s_d32de0b0e2b253::t_dd1bbf74f2e1f5 1-6
+server/clickhouse/local/golang_migrate/20260907100756_include-supported-chat-surfaces.up.sql
+  s_d32de0b0e2b253::t_494631827d77c5 1-6
+server/clickhouse/local/golang_migrate/README.md
+  s_d32de0b0e2b253::t_3f3504d46142f3 41,44
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_d32de0b0e2b253::t_464d61eb7a9228 1,102-106
+server/clickhouse/mart.sql
+  s_d32de0b0e2b253::t_4e0846b90d6039 1-34
+server/clickhouse/migrations/20260904182658_create-marts-access.sql
+  s_d32de0b0e2b253::t_02c5dd18525f6f 1-2
+server/clickhouse/migrations/20260905224908_create-marts-views.sql
+  s_d32de0b0e2b253::t_d57ed6a68ad98c 1-8
+server/clickhouse/migrations/20260907095722_bound-weekly-mart-lookback.sql
+  s_d32de0b0e2b253::t_46e9a84d93ee7b 1-6
+server/clickhouse/migrations/20260907100041_normalize-mart-email-identities.sql
+  s_d32de0b0e2b253::t_f57b1397ef782e 1-6
+server/clickhouse/migrations/20260907100751_include-supported-chat-surfaces.sql
+  s_d32de0b0e2b253::t_213ed73779ea36 1-6
+server/clickhouse/migrations/atlas.sum
+  s_d32de0b0e2b253::t_ab6da95f5b2d7a 1,107-111
+server/design/keys/design.go
+  s_d32de0b0e2b253::t_5368b8125fe13f 104-106
+server/gen/http/cli/gram/cli.go
+  s_d32de0b0e2b253::t_41814f3447b05c 15384
+server/gen/http/keys/client/cli.go
+  s_d32de0b0e2b253::t_43742b9e185263 26,31-33,48-49
+server/gen/http/keys/client/types.go
+  s_d32de0b0e2b253::t_7036abda927033 20-22,843-844
+server/gen/http/keys/server/types.go
+  s_d32de0b0e2b253::t_ac9ef902ee5e1a 20-22,1477-1478,1523-1525
+server/gen/http/openapi3.yaml
+  s_d32de0b0e2b253::t_03909dd55c13c2 69018-69021
+server/gen/keys/service.go
+  s_d32de0b0e2b253::t_f5baa7d877bad8 56-58
+server/internal/admin/converttrial_lock_test.go
+  s_d32de0b0e2b253::t_f2256bf33fe39d 398-404
+server/internal/growthsignals/handler.go
+  s_d32de0b0e2b253::t_a043ecc2e67167 7,138
+server/internal/keys/impl.go
+  s_d32de0b0e2b253::t_2dcfc9d07b8cf8 143-144,146-163
+server/internal/keys/project_binding_test.go
+  s_d32de0b0e2b253::t_2348ae23f9545f 1-126
+server/internal/keys/setup_test.go
+  s_d32de0b0e2b253::t_a9fcdea42b866d 33
+server/internal/mcp/setup_test.go
+  s_d32de0b0e2b253::t_6245ca415220ba 402-408,410-412
+server/internal/openrouterkeys/keys_test.go
+  s_d32de0b0e2b253::t_2f0dbcd48b7c9b 556-569
+server/internal/platformmcp/risk_exclusion_mutations.go
+  s_d32de0b0e2b253::t_ff8790945ed977 316
+server/internal/usage/create_stripe_checkout.go
+  s_d32de0b0e2b253::t_4590dc63bb00eb 326-329
+server/internal/usage/create_stripe_checkout_test.go
+  s_d32de0b0e2b253::t_5a2de461afe6ed 37,1610-1678
+ts-framework/functions/src/build/gram.ts
+  s_d32de0b0e2b253::t_80cbb9c4b559ad 371-413,429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "dbd156c697930ffdfbf2205007ad9a8dfae00d7b",
+  "prompts": {},
+  "sessions": {
+    "s_d32de0b0e2b253": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c4ca134-6d21-4756-a37e-e1180d485004",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
