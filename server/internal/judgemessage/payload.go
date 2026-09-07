@@ -72,21 +72,35 @@ type ToolCallPayload struct {
 	ArgumentsTruncated bool   `json:"arguments_truncated,omitempty"`
 }
 
-// Render returns the judge-visible payload as a compact JSON string. It is what
-// gets stored as a finding's Match for llm_judge / prompt_injection detections,
-// which have no literal offending substring — the "match" is the entire event
-// the judge saw. Best-effort: falls back to the raw body if marshaling fails.
-// RenderPayload already truncates body/args, so the result stays bounded.
+// Render returns the flagged event as a compact JSON string to store as a
+// finding's Match for llm_judge / prompt_injection detections, which have no
+// literal offending substring: the "match" is the entire event the judge saw.
+// The decoded view is judge-only and never rendered here: decoding turns
+// encoded material such as base64 credentials into readable plaintext, and
+// Match is persisted and UI-visible. Best-effort: falls back to the raw body
+// if marshaling fails. Body/args are truncated, so the result stays bounded.
 func Render(m Message) string {
-	b, err := json.Marshal(RenderPayload(m))
+	b, err := json.Marshal(renderPayload(m, false))
 	if err != nil {
 		return m.Body
 	}
 	return string(b)
 }
 
-// RenderPayload maps a judge message onto the JSON payload both prompt judges read.
+// RenderPayload maps a judge message onto the JSON payload both prompt judges
+// read, including the decoded view of each body/arguments string.
 func RenderPayload(m Message) Payload {
+	return renderPayload(m, true)
+}
+
+func renderPayload(m Message, includeDecoded bool) Payload {
+	decoded := func(s string) string {
+		if !includeDecoded {
+			return ""
+		}
+		return decodedView(s)
+	}
+
 	if len(m.ToolCalls) > 0 {
 		calls, truncatedCalls := payloadToolCalls(m.ToolCalls)
 		rendered := make([]ToolCallPayload, 0, len(calls))
@@ -95,7 +109,7 @@ func RenderPayload(m Message) Payload {
 			rendered = append(rendered, ToolCallPayload{
 				Tool:               payloadTool(c.ToolName, c.MCPServer, c.MCPFunction),
 				Arguments:          args,
-				Decoded:            decodedView(args),
+				Decoded:            decoded(args),
 				ArgumentsTruncated: argsTruncated,
 			})
 		}
@@ -118,7 +132,7 @@ func RenderPayload(m Message) Payload {
 		Tool:               payloadTool(m.ToolName, m.MCPServer, m.MCPFunction),
 		BodyKind:           bodyKind,
 		Body:               body,
-		Decoded:            decodedView(body),
+		Decoded:            decoded(body),
 		BodyTruncated:      truncated,
 		ToolCalls:          nil,
 		ToolCallsTruncated: false,

@@ -117,6 +117,32 @@ func TestRender(t *testing.T) {
 	require.Contains(t, judgemessage.Render(toolMsg), "rm -rf /tmp")
 }
 
+func TestRenderOmitsDecodedViewFromPersistedMatch(t *testing.T) {
+	t.Parallel()
+
+	secret := "api key is sk-live-persisted-match-secret"
+	body := "config blob: " + base64.StdEncoding.EncodeToString([]byte(secret))
+	msg := judgemessage.New(message.User, "", body)
+
+	// The judge-visible payload keeps the decoded view.
+	require.Contains(t, judgemessage.RenderPayload(msg).Decoded, secret)
+
+	// The persisted Match must not: decoding would turn encoded credentials
+	// into readable plaintext in the Risk Events UI.
+	match := judgemessage.Render(msg)
+	require.NotContains(t, match, secret)
+	require.NotContains(t, match, `"decoded"`)
+	require.Contains(t, match, body)
+
+	toolMsg := judgemessage.NewForToolCalls([]judgemessage.ToolCall{
+		judgemessage.NewToolCall("Bash", `{"note":"`+base64.StdEncoding.EncodeToString([]byte(secret))+`"}`),
+	})
+	require.Contains(t, judgemessage.RenderPayload(toolMsg).ToolCalls[0].Decoded, secret)
+	toolMatch := judgemessage.Render(toolMsg)
+	require.NotContains(t, toolMatch, secret)
+	require.NotContains(t, toolMatch, `"decoded"`)
+}
+
 func TestRenderTrajectoryBoundsEachFieldIndependently(t *testing.T) {
 	t.Parallel()
 
