@@ -59,7 +59,7 @@ fold just wrote: the policy silently narrows to the conjunction of the two, and
 `-validate` starts failing again.
 
 Before applying in an environment, confirm no writer can still set those
-columns there — the API fields rejected or ignored, and any operator scripts or
+columns there: the API fields rejected or ignored, and any operator scripts or
 Platform MCP callers updated. Apply, then `-validate`; a nonzero `remaining` on
 a later validate means a writer is still live, not that the fold missed rows.
 
@@ -71,7 +71,7 @@ confirmation cannot be dodged by spelling production the way
 `GRAM_ENVIRONMENT` does. Applying also refuses when `$GRAM_DATABASE_URL` names
 a production host while `-environment` claims something lesser. That check
 reads the host only, so it does not catch a tunnel or port-forward to
-production from localhost — a forwarded production connection still needs
+production from localhost. A forwarded production connection still needs
 `-environment=prod` and its confirmations.
 
 ## Safety properties
@@ -122,8 +122,11 @@ go run ./server/cmd/tools/migrations legacy-policy-scope \
   -confirm-environment=prod -confirm-production=production
 ```
 
-Flags: `-batch-size` (default 100), `-lock-timeout` (default 2s),
-`-statement-timeout` (default 30s).
+Flags: `-batch-size` (default 100, at most 2147483647), `-lock-timeout`
+(default 2s), `-statement-timeout` (default 30s). Both timeouts must be at
+least 1ms: they are sent to PostgreSQL as whole milliseconds, and a 0ms setting
+means no timeout at all. They bound the counting queries too, so a dry run or
+`-validate` fails fast instead of blocking when the table is locked.
 
 ## Output
 

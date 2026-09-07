@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -64,6 +65,15 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	}
 	if *batchSize <= 0 || *lockTimeout <= 0 || *statementTimeout <= 0 {
 		return legacyPolicyScopeConfig{}, errors.New("batch size and timeouts must be positive")
+	}
+	// The batch size reaches the LIMIT parameter as an int32.
+	if *batchSize > math.MaxInt32 {
+		return legacyPolicyScopeConfig{}, errors.New("batch size must not exceed 2147483647")
+	}
+	// Timeouts are serialized as whole milliseconds and PostgreSQL reads 0ms as
+	// "no timeout", so anything under 1ms would disable the guard it asked for.
+	if *lockTimeout < time.Millisecond || *statementTimeout < time.Millisecond {
+		return legacyPolicyScopeConfig{}, errors.New("timeouts must be at least 1ms")
 	}
 	if *apply && *confirmEnvironment != *environment {
 		return legacyPolicyScopeConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")

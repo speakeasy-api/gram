@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -313,4 +314,99 @@ func TestRunnerApplyClearsWhitespaceOnlyLegacyScope(t *testing.T) {
 	require.False(t, row.ScopeInclude.Valid)
 	require.Empty(t, scopes, "nothing to compose, so no category scope is invented")
 	require.Equal(t, int64(1), row.Version, "a behaviour-identical fold keeps findings addressable")
+}
+
+func TestNewRunnerRejectsOutOfRangeBatchSize(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: math.MaxInt32 + 1, LockTimeout: 0, StatementTimeout: 0,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.ErrorContains(t, err, "exceeds", "a larger batch size wraps to a negative LIMIT")
+
+	_, err = NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: math.MaxInt32, LockTimeout: 0, StatementTimeout: 0,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.NoError(t, err)
+}
+
+// PostgreSQL reads a 0ms timeout as "no timeout", so a sub-millisecond value
+// would serialize to exactly the setting that disables the guard.
+func TestNewRunnerRejectsSubMillisecondTimeouts(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 500 * time.Microsecond, StatementTimeout: 0,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.ErrorContains(t, err, "lock timeout must be at least 1ms")
+
+	_, err = NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 0, StatementTimeout: 999 * time.Nanosecond,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.ErrorContains(t, err, "statement timeout must be at least 1ms")
+
+	// Zero selects the built-in fallback rather than disabling the timeout.
+	_, err = NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 0, StatementTimeout: time.Millisecond,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.NoError(t, err)
+}
+
+func TestDurationSettingNeverSerializesZero(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "5s", durationSetting(0, "5s"), "zero selects the fallback, not 0ms")
+	require.Equal(t, "1ms", durationSetting(time.Millisecond, "5s"))
+	require.Equal(t, "2000ms", durationSetting(2*time.Second, "5s"))
+}
+
+// The counts run on every path, dry-run and validate included, and scan the
+// whole table. Under a table lock they must fail fast on their configured
+// timeouts rather than block until the caller gives up.
+func TestRunnerCountsAreBoundedByConfiguredTimeouts(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := testInfra.CloneTestDatabase(t, "legacyscope_count_timeout")
+	require.NoError(t, err)
+
+	seed(t, ctx, pool, seedPolicy{
+		action: "block", sources: []string{"gitleaks"},
+		messageTypes: []string{"tool_request"}, scopeInclude: "", scopeExempt: "",
+	})
+
+	//nolint:glint // notestingrawsql: the test must hold the table's transaction open while the runner counts
+	holder, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
+	require.NoError(t, testrepo.New(holder).LockRiskPoliciesTableFixture(ctx))
+
+	runner, err := NewRunner(pool, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 100 * time.Millisecond, StatementTimeout: 250 * time.Millisecond,
+		ApplyAttempts: 1, RetryDelay: -1,
+	})
+	require.NoError(t, err)
+
+	start := time.Now()
+	_, err = runner.Run(ctx, ModeValidate)
+	require.Error(t, err, "validate's count must not wait on the table lock forever")
+	require.Less(t, time.Since(start), 5*time.Second)
+
+	start = time.Now()
+	_, err = runner.Run(ctx, ModeDryRun)
+	require.Error(t, err, "dry run counts too, so it is bounded the same way")
+	require.Less(t, time.Since(start), 5*time.Second)
+
+	_, err = runner.CountByAction(ctx)
+	require.Error(t, err)
+
+	// With the lock released the same runner completes normally.
+	require.NoError(t, holder.Rollback(ctx))
+	summary, err := runner.Run(ctx, ModeValidate)
+	require.ErrorIs(t, err, ErrValidationFailed)
+	require.Equal(t, int64(1), summary.Remaining)
 }

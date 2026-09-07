@@ -1805,6 +1805,18 @@ func (q *Queries) LockOrganizationMetadataForUpdateNowaitFixture(ctx context.Con
 	return id, err
 }
 
+const lockRiskPoliciesTableFixture = `-- name: LockRiskPoliciesTableFixture :exec
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE
+`
+
+// Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+// can verify that readers elsewhere fail fast under their configured timeouts
+// instead of blocking indefinitely.
+func (q *Queries) LockRiskPoliciesTableFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockRiskPoliciesTableFixture)
+	return err
+}
+
 const lockRiskPolicyFixture = `-- name: LockRiskPolicyFixture :one
 SELECT id
 FROM risk_policies

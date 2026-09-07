@@ -1,7 +1,9 @@
 package main
 
 import (
+	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -87,4 +89,38 @@ func TestParseLegacyPolicyScopeFlagsApplyNeedsNoScopeFlagConfirmation(t *testing
 		[]string{"-environment=dev", "-apply", "-confirm-environment=dev", "-confirm-recommended-scopes-enabled"},
 		legacyScopeEnv("postgres://test"))
 	require.Error(t, err, "the retired flag is no longer accepted")
+}
+
+func TestParseLegacyPolicyScopeFlagsRejectsOutOfRangeBatchSize(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-batch-size=2147483648"}, legacyScopeEnv("postgres://test"))
+	require.ErrorContains(t, err, "batch size must not exceed")
+
+	cfg, err := parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-batch-size=2147483647"}, legacyScopeEnv("postgres://test"))
+	require.NoError(t, err)
+	require.Equal(t, math.MaxInt32, cfg.batchSize)
+}
+
+// A sub-millisecond timeout serializes to 0ms, which PostgreSQL reads as "no
+// timeout": the opposite of what the operator asked for.
+func TestParseLegacyPolicyScopeFlagsRejectsSubMillisecondTimeouts(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-lock-timeout=500us"}, legacyScopeEnv("postgres://test"))
+	require.ErrorContains(t, err, "at least 1ms")
+
+	_, err = parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-statement-timeout=999ns"}, legacyScopeEnv("postgres://test"))
+	require.ErrorContains(t, err, "at least 1ms")
+
+	cfg, err := parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-lock-timeout=1ms", "-statement-timeout=1ms"},
+		legacyScopeEnv("postgres://test"))
+	require.NoError(t, err)
+	require.Equal(t, time.Millisecond, cfg.lockTimeout)
+	require.Equal(t, time.Millisecond, cfg.statementTimeout)
 }

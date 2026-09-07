@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,6 +84,20 @@ func NewRunner(pool *pgxpool.Pool, logger *slog.Logger, options Options) (*Runne
 	}
 	if options.BatchSize <= 0 {
 		options.BatchSize = 100
+	}
+	// The batch size is cast to int32 for the LIMIT parameter, so a larger
+	// value would silently wrap into a negative limit.
+	if options.BatchSize > math.MaxInt32 {
+		return nil, fmt.Errorf("batch size %d exceeds %d", options.BatchSize, math.MaxInt32)
+	}
+	// Timeouts are serialized as whole milliseconds, and PostgreSQL reads a
+	// zero timeout as "no timeout at all": a sub-millisecond value would
+	// truncate to 0ms and disable the very guard it asked for.
+	if err := checkTimeout("lock timeout", options.LockTimeout); err != nil {
+		return nil, err
+	}
+	if err := checkTimeout("statement timeout", options.StatementTimeout); err != nil {
+		return nil, err
 	}
 	if options.ApplyAttempts <= 0 {
 		options.ApplyAttempts = defaultApplyAttempts
@@ -206,16 +221,13 @@ func (r *Runner) runBatch(ctx context.Context, mode Mode, after uuid.UUID, summa
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := New(tx)
-	if _, err := q.SetLocalTimeouts(ctx, SetLocalTimeoutsParams{
-		LockTimeout:      durationSetting(r.options.LockTimeout, "5s"),
-		StatementTimeout: durationSetting(r.options.StatementTimeout, "30s"),
-	}); err != nil {
-		return uuid.Nil, fmt.Errorf("set local timeouts: %w", err)
+	if err := r.setLocalTimeouts(ctx, q); err != nil {
+		return uuid.Nil, err
 	}
 
 	rows, err := q.LockLegacyScopeBatch(ctx, LockLegacyScopeBatchParams{
 		AfterID:   after,
-		BatchSize: int32(r.options.BatchSize), //nolint:gosec // batch size is operator-supplied and small
+		BatchSize: int32(r.options.BatchSize), //nolint:gosec // NewRunner rejects a batch size above math.MaxInt32
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("lock batch: %w", err)
@@ -304,8 +316,44 @@ func (r *Runner) foldRow(ctx context.Context, q *Queries, mode Mode, row LockLeg
 	return nil
 }
 
+// setLocalTimeouts applies the configured lock and statement timeouts to the
+// transaction q runs in.
+func (r *Runner) setLocalTimeouts(ctx context.Context, q *Queries) error {
+	if _, err := q.SetLocalTimeouts(ctx, SetLocalTimeoutsParams{
+		LockTimeout:      durationSetting(r.options.LockTimeout, "5s"),
+		StatementTimeout: durationSetting(r.options.StatementTimeout, "30s"),
+	}); err != nil {
+		return fmt.Errorf("set local timeouts: %w", err)
+	}
+	return nil
+}
+
+// withTimeouts runs fn inside a transaction carrying those timeouts. The
+// counting queries scan every policy row and run on every path, dry-run and
+// validate included, so they must be bounded too: an unbounded count against a
+// table someone else has locked hangs the run instead of failing it.
+func (r *Runner) withTimeouts(ctx context.Context, fn func(*Queries) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin read transaction: %w", err)
+	}
+	// Read-only work: unwind rather than commit.
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := New(tx)
+	if err := r.setLocalTimeouts(ctx, q); err != nil {
+		return err
+	}
+	return fn(q)
+}
+
 func (r *Runner) remaining(ctx context.Context) (int64, error) {
-	remaining, err := New(r.pool).CountRemainingLegacyScopes(ctx)
+	var remaining int64
+	err := r.withTimeouts(ctx, func(q *Queries) error {
+		var countErr error
+		remaining, countErr = q.CountRemainingLegacyScopes(ctx)
+		return countErr
+	})
 	if err != nil {
 		return 0, fmt.Errorf("count remaining legacy scopes: %w", err)
 	}
@@ -315,7 +363,12 @@ func (r *Runner) remaining(ctx context.Context) (int64, error) {
 // CountByAction reports the pre-run population, which is what decides how much
 // of the fleet the preserve path touches.
 func (r *Runner) CountByAction(ctx context.Context) (map[string]int64, error) {
-	rows, err := New(r.pool).CountLegacyScopesByAction(ctx)
+	var rows []CountLegacyScopesByActionRow
+	err := r.withTimeouts(ctx, func(q *Queries) error {
+		var countErr error
+		rows, countErr = q.CountLegacyScopesByAction(ctx)
+		return countErr
+	})
 	if err != nil {
 		return nil, fmt.Errorf("count legacy scopes by action: %w", err)
 	}
@@ -324,6 +377,16 @@ func (r *Runner) CountByAction(ctx context.Context) (map[string]int64, error) {
 		out[row.Action] = row.Total
 	}
 	return out, nil
+}
+
+// checkTimeout rejects a positive timeout that would serialize to 0ms. Zero
+// itself is allowed: it selects the built-in fallback rather than disabling
+// the timeout.
+func checkTimeout(name string, d time.Duration) error {
+	if d != 0 && d < time.Millisecond {
+		return fmt.Errorf("%s must be at least 1ms, got %s", name, d)
+	}
+	return nil
 }
 
 func durationSetting(d time.Duration, fallback string) string {

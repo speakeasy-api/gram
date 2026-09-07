@@ -821,6 +821,12 @@ FROM risk_policies
 WHERE id = @id
 FOR UPDATE;
 
+-- name: LockRiskPoliciesTableFixture :exec
+-- Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+-- can verify that readers elsewhere fail fast under their configured timeouts
+-- instead of blocking indefinitely.
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE;
+
 -- name: ReadRiskPolicyScopeFixture :one
 -- Test-only fixture: reads back the columns the legacy-policy-scope fold
 -- rewrites, so a test can assert on the folded row.
