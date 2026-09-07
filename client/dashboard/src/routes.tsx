@@ -84,6 +84,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import HeadlessMode from "./pages/org/HeadlessMode";
+import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -1194,6 +1195,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "skills",
     icon: "terminal",
     component: OrgSkills,
+  },
+  // Legacy URL: Platform MCP setup is what headless mode does now, so the old
+  // standalone page redirects there. Kept out of the sidebar.
+  platformMcp: {
+    title: "Platform MCP",
+    url: "platform-mcp",
+    icon: "plug-zap",
+    component: PlatformMCPRedirect,
   },
   aiIntegrations: {
     title: "AI Integrations",
