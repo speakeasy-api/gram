@@ -165,6 +165,28 @@ export function parseApprovedEmailDomains(raw: string): string[] {
     .filter((domain) => domain.length > 0);
 }
 
+/** Categories a policy detects on, for scope resolution. Broader than
+ *  `policyToCategories`: a presidio policy with no entity list detects every
+ *  presidio-backed category, and custom rules carry the `custom` category. */
+export function policyDetectionCategories(policy: {
+  policyType?: string;
+  sources?: string[];
+  presidioEntities?: string[];
+  customRuleIds?: string[];
+}): Set<RuleCategory> {
+  if (policy.policyType === "prompt_based") return new Set(["prompt_policy"]);
+
+  const sources = policy.sources ?? [];
+  const categories = policyToCategories(sources, policy.presidioEntities);
+  if (sources.includes("presidio") && !policy.presidioEntities?.length) {
+    for (const category of [...PRESIDIO_CATEGORIES, "off_policy" as const]) {
+      categories.add(category);
+    }
+  }
+  if (policy.customRuleIds?.length) categories.add("custom");
+  return categories;
+}
+
 /** Canonical ids of hidden rules an existing policy already pins via its
  *  presidioEntities. Lets an edit preserve a deprecated entity the policy
  *  carried before it was hidden, without ever newly adding one. */
