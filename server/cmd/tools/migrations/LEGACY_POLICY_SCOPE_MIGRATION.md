@@ -124,8 +124,9 @@ go run ./server/cmd/tools/migrations legacy-policy-scope \
 
 Flags: `-batch-size` (default 100, at most 2147483647), `-lock-timeout`
 (default 2s), `-statement-timeout` (default 30s). Both timeouts must be at
-least 1ms: they are sent to PostgreSQL as whole milliseconds, and a 0ms setting
-means no timeout at all. They bound the counting queries too, so a dry run or
+least 1ms and at most 2147483647ms: they are sent to PostgreSQL as whole
+milliseconds, a 0ms setting means no timeout at all, and anything larger than
+that ceiling the server rejects. They bound the counting queries too, so a dry run or
 `-validate` fails fast instead of blocking when the table is locked.
 
 ## Output

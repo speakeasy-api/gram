@@ -357,6 +357,31 @@ func TestNewRunnerRejectsSubMillisecondTimeouts(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// PostgreSQL stores both timeouts as integer milliseconds, so a larger value
+// is refused by the server; catch it in the constructor instead of mid-run.
+func TestNewRunnerRejectsTimeoutsAbovePostgresMaximum(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: maxTimeout + time.Millisecond, StatementTimeout: 0,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.ErrorContains(t, err, "lock timeout must not exceed")
+
+	_, err = NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: 0, StatementTimeout: maxTimeout + time.Millisecond,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.ErrorContains(t, err, "statement timeout must not exceed")
+
+	_, err = NewRunner(nil, slog.New(slog.DiscardHandler), Options{
+		BatchSize: 10, LockTimeout: maxTimeout, StatementTimeout: maxTimeout,
+		ApplyAttempts: 0, RetryDelay: 0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "2147483647ms", durationSetting(maxTimeout, "5s"))
+}
+
 func TestDurationSettingNeverSerializesZero(t *testing.T) {
 	t.Parallel()
 

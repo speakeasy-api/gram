@@ -379,12 +379,19 @@ func (r *Runner) CountByAction(ctx context.Context) (map[string]int64, error) {
 	return out, nil
 }
 
-// checkTimeout rejects a positive timeout that would serialize to 0ms. Zero
-// itself is allowed: it selects the built-in fallback rather than disabling
-// the timeout.
+// maxTimeout is the largest value PostgreSQL accepts for lock_timeout and
+// statement_timeout: both are integer milliseconds.
+const maxTimeout = time.Duration(math.MaxInt32) * time.Millisecond
+
+// checkTimeout rejects a positive timeout that would serialize to 0ms or to a
+// value PostgreSQL refuses. Zero itself is allowed: it selects the built-in
+// fallback rather than disabling the timeout.
 func checkTimeout(name string, d time.Duration) error {
 	if d != 0 && d < time.Millisecond {
 		return fmt.Errorf("%s must be at least 1ms, got %s", name, d)
+	}
+	if d > maxTimeout {
+		return fmt.Errorf("%s must not exceed %s, got %s", name, maxTimeout, d)
 	}
 	return nil
 }

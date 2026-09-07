@@ -75,6 +75,11 @@ func parseLegacyPolicyScopeFlags(args []string, getenv func(string) string) (leg
 	if *lockTimeout < time.Millisecond || *statementTimeout < time.Millisecond {
 		return legacyPolicyScopeConfig{}, errors.New("timeouts must be at least 1ms")
 	}
+	// PostgreSQL stores both timeouts as integer milliseconds.
+	maxTimeout := time.Duration(math.MaxInt32) * time.Millisecond
+	if *lockTimeout > maxTimeout || *statementTimeout > maxTimeout {
+		return legacyPolicyScopeConfig{}, errors.New("timeouts must not exceed 2147483647ms")
+	}
 	if *apply && *confirmEnvironment != *environment {
 		return legacyPolicyScopeConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}

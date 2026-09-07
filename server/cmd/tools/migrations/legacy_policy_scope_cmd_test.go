@@ -124,3 +124,21 @@ func TestParseLegacyPolicyScopeFlagsRejectsSubMillisecondTimeouts(t *testing.T) 
 	require.Equal(t, time.Millisecond, cfg.lockTimeout)
 	require.Equal(t, time.Millisecond, cfg.statementTimeout)
 }
+
+func TestParseLegacyPolicyScopeFlagsRejectsTimeoutsAbovePostgresMaximum(t *testing.T) {
+	t.Parallel()
+
+	// 2147483647ms is the largest value PostgreSQL accepts.
+	_, err := parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-lock-timeout=2147483648ms"}, legacyScopeEnv("postgres://test"))
+	require.ErrorContains(t, err, "must not exceed")
+
+	_, err = parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-statement-timeout=2147483648ms"}, legacyScopeEnv("postgres://test"))
+	require.ErrorContains(t, err, "must not exceed")
+
+	_, err = parseLegacyPolicyScopeFlags(
+		[]string{"-environment=dev", "-lock-timeout=2147483647ms", "-statement-timeout=2147483647ms"},
+		legacyScopeEnv("postgres://test"))
+	require.NoError(t, err)
+}
