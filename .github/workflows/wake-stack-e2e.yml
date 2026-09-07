@@ -33,12 +33,22 @@ concurrency:
 
 jobs:
   wake-stack-e2e:
+    # Booting the stack applies the Postgres migrations, and Atlas refuses to
+    # apply a directory using `atlas:txtar` checks without a login. A fork PR
+    # gets no secrets, so it would fail on that rather than on anything it
+    # changed -- skip instead, and let a maintainer run it by hand.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # A cold boot compiles the Go server and pulls every infra image before the
     # suite starts; the suite itself then pauses and wakes that stack twice.
     timeout-minutes: 45
     env:
       GOMAXPROCS: 8
+      # `mise db:migrate` shells out to `atlas migrate apply`, and the
+      # migration directory uses checks that are gated behind an account.
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -71,8 +81,24 @@ jobs:
       # takes the whole boot down with it. zero only writes this key when it is
       # absent, so setting it first is enough. Agent skills have no bearing on
       # what this job tests.
-      - name: Opt out of the recommended agent skills
-        run: printf '[env]\nUSE_RECOMMENDED_SKILLS = "false"\n' > mise.local.toml
+      # Two things `./zero --agent` would otherwise decide by asking, on a
+      # runner with nobody to ask:
+      #
+      # - the recommended agent skill set, which it opts a fresh checkout into
+      #   and which clones a private repo the runner cannot authenticate to
+      #   (`fatal: could not read Username for 'https://github.com'`);
+      # - the ClickHouse migration engine, where it prompts for an Atlas Pro
+      #   login and only skips the question when the engine is already chosen.
+      #
+      # zero writes neither key when one is already present, so seeding the
+      # file settles both. Neither has any bearing on what this job tests.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          USE_RECOMMENDED_SKILLS = "false"
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
 
       # The same command a developer or a cloud agent runs on a fresh checkout:
       # tools, deps, keys, TLS, infra, migrations, seed, then every daemon. The
