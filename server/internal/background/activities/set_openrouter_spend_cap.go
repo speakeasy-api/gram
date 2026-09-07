@@ -83,13 +83,17 @@ type setOpenRouterSpendCapHeartbeat struct {
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
-	// A bypass is an operator acting through the admin app; anything else is
-	// the reconciler running on its own, which is a surface in its own right
-	// rather than one we failed to identify.
+	// Deliberately not marked SurfaceSystem when the policy is not bypassed.
+	// BypassPolicy separates an admin override from normal billing policy, not
+	// a request from background work: usage.SetSpendCap is an authenticated
+	// handler that schedules this same workflow with BypassPolicy false. The
+	// activity runs in a worker, so the originating request's context is gone
+	// by the time we get here and the two are indistinguishable. Marking them
+	// all system would erase real user attribution, so this path keeps
+	// recording unknown until the surface is threaded through the workflow
+	// args alongside the actor.
 	if args.BypassPolicy {
 		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdmin))
-	} else {
-		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 	}
 
 	if args.OperationID == "" {

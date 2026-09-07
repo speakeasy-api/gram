@@ -153,9 +153,7 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
 	require.NotNil(t, entry.ActingSurface)
-	// No bypass, so this is the reconciler acting on its own rather than an
-	// operator through the admin app.
-	require.Equal(t, string(audit.SurfaceSystem), *entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceUnknown), *entry.ActingSurface)
 	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(
 		t.Context(),
