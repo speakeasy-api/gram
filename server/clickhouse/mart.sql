@@ -5,8 +5,8 @@
 CREATE DATABASE IF NOT EXISTS marts ENGINE = Atomic;
 
 -- Atlas currently ignores access-control statements when loading SQL desired
--- state. Keep them here as the complete contract and bootstrap them with a
--- manual migration.
+-- state. Keep them here as the complete contract and include explicit grants
+-- in migrations after creating each approved view.
 CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
     readonly = 1 CONST,
     max_execution_time = 30 CONST,
@@ -22,8 +22,6 @@ CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
 CREATE USER IF NOT EXISTS marts_definer HOST NONE;
 
 GRANT SELECT ON gram.attribute_metrics_summaries TO marts_definer;
-
-GRANT SELECT ON marts.* TO marts_reader;
 
 -- Completed UTC weeks only. Counts span all organizations and are per surface:
 -- a person using multiple surfaces counts in each, so rows are not additive.
@@ -45,3 +43,5 @@ WHERE is_active = 1
   AND hook_source NOT IN ('', 'assistants', 'chat-analysis', 'elements', 'gram', 'mcp-research', 'playground', 'risk-analysis', 'skill-efficacy', 'skill-suggestions', 'slack')
 GROUP BY week_start, surface
 HAVING active_users >= 10;
+
+GRANT SELECT ON marts.weekly_ai_surface_adoption TO marts_reader;
