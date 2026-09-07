@@ -167,6 +167,7 @@ beforeEach(() => {
   testState.createPending = false;
   testState.verifyPending = false;
   testState.items = [];
+  testState.presets = [];
 });
 
 afterEach(() => {

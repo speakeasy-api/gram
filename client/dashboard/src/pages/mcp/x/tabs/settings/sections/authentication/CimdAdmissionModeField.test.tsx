@@ -261,10 +261,14 @@ describe("CimdAdmissionModeField", () => {
   it("opens the allowed-clients table from the explanation line", () => {
     render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
 
-    // The catalog and the project's own URLs are one table inside the
-    // modal now; this field only owns the affordance that opens it.
-    expect(
+    // The catalog and the project's own URLs are one table inside the modal
+    // now; this field only owns the affordance that opens it.
+    fireEvent.click(
       screen.getByRole("button", { name: /Manage allowed clients/ }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Allowed clients" }),
     ).toBeDefined();
   });
 

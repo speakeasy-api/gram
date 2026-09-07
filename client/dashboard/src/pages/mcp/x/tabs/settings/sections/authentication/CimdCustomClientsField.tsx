@@ -32,7 +32,11 @@ export function CimdCustomClientsField({
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const presets = useCimdClientPresets();
+  // throwOnError: false so a failed catalog fetch reaches the inline error
+  // below instead of unmounting the whole table into an error boundary.
+  const presets = useCimdClientPresets(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const query = useUserSessionIssuerCimdClientsInfinite({
     userSessionIssuerId: userSessionIssuer.id,
@@ -182,7 +186,7 @@ export function CimdCustomClientsField({
     presets.isLoading ||
     query.isLoading ||
     (hasNextPage && !isFetchNextPageError);
-  const listError = query.isError || isFetchNextPageError;
+  const listError = query.isError || isFetchNextPageError || presets.isError;
 
   const columns: Column<AllowedClientRow>[] = [
     {
@@ -196,7 +200,13 @@ export function CimdCustomClientsField({
               {row.name}
             </Text>
           )}
-          <Text muted mono variant="small" className="block truncate">
+          <Text
+            muted
+            mono
+            variant="small"
+            title={row.url}
+            className="block truncate"
+          >
             {row.url}
           </Text>
         </div>
@@ -218,13 +228,23 @@ export function CimdCustomClientsField({
       width: "auto",
       render: (row) =>
         row.custom ? (
-          <RequireScope scope="project:write" level="component">
+          <RequireScope
+            scope="project:write"
+            resourceId={userSessionIssuer.projectId}
+            level="component"
+          >
             {({ disabled }) => (
               <Button
                 size="sm"
                 variant="tertiary"
                 aria-label={`Remove ${row.url}`}
-                disabled={disabled || remove.variables?.request.id === row.id}
+                disabled={
+                  disabled ||
+                  // isPending is load-bearing: a settled failure leaves the
+                  // variables in place, so without it a failed delete locks
+                  // its own row and the operator cannot retry.
+                  (remove.isPending && remove.variables?.request.id === row.id)
+                }
                 onClick={() => remove.mutate({ request: { id: row.id } })}
               >
                 <Button.LeftIcon>
@@ -272,6 +292,7 @@ export function CimdCustomClientsField({
           <div className="bg-muted/20 shrink-0 border-t p-2">
             <RequireScope
               scope="project:write"
+              resourceId={userSessionIssuer.projectId}
               level="component"
               className="w-full"
             >

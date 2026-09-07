@@ -136,7 +136,12 @@ export function CimdAdmissionModeField({
   // follows the SELECTION rather than the saved value: an operator moving
   // onto "Verified clients" needs to stage those URLs before the switch
   // takes effect, not after.
-  const admitsCustomUrls = selectedMode === WritableMode.Presets;
+  const admitsCustomUrls =
+    selectedMode === WritableMode.Presets ||
+    // "reporting" is not selectable, so selectedMode is null for an issuer
+    // still stored that way — but it consults the same list, and hiding the
+    // affordance would strand those issuers with no way to edit it.
+    (draftMode === null && unconfigured);
 
   return (
     <AuthRow
@@ -162,6 +167,7 @@ export function CimdAdmissionModeField({
     >
       <RadioGroup
         aria-label="Client access"
+        aria-describedby={explanation ? `${fieldId}-explanation` : undefined}
         value={selectedMode ?? ""}
         onValueChange={(next) => {
           setDraftMode(next as WritableMode);
@@ -186,7 +192,7 @@ export function CimdAdmissionModeField({
       </RadioGroup>
 
       {explanation && (
-        <Text muted small className="block">
+        <Text muted small id={`${fieldId}-explanation`} className="block">
           {explanation}
         </Text>
       )}

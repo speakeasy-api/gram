@@ -85,8 +85,9 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
 
 /**
  * The auth configuration surface: identity-provider setup or the manage
- * fields, plus the attach/modify/delete overlays. Chrome-free so both the
- * remote server settings tab and the toolset detail page can mount it.
+ * rows, plus the attach/modify/delete overlays. It owns its own panel (the
+ * rows share one bordered surface and its dividers) but not the section
+ * heading, so each shell supplies only the header above it.
  */
 export function AuthenticationSectionBody({
   target,

@@ -117,6 +117,10 @@ export function UserSessionDurationField({
           min="1"
           value={String(durationNumber)}
           onChange={handleNumberChange}
+          aria-invalid={dirty && !valid ? true : undefined}
+          aria-describedby={
+            dirty && !valid ? "mcp-auth-session-duration-error" : undefined
+          }
           className="w-[90px]"
         />
         <Select
@@ -137,7 +141,9 @@ export function UserSessionDurationField({
       </div>
 
       {dirty && !valid && (
-        <FieldError>Enter a duration of at least one hour.</FieldError>
+        <FieldError id="mcp-auth-session-duration-error">
+          Enter a duration of at least one hour.
+        </FieldError>
       )}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
 

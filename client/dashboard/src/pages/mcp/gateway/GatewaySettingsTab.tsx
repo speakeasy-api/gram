@@ -195,8 +195,9 @@ function GatewayAuthenticationSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Authentication</SettingsSection.Title>
         <SettingsSection.Description>
-          Who may connect to this gateway and how they sign in. Without an
-          identity provider it serves anonymously.
+          Who may connect to this gateway and how they sign in. Changes take
+          effect on new connections. Without an identity provider it serves
+          anonymously.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <AuthenticationSectionBody target={target} />

@@ -90,7 +90,11 @@ export function ExplainerDialog({
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
         </Dialog.Header>
-        <div className="space-y-3">{children}</div>
+        {/* asChild so the paragraphs stay the description Radix resolves
+            aria-describedby to, rather than leaving it dangling. */}
+        <Dialog.Description asChild>
+          <div className="space-y-3">{children}</div>
+        </Dialog.Description>
       </Dialog.Content>
     </Dialog>
   );
