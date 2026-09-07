@@ -15,10 +15,11 @@ set -e
 # (.github/workflows/wake-stack-e2e.yml), which boots a stack first and runs
 # only when the lifecycle files change.
 
-if [ ! -d node_modules/@playwright/test ]; then
-    echo "Installing the e2e suite's dependencies..." >&2
-    aube install -F @gram/e2e
-fi
+# Unconditional rather than guarded on node_modules: a guard makes this a
+# one-time install, so bumping the runner in e2e/package.json would leave the
+# old one in place and the browser install below would then fetch a build that
+# does not match it. An install that has nothing to do costs about a second.
+aube install -F @gram/e2e
 
 # Separate from the `playwright-cli` browser install: this is Playwright's own
 # CLI, which fetches the build the pinned test runner expects. Idempotent, and

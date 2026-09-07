@@ -65,6 +65,15 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      # `./zero --agent` opts a fresh checkout into the SHA-pinned recommended
+      # skill set, which clones a private repo the runner has no credentials
+      # for -- `fatal: could not read Username for 'https://github.com'` -- and
+      # takes the whole boot down with it. zero only writes this key when it is
+      # absent, so setting it first is enough. Agent skills have no bearing on
+      # what this job tests.
+      - name: Opt out of the recommended agent skills
+        run: printf '[env]\nUSE_RECOMMENDED_SKILLS = "false"\n' > mise.local.toml
+
       # The same command a developer or a cloud agent runs on a fresh checkout:
       # tools, deps, keys, TLS, infra, migrations, seed, then every daemon. The
       # suite needs a stack that has genuinely been through this, because what

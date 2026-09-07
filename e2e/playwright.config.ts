@@ -17,10 +17,12 @@ export default defineConfig({
   testDir: "./tests",
   workers: 1,
   fullyParallel: false,
-  // A wake starts containers, waits for Postgres and ClickHouse, then builds
-  // and starts the Go server -- minutes on a cold worktree, and the login that
-  // follows needs the server to be answering.
-  timeout: 12 * 60 * 1000,
+  // Has to sit above every wait the test sets for itself -- the lock wait, the
+  // exec timeout on a `mise` task that may run a full boot, the wait for the
+  // dashboard to answer. Otherwise this cap binds first and a slow-but-working
+  // run dies with a generic test timeout instead of the specific diagnostic the
+  // step was written to produce. A healthy run takes about three minutes.
+  timeout: 30 * 60 * 1000,
   expect: { timeout: 20_000 },
   // Every retry would pay the pause/wake cost again, and a flake here is
   // usually a real stack problem worth reading the trace for.

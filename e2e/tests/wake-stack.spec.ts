@@ -20,12 +20,22 @@ import path from "node:path";
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 
 function run(command: string, args: string[], timeoutMs = 15 * 60_000): string {
-  return execFileSync(command, args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-    timeout: timeoutMs,
-    stdio: ["ignore", "pipe", "inherit"],
-  });
+  try {
+    return execFileSync(command, args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: timeoutMs,
+      stdio: ["ignore", "pipe", "inherit"],
+      // A cold `ensure-stack` runs a whole boot through this pipe, and the
+      // default 1 MiB ceiling turns that into ERR_CHILD_PROCESS_STDIO_MAXBUFFER
+      // -- a failure about a buffer, in a suite about a stack.
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (cause) {
+    // execFileSync's own message is the command line and nothing else, so a
+    // timeout and a task that exited 1 read identically.
+    throw new Error(`\`${[command, ...args].join(" ")}\` failed`, { cause });
+  }
 }
 
 function mise(...args: string[]): string {
@@ -95,11 +105,17 @@ async function waitForNoStackLock(): Promise<void> {
     .toBe(false);
 }
 
-function alive(pid: number): boolean {
+// Identity, not just existence: `wake` kills the parker and the pid is then
+// free to be reused, which a bare `kill(pid, 0)` would report as a parker that
+// outlived its wake. `wake.sh`'s own release_port() makes the same check
+// before it signals anything.
+function parkerAlive(pid: number): boolean {
   try {
-    process.kill(pid, 0);
-    return true;
+    return run("ps", ["-o", "command=", "-p", String(pid)], 10_000).includes(
+      "park",
+    );
   } catch {
+    // `ps` exits non-zero when the pid is gone, which is the answer.
     return false;
   }
 }
@@ -159,7 +175,9 @@ test("a paused worktree serves the resume page and comes back from it", async ({
 
     const pid = parkerPid();
     expect(pid, "no parker pid file, so the site port is dead").not.toBeNull();
-    expect(alive(pid!), "the parker exited after writing its pid").toBe(true);
+    expect(parkerAlive(pid!), "the parker exited after writing its pid").toBe(
+      true,
+    );
   });
 
   await test.step("the dashboard URL answers with the resume page", async () => {
@@ -208,7 +226,7 @@ test("a paused worktree serves the resume page and comes back from it", async ({
     await expect(page.locator("#root")).toBeAttached({ timeout: 10 * 60_000 });
     await expect(page).toHaveTitle("Speakeasy");
 
-    expect(alive(parked!), "the parker outlived the wake").toBe(false);
+    expect(parkerAlive(parked!), "the parker outlived the wake").toBe(false);
     expect(running().length, "the wake started no containers").toBeGreaterThan(
       0,
     );
