@@ -783,6 +783,14 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      - name: Bootstrap local ClickHouse principals
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          docker exec -i "$CLICKHOUSE_CONTAINER" \
+            clickhouse-client --user gram --password gram --multiquery \
+            < local/clickhouse/initdb/01-marts-definer.sql
+
       - name: Run ClickHouse migrations with golang-migrate
         env:
           CH_URL: clickhouse://127.0.0.1:9000?database=gram&username=gram&password=gram&secure=false&x-multi-statement=true
