@@ -77,7 +77,9 @@ describe("SetupGuideCallout", () => {
 
     expect(screen.getByText("Setup guide available")).toBeTruthy();
     expect(
-      screen.getByText("Box needs some setup before it will work in Gram."),
+      screen.getByText(
+        "Box needs some setup before it will work in Speakeasy.",
+      ),
     ).toBeTruthy();
   });
 

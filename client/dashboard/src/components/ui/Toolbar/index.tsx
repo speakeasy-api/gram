@@ -233,7 +233,9 @@ function ToolbarSearch({
           }
         }}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none"
+        // text-sm with the shared mono tracking, matching the toolbar buttons
+        // beside it; text-xs left the search visibly smaller than "More filters".
+        className="min-w-0 flex-1 bg-transparent font-mono text-sm tracking-[-0.01em] outline-none"
       />
       {local && (
         <button
