@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	devidpworkos "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
@@ -32,6 +33,56 @@ type retiredPrefix struct {
 var retiredPrefixes = []retiredPrefix{
 	{old: "/oauth2", current: oauth21.Prefix, envVar: "GRAM_IDP_BASE_URL"},
 	{old: "/mock-workos", current: devidpworkos.Prefix, envVar: "WORKOS_API_URL"},
+}
+
+// retiredEnvKeys are settings dev-idp or the Gram server used to read and no
+// longer do. Left in mise.local.toml they change nothing, but they make the
+// configuration look like it still has a knob it lost.
+var retiredEnvKeys = []struct{ key, replacedBy string }{
+	{key: "GRAM_IDP_MODE", replacedBy: "GRAM_DEVIDP_BACKEND"},
+}
+
+// staleConfigFix is the one command that repairs every finding below:
+// `git:worksync` refreshes generated declarations whose mise.toml template
+// changed and drops retired keys.
+const staleConfigFix = "mise gws && mise run start"
+
+// reportStaleConfig inspects the environment dev-idp was started with for
+// values that predate a rename and logs each at error level with the fix, so
+// a stale checkout hears about it at `mise run start` rather than at the first
+// request that 410s. dev-idp and the Gram server start from the same mise
+// environment, so what dev-idp sees here is what the server will call.
+// Startup continues either way: the retired prefix handlers still explain
+// each request, and a warning that blocks boot is easy to miss in a supervisor
+// restart loop. Returns the number of findings.
+func reportStaleConfig(logger *slog.Logger, getenv func(string) string) int {
+	findings := 0
+	for _, p := range retiredPrefixes {
+		value := getenv(p.envVar)
+		if value == "" || !strings.HasSuffix(strings.TrimRight(value, "/"), p.old) {
+			continue
+		}
+		findings++
+		logger.Error("stale local configuration: env var points at a retired dev-idp prefix",
+			slog.String("env_var", p.envVar),
+			slog.String("value", value),
+			slog.String("retired_prefix", p.old),
+			slog.String("current_prefix", p.current),
+			slog.String("fix", staleConfigFix),
+		)
+	}
+	for _, k := range retiredEnvKeys {
+		if getenv(k.key) == "" {
+			continue
+		}
+		findings++
+		logger.Error("stale local configuration: retired env var is still set",
+			slog.String("env_var", k.key),
+			slog.String("replaced_by", k.replacedBy),
+			slog.String("fix", staleConfigFix),
+		)
+	}
+	return findings
 }
 
 // mountRetiredPrefixes registers an explanatory handler on each prefix

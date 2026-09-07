@@ -93,3 +93,42 @@ func TestRetiredPrefixesPointAtRealPrefixes(t *testing.T) {
 			"retired %s would shadow its own replacement %s", p.old, p.current)
 	}
 }
+
+// The same stale configuration that makes a request hit a retired prefix is
+// visible in the environment at startup, so report it there too: a developer
+// reads the first lines of `mise run start` long before a 410 in a log.
+func TestStaleConfigIsReportedAtStartup(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{
+		"GRAM_IDP_BASE_URL": "http://localhost:31661/oauth2",
+		"WORKOS_API_URL":    "http://localhost:31661/workos",
+		"GRAM_IDP_MODE":     "mock-workos",
+	}
+	logger, logs := newCapturingLogger()
+
+	require.Equal(t, 2, reportStaleConfig(logger, func(key string) string { return env[key] }))
+
+	out := logs.String()
+	require.Contains(t, out, "env_var=GRAM_IDP_BASE_URL")
+	require.Contains(t, out, "current_prefix=/oauth2-1")
+	require.Contains(t, out, "env_var=GRAM_IDP_MODE")
+	require.Contains(t, out, "replaced_by=GRAM_DEVIDP_BACKEND")
+	require.NotContains(t, out, "env_var=WORKOS_API_URL", "a value already on the current prefix is not stale")
+	require.Contains(t, out, "mise gws")
+	require.Contains(t, out, "level=ERROR")
+}
+
+func TestCurrentConfigIsQuietAtStartup(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{
+		"GRAM_IDP_BASE_URL":   "http://localhost:31661/oauth2-1",
+		"WORKOS_API_URL":      "http://localhost:31661/workos/",
+		"GRAM_DEVIDP_BACKEND": "local",
+	}
+	logger, logs := newCapturingLogger()
+
+	require.Equal(t, 0, reportStaleConfig(logger, func(key string) string { return env[key] }))
+	require.Empty(t, logs.String())
+}

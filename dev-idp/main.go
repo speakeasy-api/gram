@@ -98,6 +98,10 @@ func run() error {
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
 	slog.SetDefault(logger)
 
+	// Before anything binds: a checkout that predates a prefix rename should
+	// learn so from the first lines of `mise run start`.
+	reportStaleConfig(logger, os.Getenv)
+
 	dbCfg, err := config.ParseDB(*dbSpec)
 	if err != nil {
 		return err

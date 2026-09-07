@@ -44,6 +44,17 @@ if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
 fi
 
+# dev-idp folded its two identity modes into one WorkOS surface picked by
+# GRAM_DEVIDP_BACKEND. Nothing reads GRAM_IDP_MODE any more; `zero:idp` used
+# to write it, so clear it rather than leave a knob that does nothing. The
+# generated GRAM_IDP_BASE_URL and WORKOS_API_URL declarations from before the
+# prefix rename are refreshed by the remap pass below: they carry the old
+# template verbatim, which is how it tells them from hand-pinned values.
+if grep -qE '^GRAM_IDP_MODE[[:space:]]*=' mise.local.toml; then
+  mise unset --file mise.local.toml GRAM_IDP_MODE
+  echo "✅ Removed the retired GRAM_IDP_MODE setting; GRAM_DEVIDP_BACKEND replaced it."
+fi
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)
