@@ -1,0 +1,42 @@
+server/internal/platformmcp/access_role_mutations_test.go
+  h_9630b74bdac540 137-169
+server/internal/plugins/platform_mcp_public_test.go
+  h_9630b74bdac540 24-25,43-50
+server/internal/platformmcp/tool_access_role_mutations_test.go
+  h_9630b74bdac540 14,28-29
+.changeset/platform-mcp-assign-access-roles.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/access_reads_test.go
+  h_9630b74bdac540 27,30
+server/internal/platformmcp/access_role_assignment_integration_test.go
+  h_9630b74bdac540 1-172
+server/internal/platformmcp/tool_access_role_mutations.go
+  h_9630b74bdac540 21,33-39,52-56
+server/internal/platformmcp/access_role_mutations.go
+  h_9630b74bdac540 32,112-113,115,570-585
+server/internal/platformmcp/access_role_assignment.go
+  h_9630b74bdac540 1-181
+server/internal/plugins/platform_mcp_skills/manage-mcp-access/SKILL.md
+  h_9630b74bdac540 1-42
+server/internal/platformmcp/access_reads.go
+  h_9630b74bdac540 89,293-296,301
+server/internal/access/queries.sql
+  h_9630b74bdac540 446-456
+server/internal/platformmcp/access_role_assignment_receipt.go
+  h_9630b74bdac540 1-108
+server/internal/access/role_manager.go
+  h_9630b74bdac540 674-699,718-724,891-1097
+server/internal/access/role_manager_test.go
+  h_9630b74bdac540 9,15,116-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3f9f7f0d2d71f12f9df85b9844cd59e61d333a62",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
