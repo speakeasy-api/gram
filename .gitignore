@@ -99,6 +99,9 @@ __pycache__/
 .playwright-mcp
 .playwright-cli
 
+# Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
+e2e/.playwright
+
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
 
