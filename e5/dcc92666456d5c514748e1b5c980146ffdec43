@@ -1,0 +1,37 @@
+client/dashboard/src/pages/security/policy-scope.test.ts
+  s_5362a0735be55b::t_7f0c4644ee9db3 639
+  s_5362a0735be55b::t_9c5f52d3e61731 188,204,232,246,258
+  s_5362a0735be55b::t_9d72a2221c7b09 277-295
+  s_5362a0735be55b::t_ac496fd5a42a31 4,7,362,369-373,379,385,391-399,404,409,423,430-439,444,457,468-516,530,548-627,629,631,633,635,637-638,640,686
+  s_5362a0735be55b::t_da4b5cde730d47 53-71,654,677-685
+  s_5362a0735be55b::t_7e24ad70710ef8 687
+client/dashboard/src/pages/security/policy-scope.ts
+  s_5362a0735be55b::t_8021a309d9006a 32-34,251-252,255,257-260,303-308,311,317-321,467,469-477
+  s_5362a0735be55b::t_c719667c706bee 352-353,355-360,374,383-390,395-396,398,413,417-424
+  s_5362a0735be55b::t_4f8b84cc230717 71-74,76-79,107,196-198
+  s_5362a0735be55b::t_0d2efda33f40ff 215-229,399
+  s_5362a0735be55b::t_7f0c4644ee9db3 322-334,340
+  s_5362a0735be55b::t_3c135da8f99b9c 309-310,339
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_5362a0735be55b::t_ac27083e775635 832-833
+  s_5362a0735be55b::t_3de0b0b75f83a4 55,365-372
+  s_5362a0735be55b::t_3c135da8f99b9c 325-327,798-831
+  s_5362a0735be55b::t_04050b9eec0b45 53,256-261,275,320-324,328-333,359-364,373-375,536,641-645
+  s_5362a0735be55b::t_2f14b3082be299 560-562,782-797
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "e5dcc92666456d5c514748e1b5c980146ffdec43",
+  "prompts": {},
+  "sessions": {
+    "s_5362a0735be55b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8daab8a4-c141-4ae8-86b1-85794897fbaf",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
