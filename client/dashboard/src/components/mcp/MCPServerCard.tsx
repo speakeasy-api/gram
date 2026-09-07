@@ -1,3 +1,4 @@
+import { useIconConfetti } from "@/components/icon-confetti";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -32,6 +33,7 @@ export function MCPServerCard({
   recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
+  const { canvasRef, start, stop } = useIconConfetti();
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
@@ -42,9 +44,20 @@ export function MCPServerCard({
   return (
     <Link
       to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
-      className="focus-visible:ring-ring block no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      onMouseEnter={start}
+      onMouseLeave={stop}
+      className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <Card.Entity
+        iconRailClassName="isolate"
+        iconTileClassName="icon-hover-pulse"
+        overlay={
+          <canvas
+            ref={canvasRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10 size-full"
+          />
+        }
         icon={
           <SourceMcpIcon
             mcpServerId={server.id}

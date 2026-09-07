@@ -12,6 +12,14 @@ import { Navigate, useParams } from "react-router";
 
 // Sources moved under MCP rather than going away: the CLI links here after a
 // push, so the old top-level URL lands on the same shelf.
+// Deployments joined MCP as a tab; the old top-level listing keeps resolving.
+// The deployment *detail* URL is untouched — it is what the CLI prints after a
+// push.
+export function RedirectToDeployments(): JSX.Element {
+  const routes = useRoutes();
+  return <Navigate to={routes.mcp.deployments.href()} replace />;
+}
+
 export function RedirectToSources(): JSX.Element {
   const routes = useRoutes();
   return <Navigate to={routes.mcp.sources.href()} replace />;

@@ -1,16 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import { GatewayTableRow } from "@/components/mcp/GatewayTableRow";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
-import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
-import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
-import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -33,6 +28,7 @@ import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/useToolsets";
+import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
   useFilterState as useMcpDimensionFilters,
@@ -92,6 +88,14 @@ export const MCPPage = (): JSX.Element => {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+          <Page.Section>
+            <Page.Section.Title>MCP Servers</Page.Section.Title>
+            <Page.Section.Description className="max-w-2xl">
+              The servers your agents can reach, what they are built from, and
+              the versions those arrive in.
+            </Page.Section.Description>
+          </Page.Section>
+          <McpTabs active="servers" />
           <MCPOverview />
         </RequireScope>
       </Page.Body>
@@ -242,17 +246,6 @@ function MCPOverview() {
     }
     return urls;
   }, [endpointsResult]);
-  const endpointCountByGatewayId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
-      if (!endpoint.metaMcpServerId) continue;
-      counts.set(
-        endpoint.metaMcpServerId,
-        (counts.get(endpoint.metaMcpServerId) ?? 0) + 1,
-      );
-    }
-    return counts;
-  }, [endpointsResult]);
 
   const isLoading =
     toolsets.isLoading ||
@@ -266,7 +259,6 @@ function MCPOverview() {
     isEndpointsError ||
     isGatewaysError;
 
-  const [viewMode, setViewMode] = useViewMode();
   const [search, setSearch] = useState("");
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
@@ -343,7 +335,9 @@ function MCPOverview() {
 
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
-      <Button size="sm" onClick={() => routes.mcp.add.goTo()}>
+      {/* h-10 matches the toolbar's own controls, which Toolbar.Actions
+          leaves to its children to size. */}
+      <Button size="sm" className="h-10" onClick={() => routes.mcp.add.goTo()}>
         <Button.LeftIcon>
           <Plus />
         </Button.LeftIcon>
@@ -383,28 +377,6 @@ function MCPOverview() {
     </Page.Section>
   );
 
-  // The material servers are built from, one step back from the inventory
-  // itself: sources lost their own section when MCP became the inventory, and
-  // this is the way in from the app rather than from a CLI link.
-  const advancedSection = (
-    <Page.Section>
-      <Page.Section.Title area="" className="text-display-xs">
-        Advanced
-      </Page.Section.Title>
-      <Page.Section.Description>
-        The OpenAPI documents and functions this project deploys, and the tools
-        they produce.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <Button variant="secondary" asChild>
-          <routes.mcp.sources.Link>
-            <Button.Text>View sources</Button.Text>
-          </routes.mcp.sources.Link>
-        </Button>
-      </Page.Section.Body>
-    </Page.Section>
-  );
-
   if (
     !isLoading &&
     !hasRefreshError &&
@@ -416,170 +388,104 @@ function MCPOverview() {
       <>
         <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
-        {advancedSection}
       </>
     );
   }
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
-        {hasRefreshError ? (
-          <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
-        ) : null}
-        <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Every MCP server this organization runs, however it is reached —
-          picked from the catalog, hosted remotely, tunneled, or built from your
-          own API.
-          {gatewaysEnabled &&
-            " Gateways front a set of these servers behind a single URL."}
-        </Page.Section.Description>
-        <Page.Section.Body>
-          {showFilters && (
-            <Page.Toolbar className="mb-4">
-              <Page.Toolbar.Search
-                value={search}
-                onChange={setSearch}
-                placeholder="Search MCP servers..."
-              />
-              <Page.Toolbar.Filters
-                schema={MCP_FILTERS}
-                values={mcpFilters.values}
-                optionsById={filterOptions}
-                onChange={
-                  mcpFilters.setValue as (
-                    id: string,
-                    value: FilterValue,
-                  ) => void
-                }
-                onClear={mcpFilters.clearValue as (id: string) => void}
-                onClearAll={mcpFilters.clearAll}
-              />
-              <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
-              <Page.Toolbar.Refresh
-                onRefresh={handleRefresh}
-                isRefreshing={isRefreshing}
-              />
-            </Page.Toolbar>
-          )}
-          {showNoMatches ? (
-            <Text muted className="py-8 text-center">
-              {search !== ""
-                ? `No MCP servers matching “${search}”`
-                : "No MCP servers match your filters"}
-            </Text>
-          ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {isLoading ? (
-                <>
-                  <MCPCardSkeleton />
-                  <MCPCardSkeleton />
-                </>
-              ) : (
-                <>
-                  {filteredGateways.map((gateway) => (
-                    <GatewayCard
-                      key={gateway.id}
-                      gateway={gateway}
-                      url={gatewayUrlById.get(gateway.id)}
-                      activityStatus={activityStatusFor(
-                        "meta_mcp_server",
-                        gateway.id,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                  {filteredToolsets.map((toolset) => (
-                    <MCPCard
-                      key={toolset.id}
-                      toolset={toolset}
-                      activityStatus={activityStatusFor(
-                        "hosted_mcp_server",
-                        toolset.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                  {filteredMcpServers.map((server) => (
-                    <MCPServerCard
-                      key={server.id}
-                      server={server}
-                      endpointCount={
-                        endpointCountByServerId.get(server.id) ?? 0
-                      }
-                      activityStatus={activityStatusFor(
-                        mcpServerTargetType(server),
-                        server.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
-          ) : (
-            <DotTable
-              headers={[
-                { label: "Name" },
-                { label: "Visibility" },
-                { label: "URL" },
-                // Kind-dependent cargo: tool chips for toolsets, the kind badge
-                // for mcp_servers, member count for gateways.
-                { label: "Contents" },
-              ]}
-            >
-              {isLoading ? (
-                <>
-                  <MCPTableRowSkeleton />
-                  <MCPTableRowSkeleton />
-                </>
-              ) : (
-                <>
-                  {filteredGateways.map((gateway) => (
-                    <GatewayTableRow
-                      key={gateway.id}
-                      gateway={gateway}
-                      endpointCount={
-                        endpointCountByGatewayId.get(gateway.id) ?? 0
-                      }
-                      url={gatewayUrlById.get(gateway.id)}
-                    />
-                  ))}
-                  {filteredToolsets.map((toolset) => (
-                    <MCPTableRow
-                      key={toolset.id}
-                      toolset={toolset}
-                      activityStatus={activityStatusFor(
-                        "hosted_mcp_server",
-                        toolset.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                  {filteredMcpServers.map((server) => (
-                    <MCPServerTableRow
-                      key={server.id}
-                      server={server}
-                      endpointCount={
-                        endpointCountByServerId.get(server.id) ?? 0
-                      }
-                      activityStatus={activityStatusFor(
-                        mcpServerTargetType(server),
-                        server.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                </>
-              )}
-            </DotTable>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+      {/* No section heading or description: the page title above the tabs
+          already says what this list is, and repeating it pushed the servers
+          themselves below the fold. */}
+      {/* Deliberately not a Page.Section: its top margin put this toolbar
+          12px below where the sibling tabs put theirs, so switching tabs
+          nudged the controls. */}
+      <div>
+        {showFilters && (
+          <Page.Toolbar className="mb-8">
+            <Page.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Search MCP servers..."
+            />
+            <Page.Toolbar.Filters
+              schema={MCP_FILTERS}
+              values={mcpFilters.values}
+              optionsById={filterOptions}
+              onChange={
+                mcpFilters.setValue as (id: string, value: FilterValue) => void
+              }
+              onClear={mcpFilters.clearValue as (id: string) => void}
+              onClearAll={mcpFilters.clearAll}
+            />
+            <Page.Toolbar.Refresh
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+            />
+            {/* The one thing you come here to do sits with the controls that
+                  filter what you are looking at. */}
+            <Page.Toolbar.Actions>
+              {hasRefreshError ? refreshErrorIndicator : null}
+              {newMcpServerButton}
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
+        )}
+        {showNoMatches ? (
+          <Text muted className="py-8 text-center">
+            {search !== ""
+              ? `No MCP servers matching “${search}”`
+              : "No MCP servers match your filters"}
+          </Text>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {isLoading ? (
+              <>
+                <MCPCardSkeleton />
+                <MCPCardSkeleton />
+              </>
+            ) : (
+              <>
+                {filteredGateways.map((gateway) => (
+                  <GatewayCard
+                    key={gateway.id}
+                    gateway={gateway}
+                    url={gatewayUrlById.get(gateway.id)}
+                    activityStatus={activityStatusFor(
+                      "meta_mcp_server",
+                      gateway.id,
+                    )}
+                    recentWindowDays={recentWindowDays}
+                  />
+                ))}
+                {filteredToolsets.map((toolset) => (
+                  <MCPCard
+                    key={toolset.id}
+                    toolset={toolset}
+                    activityStatus={activityStatusFor(
+                      "hosted_mcp_server",
+                      toolset.slug,
+                    )}
+                    recentWindowDays={recentWindowDays}
+                  />
+                ))}
+                {filteredMcpServers.map((server) => (
+                  <MCPServerCard
+                    key={server.id}
+                    server={server}
+                    endpointCount={endpointCountByServerId.get(server.id) ?? 0}
+                    activityStatus={activityStatusFor(
+                      mcpServerTargetType(server),
+                      server.slug,
+                    )}
+                    recentWindowDays={recentWindowDays}
+                  />
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
       {builtInSection}
-      {advancedSection}
     </>
   );
 }

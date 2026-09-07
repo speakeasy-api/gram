@@ -8,7 +8,27 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
+import { McpTabs } from "../McpTabs";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
 import { useMemo, useState } from "react";
+
+// The one thing that distinguishes one source from another at a glance, and
+// the only facet the deployment carries for them.
+const SOURCE_FILTERS = defineFilters([
+  { id: "kind", label: "Kind", kind: "multiselect" },
+]);
+
+const SOURCE_FILTER_OPTIONS: OptionsById = {
+  kind: [
+    { value: "openapi", label: "OpenAPI document" },
+    { value: "function", label: "Function" },
+  ],
+};
 import { Outlet } from "react-router";
 
 export function SourcesRoot(): JSX.Element {
@@ -28,14 +48,18 @@ export default function Sources(): JSX.Element {
   const project = useProject();
   const { sources, isLoading } = useProjectSources();
   const [search, setSearch] = useState("");
+  const kindFilters = useFilterState(SOURCE_FILTERS);
 
+  const selectedKinds = kindFilters.values["kind"];
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return sources;
-    return sources.filter((source) =>
-      source.name.toLowerCase().includes(query),
-    );
-  }, [sources, search]);
+    const kinds = Array.isArray(selectedKinds) ? selectedKinds : [];
+    return sources.filter((source) => {
+      if (query && !source.name.toLowerCase().includes(query)) return false;
+      if (kinds.length > 0 && !kinds.includes(source.kind)) return false;
+      return true;
+    });
+  }, [sources, search, selectedKinds]);
 
   return (
     <ResourceListPage
@@ -50,10 +74,19 @@ export default function Sources(): JSX.Element {
           </routes.mcp.add.fromSource.Link>
         </Button>
       }
+      belowHeader={<McpTabs active="sources" />}
       search={{
         value: search,
         onChange: setSearch,
         placeholder: "Search sources...",
+      }}
+      filters={{
+        schema: SOURCE_FILTERS,
+        values: kindFilters.values,
+        optionsById: SOURCE_FILTER_OPTIONS,
+        onChange: kindFilters.setValue as (id: string, v: FilterValue) => void,
+        onClear: kindFilters.clearValue as (id: string) => void,
+        onClearAll: kindFilters.clearAll,
       }}
       isLoading={isLoading}
       isEmpty={sources.length === 0}
@@ -69,7 +102,7 @@ export default function Sources(): JSX.Element {
         // Distinct from the empty state above: the project has sources, this
         // search just doesn't match any, so the toolbar stays put.
         <Text muted small>
-          No sources match “{search.trim()}”.
+          No sources match the current search and filters.
         </Text>
       ) : null}
       <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">

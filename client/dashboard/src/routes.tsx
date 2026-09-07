@@ -51,6 +51,7 @@ import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
 import CreateFromSource from "./pages/mcp/add/CreateFromSource";
+import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
@@ -474,6 +475,11 @@ const ROUTE_STRUCTURE = {
       },
       // Sources have no section of their own any more, but the CLI links here
       // after a push and functions still arrive this way, so they keep a page.
+      deployments: {
+        title: "Deployments",
+        url: "deployments",
+        component: Deployments,
+      },
       sources: {
         title: "Sources",
         url: "sources",
@@ -857,7 +863,10 @@ const ROUTE_STRUCTURE = {
     url: "deployments",
     icon: "history",
     component: DeploymentsRoot,
-    indexComponent: Deployments,
+    // The listing lives on the MCP page as a tab now; this index only
+    // forwards. The detail route below stays put — it is the URL the CLI
+    // prints after a push.
+    indexComponent: RedirectToDeployments,
     subPages: {
       deployment: {
         title: "Overview",
