@@ -30,10 +30,11 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
 			Value:    sessionCookie,
-			MaxAge:   2592000,
+			MaxAge:   259200,
 			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
 		})
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return nil
@@ -241,9 +242,10 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (*auth.LoginPayload, error) {
 		var payload *auth.LoginPayload
 		var (
-			redirect *string
-			orgName  *string
-			email    *string
+			redirect       *string
+			orgName        *string
+			email          *string
+			supportHandoff *string
 		)
 		qp := r.URL.Query()
 		redirectRaw := qp.Get("redirect")
@@ -258,7 +260,11 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if emailRaw != "" {
 			email = &emailRaw
 		}
-		payload = NewLoginPayload(redirect, orgName, email)
+		supportHandoffRaw := qp.Get("support_handoff")
+		if supportHandoffRaw != "" {
+			supportHandoff = &supportHandoffRaw
+		}
+		payload = NewLoginPayload(redirect, orgName, email, supportHandoff)
 
 		return payload, nil
 	}
@@ -430,10 +436,11 @@ func EncodeSwitchScopesResponse(encoder func(context.Context, http.ResponseWrite
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
 			Value:    sessionCookie,
-			MaxAge:   2592000,
+			MaxAge:   259200,
 			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
 		})
 		w.WriteHeader(http.StatusOK)
 		return nil
@@ -642,10 +649,11 @@ func EncodeEnterDemoResponse(encoder func(context.Context, http.ResponseWriter) 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
 			Value:    sessionCookie,
-			MaxAge:   2592000,
+			MaxAge:   259200,
 			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
 		})
 		w.WriteHeader(http.StatusOK)
 		return nil
@@ -1254,10 +1262,11 @@ func EncodeInfoResponse(encoder func(context.Context, http.ResponseWriter) goaht
 		http.SetCookie(w, &http.Cookie{
 			Name:     "gram_session",
 			Value:    sessionCookie,
-			MaxAge:   2592000,
+			MaxAge:   259200,
 			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
 		})
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)

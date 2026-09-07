@@ -10,7 +10,7 @@ export default function AssistantPage(): JSX.Element {
 
 // Register the assistant's name as this page's command-palette "Recently
 // Visited" label. Without it, the visit is recorded by App from the URL alone,
-// which for this id-keyed route falls back to an opaque "Assistant · <id>".
+// which for this id-keyed route falls back to the section title.
 function useRecordAssistantRecent(): void {
   const { assistantId = "" } = useParams();
   const { pathname } = useLocation();

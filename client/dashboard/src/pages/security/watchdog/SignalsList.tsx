@@ -21,18 +21,16 @@ import {
 } from "./signals-helpers";
 
 /**
- * Finding-count trend for a signal row: green/red arrow with the
- * window-over-window percentage, or a "new" badge when the previous window had
- * nothing to compare against.
+ * Finding-count trend for a signal row: the within-window percentage (end of
+ * the sparkline against its start, so the number moves with the drawn line),
+ * or a "new" badge when the window opened with nothing to compare against.
  */
 export function SignalTrend({
-  findings,
-  previousFindings,
+  sparkline,
 }: {
-  findings: number;
-  previousFindings: number;
+  sparkline: number[];
 }): JSX.Element {
-  const trend = trendPercent(findings, previousFindings);
+  const trend = trendPercent(sparkline);
   if (trend === null) {
     return (
       <Badge variant="information" size="sm">
@@ -70,6 +68,7 @@ function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {
       return RULE_CATEGORY_META[group.key as RuleCategory]?.label ?? group.key;
     case "team":
     case "app":
+    case "principal":
       return group.key === UNATTRIBUTED_GROUP_KEY ? "Unattributed" : group.key;
   }
 }
@@ -175,10 +174,7 @@ function SignalRow({
             <span className="text-lg font-normal tabular-nums">
               {signal.findings.toLocaleString()}
             </span>
-            <SignalTrend
-              findings={signal.findings}
-              previousFindings={signal.previousFindings}
-            />
+            <SignalTrend sparkline={signal.sparkline} />
           </div>
           <Sparkline values={signal.sparkline} width={184} height={28} />
           <span className="text-muted-foreground font-mono text-xs">

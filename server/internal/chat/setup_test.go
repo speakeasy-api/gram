@@ -106,10 +106,7 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tp)
-	// Use a unique suffix per test to isolate Redis cache entries when tests
-	// run in parallel and all use the same mockidp.MockUserID.
-	suffix := cache.Suffix("gram-local-" + uuid.NewString()[:8])
-	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
+	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)

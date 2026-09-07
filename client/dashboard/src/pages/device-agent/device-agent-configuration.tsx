@@ -28,42 +28,40 @@ import {
 import { useUpdateDeviceAgentConfigurationMutation } from "@gram/client/react-query/updateDeviceAgentConfiguration.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import {
+  enforcementLayer,
+  recordValue,
+  type EnforcementLayer,
+} from "./platform-layers";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-
-type EnforcementLayer = "off" | "user" | "managed";
 
 const PLATFORMS = [
   {
     key: "claude_code",
     label: "Claude Code",
     description: "Configure Claude Code plugins and MCP settings.",
-    defaultLayer: "user",
   },
   {
     key: "codex",
     label: "Codex",
     description: "Configure Codex plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "cursor",
     label: "Cursor",
     description: "Configure Cursor plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "opencode",
     label: "OpenCode",
     description: "Configure OpenCode plugins and MCP settings.",
-    defaultLayer: "off",
   },
 ] as const satisfies ReadonlyArray<{
   key: string;
   label: string;
   description: string;
-  defaultLayer: EnforcementLayer;
 }>;
 
 const MIN_SYNC_INTERVAL_SECONDS = 60;
@@ -92,23 +90,6 @@ const AUTO_UPDATE_POLICIES = [
     description: "Install updates as they release",
   },
 ] as const;
-
-function recordValue(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function enforcementLayer(
-  config: DeviceAgentConfiguration,
-  platform: (typeof PLATFORMS)[number],
-): EnforcementLayer {
-  const value = recordValue(config.config.platforms)[platform.key];
-  if (value === "user" || value === "managed") return value;
-  if (value === false) return "off";
-  return platform.defaultLayer;
-}
 
 function stringSetting(
   config: DeviceAgentConfiguration,
@@ -222,7 +203,7 @@ function DeviceAgentConfigurationForm({
     Object.fromEntries(
       PLATFORMS.map((platform) => [
         platform.key,
-        enforcementLayer(configuration, platform),
+        enforcementLayer(configuration.config.platforms, platform.key),
       ]),
     ),
   );
@@ -264,7 +245,7 @@ function DeviceAgentConfigurationForm({
   const currentPlatformLayers = Object.fromEntries(
     PLATFORMS.map((platform) => [
       platform.key,
-      enforcementLayer(configuration, platform),
+      enforcementLayer(configuration.config.platforms, platform.key),
     ]),
   );
   const isDirty =

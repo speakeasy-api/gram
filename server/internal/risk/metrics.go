@@ -69,8 +69,10 @@ func (m *metrics) RecordFindingCHInserts(ctx context.Context, count int, outcome
 	m.chMessagesInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
 }
 
-// RecordFindingCHSkipped records a risk finding message that was dropped before
-// reaching ClickHouse, tagged with the reason it was skipped.
+// RecordFindingCHSkipped records a risk finding message the writer rejected as
+// unpersistable (malformed id or timestamp) and nacked for individual
+// redelivery, tagged with the reason. A sustained non-zero rate flags a
+// producer bug to fix while the subscription still retains the messages.
 func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
 	if m.chMessagesSkipped == nil {
 		return

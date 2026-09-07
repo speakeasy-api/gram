@@ -551,8 +551,9 @@ def _scan_to_detections(
     n = len(content)
     # Clamp each span to the content's bounds (guarding against an out-of-range
     # span) and drop catalog false positives (reserved/placeholder IPs and emails,
-    # cloud/CDN ASN attribution) before they ever reach the handler. This pass
-    # works in character offsets, so a discarded match never costs byte conversion.
+    # cloud/CDN ASN attribution, NHS numbers with no health-care context) before
+    # they ever reach the handler. This pass works in character offsets, so a
+    # discarded match never costs byte conversion.
     spans: list[tuple[Recognized, int, int, str]] = []
     for r in results:
         # Drop US_DRIVER_LICENSE regardless of how the scan was scoped: an
@@ -563,7 +564,12 @@ def _scan_to_detections(
         start = max(0, min(r.start, n))
         end = max(start, min(r.end, n))
         match = content[start:end]
-        if presidiofp.reason(r.entity_type, match):
+        # The whole payload goes in alongside the match: some catalogs need it.
+        # A ten-digit run only reads as a UK NHS number when the surrounding
+        # text talks about health care, because Presidio's recognizer pins any
+        # checksum-valid run at maximum confidence without consulting its own
+        # context words.
+        if presidiofp.reason_in_context(r.entity_type, match, content):
             continue
         spans.append((r, start, end, match))
     if not spans:

@@ -22,6 +22,7 @@ import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { cn } from "@/lib/utils";
 import type { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
+import { getFilterAccents } from "@/components/gradient-colors";
 import { FilterChip, CustomFilterChip } from "@/components/filters/FilterChip";
 import { FilterSheet } from "@/components/filters/FilterSheet";
 import {
@@ -72,7 +73,7 @@ const CONTROL_HEIGHT = "h-10";
 
 // The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.
-const TOOLBAR_SHELL = "border-border bg-muted/40 w-full border p-2";
+const TOOLBAR_SHELL = "border-border bg-card w-full border p-2";
 
 // One row of clusters: the left holds the controls that narrow the data
 // (search + filters + leading), spaced apart (justify-between) from the right,
@@ -232,7 +233,9 @@ function ToolbarSearch({
           }
         }}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+        // text-sm with the shared mono tracking, matching the toolbar buttons
+        // beside it; text-xs left the search visibly smaller than "More filters".
+        className="min-w-0 flex-1 bg-transparent font-mono text-sm tracking-[-0.01em] outline-none"
       />
       {local && (
         <button
@@ -298,6 +301,16 @@ function ToolbarFilters({
       (d) => !d.pinned && !d.hideChip && isDimensionActive(d, values[d.id]!),
     ).length + customFilters.length;
 
+  // The sheet only earns its trigger when it holds something the chip row
+  // doesn't: unpinned dimensions, hideChip dimensions (which never render a
+  // chip even when pinned), a custom-attribute builder, or active custom
+  // filters. A schema of only pinned dimensions would make "More filters" a
+  // second door to the same controls.
+  const sheetHasMore =
+    schema.some((d) => !d.pinned || d.hideChip) ||
+    customBuilder !== undefined ||
+    customFilters.length > 0;
+
   const hasClearable =
     customFilters.length > 0 ||
     schema.some(
@@ -307,22 +320,49 @@ function ToolbarFilters({
         isDimensionActive(d, values[d.id]!),
     );
 
+  // One brand hue per dimension, keyed on the dimension id so a filter keeps
+  // its color across pages, and de-duplicated within this bar. Every schema
+  // dimension gets a hue, not just the pilled ones, so the sheet can label
+  // each control with the same swatch its chip carries; pilled dims are asked
+  // for first so the visible bar keeps its colors when a sheet-only filter
+  // becomes active and joins the row.
+  const accents = getFilterAccents([
+    ...pillDims.map((d) => d.id),
+    ...schema.filter((d) => !pillDims.includes(d)).map((d) => d.id),
+    ...customFilters.map((f) => f.path),
+  ]);
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {pillDims.map((dim) => (
-        <FilterChip
-          key={dim.id}
-          label={chipLabel(dim, values[dim.id]!, optionsById[dim.id])}
-          onClick={() => setSheetOpen(true)}
-          // A default pinned chip ("All …", default daterange) has nothing to
-          // clear — omit onRemove so the × is hidden instead of a no-op.
-          onRemove={
-            isDimensionAtDefault(dim, values[dim.id]!)
-              ? undefined
-              : () => onClear(dim.id)
-          }
-        />
-      ))}
+      {pillDims.map((dim) => {
+        const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
+        const ariaLabel =
+          dim.kind === "select" ||
+          dim.kind === "multiselect" ||
+          dim.kind === "daterange"
+            ? `${dim.label} filter: ${label}`
+            : label;
+        return (
+          <FilterChip
+            key={dim.id}
+            label={label}
+            ariaLabel={ariaLabel}
+            color={accents[dim.id]}
+            active={!isDimensionAtDefault(dim, values[dim.id]!)}
+            onClick={() => setSheetOpen(true)}
+            // A default pinned chip ("All …", default daterange) has nothing to
+            // clear, and a `required` dimension has nothing to clear *to* —
+            // clearing it just resolves back to a value, so the × would look
+            // broken. Omit onRemove in both cases so it is hidden rather than a
+            // no-op.
+            onRemove={
+              dim.required || isDimensionAtDefault(dim, values[dim.id]!)
+                ? undefined
+                : () => onClear(dim.id)
+            }
+          />
+        );
+      })}
 
       {customFilters.map((filter) => (
         <CustomFilterChip
@@ -335,19 +375,25 @@ function ToolbarFilters({
 
       {extraChips}
 
-      <Button
-        variant="secondary"
-        onClick={() => setSheetOpen(true)}
-        className={cn(CONTROL_HEIGHT, "gap-2")}
-      >
-        <SlidersHorizontal className="size-4" />
-        More filters
-        {sheetCount > 0 && (
-          <Badge variant="neutral" className="ml-1 px-1.5">
-            {sheetCount}
-          </Badge>
-        )}
-      </Button>
+      {sheetHasMore && (
+        // The label wears `text-eyebrow` on its own span rather than through the
+        // Button's className: `text-eyebrow` is a custom utility and `text-sm`
+        // a core one, so which wins is decided by their order in the compiled
+        // stylesheet, not by class order — tailwind-merge cannot arbitrate it.
+        <Button
+          variant="secondary"
+          onClick={() => setSheetOpen(true)}
+          className={cn(CONTROL_HEIGHT, "gap-2")}
+        >
+          <SlidersHorizontal className="size-4" />
+          <span className="text-eyebrow">More filters</span>
+          {sheetCount > 0 && (
+            <Badge variant="neutral" className="ml-1 px-1.5">
+              {sheetCount}
+            </Badge>
+          )}
+        </Button>
+      )}
 
       {hasClearable && (
         <Button
@@ -356,7 +402,7 @@ function ToolbarFilters({
           className={cn(CONTROL_HEIGHT, "text-muted-foreground gap-1")}
         >
           <X className="size-3.5" />
-          Reset to default
+          <span className="text-eyebrow">Reset</span>
         </Button>
       )}
 
@@ -368,6 +414,7 @@ function ToolbarFilters({
         optionsById={optionsById}
         onChange={onChange}
         onClearAll={onClearAll}
+        accents={accents}
         projectSlug={projectSlug}
         customFilters={customFilters}
         onEditCustomFilter={onEditCustomFilter}
@@ -461,11 +508,6 @@ function ToolbarViewAs({ value, onChange }: ToolbarViewAsProps): JSX.Element {
   );
 }
 
-/** Result count (or similar), right-aligned, left of the view toggle. */
-function ToolbarCount({ children }: { children: ReactNode }): JSX.Element {
-  return <span className="text-muted-foreground text-sm">{children}</span>;
-}
-
 /**
  * Right-aligned slot for page-specific controls that aren't search/sort/view —
  * e.g. a Tokens/Cost segmented toggle or an Employees/Unknown-users scope
@@ -525,7 +567,6 @@ export const Toolbar = Object.assign(ToolbarRoot, {
   Leading: ToolbarLeading,
   SortBy: ToolbarSortBy,
   ViewAs: ToolbarViewAs,
-  Count: ToolbarCount,
   Actions: ToolbarActions,
   Refresh: ToolbarRefresh,
 });

@@ -22,6 +22,41 @@ func LogoutAdminPath() string {
 	return "/admin/auth.logout"
 }
 
+// GetSessionAdminPath returns the URL path to the admin service getSession HTTP endpoint.
+func GetSessionAdminPath() string {
+	return "/admin/session.get"
+}
+
+// GetOrganizationFeaturesAdminPath returns the URL path to the admin service getOrganizationFeatures HTTP endpoint.
+func GetOrganizationFeaturesAdminPath() string {
+	return "/admin/organization.features"
+}
+
+// SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
+func SetOrganizationFeatureAdminPath() string {
+	return "/admin/organization.features"
+}
+
+// GetOrganizationChatAnalysisSettingsAdminPath returns the URL path to the admin service getOrganizationChatAnalysisSettings HTTP endpoint.
+func GetOrganizationChatAnalysisSettingsAdminPath() string {
+	return "/admin/organization.chatAnalysisSettings"
+}
+
+// SetOrganizationChatAnalysisSettingsAdminPath returns the URL path to the admin service setOrganizationChatAnalysisSettings HTTP endpoint.
+func SetOrganizationChatAnalysisSettingsAdminPath() string {
+	return "/admin/organization.chatAnalysisSettings"
+}
+
+// TriggerOrganizationChatAnalysisAdminPath returns the URL path to the admin service triggerOrganizationChatAnalysis HTTP endpoint.
+func TriggerOrganizationChatAnalysisAdminPath() string {
+	return "/admin/organization.chatAnalysisTrigger"
+}
+
+// OpenOrganizationInDashboardAdminPath returns the URL path to the admin service openOrganizationInDashboard HTTP endpoint.
+func OpenOrganizationInDashboardAdminPath() string {
+	return "/admin/organization.open-dashboard"
+}
+
 // GetProjectAdminPath returns the URL path to the admin service getProject HTTP endpoint.
 func GetProjectAdminPath() string {
 	return "/admin/project.get"
@@ -30,6 +65,21 @@ func GetProjectAdminPath() string {
 // UpdateOrganizationAdminPath returns the URL path to the admin service updateOrganization HTTP endpoint.
 func UpdateOrganizationAdminPath() string {
 	return "/admin/organization.update"
+}
+
+// BulkUpdateAccountTypeAdminPath returns the URL path to the admin service bulkUpdateAccountType HTTP endpoint.
+func BulkUpdateAccountTypeAdminPath() string {
+	return "/admin/organizations.bulkUpdateAccountType"
+}
+
+// DisableOrganizationAdminPath returns the URL path to the admin service disableOrganization HTTP endpoint.
+func DisableOrganizationAdminPath() string {
+	return "/admin/organization.disable"
+}
+
+// EnableOrganizationAdminPath returns the URL path to the admin service enableOrganization HTTP endpoint.
+func EnableOrganizationAdminPath() string {
+	return "/admin/organization.enable"
 }
 
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
@@ -47,7 +97,72 @@ func ListOrganizationProjectsAdminPath() string {
 	return "/admin/organization.projects"
 }
 
+// ListOrganizationActivityAdminPath returns the URL path to the admin service listOrganizationActivity HTTP endpoint.
+func ListOrganizationActivityAdminPath() string {
+	return "/admin/organization.activity"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
+}
+
+// ExtendTrialAdminPath returns the URL path to the admin service extendTrial HTTP endpoint.
+func ExtendTrialAdminPath() string {
+	return "/admin/trial.extend"
+}
+
+// CreateOrganizationAdminPath returns the URL path to the admin service createOrganization HTTP endpoint.
+func CreateOrganizationAdminPath() string {
+	return "/admin/organization.create"
+}
+
+// RearmTrialAdminPath returns the URL path to the admin service rearmTrial HTTP endpoint.
+func RearmTrialAdminPath() string {
+	return "/admin/trial.rearm"
+}
+
+// GetOrganizationStatsAdminPath returns the URL path to the admin service getOrganizationStats HTTP endpoint.
+func GetOrganizationStatsAdminPath() string {
+	return "/admin/organizations.stats"
+}
+
+// GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
+func GetInferenceKeysAdminPath() string {
+	return "/admin/organization.inferenceKeys"
+}
+
+// SetInferenceKeyMonthlyLimitAdminPath returns the URL path to the admin service setInferenceKeyMonthlyLimit HTTP endpoint.
+func SetInferenceKeyMonthlyLimitAdminPath() string {
+	return "/admin/organization.setInferenceKeyMonthlyLimit"
+}
+
+// GetInferenceSpendHistoryAdminPath returns the URL path to the admin service getInferenceSpendHistory HTTP endpoint.
+func GetInferenceSpendHistoryAdminPath() string {
+	return "/admin/organization.inferenceSpendHistory"
+}
+
+// GetPaygBillingSummaryAdminPath returns the URL path to the admin service getPaygBillingSummary HTTP endpoint.
+func GetPaygBillingSummaryAdminPath() string {
+	return "/admin/organization.paygBillingSummary"
+}
+
+// GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
+func GetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.stripeSubscription"
+}
+
+// CancelStripeSubscriptionAdminPath returns the URL path to the admin service cancelStripeSubscription HTTP endpoint.
+func CancelStripeSubscriptionAdminPath() string {
+	return "/admin/organization.cancelStripeSubscription"
+}
+
+// ResumeStripeSubscriptionAdminPath returns the URL path to the admin service resumeStripeSubscription HTTP endpoint.
+func ResumeStripeSubscriptionAdminPath() string {
+	return "/admin/organization.resumeStripeSubscription"
+}
+
+// MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
+func MarkEnterpriseTrialConvertedAdminPath() string {
+	return "/admin/trial.convert"
 }

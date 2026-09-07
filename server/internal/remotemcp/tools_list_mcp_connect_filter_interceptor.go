@@ -27,6 +27,15 @@ import (
 // the filter matches disposition-scoped grants the same way the paired
 // tools/call enforcement does. A tool with no recorded metadata resolves to
 // the empty disposition, leaving a pure tool-name match.
+//
+// A catalog where every tool is authorized is not rewritten at all and
+// relays byte-for-byte. When filtering does remove tools, the rewrite
+// touches only the result's tools member; every other member of the
+// upstream result relays untouched, including members future protocol
+// revisions add. Should such a member ever carry tool identities the way
+// tools does, this filter will not scrub it. The kept tool objects,
+// however, are re-marshaled from [mcp.Tool], so per-tool members the SDK
+// does not model are dropped from a filtered catalog.
 type ToolsListMCPConnectFilterInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
@@ -105,6 +114,15 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		if matched[idx] {
 			allowed = append(allowed, t)
 		}
+	}
+
+	// Committing an unchanged catalog is not free: SetTools flips the
+	// message's dirty flag, which re-encodes the whole JSON-RPC message
+	// (re-marshaling each kept tool through mcp.Tool) before relaying.
+	// When every tool matched, skip the commit so the response relays
+	// byte-for-byte.
+	if len(allowed) == len(tools) {
+		return nil
 	}
 
 	if err := list.SetTools(allowed); err != nil {

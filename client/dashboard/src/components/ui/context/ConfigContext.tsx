@@ -18,8 +18,7 @@ export function ConfigProvider({
   // without this, this document's <html> class (and so the whole UI) stays on
   // the old theme while storage says otherwise. Lives at the provider level
   // so every route stays in sync, not just those mounting a ThemeSwitcher.
-  // Routing through setTheme keeps the class, favicon, and React state in one
-  // code path.
+  // Routing through setTheme keeps the class and React state in one code path.
   useEffect(() => {
     const onStorage = (event: StorageEvent): void => {
       if (event.key !== PREFERRED_THEME_STORAGE_KEY) return;

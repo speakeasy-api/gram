@@ -1,0 +1,10 @@
+package otel
+
+const (
+	testLogOrganizationID      = "01900000-0000-7000-8000-000000000001"
+	testLogOtherOrganizationID = "01900000-0000-7000-8000-000000000002"
+	testLogThirdOrganizationID = "01900000-0000-7000-8000-000000000003"
+	testLogProjectID           = "01900000-0000-7000-8000-000000000101"
+	testLogOtherProjectID      = "01900000-0000-7000-8000-000000000102"
+	testLogThirdProjectID      = "01900000-0000-7000-8000-000000000103"
+)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -59,8 +60,31 @@ func NormalizeURLHost(scheme string, host string) string {
 	if err != nil {
 		return host
 	}
-	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+	if isDefaultPort(scheme, port) {
 		return name
 	}
 	return host
+}
+
+// defaultPorts is the port each scheme implies, which normalization drops.
+var defaultPorts = map[string]int{
+	"http":  80,
+	"https": 443,
+}
+
+// isDefaultPort reports whether an explicit port is the one its scheme already
+// implies. The comparison is numeric so a zero-padded spelling such as `:0443`
+// still names the same endpoint as the implicit default.
+func isDefaultPort(scheme string, port string) bool {
+	implied, known := defaultPorts[scheme]
+	if !known {
+		return false
+	}
+
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		return false
+	}
+
+	return n == implied
 }

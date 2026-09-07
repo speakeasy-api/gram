@@ -680,10 +680,41 @@ SELECT
   users.email,
   users.photo_url,
   COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at
+  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at,
+  -- The member's identity-provider profile, when the directory has synced one.
+  -- A member with no directory row, or one whose provider does not report the
+  -- attribute, comes back as an empty string.
+  COALESCE(du.attributes ->> 'department_name', '')::text AS department,
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  -- The member's directory profile, preferring an explicit user link over an
+  -- email match so a stale email row cannot shadow the linked profile. An
+  -- email-matched row has a NULL user_id, and NULLs sort first under DESC, so
+  -- the link test needs NULLS LAST to actually win; among equals the profile
+  -- the directory updated most recently is the current one.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
   AND ora.workos_user_id = users.workos_id
@@ -710,6 +741,8 @@ type ListAccessMembersRow struct {
 	PhotoUrl    pgtype.Text
 	RoleID      string
 	JoinedAt    pgtype.Timestamptz
+	Department  string
+	GroupNames  []string
 }
 
 func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
@@ -728,6 +761,8 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.PhotoUrl,
 			&i.RoleID,
 			&i.JoinedAt,
+			&i.Department,
+			&i.GroupNames,
 		); err != nil {
 			return nil, err
 		}
@@ -1540,6 +1575,34 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRetainedResolvedChallengeIDs = `-- name: ListRetainedResolvedChallengeIDs :many
+SELECT challenge_id FROM authz_challenge_resolutions
+WHERE organization_id = $1
+  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
+`
+
+// Resolutions cannot predate their challenge, so records older than ClickHouse's
+// 90-day challenge retention cannot match a retained bucket.
+func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRetainedResolvedChallengeIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var challenge_id string
+		if err := rows.Scan(&challenge_id); err != nil {
+			return nil, err
+		}
+		items = append(items, challenge_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

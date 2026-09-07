@@ -8,7 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestService_ListRoles(t *testing.T) {
@@ -29,11 +29,13 @@ func TestService_ListRoles(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "custom-builder"))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMember("", "membership_3", "user_3", "custom-builder"))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_workos_only", "user_workos_only", "custom-builder"))
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), authz.ScopeOrgAdmin, authz.WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-2")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeRiskPolicyEvaluate, "policy-1")
+	adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin")
+	customRolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, adminPrincipal, authz.ScopeOrgAdmin, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeProjectRead, "project-2")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, customRolePrincipal, authz.ScopeRiskPolicyEvaluate, "policy-1")
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
 	require.NoError(t, err)
@@ -123,4 +125,58 @@ func TestService_ListRoles_DoesNotCountConnectedUsersWithoutAssignments(t *testi
 	require.Equal(t, memberID, result.Roles[0].ID)
 	require.Equal(t, "Member", result.Roles[0].Name)
 	require.Equal(t, 0, result.Roles[0].MemberCount)
+}
+
+func TestService_ListRoles_AllowsActiveProjectReader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+	})
+
+	_, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+}
+
+func TestService_ListRoles_RejectsUnrelatedProjectReader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, "unrelated-project"),
+	})
+
+	_, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+}
+
+func TestService_ListRoles_RejectsProjectFromAnotherActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	clone := *authCtx
+	clone.ActiveOrganizationID = "roles-test-other-org"
+	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
+	ctx = contextvalues.SetAuthContext(ctx, &clone)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String()),
+	})
+
+	_, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
 }

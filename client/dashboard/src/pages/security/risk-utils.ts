@@ -33,6 +33,24 @@ export function isJudgeSource(source: string | undefined): boolean {
   return source !== undefined && JUDGE_SOURCE_SET.has(source);
 }
 
+// Shadow MCP is the documented carve-out to redaction: its "match" is a server
+// URL or command identifier, not captured user content, so the server passes
+// match_redacted through verbatim. Surfaces that would otherwise describe the
+// value as hidden have to check this first — the identifier is right there on
+// screen.
+export function isShadowMcpSource(source: string | undefined): boolean {
+  return source === "shadow_mcp";
+}
+
+// A signal clusters findings on one rule, so a judge-backed signal is one
+// whose detection sources are judge detectors. Judge findings cannot be
+// meaningfully excluded — every one carries the same constant rule id, so a
+// rule exclusion would silence the whole detector — which is why exclusion
+// affordances hide behind this check and false-positive dismissal takes over.
+export function hasJudgeSource(sources: readonly string[]): boolean {
+  return sources.some(isJudgeSource);
+}
+
 const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
 

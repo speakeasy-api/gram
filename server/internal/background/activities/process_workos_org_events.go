@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -47,6 +48,13 @@ type ProcessWorkOSOrganizationEventsResult struct {
 	HasMore      bool   `json:"has_more"`
 }
 
+// IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
+// sync after directory changes, instead of waiting out the sync schedule.
+// Optional: nil means changes converge at the next scheduled tick.
+type IdentityMapRefreshSignaler interface {
+	SignalIdentityMapRefresh(ctx context.Context) error
+}
+
 // ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
 // since the stored cursor, applying supported organization, role, membership,
 // and Directory Sync events in a transaction before advancing the cursor.
@@ -54,6 +62,7 @@ type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
 	workosClient WorkOSClient
+	identityMap  IdentityMapRefreshSignaler
 	// userInfoCache mirrors the identity resolver's cached user info (same
 	// key shape and suffix as the resolver wiring in cmd/gram) so that
 	// deprovisioning events can invalidate a user's cached org memberships
@@ -61,11 +70,12 @@ type ProcessWorkOSOrganizationEvents struct {
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
 		db:            db,
 		logger:        logger,
 		workosClient:  workosClient,
+		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
 	}
 }
@@ -163,9 +173,20 @@ type postCommitEffects struct {
 	// info to drop after deprovisioning, so org-access checks observe the
 	// change without waiting out the cache TTL.
 	invalidateUserInfoCacheUserID string
+	// refreshIdentityMap requests an immediate ClickHouse identity map sync
+	// because the directory changed (membership added, removed, or
+	// deactivated). Safe to lose: the sync schedule delivers the same
+	// refresh at its next tick.
+	refreshIdentityMap bool
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+	if effects.refreshIdentityMap && p.identityMap != nil {
+		if err := p.identityMap.SignalIdentityMapRefresh(ctx); err != nil {
+			logger.WarnContext(ctx, "failed to signal identity map refresh", attr.SlogError(err))
+		}
+	}
+
 	if update := effects.updateWorkOSExternalID; update != nil {
 		if err := p.workosClient.UpdateOrganizationExternalID(ctx, update.workosOrgID, update.externalID); err != nil {
 			logger.WarnContext(ctx, "failed to update WorkOS organization external ID", attr.SlogError(err))
@@ -341,6 +362,13 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
 			return effects, err
 		}
+		tx, ok := dbtx.(pgx.Tx)
+		if !ok {
+			return effects, fmt.Errorf("seed organization default entitlements requires a transaction")
+		}
+		if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, resolved.organizationID); err != nil {
+			return effects, fmt.Errorf("seed organization default entitlements for organization %q from workos event: %w", payload.ID, err)
+		}
 	default:
 		if err := updateOrganizationFromWorkOSEvent(ctx, repo, resolved.row, payload, event.ID); err != nil {
 			return effects, err
@@ -416,9 +444,11 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		return nil
 	}
 
-	slug := orgslug.Slugify(payload.Name)
-	if slug == "" {
-		return fmt.Errorf("slugify workos organization name %q: empty slug", payload.Name)
+	// Seeded with the WorkOS organization ID rather than randomness so the
+	// advisory-lock key below is the same across duplicate deliveries.
+	slug, err := orgslug.StableBase(payload.Name, payload.ID)
+	if err != nil {
+		return fmt.Errorf("derive slug for WorkOS organization %q: %w", payload.ID, err)
 	}
 	if err := repo.LockOrganizationSlug(ctx, slug); err != nil {
 		return fmt.Errorf("lock organization slug %q: %w", slug, err)
@@ -643,7 +673,7 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+existing.ID.String())
-	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, payload.Slug, rolePrincipal.String()); err != nil {
+	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, rolePrincipal.String()); err != nil {
 		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
 	}
 

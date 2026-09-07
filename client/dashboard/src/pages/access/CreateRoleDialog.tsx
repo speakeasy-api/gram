@@ -53,8 +53,12 @@ import {
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
-import type { ActivePanel, RoleGrant, ScopeRule } from "./types";
-import { isProjectSelectableResourceType } from "./types";
+import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
+import {
+  isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+  unrestrictedResourceLabel,
+} from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,
@@ -177,7 +181,7 @@ export function CreateRoleDialog({
   const scopeGroups = useMemo(() => {
     const groupOrder: {
       label: string;
-      resourceType: string;
+      resourceType: ResourceType;
       description: string;
     }[] = [
       {
@@ -209,6 +213,11 @@ export function CreateRoleDialog({
         label: "Agent Sessions",
         resourceType: "chat",
         description: "Access to members' agent session transcripts.",
+      },
+      {
+        label: "Agents",
+        resourceType: "agent",
+        description: "Agents available within the organization.",
       },
     ];
     return groupOrder.map((g) => ({
@@ -510,7 +519,7 @@ export function CreateRoleDialog({
         request: {
           createRoleForm: {
             name,
-            description,
+            description: description.trim() || undefined,
             grants: sdkGrants,
             memberIds:
               selectedMembers.size > 0
@@ -644,7 +653,6 @@ export function CreateRoleDialog({
                   <textarea
                     {...props}
                     rows={2}
-                    required
                     disabled={editingRole?.isSystem}
                     placeholder="Describe what this role can do..."
                     value={description}
@@ -754,9 +762,9 @@ export function CreateRoleDialog({
                                 const grant = grants[scopeDef.slug];
                                 const isChecked = !!grant;
                                 const isConfigurable =
-                                  scopeDef.resourceType !== "org" &&
-                                  scopeDef.resourceType !== "environment" &&
-                                  scopeDef.resourceType !== "chat";
+                                  !isUnrestrictedResourceType(
+                                    scopeDef.resourceType,
+                                  );
 
                                 const row = (
                                   <div key={scopeDef.slug}>
@@ -786,15 +794,12 @@ export function CreateRoleDialog({
                                         </div>
                                       </label>
 
-                                      {/* Static label for org/environment */}
+                                      {/* Static label for unrestricted resources */}
                                       {isChecked && !isConfigurable && (
                                         <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center border bg-transparent px-2 py-1 text-xs">
-                                          {scopeDef.resourceType ===
-                                          "environment"
-                                            ? "All in project"
-                                            : scopeDef.resourceType === "chat"
-                                              ? "All sessions"
-                                              : "All"}
+                                          {unrestrictedResourceLabel(
+                                            scopeDef.resourceType,
+                                          )}
                                         </span>
                                       )}
                                     </div>

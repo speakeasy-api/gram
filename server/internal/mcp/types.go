@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
 var (
@@ -84,6 +85,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 
 	return &mcpInputs{
 		projectID:        m.ProjectID,
+		organizationID:   "",
 		toolset:          m.Toolset,
 		environment:      m.Environment,
 		mcpEnvVariables:  m.McpEnvVariables,
@@ -96,10 +98,18 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		externalUserID:   m.ExternalUserID,
 		apiKeyID:         m.APIKeyID,
 		// Internal clients (agent workflows) always use the project-default
-		// variation group, never filter by tag, and have no fronting
-		// mcp_servers row to record.
-		toolVariationsGroupID: nil,
-		mcpServerID:           nil,
-		tags:                  nil,
+		// variation group, never filter by tag, have no fronting mcp_servers
+		// row to record, and carry no HTTP request to declare a protocol
+		// version, so they resolve to the unversioned default.
+		toolVariationsGroupID:    nil,
+		mcpServerID:              nil,
+		wrapperRBACResourceID:    "",
+		wrapperIsPublic:          nil,
+		metaMcpServerID:          "",
+		skipProxyTools:           false,
+		tags:                     nil,
+		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
+		identityCoverageRecorded: false,
+		toolSelection:            nil,
 	}
 }

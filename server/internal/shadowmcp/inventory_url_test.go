@@ -45,6 +45,24 @@ func TestCanonicalizeInventoryURL(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name: "strips zero-padded default port",
+			raw:  "https://mcp.speakeasy.com:0443/mcp",
+			want: shadowmcp.InventoryURL{
+				CanonicalURL: "https://mcp.speakeasy.com/mcp",
+				URLHost:      "mcp.speakeasy.com",
+			},
+			wantOK: true,
+		},
+		{
+			name: "keeps non-default port",
+			raw:  "https://mcp.speakeasy.com:8443/mcp",
+			want: shadowmcp.InventoryURL{
+				CanonicalURL: "https://mcp.speakeasy.com:8443/mcp",
+				URLHost:      "mcp.speakeasy.com:8443",
+			},
+			wantOK: true,
+		},
+		{
 			name: "strips default port from ipv6 host",
 			raw:  "https://[2001:db8::1]:443/mcp",
 			want: shadowmcp.InventoryURL{

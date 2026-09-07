@@ -120,7 +120,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="GCP identity"
-        description="The service account in your project that Gram impersonates. Gram's own service account needs the roles/iam.serviceAccountTokenCreator role on it."
+        description="The service account in your project that Speakeasy impersonates. Speakeasy's own service account needs the roles/iam.serviceAccountTokenCreator role on it."
       >
         <Field
           label="Impersonate service account"

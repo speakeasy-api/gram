@@ -7,29 +7,162 @@ package repo
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const acquireOpenRouterBillingLock = `-- name: AcquireOpenRouterBillingLock :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Shared with billing reconciliation and the disable-cause classifier.
+func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireOpenRouterBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
+const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
+const addOpenRouterAPIKeyDisableCause = `-- name: AddOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN $1::text = ANY(disable_causes) THEN disable_causes
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, $1::text)) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
+    END,
+    disabled = TRUE,
+    updated_at = CASE
+      WHEN $1::text = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
+WHERE organization_id = $2
+  AND key_type = $3
+  AND key_hash = $4
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+`
+
+type AddOpenRouterAPIKeyDisableCauseParams struct {
+	DisableCause   string
+	OrganizationID string
+	KeyType        string
+	KeyHash        string
+}
+
+func (q *Queries) AddOpenRouterAPIKeyDisableCause(ctx context.Context, arg AddOpenRouterAPIKeyDisableCauseParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, addOpenRouterAPIKeyDisableCause,
+		arg.DisableCause,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.KeyHash,
+	)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.KeyType,
+		&i.Key,
+		&i.KeyEncrypted,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const compareAndSetOpenRouterKeyMonthlyCredits = `-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
+UPDATE openrouter_api_keys
+SET monthly_credits = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = $2
+  AND key_type = $3
+  AND monthly_credits = $4
+  AND (extract(epoch FROM updated_at) * 1000000)::bigint = $5::bigint
+  AND deleted IS FALSE
+`
+
+type CompareAndSetOpenRouterKeyMonthlyCreditsParams struct {
+	MonthlyCredits        int64
+	OrganizationID        string
+	KeyType               string
+	CurrentMonthlyCredits int64
+	CurrentGeneration     int64
+}
+
+// Reconciles an upstream observation only while the local mirror still equals
+// what the caller observed. A concurrent explicit cap change wins this CAS.
+func (q *Queries) CompareAndSetOpenRouterKeyMonthlyCredits(ctx context.Context, arg CompareAndSetOpenRouterKeyMonthlyCreditsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, compareAndSetOpenRouterKeyMonthlyCredits,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.CurrentMonthlyCredits,
+		arg.CurrentGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
 
 const createOpenRouterAPIKey = `-- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
-  , key
+  , key_encrypted
   , key_hash
   , monthly_credits
+  , disable_causes
 ) VALUES (
     $1
   , $2
   , $3
   , $4
   , $5
+  , '{}'::text[]
 )
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 }
@@ -38,7 +171,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	row := q.db.QueryRow(ctx, createOpenRouterAPIKey,
 		arg.OrganizationID,
 		arg.KeyType,
-		arg.Key,
+		arg.KeyEncrypted,
 		arg.KeyHash,
 		arg.MonthlyCredits,
 	)
@@ -47,9 +180,11 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -60,10 +195,18 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 
 const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
 UPDATE openrouter_api_keys
-SET disabled = TRUE,
-    updated_at = clock_timestamp()
+SET disable_causes = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN disable_causes
+      ELSE array_prepend('admin_lock', disable_causes)
+    END,
+    disabled = TRUE,
+    updated_at = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
 WHERE organization_id = $1
   AND key_type = $2
+  AND disable_causes IS NOT NULL
   AND deleted IS FALSE
 `
 
@@ -72,16 +215,15 @@ type DisableOpenRouterAPIKeyParams struct {
 	KeyType        string
 }
 
-// Locks the key down without deleting it, so a reinstated organization keeps
-// the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
-// refuses to hand the key to a completion.
+// Legacy query retained for compatibility. Generic disables are admin locks and
+// must preserve classified causes; unclassified rows remain untouched.
 func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
 	return err
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -100,9 +242,11 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -127,21 +271,207 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 	return err
 }
 
+const prepareEnterpriseTrialConversionKey = `-- name: PrepareEnterpriseTrialConversionKey :one
+WITH existing AS MATERIALIZED (
+  SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
+  FROM openrouter_api_keys AS keys
+  WHERE keys.organization_id = $1
+    AND keys.key_type = $2
+    AND keys.deleted IS FALSE
+), desired AS (
+  SELECT
+    key_type,
+    key_hash,
+    GREATEST(monthly_credits, $3::bigint) AS monthly_credits,
+    CASE
+      WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
+      ELSE array_remove(disable_causes, 'trial_demotion')
+    END AS disable_causes
+  FROM existing
+), updated AS (
+  UPDATE openrouter_api_keys AS keys
+  SET monthly_credits = desired.monthly_credits,
+      disable_causes = desired.disable_causes,
+      disabled = cardinality(desired.disable_causes) > 0,
+      updated_at = CASE
+        WHEN keys.monthly_credits IS DISTINCT FROM desired.monthly_credits
+          OR keys.disable_causes IS DISTINCT FROM desired.disable_causes
+          OR keys.disabled IS DISTINCT FROM (cardinality(desired.disable_causes) > 0)
+          THEN GREATEST(clock_timestamp(), keys.updated_at + INTERVAL '1 microsecond')
+        ELSE keys.updated_at
+      END
+  FROM desired
+  WHERE keys.organization_id = $1
+    AND keys.key_type = $2
+    AND keys.key_hash = desired.key_hash
+    AND keys.key_hash = $4
+    AND keys.deleted IS FALSE
+    AND keys.disable_causes IS NOT NULL
+  RETURNING keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
+)
+SELECT
+  existing.key_type,
+  existing.key_hash AS before_key_hash,
+  existing.monthly_credits AS before_monthly_credits,
+  existing.disabled AS before_disabled,
+  existing.disable_causes AS before_disable_causes,
+  updated.key_hash AS after_key_hash,
+  updated.monthly_credits AS after_monthly_credits,
+  updated.disabled AS after_disabled,
+  updated.disable_causes AS after_disable_causes
+FROM existing
+LEFT JOIN updated ON TRUE
+`
+
+type PrepareEnterpriseTrialConversionKeyParams struct {
+	OrganizationID  string
+	KeyType         string
+	EnterpriseFloor int64
+	ExpectedKeyHash string
+}
+
+type PrepareEnterpriseTrialConversionKeyRow struct {
+	KeyType              string
+	BeforeKeyHash        string
+	BeforeMonthlyCredits int64
+	BeforeDisabled       bool
+	BeforeDisableCauses  []string
+	AfterKeyHash         pgtype.Text
+	AfterMonthlyCredits  pgtype.Int8
+	AfterDisabled        pgtype.Bool
+	AfterDisableCauses   []string
+}
+
+// Local-only conversion preparation. The caller owns the transaction and has
+// already acquired lifecycle and per-key advisory locks in canonical order.
+func (q *Queries) PrepareEnterpriseTrialConversionKey(ctx context.Context, arg PrepareEnterpriseTrialConversionKeyParams) (PrepareEnterpriseTrialConversionKeyRow, error) {
+	row := q.db.QueryRow(ctx, prepareEnterpriseTrialConversionKey,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.EnterpriseFloor,
+		arg.ExpectedKeyHash,
+	)
+	var i PrepareEnterpriseTrialConversionKeyRow
+	err := row.Scan(
+		&i.KeyType,
+		&i.BeforeKeyHash,
+		&i.BeforeMonthlyCredits,
+		&i.BeforeDisabled,
+		&i.BeforeDisableCauses,
+		&i.AfterKeyHash,
+		&i.AfterMonthlyCredits,
+		&i.AfterDisabled,
+		&i.AfterDisableCauses,
+	)
+	return i, err
+}
+
+const releaseOpenRouterKeyBillingLock = `-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+) AS unlocked
+`
+
+type ReleaseOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
+const removeOpenRouterAPIKeyDisableCause = `-- name: RemoveOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN $1::text = ANY(disable_causes) THEN ARRAY(
+        SELECT cause
+        FROM unnest(array_remove(disable_causes, $1::text)) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END, cause
+      )
+      ELSE disable_causes
+    END,
+    disabled = CASE
+      WHEN $1::text = ANY(disable_causes)
+        AND cardinality(array_remove(disable_causes, $1::text)) = 0 THEN FALSE
+      ELSE disabled
+    END,
+    monthly_credits = CASE
+      WHEN $1::text = ANY(disable_causes) AND $2::boolean
+        THEN $3::bigint
+      ELSE monthly_credits
+    END,
+    updated_at = CASE
+      WHEN $1::text = ANY(disable_causes)
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $4
+  AND key_type = $5
+  AND key_hash = $6
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+`
+
+type RemoveOpenRouterAPIKeyDisableCauseParams struct {
+	DisableCause         string
+	UpdateMonthlyCredits bool
+	MonthlyCredits       int64
+	OrganizationID       string
+	KeyType              string
+	KeyHash              string
+}
+
+func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg RemoveOpenRouterAPIKeyDisableCauseParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, removeOpenRouterAPIKeyDisableCause,
+		arg.DisableCause,
+		arg.UpdateMonthlyCredits,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.KeyHash,
+	)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.KeyType,
+		&i.Key,
+		&i.KeyEncrypted,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = $1, key_hash = $2, key = $3,
-    disabled = disabled AND NOT $4::boolean
-WHERE organization_id = $5
-  AND key_type = $6
+SET monthly_credits = $1, key_hash = $2,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = $3
+  AND key_type = $4
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Key            string
-	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -150,8 +480,6 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
-		arg.Key,
-		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)
@@ -160,9 +488,11 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -173,7 +503,8 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 
 const updateOpenRouterKeyMonthlyCredits = `-- name: UpdateOpenRouterKeyMonthlyCredits :exec
 UPDATE openrouter_api_keys
-SET monthly_credits = $1
+SET monthly_credits = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $2
   AND key_type = $3
   AND deleted IS FALSE
@@ -189,7 +520,7 @@ type UpdateOpenRouterKeyMonthlyCreditsParams struct {
 // metrics-collection reconciliation path when the upstream OpenRouter limit
 // diverges from the locally cached value (e.g. after a manual change on the
 // OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
-// key-provisioning write path and also mutates key/key_hash.
+// key-provisioning write path and also mutates key_hash.
 func (q *Queries) UpdateOpenRouterKeyMonthlyCredits(ctx context.Context, arg UpdateOpenRouterKeyMonthlyCreditsParams) error {
 	_, err := q.db.Exec(ctx, updateOpenRouterKeyMonthlyCredits, arg.MonthlyCredits, arg.OrganizationID, arg.KeyType)
 	return err

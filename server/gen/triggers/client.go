@@ -18,6 +18,7 @@ import (
 type Client struct {
 	ListTriggerDefinitionsEndpoint goa.Endpoint
 	ListTriggerInstancesEndpoint   goa.Endpoint
+	ListTriggerEventsEndpoint      goa.Endpoint
 	GetTriggerInstanceEndpoint     goa.Endpoint
 	CreateTriggerInstanceEndpoint  goa.Endpoint
 	UpdateTriggerInstanceEndpoint  goa.Endpoint
@@ -27,10 +28,11 @@ type Client struct {
 }
 
 // NewClient initializes a "triggers" service client given the endpoints.
-func NewClient(listTriggerDefinitions, listTriggerInstances, getTriggerInstance, createTriggerInstance, updateTriggerInstance, deleteTriggerInstance, pauseTriggerInstance, resumeTriggerInstance goa.Endpoint) *Client {
+func NewClient(listTriggerDefinitions, listTriggerInstances, listTriggerEvents, getTriggerInstance, createTriggerInstance, updateTriggerInstance, deleteTriggerInstance, pauseTriggerInstance, resumeTriggerInstance goa.Endpoint) *Client {
 	return &Client{
 		ListTriggerDefinitionsEndpoint: listTriggerDefinitions,
 		ListTriggerInstancesEndpoint:   listTriggerInstances,
+		ListTriggerEventsEndpoint:      listTriggerEvents,
 		GetTriggerInstanceEndpoint:     getTriggerInstance,
 		CreateTriggerInstanceEndpoint:  createTriggerInstance,
 		UpdateTriggerInstanceEndpoint:  updateTriggerInstance,
@@ -84,6 +86,29 @@ func (c *Client) ListTriggerInstances(ctx context.Context, p *ListTriggerInstanc
 		return
 	}
 	return ires.(*ListTriggerInstancesResult), nil
+}
+
+// ListTriggerEvents calls the "listTriggerEvents" endpoint of the "triggers"
+// service.
+// ListTriggerEvents may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListTriggerEvents(ctx context.Context, p *ListTriggerEventsPayload) (res *ListTriggerEventsResult, err error) {
+	var ires any
+	ires, err = c.ListTriggerEventsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListTriggerEventsResult), nil
 }
 
 // GetTriggerInstance calls the "getTriggerInstance" endpoint of the "triggers"

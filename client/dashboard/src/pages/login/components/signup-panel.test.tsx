@@ -16,10 +16,10 @@ afterEach(() => {
   telemetryCapture.mockReset();
 });
 
-function renderPanel(initialEntry = "/sign-up") {
+function renderPanel(initialEntry = "/sign-up", redirectTo?: string | null) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <SignUpPanel />
+      <SignUpPanel redirectTo={redirectTo} />
     </MemoryRouter>,
   );
 }
@@ -36,7 +36,7 @@ describe("SignUpPanel", () => {
 
   it("leaves the CTA enabled on a pristine empty form", () => {
     renderPanel();
-    const cta = screen.getByRole("button", { name: /start trial/i });
+    const cta = screen.getByRole("button", { name: /create account/i });
     expect(cta.hasAttribute("disabled")).toBe(false);
   });
 
@@ -45,7 +45,7 @@ describe("SignUpPanel", () => {
     renderPanel();
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(await screen.findByText("Company name is required")).toBeTruthy();
   });
@@ -55,7 +55,7 @@ describe("SignUpPanel", () => {
     renderPanel();
 
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(await screen.findByText("Email is required")).toBeTruthy();
   });
@@ -69,31 +69,15 @@ describe("SignUpPanel", () => {
     expect(await screen.findByText(/valid email/i)).toBeTruthy();
     expect(
       screen
-        .getByRole("button", { name: /start trial/i })
+        .getByRole("button", { name: /create account/i })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
 
-  it("rejects characters the server would reject and disables the CTA", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.type(screen.getByLabelText("Company name"), "Bob's Bakery");
-
-    expect(
-      await screen.findByText(/contains invalid characters/i),
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: /start trial/i })
-        .hasAttribute("disabled"),
-    ).toBe(true);
-  });
-
-  // Only [a-z0-9] survives Slugify, so the floor counts those and nothing
-  // else. "A" and "A-" both yield a one-character slug; "-----" yields none.
-  it.each(["A", "A-", "-----", "___", "- _ -"])(
-    "rejects %j, which cannot make a usable slug",
+  // Punctuation and symbols carry no name, and a lone initial is not enough to
+  // identify an organization by.
+  it.each(["A", "A-", "-----", "___", "- _ -", "€ £ ¥"])(
+    "rejects %j, which is not a name",
     async (input) => {
       const user = userEvent.setup();
       renderPanel();
@@ -105,24 +89,56 @@ describe("SignUpPanel", () => {
       ).toBeTruthy();
       expect(
         screen
-          .getByRole("button", { name: /start trial/i })
+          .getByRole("button", { name: /create account/i })
           .hasAttribute("disabled"),
       ).toBe(true);
     },
   );
 
-  it.each(["Ab", "3M", "-a1-"])("accepts %j", async (input) => {
+  it.each([
+    "Ab",
+    "3M",
+    "-a1-",
+    "Acme, Inc.",
+    "Bob's Bakery",
+    "Acme & Sons",
+    "Café Zoë",
+    "アクメ株式会社",
+    "Акме",
+  ])("accepts %j", async (input) => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.type(screen.getByLabelText("Company name"), input);
+    const field = screen.getByLabelText("Company name");
+    await user.type(field, input);
 
-    expect(screen.queryByText(/at least 2 letters or numbers/i)).toBeNull();
+    expect(field.getAttribute("aria-invalid")).toBeNull();
     expect(
       screen
-        .getByRole("button", { name: /start trial/i })
+        .getByRole("button", { name: /create account/i })
         .hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("hands off a company name in a non-latin script unchanged", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
+    await user.type(screen.getByLabelText("Company name"), "アクメ株式会社");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(assign).toHaveBeenCalledTimes(1);
+    const target = assign.mock.calls[0]?.[0] as string;
+    expect(
+      new URL(target, "https://example.com").searchParams.get("org_name"),
+    ).toBe("アクメ株式会社");
+
+    assign.mockRestore();
   });
 
   it("hands off to the login endpoint with the company name", async () => {
@@ -135,13 +151,33 @@ describe("SignUpPanel", () => {
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(assign).toHaveBeenCalledTimes(1);
     const target = assign.mock.calls[0]?.[0] as string;
     expect(target).toContain("/rpc/auth.login");
     expect(target).toContain("org_name=Acme+Inc");
     expect(target).toContain("email=someone%40example.com");
+
+    assign.mockRestore();
+  });
+
+  it("preserves the requested destination in the login handoff", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    renderPanel("/sign-up", "https://app.example/cli/callback");
+
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    const target = assign.mock.calls[0]?.[0] as string;
+    expect(new URL(target).searchParams.get("redirect")).toBe(
+      "https://app.example/cli/callback",
+    );
 
     assign.mockRestore();
   });
@@ -160,7 +196,7 @@ describe("SignUpPanel", () => {
     // navigation the panel cannot catch.
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(assign).toHaveBeenCalledTimes(1);
     const target = assign.mock.calls[0]?.[0] as string;
@@ -185,7 +221,7 @@ describe("SignUpPanel", () => {
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(telemetryCapture).toHaveBeenCalledWith("onboarding_event", {
       action: "signup_started",
@@ -205,7 +241,7 @@ describe("SignUpPanel", () => {
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    const cta = screen.getByRole("button", { name: /start trial/i });
+    const cta = screen.getByRole("button", { name: /create account/i });
 
     await user.click(cta);
     expect(cta.hasAttribute("disabled")).toBe(true);
@@ -224,7 +260,7 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(screen.getByRole("button", { name: /start trial/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(await screen.findByText("Company name is required")).toBeTruthy();
     expect(telemetryCapture).not.toHaveBeenCalled();

@@ -34,6 +34,8 @@ func capturingPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1
 }
 
 func newRequest(content string) *riskv1.PromptPolicyAnalysis {
+	// Keeps a legacy `model` key: the judge model is fixed, so the key must be
+	// ignored without disturbing fail_open.
 	modelConfig := []byte(`{"model":"openai/gpt-4.1-mini","fail_open":false}`)
 	return riskv1.PromptPolicyAnalysis_builder{
 		RequestId:         new("req-1"),
@@ -63,7 +65,6 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 		require.Equal(t, "user-1", in.UserID)
 		require.Equal(t, "block unsafe requests", in.Prompt)
 		require.Equal(t, "delete production", in.Message.Body)
-		require.Equal(t, "openai/gpt-4.1-mini", in.Config.Model)
 		require.False(t, in.Config.FailOpen)
 		return &promptpolicy.Verdict{
 			Matched:          true,

@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "userSessionClients" service endpoints.
 type Endpoints struct {
-	ListUserSessionClients  goa.Endpoint
-	GetUserSessionClient    goa.Endpoint
-	RevokeUserSessionClient goa.Endpoint
+	ListUserSessionClients       goa.Endpoint
+	GetUserSessionClient         goa.Endpoint
+	RefreshUserSessionClientCIMD goa.Endpoint
+	RevokeUserSessionClient      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "userSessionClients" service with
@@ -27,9 +28,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListUserSessionClients:  NewListUserSessionClientsEndpoint(s, a.APIKeyAuth),
-		GetUserSessionClient:    NewGetUserSessionClientEndpoint(s, a.APIKeyAuth),
-		RevokeUserSessionClient: NewRevokeUserSessionClientEndpoint(s, a.APIKeyAuth),
+		ListUserSessionClients:       NewListUserSessionClientsEndpoint(s, a.APIKeyAuth),
+		GetUserSessionClient:         NewGetUserSessionClientEndpoint(s, a.APIKeyAuth),
+		RefreshUserSessionClientCIMD: NewRefreshUserSessionClientCIMDEndpoint(s, a.APIKeyAuth),
+		RevokeUserSessionClient:      NewRevokeUserSessionClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -38,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUserSessionClients = m(e.ListUserSessionClients)
 	e.GetUserSessionClient = m(e.GetUserSessionClient)
+	e.RefreshUserSessionClientCIMD = m(e.RefreshUserSessionClientCIMD)
 	e.RevokeUserSessionClient = m(e.RevokeUserSessionClient)
 }
 
@@ -156,6 +159,66 @@ func NewGetUserSessionClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetUserSessionClient(ctx, p)
+	}
+}
+
+// NewRefreshUserSessionClientCIMDEndpoint returns an endpoint function that
+// calls the method "refreshUserSessionClientCIMD" of service
+// "userSessionClients".
+func NewRefreshUserSessionClientCIMDEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshUserSessionClientCIMDPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshUserSessionClientCIMD(ctx, p)
 	}
 }
 

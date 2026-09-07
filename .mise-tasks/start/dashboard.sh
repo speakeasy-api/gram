@@ -5,4 +5,4 @@
 
 set -e
 
-exec pnpm --filter ./client/dashboard dev
+exec aube run --filter ./client/dashboard dev

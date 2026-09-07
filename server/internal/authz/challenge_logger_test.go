@@ -36,12 +36,13 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: orgID,
-		UserID:               "user_admin",
-		AccountType:          "enterprise",
+	ctx := contextvalues.WithValidatedSupportSession(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  orgID,
+		UserID:                "user_admin",
+		AccountType:           "enterprise",
+		IsAdmin:               true,
+		SupportOrganizationID: orgID,
 	})
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, orgID)
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
 

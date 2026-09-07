@@ -7,11 +7,13 @@ import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
+import { assistantsInterruptTurn } from "../funcs/assistantsInterruptTurn.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
+import { InterruptTurnResult } from "../models/components/interruptturnresult.js";
 import { ListAssistantsResult } from "../models/components/listassistantsresult.js";
 import { SendMessageResult } from "../models/components/sendmessageresult.js";
 import {
@@ -34,6 +36,10 @@ import {
   GetManagedAssistantRequest,
   GetManagedAssistantSecurity,
 } from "../models/operations/getmanagedassistant.js";
+import {
+  InterruptAssistantTurnRequest,
+  InterruptAssistantTurnSecurity,
+} from "../models/operations/interruptassistantturn.js";
 import {
   ListAssistantsRequest,
   ListAssistantsSecurity,
@@ -137,6 +143,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsGetManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * interruptTurn assistants
+   *
+   * @remarks
+   * Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation's thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.
+   */
+  async interruptTurn(
+    request: InterruptAssistantTurnRequest,
+    security?: InterruptAssistantTurnSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<InterruptTurnResult> {
+    return unwrapAsync(assistantsInterruptTurn(
       this,
       request,
       security,

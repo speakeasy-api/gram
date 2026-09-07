@@ -14,9 +14,11 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +28,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -39,7 +43,16 @@ import (
 //go:embed consent_template.html
 var consentTemplateHTML string
 
-var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
+// consentLogoHTML defines the "speakeasyWordmark" template. Kept in its own
+// file because it is generated from the dashboard's GramLogo component and is
+// almost entirely path data.
+//
+//go:embed consent_logo.html
+var consentLogoHTML string
+
+var consentTemplate = template.Must(
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentLogoHTML),
+)
 
 // consentScriptData is the consent page's client-side script. It is served
 // as an external file (not inlined into the template) because the ingress
@@ -126,14 +139,41 @@ type consentTemplateData struct {
 	// (connected or expired), so a change can be persisted immediately rather
 	// than only riding the next connect.
 	AutoRefreshHasSessions bool
+	// ShowToolsIsland renders the "Tool access" React island mount on every
+	// non-first-party client-grant page. The island hydrates the picker from
+	// ConsentToolsURL and owns enabling the approve button, which the
+	// template renders disabled; a missing or failed bundle therefore fails
+	// closed.
+	ShowToolsIsland bool
+	// ConsentToolsURL is the state-authorized inventory action the island
+	// POSTs its tools/list request to.
+	ConsentToolsURL string
+	// ConsentToolsScriptURL is the content-hashed island bundle URL.
+	ConsentToolsScriptURL string
+	// ConsentToolsPrefill is the subject's stored selection serialized for
+	// the island bootstrap; empty when there is no restrictive prefill.
+	ConsentToolsPrefill string
+	// ConnectedCardCount is the number of RemoteSessionCards already linked,
+	// rendered as the "n of m connected" summary above the service list.
+	ConnectedCardCount int
+	// Styles is the compiled design-system stylesheet inlined into the
+	// document head. A build artifact, never user input.
+	Styles template.CSS
+	// SelectedSessionDuration is the preselected length, surfaced on the
+	// summary line so the session's lifetime is visible without opening the
+	// configuration disclosure. Empty when there is no picker.
+	SelectedSessionDuration string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
 // picker.
 type sessionDurationOption struct {
-	Hours    int
-	Label    string
-	Selected bool
+	Hours int
+	Label string
+	// ShortLabel drops the "(maximum)" qualifier so the duration reads as a
+	// plain phrase on the summary line ("signing in as … for 2 weeks").
+	ShortLabel string
+	Selected   bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -141,16 +181,32 @@ type sessionDurationOption struct {
 // against the non-consuming consent action endpoint, so no upstream
 // authorize URL is prebuilt here.
 //
-// Connected and Expired are mutually exclusive and reflect the stored
-// remote_session's usability: Connected means the runtime gate will accept
-// it; Expired means a stale link exists that must be re-established; both
-// false means never connected. Only Connected enables consent — an expired
-// link is no better than none until the user reconnects.
+// Connected, Expired and Unroutable are mutually exclusive and reflect the
+// stored remote_session's usability: Connected means the runtime gate will
+// accept it and forward it to this endpoint's backend; Expired means a stale
+// link exists that must be re-established; Unroutable means a live link
+// exists but was minted for another upstream (or before resources were
+// recorded), so this endpoint's routing would never forward it; all false
+// means never connected. Only Connected enables consent — the other two are
+// no better than none until the user reconnects.
 type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
+
+	// IssuerDisplay is the card's identity-provider label: the issuer's
+	// operator-set display name when present, otherwise the slug. Issuer
+	// branding is Gram-controlled and tenant-set, unlike the
+	// attacker-chosen CIMD client_name/logo_uri surfaced via
+	// ClientIDOrigin, so the two stay visually separate on the page.
+	IssuerDisplay string
+
+	// IssuerLogoURL points at the issuer's logo through the public
+	// assets.serveImage endpoint, empty when the issuer has no logo.
+	IssuerLogoURL string
+
 	Connected  bool
 	Expired    bool
+	Unroutable bool
 	CanRefresh bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
@@ -159,6 +215,12 @@ type remoteSessionCard struct {
 	AccessExpiresIn  string
 	RefreshExpiresAt string
 	RefreshExpiresIn string
+	// AuthorizationExpiresAt is the absolute end of the grant, which no amount
+	// of background refreshing extends — unlike the refresh idle timeout above,
+	// which is exactly what auto refresh prevents. The page states the two
+	// differently for that reason.
+	AuthorizationExpiresAt string
+	AuthorizationExpiresIn string
 	// AutoRefreshChecked is the effective auto-refresh value for this card:
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
@@ -194,6 +256,16 @@ func (p autoRefreshPolicy) IsUserControlled() bool {
 // IsEnforced reports whether the organization requires auto refresh.
 func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
+}
+
+// consentToolFilteringEnabled reports the organization admin's durable opt-in
+// from the consent_tool_filtering product feature managed on MCP Connections.
+// An unavailable checker degrades to off.
+func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
+	if s.platformFeatureChecker == nil {
+		return false
+	}
+	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
 }
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
@@ -300,6 +372,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	clientName := "Gram"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
+	var clientRowID uuid.UUID
 	if !challengeState.FirstParty {
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
@@ -308,6 +381,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
+		clientRowID = client.ID
 		clientName = client.ClientName
 		if client.ClientIDMetadataUri.Valid {
 			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
@@ -331,22 +405,36 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
-	hasConnectedCard := false
+	connectedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		if c.Connected {
-			hasConnectedCard = true
+			connectedCardCount++
 		}
-		if c.Connected || c.Expired {
+		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
 		}
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	consentEnabled := len(cards) == 0 || hasConnectedCard
+	consentEnabled := len(cards) == 0 || connectedCardCount > 0
+
+	// Skip the interstitial when it has nothing to ask. A server fronting a
+	// single upstream that the subject has not linked yet leaves the page with
+	// exactly one useful control, and the user already expressed intent by
+	// starting the authorization — so send them straight to the provider and
+	// let them land back here with something to approve. Multi-service pages
+	// keep the list: each provider is its own consent decision, and a silent
+	// chain of redirects through three login screens is worse than a list that
+	// shows what is being asked for.
+	if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
+		return err
+	} else if redirected {
+		return nil
+	}
 
 	// First-party pages mint no user session, so there is no length to pick.
 	// A lookup failure degrades to no picker rather than a failed render; the
@@ -354,11 +442,46 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var durationOptions []sessionDurationOption
 	if !challengeState.FirstParty {
 		if issuer, ierr := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-			ID:        endpoint.UserSessionIssuerID,
-			ProjectID: endpoint.ProjectID,
+			ID:             endpoint.UserSessionIssuerID,
+			ProjectID:      endpoint.ProjectID,
+			OrganizationID: endpoint.OrganizationID,
 		}); ierr == nil {
 			durationOptions = buildSessionDurationOptions(issuer)
 		}
+	}
+
+	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
+	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
+	// only when every tool is representable in the island. The island owns
+	// approve-button enabling, so unavailable checks must hide it rather than
+	// prevent unrestricted approval.
+	showToolsIsland := false
+	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+		var eligibilityErr error
+		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
+		}
+	}
+	if showToolsIsland {
+		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if lerr != nil {
+			return lerr
+		}
+		// The consent transport enumerates the live upstream inventory and is
+		// therefore lockdown-protected like runtime MCP dispatch. On the
+		// platform origin, hide the island so the page does not deadlock on a
+		// relative transport request that must be rejected; the ordinary
+		// unrestricted approval path remains available.
+		if lockedDown {
+			showToolsIsland = false
+		}
+	}
+	prefillAttr := ""
+	if showToolsIsland {
+		prefillAttr = consentPrefillAttr(
+			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
+		)
 	}
 
 	data := consentTemplateData{
@@ -380,6 +503,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
+		ShowToolsIsland:         showToolsIsland,
+		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
+		ConsentToolsScriptURL:   consentToolsScriptURL,
+		ConsentToolsPrefill:     prefillAttr,
+		ConnectedCardCount:      connectedCardCount,
+		Styles:                  consentPageStyles,
+		SelectedSessionDuration: selectedSessionDuration(durationOptions),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -394,8 +524,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	ctx := r.Context()
 
 	// Cap form body to defend against memory exhaustion (gosec G120). The
-	// consent form has a few short fields; 16 KiB is generous.
-	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	// tool picker can post consentToolNameLimit names of up to
+	// consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
+	// encoding; 1 MiB fits that worst case with room for the fixed fields
+	// while staying bounded.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
@@ -407,11 +540,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
-	// Atomic GETDEL: a consent POST consumes the authn-challenge state
-	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
-	// and get "not found or expired", so only one grant is ever minted per
-	// authorization request.
-	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	// Preflight on a plain Get: everything that can fail for retryable
+	// reasons (validation, inventory snapshot, client lookup, selection
+	// parsing) runs BEFORE the challenge is consumed, so a transient failure
+	// leaves the page usable. The consuming GetAndDelete below re-validates
+	// against the consumed value, which stays the single-use authority.
+	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
@@ -420,24 +554,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	mcpSlug := endpoint.Slug
 
 	// The guards below (state-confusion ref check, CSRF, and the unknown-action
-	// default) consume the challenge but are deliberately NOT counted as flow
-	// failures: they are attacker-controllable, so emitting `failed` here would
-	// let crafted requests pollute a config's health signal. A legitimate user
-	// never trips them; the rare case lands in the started-without-terminal gap.
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
-	}
-
-	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
-	}
-
-	// First-party challenges have no MCP client to grant to: linking the cards
-	// is terminal, so there is no approve/deny POST. The template omits the
-	// form; reject any crafted submission rather than falling into the
-	// client-grant path with an empty ClientID.
-	if challengeState.FirstParty {
-		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step").LogError(ctx, logger)
+	// default) are deliberately NOT counted as flow failures: they are
+	// attacker-controllable, so emitting `failed` here would let crafted
+	// requests pollute a config's health signal. A legitimate user never
+	// trips them; the rare case lands in the started-without-terminal gap.
+	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+		return err.LogError(ctx, logger)
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so
@@ -458,15 +580,20 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// recorded under a different origin (or vice versa).
 	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
 	}
 
 	if action == "deny" {
-		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
-		// with access_denied per RFC 6749 §4.1.2.1, preserving the original
-		// state. The user reached the consent screen and chose "no" — a
-		// decline, not an errant config.
+		// Cancel: consume the challenge, then 303 (POST → GET) the MCP client
+		// back to its redirect_uri with access_denied per RFC 6749 §4.1.2.1,
+		// preserving the original state. The user reached the consent screen
+		// and chose "no" — a decline, not an errant config. A lost consume
+		// race (double submit) reads as expired state.
+		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		}
+		s.evictConsentToolInventory(ctx, stateID)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
 			RedirectURI:      challengeState.RedirectURI,
 			Issuer:           issuer,
@@ -479,10 +606,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			// Recorded as failed, not declined: the user's decline never
 			// reached the client, so this flow ended on a fault. Exactly one
 			// terminal outcome is counted per started flow either way.
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 		}
-		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
@@ -491,22 +618,73 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		// Reaching an approved consent POST with no resolved subject is a code
 		// invariant break, not a user action — a config/code-class failure.
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
-	subject := *challengeState.Subject
+
+	// A restrictive approve binds to the exact inventory snapshot the island
+	// displayed: the island submits its attempt id only after fetching every
+	// page, and only a COMPLETE snapshot satisfies the lookup. A missing,
+	// incomplete, or expired snapshot is retryable — reload the page — and
+	// must not consume the challenge; a store outage is an operational 503.
+	// Approvals without tool_filtering=on (pages rendered before the picker
+	// deployed or with the product feature off) skip the binding: they mint the
+	// unrestricted grant the pre-picker flow always minted, so stripping the
+	// field can only widen a submission to the status quo, never past it.
+	var boundInventory *consentToolInventory
+	if r.PostForm.Get("tool_filtering") == "on" {
+		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
+		if eerr != nil {
+			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !eligible {
+			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
+		}
+
+		attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id"))
+		if aerr != nil {
+			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+		}
+		inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt)
+		if gerr != nil {
+			return oops.E(oops.CodeUnavailable, gerr, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !found {
+			return oops.E(oops.CodeConflict, nil, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+		}
+		boundInventory = &inventory
+	}
+
+	toolSelection, err := chosenToolSelection(r.PostForm, boundInventory)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
+	}
 
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
+
+	// Atomic GETDEL: a consent approval consumes the authn-challenge state
+	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
+	// and get "not found or expired", so only one grant is ever minted per
+	// authorization request. The consumed value is the authority — re-run
+	// the guards against it in case the preflighted copy went stale.
+	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+	}
+	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+		return err.LogError(ctx, logger)
+	}
+	subject := *challengeState.Subject
 
 	// Persist the consent record. The unique index on
 	// (principal_urn, user_session_client_id, remote_set_hash) makes this
@@ -517,13 +695,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		UserSessionClientID: clientRow.ID,
 		RemoteSetHash:       remoteSetHashEmpty,
 	}); err != nil && !isUniqueViolation(err) {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
 
@@ -538,12 +716,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
 		Subject:                     subject,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		ToolSelection:               toolSelection,
 		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
 	}
+
+	s.evictConsentToolInventory(ctx, stateID)
 
 	clientRedirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      challengeState.RedirectURI,
@@ -554,12 +735,36 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ErrorDescription: "",
 	})
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
+	return nil
+}
+
+// validateConsentChallenge runs the consent POST's state guards: endpoint
+// ref, CSRF (constant time), the first-party rejection, and subject
+// resolution. Shared by the preflight Get and the post-consume revalidation
+// so both read the same rules.
+func validateConsentChallenge(endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
+	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	}
+	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token")
+	}
+	// First-party challenges have no MCP client to grant to: linking the
+	// cards is terminal, so there is no approve/deny POST. The template
+	// omits the form; reject any crafted submission rather than falling into
+	// the client-grant path with an empty ClientID.
+	if challengeState.FirstParty {
+		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step")
+	}
+	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved")
+	}
 	return nil
 }
 
@@ -698,16 +903,19 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 // consentDurationPresets are the session-length choices offered on the
 // consent page, largest first. The issuer's maximum is inserted when not
 // already present, and anything above the maximum is dropped.
-var consentDurationPresets = []sessionDurationOption{
-	{Hours: 90 * 24, Label: "90 days", Selected: false},
-	{Hours: 60 * 24, Label: "60 days", Selected: false},
-	{Hours: 30 * 24, Label: "30 days", Selected: false},
-	{Hours: 14 * 24, Label: "2 weeks", Selected: false},
-	{Hours: 7 * 24, Label: "1 week", Selected: false},
-	{Hours: 3 * 24, Label: "3 days", Selected: false},
-	{Hours: 24, Label: "1 day", Selected: false},
-	{Hours: 12, Label: "12 hours", Selected: false},
-	{Hours: 1, Label: "1 hour", Selected: false},
+var consentDurationPresets = []struct {
+	Hours int
+	Label string
+}{
+	{Hours: 90 * 24, Label: "90 days"},
+	{Hours: 60 * 24, Label: "60 days"},
+	{Hours: 30 * 24, Label: "30 days"},
+	{Hours: 14 * 24, Label: "2 weeks"},
+	{Hours: 7 * 24, Label: "1 week"},
+	{Hours: 3 * 24, Label: "3 days"},
+	{Hours: 24, Label: "1 day"},
+	{Hours: 12, Label: "12 hours"},
+	{Hours: 1, Label: "1 hour"},
 }
 
 // formatDurationHours renders a whole-hour count the way the presets do.
@@ -749,7 +957,12 @@ func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []s
 			return
 		}
 		seen[hours] = true
-		options = append(options, sessionDurationOption{Hours: hours, Label: label, Selected: hours == maxHours})
+		options = append(options, sessionDurationOption{
+			Hours:      hours,
+			Label:      label,
+			ShortLabel: formatDurationHours(hours),
+			Selected:   hours == maxHours,
+		})
 	}
 	add(maxHours, formatDurationHours(maxHours)+" (maximum)")
 	for _, preset := range consentDurationPresets {
@@ -766,6 +979,29 @@ func desiredSessionDurationHours(raw string) int {
 		return 0
 	}
 	return hours
+}
+
+// issuerCardBranding resolves the branding a consent card renders for its
+// identity provider. The display fallback matches
+// formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
+// name wins, otherwise the identifier the page always rendered (the slug).
+// The logo URL points at the public assets.serveImage endpoint on the
+// platform origin, the same construction mcpmetadata uses for MCP server
+// logos, and is empty when the issuer has no logo.
+func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+	display = c.IssuerSlug
+	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
+		display = name
+	}
+	if c.IssuerLogoAssetID.Valid {
+		u := *serverURL
+		u.Path = "/rpc/assets.serveImage"
+		q := u.Query()
+		q.Set("id", c.IssuerLogoAssetID.UUID.String())
+		u.RawQuery = q.Encode()
+		logoURL = u.String()
+	}
+	return display, logoURL
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -794,9 +1030,17 @@ func (s *Service) buildRemoteSessionCards(
 	// not-connected.
 	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
 			return nil, fmt.Errorf("remote session statuses: %w", err)
+		}
+	}
+
+	var routing consentRouting
+	if len(statuses) > 0 {
+		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -804,6 +1048,7 @@ func (s *Service) buildRemoteSessionCards(
 	renderedAt := time.Now()
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
+		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
 		var checked bool
 		switch policy {
 		case autoRefreshEnforced:
@@ -830,17 +1075,29 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
+		authorizationExpiresAt := ""
+		authorizationExpiresIn := ""
+		if state.AuthorizationExpiresAt != nil {
+			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
+			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
+		}
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
 		cards = append(cards, remoteSessionCard{
-			ClientID:           c.ID.String(),
-			IssuerSlug:         c.IssuerSlug,
-			Connected:          state.Status == remotesessions.RemoteSessionActive,
-			Expired:            state.Status == remotesessions.RemoteSessionExpired,
-			CanRefresh:         state.CanRefresh,
-			AccessExpiresAt:    accessExpiresAt,
-			AccessExpiresIn:    accessExpiresIn,
-			RefreshExpiresAt:   refreshExpiresAt,
-			RefreshExpiresIn:   refreshExpiresIn,
-			AutoRefreshChecked: checked,
+			ClientID:               c.ID.String(),
+			IssuerSlug:             c.IssuerSlug,
+			IssuerDisplay:          issuerDisplay,
+			IssuerLogoURL:          issuerLogoURL,
+			Connected:              state.Status == remotesessions.RemoteSessionActive && !unroutable,
+			Expired:                state.Status == remotesessions.RemoteSessionExpired,
+			Unroutable:             unroutable,
+			CanRefresh:             state.CanRefresh,
+			AccessExpiresAt:        accessExpiresAt,
+			AccessExpiresIn:        accessExpiresIn,
+			RefreshExpiresAt:       refreshExpiresAt,
+			RefreshExpiresIn:       refreshExpiresIn,
+			AuthorizationExpiresAt: authorizationExpiresAt,
+			AuthorizationExpiresIn: authorizationExpiresIn,
+			AutoRefreshChecked:     checked,
 		})
 	}
 	return cards, nil
@@ -876,4 +1133,88 @@ func pluralize(value int, singular string) string {
 		return singular
 	}
 	return singular + "s"
+}
+
+// maybeAutoConnect sends the subject straight to the sole unlinked upstream
+// provider, reporting whether it wrote a redirect. It is a no-op unless there
+// is exactly one remote-session card, that card is unlinked, and this
+// challenge has not auto-connected before.
+//
+// The latch is persisted BEFORE redirecting and is never cleared, so every
+// path back to this page — the user denying consent upstream, the provider
+// erroring, an explicit disconnect — renders the page with its manual
+// controls instead of bouncing the user out again.
+func (s *Service) maybeAutoConnect(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	cards []remoteSessionCard,
+) (bool, error) {
+	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected {
+		return false, nil
+	}
+
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+	}
+	var client *remotesessions.Client
+	for i := range clients {
+		if clients[i].ID.String() == cards[0].ClientID {
+			client = &clients[i]
+			break
+		}
+	}
+	if client == nil {
+		return false, nil
+	}
+
+	// Claim the latch before redirecting: a redirect the latch did not survive
+	// is an infinite bounce between this page and the provider.
+	//
+	// CompareAndSwap rather than Store, for two reasons. Concurrent GETs would
+	// both read AutoConnectDone=false and both start an upstream login; only
+	// the swap winner may redirect. And a plain Store would recreate a
+	// challenge that the approve POST's GetAndDelete had already consumed,
+	// handing a replayed approval a live state to mint a second grant against.
+	// Losing the race is not an error — it means someone else is driving this
+	// challenge, so fall through and render.
+	claimed := challengeState
+	claimed.AutoConnectDone = true
+	swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, claimed)
+	if err != nil {
+		logger.WarnContext(ctx, "claim auto-connect latch; falling back to the consent page", attr.SlogError(err))
+		return false, nil
+	}
+	if !swapped {
+		return false, nil
+	}
+	challengeState = claimed
+
+	// autoRefresh is nil: the subject has not been shown the control yet, so
+	// there is no choice to record. The page's own Connect action is what
+	// authors a stored preference.
+	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, nil)
+	if err != nil {
+		// Already logged. Render the page so the user can connect manually
+		// rather than seeing an error for a step they did not take.
+		return false, nil
+	}
+
+	http.Redirect(w, r, challengeURL, http.StatusSeeOther)
+	return true, nil
+}
+
+// selectedSessionDuration returns the preselected option's short label, for
+// the summary line. Empty when there is no picker to describe.
+func selectedSessionDuration(options []sessionDurationOption) string {
+	for _, o := range options {
+		if o.Selected {
+			return o.ShortLabel
+		}
+	}
+	return ""
 }

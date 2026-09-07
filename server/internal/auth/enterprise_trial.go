@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -21,19 +20,27 @@ import (
 // on the date they were given.
 const enterpriseTrialDuration = 14 * 24 * time.Hour
 
-// EnterpriseTrialBundleSeeder enables the entitlements an enterprise trial
-// organization starts with. The dependency travels as a function because the
-// productfeatures package that implements it imports auth.
+// OrganizationFeatureSeeder enables baseline organization entitlements. The
+// dependency travels as a function because the productfeatures package that
+// implements it imports auth.
+type OrganizationFeatureSeeder func(ctx context.Context, tx pgx.Tx, organizationID string) error
+
+// EnterpriseTrialBundleSeeder enables the additional entitlements an enterprise
+// trial organization starts with.
 type EnterpriseTrialBundleSeeder func(ctx context.Context, tx pgx.Tx, organizationID string) error
 
-// armEnterpriseTrialTx turns an organization the caller's transaction just
-// created into an enterprise trial. Every write joins that transaction, so a
-// signup produces either a complete trial or no organization.
+// ArmEnterpriseTrialTx turns an organization into an enterprise trial. Every
+// write joins the caller's transaction. Callers must first establish that the
+// organization has no existing trial lifecycle.
 //
 // A trial sits on the real enterprise tier rather than a tier of its own, so
 // every account-type lookup downstream, including the OpenRouter credit
 // ceiling, resolves against a value it already knows.
-func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRepo.OrganizationMetadatum, userID string) error {
+//
+// actorEmail is the display name recorded on the audit entry. It travels as a
+// parameter rather than an auth-context read because signup and invite callbacks
+// have no auth context to read.
+func ArmEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRepo.OrganizationMetadatum, userID, actorEmail string, trialBundleSeeder EnterpriseTrialBundleSeeder, auditLogger *audit.Logger) error {
 	if err := orgRepo.New(tx).SetAccountType(ctx, orgRepo.SetAccountTypeParams{
 		ID:              org.ID,
 		GramAccountType: string(billing.TierEnterprise),
@@ -41,7 +48,7 @@ func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRe
 		return fmt.Errorf("set enterprise trial account type: %w", err)
 	}
 
-	if err := s.trialBundleSeeder(ctx, tx, org.ID); err != nil {
+	if err := trialBundleSeeder(ctx, tx, org.ID); err != nil {
 		return fmt.Errorf("seed enterprise trial entitlements: %w", err)
 	}
 
@@ -54,15 +61,10 @@ func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRe
 		return fmt.Errorf("create enterprise trial: %w", err)
 	}
 
-	var actorDisplayName *string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		actorDisplayName = authCtx.Email
-	}
-
-	if err := s.auditLogger.LogOrganizationEnterpriseTrialArmed(ctx, tx, audit.LogOrganizationEnterpriseTrialArmedEvent{
+	if err := auditLogger.LogOrganizationEnterpriseTrialArmed(ctx, tx, audit.LogOrganizationEnterpriseTrialArmedEvent{
 		OrganizationID:   org.ID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, userID),
-		ActorDisplayName: actorDisplayName,
+		ActorDisplayName: conv.PtrEmpty(actorEmail),
 		ActorSlug:        nil,
 		OrganizationName: org.Name,
 		OrganizationSlug: org.Slug,
@@ -72,4 +74,8 @@ func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRe
 	}
 
 	return nil
+}
+
+func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRepo.OrganizationMetadatum, userID, actorEmail string) error {
+	return ArmEnterpriseTrialTx(ctx, tx, org, userID, actorEmail, s.trialBundleSeeder, s.auditLogger)
 }

@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -485,6 +486,244 @@ func DecodeListTriggerInstancesResponse(decoder func(*http.Response) goahttp.Dec
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("triggers", "listTriggerInstances", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTriggerEventsRequest instantiates a HTTP request object with method
+// and path set to call the "triggers" service "listTriggerEvents" endpoint
+func (c *Client) BuildListTriggerEventsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTriggerEventsTriggersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("triggers", "listTriggerEvents", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTriggerEventsRequest returns an encoder for requests sent to the
+// triggers listTriggerEvents server.
+func EncodeListTriggerEventsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*triggers.ListTriggerEventsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("triggers", "listTriggerEvents", "*triggers.ListTriggerEventsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListTriggerEventsResponse returns a decoder for responses returned by
+// the triggers listTriggerEvents endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListTriggerEventsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTriggerEventsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTriggerEventsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			res := NewListTriggerEventsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTriggerEventsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTriggerEventsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTriggerEventsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTriggerEventsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTriggerEventsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTriggerEventsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTriggerEventsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTriggerEventsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+				}
+				err = ValidateListTriggerEventsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+				}
+				return nil, NewListTriggerEventsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTriggerEventsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+				}
+				err = ValidateListTriggerEventsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+				}
+				return nil, NewListTriggerEventsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("triggers", "listTriggerEvents", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTriggerEventsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("triggers", "listTriggerEvents", err)
+			}
+			err = ValidateListTriggerEventsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("triggers", "listTriggerEvents", err)
+			}
+			return nil, NewListTriggerEventsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("triggers", "listTriggerEvents", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1965,6 +2204,23 @@ func unmarshalTriggerInstanceResponseBodyToTypesTriggerInstance(v *TriggerInstan
 		tk := key
 		tv := val
 		res.Config[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalTriggerEventResponseBodyToTypesTriggerEvent builds a value of type
+// *types.TriggerEvent from a value of type *TriggerEventResponseBody.
+func unmarshalTriggerEventResponseBodyToTypesTriggerEvent(v *TriggerEventResponseBody) *types.TriggerEvent {
+	res := &types.TriggerEvent{
+		ID:                *v.ID,
+		TriggerInstanceID: *v.TriggerInstanceID,
+		Status:            *v.Status,
+		Attempts:          *v.Attempts,
+		LastError:         v.LastError,
+		ChatID:            v.ChatID,
+		CreatedAt:         *v.CreatedAt,
+		ProcessedAt:       v.ProcessedAt,
 	}
 
 	return res

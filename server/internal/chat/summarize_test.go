@@ -299,10 +299,10 @@ func TestService_Summarize_ImpersonatingAdminBlocked(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.IsAdmin = true
-	impersonating := contextvalues.SetAdminOverrideInContext(
-		contextvalues.SetAuthContext(ctx, authCtx), authCtx.ActiveOrganizationID)
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	supportCtx := contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
-	_, err := ti.service.Summarize(impersonating, &gen.SummarizePayload{ID: chatID.String()})
+	_, err := ti.service.Summarize(supportCtx, &gen.SummarizePayload{ID: chatID.String()})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	client.AssertNotCalled(t, "GetCompletion", mock.Anything, mock.Anything)
 }

@@ -4,6 +4,14 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
+-- name: AcquireFeatureCacheLock :exec
+-- Serialize durable feature updates with cache fills and refreshes so an older
+-- operation cannot overwrite a newer cache value after the database changes.
+SELECT pg_advisory_lock(hashtextextended('product-feature:' || @organization_id::text || ':' || @feature_name::text, 0));
+
+-- name: ReleaseFeatureCacheLock :one
+SELECT pg_advisory_unlock(hashtextextended('product-feature:' || @organization_id::text || ':' || @feature_name::text, 0)) AS unlocked;
+
 -- name: IsFeatureEnabled :one
 SELECT EXISTS (
         SELECT 1
@@ -30,6 +38,23 @@ INSERT INTO organization_features (
 ) VALUES (
     @organization_id,
     @feature_name
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO NOTHING;
+
+-- name: EnableFeatureIfNeverConfigured :execrows
+-- PAYG activation grants purchased capabilities to legacy organizations while
+-- preserving a soft-deleted row as an explicit administrator choice.
+INSERT INTO organization_features (
+    organization_id,
+    feature_name
+)
+SELECT @organization_id, @feature_name
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM organization_features
+    WHERE organization_id = @organization_id
+      AND feature_name = @feature_name
 )
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
 DO NOTHING;

@@ -344,7 +344,7 @@ mise run playwright kill-all
 
 ## Gram repository setup
 
-Run browser automation through `mise run playwright`; the task supplies the repository config and installs Chromium on first use. Use existing `pnpm` package scripts for repository checks. Gram does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
+Run browser automation through `mise run playwright`; the task supplies the repository config and installs Chromium on first use. Use existing `aube` package scripts for repository checks. Gram does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
 
 ```bash
 mise run playwright --help

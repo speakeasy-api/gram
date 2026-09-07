@@ -101,15 +101,24 @@ var subscribeScans = []scan{
 		subVar:  "SUB",
 		hdlrVar: "HANDLER",
 	},
-	// Go: batch subscription registered in the streams runner. mustReceiveBatch
-	// carries an extra BatchReceiveSettings argument ($S) between the subscription
-	// marker and the handler, and binds a streams.BatchHandler. A distinct
-	// identifier from mustReceive, so the single-message scan never matches it.
+	// Go: batch subscriptions registered in the streams runner. The handler is
+	// the first trailing argument; BatchReceiveSettings and subscriber options follow it.
 	{
 		id:      "subscribe-batch-go",
 		role:    "subscribe",
 		lang:    "go",
-		pattern: "mustReceiveBatch($G, $MSG, $SUB, $S, $$$HANDLER)",
+		pattern: "mustReceiveBatch($G, $MSG, $SUB, $$$HANDLER)",
+		dirs:    []string{"server"},
+		msgVar:  "MSG",
+		subVar:  "SUB",
+		hdlrVar: "HANDLER",
+		batch:   true,
+	},
+	{
+		id:      "subscribe-batch-result-go",
+		role:    "subscribe",
+		lang:    "go",
+		pattern: "mustReceiveBatchWithResult($G, $MSG, $SUB, $$$HANDLER)",
 		dirs:    []string{"server"},
 		msgVar:  "MSG",
 		subVar:  "SUB",
@@ -556,7 +565,9 @@ func declaredPackageName(dir string) (string, bool) {
 	return "", false
 }
 
-var pyFromImport = regexp.MustCompile(`(?m)^\s*from\s+([\w.]+)\s+import\s+(.+?)\s*$`)
+// Inside a parenthesized block, a `#` comment runs to end of line so a `)`
+// within the comment does not terminate the block early.
+var pyFromImport = regexp.MustCompile(`(?m)^\s*from\s+([\w.]+)\s+import\s+(\((?:[^)#]|#[^\n]*)*\)|.+?)\s*(?:#[^\n]*)?$`)
 
 // pyImports maps each imported module name to its proto package by reading
 // `from <pkg> import a, b as c` statements. Only packages that look like proto
@@ -573,7 +584,15 @@ func pyImports(absPath string) (map[string]string, error) {
 		if !strings.Contains(pkg, ".") {
 			continue
 		}
-		for item := range strings.SplitSeq(match[2], ",") {
+		// Strip comments per line before splitting on commas: a trailing
+		// comment on one item line must not swallow the items that follow it.
+		lines := strings.Split(match[2], "\n")
+		for n, line := range lines {
+			if before, _, found := strings.Cut(line, "#"); found {
+				lines[n] = before
+			}
+		}
+		for item := range strings.SplitSeq(strings.Join(lines, "\n"), ",") {
 			item = strings.TrimSpace(strings.Trim(strings.TrimSpace(item), "()"))
 			if item == "" {
 				continue

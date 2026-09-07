@@ -53,8 +53,7 @@ var _ gen.Service = (*WebhookHandler)(nil)
 // with fault=false/temporary=false, which Goa would otherwise default to 400.
 // The ServiceError.Name is the oops.Code string, so we remap via StatusCodes.
 func oopsFormatter(ctx context.Context, err error) goahttp.Statuser {
-	var se *goapkg.ServiceError
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*goapkg.ServiceError](err); ok {
 		if status, ok := oops.StatusCodes[oops.Code(se.Name)]; ok {
 			return &staticStatus{status}
 		}

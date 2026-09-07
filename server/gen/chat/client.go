@@ -15,31 +15,37 @@ import (
 
 // Client is the "chat" service client.
 type Client struct {
-	ListChatsEndpoint         goa.Endpoint
-	GetWorkUnitsTrendEndpoint goa.Endpoint
-	LoadChatEndpoint          goa.Endpoint
-	GenerateTitleEndpoint     goa.Endpoint
-	CreditUsageEndpoint       goa.Endpoint
-	DeleteChatEndpoint        goa.Endpoint
-	SetPinnedEndpoint         goa.Endpoint
-	SummarizeEndpoint         goa.Endpoint
-	SubmitFeedbackEndpoint    goa.Endpoint
-	ListSourcesEndpoint       goa.Endpoint
+	ListChatsEndpoint                  goa.Endpoint
+	GetAssistantSessionSummaryEndpoint goa.Endpoint
+	GetWorkUnitsTrendEndpoint          goa.Endpoint
+	LoadChatEndpoint                   goa.Endpoint
+	GenerateTitleEndpoint              goa.Endpoint
+	CreditUsageEndpoint                goa.Endpoint
+	DeleteChatEndpoint                 goa.Endpoint
+	SetPinnedEndpoint                  goa.Endpoint
+	SummarizeEndpoint                  goa.Endpoint
+	SummarizeToolCallEndpoint          goa.Endpoint
+	SubmitFeedbackEndpoint             goa.Endpoint
+	ListSourcesEndpoint                goa.Endpoint
+	ListSessionLinksEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, submitFeedback, listSources goa.Endpoint) *Client {
+func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolCall, submitFeedback, listSources, listSessionLinks goa.Endpoint) *Client {
 	return &Client{
-		ListChatsEndpoint:         listChats,
-		GetWorkUnitsTrendEndpoint: getWorkUnitsTrend,
-		LoadChatEndpoint:          loadChat,
-		GenerateTitleEndpoint:     generateTitle,
-		CreditUsageEndpoint:       creditUsage,
-		DeleteChatEndpoint:        deleteChat,
-		SetPinnedEndpoint:         setPinned,
-		SummarizeEndpoint:         summarize,
-		SubmitFeedbackEndpoint:    submitFeedback,
-		ListSourcesEndpoint:       listSources,
+		ListChatsEndpoint:                  listChats,
+		GetAssistantSessionSummaryEndpoint: getAssistantSessionSummary,
+		GetWorkUnitsTrendEndpoint:          getWorkUnitsTrend,
+		LoadChatEndpoint:                   loadChat,
+		GenerateTitleEndpoint:              generateTitle,
+		CreditUsageEndpoint:                creditUsage,
+		DeleteChatEndpoint:                 deleteChat,
+		SetPinnedEndpoint:                  setPinned,
+		SummarizeEndpoint:                  summarize,
+		SummarizeToolCallEndpoint:          summarizeToolCall,
+		SubmitFeedbackEndpoint:             submitFeedback,
+		ListSourcesEndpoint:                listSources,
+		ListSessionLinksEndpoint:           listSessionLinks,
 	}
 }
 
@@ -63,6 +69,29 @@ func (c *Client) ListChats(ctx context.Context, p *ListChatsPayload) (res *ListC
 		return
 	}
 	return ires.(*ListChatsResult), nil
+}
+
+// GetAssistantSessionSummary calls the "getAssistantSessionSummary" endpoint
+// of the "chat" service.
+// GetAssistantSessionSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetAssistantSessionSummary(ctx context.Context, p *GetAssistantSessionSummaryPayload) (res *AssistantSessionSummary, err error) {
+	var ires any
+	ires, err = c.GetAssistantSessionSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AssistantSessionSummary), nil
 }
 
 // GetWorkUnitsTrend calls the "getWorkUnitsTrend" endpoint of the "chat"
@@ -212,6 +241,29 @@ func (c *Client) Summarize(ctx context.Context, p *SummarizePayload) (res *Summa
 	return ires.(*SummarizeChatResult), nil
 }
 
+// SummarizeToolCall calls the "summarizeToolCall" endpoint of the "chat"
+// service.
+// SummarizeToolCall may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SummarizeToolCall(ctx context.Context, p *SummarizeToolCallPayload) (res *SummarizeToolCallResult, err error) {
+	var ires any
+	ires, err = c.SummarizeToolCallEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SummarizeToolCallResult), nil
+}
+
 // SubmitFeedback calls the "submitFeedback" endpoint of the "chat" service.
 // SubmitFeedback may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -254,4 +306,26 @@ func (c *Client) ListSources(ctx context.Context, p *ListSourcesPayload) (res *L
 		return
 	}
 	return ires.(*ListSourcesResult), nil
+}
+
+// ListSessionLinks calls the "listSessionLinks" endpoint of the "chat" service.
+// ListSessionLinks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSessionLinks(ctx context.Context, p *ListSessionLinksPayload) (res *ListSessionLinksResult, err error) {
+	var ires any
+	ires, err = c.ListSessionLinksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSessionLinksResult), nil
 }

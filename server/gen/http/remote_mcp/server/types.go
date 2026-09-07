@@ -25,6 +25,18 @@ type CreateServerRequestBody struct {
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
 }
 
+// CreateServerAndMcpServerRequestBody is the type of the "remoteMcp" service
+// "createServerAndMcpServer" endpoint HTTP request body.
+type CreateServerAndMcpServerRequestBody struct {
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The URL of the remote MCP server
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+}
+
 // UpdateServerRequestBody is the type of the "remoteMcp" service
 // "updateServer" endpoint HTTP request body.
 type UpdateServerRequestBody struct {
@@ -117,6 +129,13 @@ type CreateServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateServerAndMcpServerResponseBody is the type of the "remoteMcp" service
+// "createServerAndMcpServer" endpoint HTTP response body.
+type CreateServerAndMcpServerResponseBody struct {
+	RemoteMcpServer *RemoteMcpServerResponseBody `form:"remote_mcp_server" json:"remote_mcp_server" xml:"remote_mcp_server"`
+	McpServer       *McpServerResponseBody       `form:"mcp_server" json:"mcp_server" xml:"mcp_server"`
 }
 
 // ListServersResponseBody is the type of the "remoteMcp" service "listServers"
@@ -436,6 +455,196 @@ type CreateServerUnexpectedResponseBody struct {
 // CreateServerGatewayErrorResponseBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP response body for the "gateway_error" error.
 type CreateServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerUnauthorizedResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type CreateServerAndMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerForbiddenResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateServerAndMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerBadRequestResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "bad_request" error.
+type CreateServerAndMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerNotFoundResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "not_found" error.
+type CreateServerAndMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerConflictResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "conflict" error.
+type CreateServerAndMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerUnsupportedMediaResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CreateServerAndMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerInvalidResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "invalid" error.
+type CreateServerAndMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerInvariantViolationResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type CreateServerAndMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerUnexpectedResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unexpected" error.
+type CreateServerAndMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerAndMcpServerGatewayErrorResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type CreateServerAndMcpServerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2507,6 +2716,41 @@ type RemoteMcpServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// McpServerResponseBody is used to define fields on response body types.
+type McpServerResponseBody struct {
+	// The ID of the MCP server
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this MCP server belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The ID of the environment associated with the server
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the remote MCP server used as the backend
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// The ID of the toolset used as the backend
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the unproxied MCP server used as the backend, if any. A server
+	// backed by an unproxied MCP server is never proxied by Gram.
+	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The visibility of the server
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// When the MCP server was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the MCP server was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ProtectedResourceMetadataResponseBody is used to define fields on response
 // body types.
 type ProtectedResourceMetadataResponseBody struct {
@@ -2569,6 +2813,20 @@ func NewCreateServerResponseBody(res *types.RemoteMcpServer) *CreateServerRespon
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
 		UpdatedAt:     res.UpdatedAt,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerResponseBody builds the HTTP response body from
+// the result of the "createServerAndMcpServer" endpoint of the "remoteMcp"
+// service.
+func NewCreateServerAndMcpServerResponseBody(res *remotemcp.CreateServerAndMcpServerResult) *CreateServerAndMcpServerResponseBody {
+	body := &CreateServerAndMcpServerResponseBody{}
+	if res.RemoteMcpServer != nil {
+		body.RemoteMcpServer = marshalTypesRemoteMcpServerToRemoteMcpServerResponseBody(res.RemoteMcpServer)
+	}
+	if res.McpServer != nil {
+		body.McpServer = marshalTypesMcpServerToMcpServerResponseBody(res.McpServer)
 	}
 	return body
 }
@@ -2859,6 +3117,156 @@ func NewCreateServerUnexpectedResponseBody(res *goa.ServiceError) *CreateServerU
 // the result of the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerGatewayErrorResponseBody(res *goa.ServiceError) *CreateServerGatewayErrorResponseBody {
 	body := &CreateServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerUnauthorizedResponseBody {
+	body := &CreateServerAndMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerForbiddenResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerForbiddenResponseBody {
+	body := &CreateServerAndMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerBadRequestResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerBadRequestResponseBody {
+	body := &CreateServerAndMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerNotFoundResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerNotFoundResponseBody {
+	body := &CreateServerAndMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerConflictResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerConflictResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerConflictResponseBody {
+	body := &CreateServerAndMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createServerAndMcpServer" endpoint of
+// the "remoteMcp" service.
+func NewCreateServerAndMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerUnsupportedMediaResponseBody {
+	body := &CreateServerAndMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerInvalidResponseBody builds the HTTP response body
+// from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerInvalidResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerInvalidResponseBody {
+	body := &CreateServerAndMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createServerAndMcpServer" endpoint of
+// the "remoteMcp" service.
+func NewCreateServerAndMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerInvariantViolationResponseBody {
+	body := &CreateServerAndMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerUnexpectedResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerUnexpectedResponseBody {
+	body := &CreateServerAndMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createServerAndMcpServer" endpoint of the
+// "remoteMcp" service.
+func NewCreateServerAndMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *CreateServerAndMcpServerGatewayErrorResponseBody {
+	body := &CreateServerAndMcpServerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4462,6 +4870,21 @@ func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string,
 	return v
 }
 
+// NewCreateServerAndMcpServerPayload builds a remoteMcp service
+// createServerAndMcpServer endpoint payload.
+func NewCreateServerAndMcpServerPayload(body *CreateServerAndMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.CreateServerAndMcpServerPayload {
+	v := &remotemcp.CreateServerAndMcpServerPayload{
+		Name:          body.Name,
+		URL:           *body.URL,
+		TransportType: *body.TransportType,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListServersPayload builds a remoteMcp service listServers endpoint
 // payload.
 func NewListServersPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.ListServersPayload {
@@ -4616,6 +5039,21 @@ func NewDeleteServerHeaderPayload(id string, sessionToken *string, apikeyToken *
 // ValidateCreateServerRequestBody runs the validations defined on
 // CreateServerRequestBody
 func ValidateCreateServerRequestBody(body *CreateServerRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.TransportType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerRequestBody runs the validations defined on
+// CreateServerAndMcpServerRequestBody
+func ValidateCreateServerAndMcpServerRequestBody(body *CreateServerAndMcpServerRequestBody) (err error) {
 	if body.URL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}

@@ -26,3 +26,23 @@ func GetConfigurationAgentPath() string {
 func UpdateConfigurationAgentPath() string {
 	return "/rpc/agent.updateConfiguration"
 }
+
+// GetSessionMetaAgentPath returns the URL path to the agent service getSessionMeta HTTP endpoint.
+func GetSessionMetaAgentPath() string {
+	return "/rpc/agent.getSessionMeta"
+}
+
+// ReportSessionMovedAgentPath returns the URL path to the agent service reportSessionMoved HTTP endpoint.
+func ReportSessionMovedAgentPath() string {
+	return "/rpc/agent.reportSessionMoved"
+}
+
+// ReportAIScanAgentPath returns the URL path to the agent service reportAIScan HTTP endpoint.
+func ReportAIScanAgentPath() string {
+	return "/rpc/agent.reportAIScan"
+}
+
+// CreateSessionHandoffAgentPath returns the URL path to the agent service createSessionHandoff HTTP endpoint.
+func CreateSessionHandoffAgentPath() string {
+	return "/rpc/agent.createSessionHandoff"
+}

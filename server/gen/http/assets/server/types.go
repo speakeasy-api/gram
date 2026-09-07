@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// FetchImageFromURLRequestBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP request body.
+type FetchImageFromURLRequestBody struct {
+	// The URL to fetch the image from
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+}
+
 // FetchOpenAPIv3FromURLRequestBody is the type of the "assets" service
 // "fetchOpenAPIv3FromURL" endpoint HTTP request body.
 type FetchOpenAPIv3FromURLRequestBody struct {
@@ -47,6 +54,13 @@ type UploadFunctionsResponseBody struct {
 // UploadOpenAPIv3ResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body.
 type UploadOpenAPIv3ResponseBody struct {
+	// The asset entry that was created in Gram
+	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+}
+
+// FetchImageFromURLResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body.
+type FetchImageFromURLResponseBody struct {
 	// The asset entry that was created in Gram
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
 }
@@ -793,6 +807,190 @@ type UploadOpenAPIv3UnexpectedResponseBody struct {
 // UploadOpenAPIv3GatewayErrorResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body for the "gateway_error" error.
 type UploadOpenAPIv3GatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLUnauthorizedResponseBody is the type of the "assets"
+// service "fetchImageFromURL" endpoint HTTP response body for the
+// "unauthorized" error.
+type FetchImageFromURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLForbiddenResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "forbidden" error.
+type FetchImageFromURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLBadRequestResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "bad_request" error.
+type FetchImageFromURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLNotFoundResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "not_found" error.
+type FetchImageFromURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLConflictResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "conflict" error.
+type FetchImageFromURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLUnsupportedMediaResponseBody is the type of the "assets"
+// service "fetchImageFromURL" endpoint HTTP response body for the
+// "unsupported_media" error.
+type FetchImageFromURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLInvalidResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "invalid" error.
+type FetchImageFromURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLInvariantViolationResponseBody is the type of the "assets"
+// service "fetchImageFromURL" endpoint HTTP response body for the
+// "invariant_violation" error.
+type FetchImageFromURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLUnexpectedResponseBody is the type of the "assets" service
+// "fetchImageFromURL" endpoint HTTP response body for the "unexpected" error.
+type FetchImageFromURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchImageFromURLGatewayErrorResponseBody is the type of the "assets"
+// service "fetchImageFromURL" endpoint HTTP response body for the
+// "gateway_error" error.
+type FetchImageFromURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2341,6 +2539,16 @@ func NewUploadOpenAPIv3ResponseBody(res *assets.UploadOpenAPIv3Result) *UploadOp
 	return body
 }
 
+// NewFetchImageFromURLResponseBody builds the HTTP response body from the
+// result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLResponseBody(res *assets.UploadImageResult) *FetchImageFromURLResponseBody {
+	body := &FetchImageFromURLResponseBody{}
+	if res.Asset != nil {
+		body.Asset = marshalAssetsAssetToAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
 // NewFetchOpenAPIv3FromURLResponseBody builds the HTTP response body from the
 // result of the "fetchOpenAPIv3FromURL" endpoint of the "assets" service.
 func NewFetchOpenAPIv3FromURLResponseBody(res *assets.UploadOpenAPIv3Result) *FetchOpenAPIv3FromURLResponseBody {
@@ -2945,6 +3153,148 @@ func NewUploadOpenAPIv3UnexpectedResponseBody(res *goa.ServiceError) *UploadOpen
 // from the result of the "uploadOpenAPIv3" endpoint of the "assets" service.
 func NewUploadOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *UploadOpenAPIv3GatewayErrorResponseBody {
 	body := &UploadOpenAPIv3GatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLUnauthorizedResponseBody(res *goa.ServiceError) *FetchImageFromURLUnauthorizedResponseBody {
+	body := &FetchImageFromURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLForbiddenResponseBody builds the HTTP response body from
+// the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLForbiddenResponseBody(res *goa.ServiceError) *FetchImageFromURLForbiddenResponseBody {
+	body := &FetchImageFromURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLBadRequestResponseBody builds the HTTP response body
+// from the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLBadRequestResponseBody(res *goa.ServiceError) *FetchImageFromURLBadRequestResponseBody {
+	body := &FetchImageFromURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLNotFoundResponseBody builds the HTTP response body from
+// the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLNotFoundResponseBody(res *goa.ServiceError) *FetchImageFromURLNotFoundResponseBody {
+	body := &FetchImageFromURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLConflictResponseBody builds the HTTP response body from
+// the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLConflictResponseBody(res *goa.ServiceError) *FetchImageFromURLConflictResponseBody {
+	body := &FetchImageFromURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "fetchImageFromURL" endpoint of the "assets"
+// service.
+func NewFetchImageFromURLUnsupportedMediaResponseBody(res *goa.ServiceError) *FetchImageFromURLUnsupportedMediaResponseBody {
+	body := &FetchImageFromURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLInvalidResponseBody builds the HTTP response body from
+// the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLInvalidResponseBody(res *goa.ServiceError) *FetchImageFromURLInvalidResponseBody {
+	body := &FetchImageFromURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "fetchImageFromURL" endpoint of the "assets"
+// service.
+func NewFetchImageFromURLInvariantViolationResponseBody(res *goa.ServiceError) *FetchImageFromURLInvariantViolationResponseBody {
+	body := &FetchImageFromURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLUnexpectedResponseBody builds the HTTP response body
+// from the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLUnexpectedResponseBody(res *goa.ServiceError) *FetchImageFromURLUnexpectedResponseBody {
+	body := &FetchImageFromURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchImageFromURLGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "fetchImageFromURL" endpoint of the "assets" service.
+func NewFetchImageFromURLGatewayErrorResponseBody(res *goa.ServiceError) *FetchImageFromURLGatewayErrorResponseBody {
+	body := &FetchImageFromURLGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4171,6 +4521,19 @@ func NewUploadOpenAPIv3Form(contentType string, contentLength int64, apikeyToken
 	return v
 }
 
+// NewFetchImageFromURLForm builds a assets service fetchImageFromURL endpoint
+// payload.
+func NewFetchImageFromURLForm(body *FetchImageFromURLRequestBody, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.FetchImageFromURLForm {
+	v := &assets.FetchImageFromURLForm{
+		URL: *body.URL,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewFetchOpenAPIv3FromURLForm builds a assets service fetchOpenAPIv3FromURL
 // endpoint payload.
 func NewFetchOpenAPIv3FromURLForm(body *FetchOpenAPIv3FromURLRequestBody, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.FetchOpenAPIv3FromURLForm {
@@ -4267,6 +4630,15 @@ func NewServeChatAttachmentSignedForm(token string) *assets.ServeChatAttachmentS
 	v.Token = token
 
 	return v
+}
+
+// ValidateFetchImageFromURLRequestBody runs the validations defined on
+// FetchImageFromURLRequestBody
+func ValidateFetchImageFromURLRequestBody(body *FetchImageFromURLRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	return
 }
 
 // ValidateFetchOpenAPIv3FromURLRequestBody runs the validations defined on

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assetsinternal "github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
@@ -42,13 +43,14 @@ func TestService_CreateSignedChatAttachmentURL_Success(t *testing.T) {
 
 	// Create asset in database
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -101,13 +103,14 @@ func TestService_CreateSignedChatAttachmentURL_CustomTTL(t *testing.T) {
 
 	// Create asset in database
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -203,13 +206,14 @@ func TestService_ServeChatAttachmentSigned_Success(t *testing.T) {
 
 	// Create asset in database
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -359,13 +363,14 @@ func TestService_SignedChatAttachment_EndToEnd(t *testing.T) {
 
 	// Step 2: Create asset in database
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "def456",
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "def456",
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 

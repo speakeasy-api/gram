@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
 import { DotRow } from "@/components/ui/DotRow";
@@ -234,10 +235,18 @@ function PlatformIssuerTable({
         <DotRow
           key={item.issuer.id}
           icon={
-            <Icon
-              name="fingerprint"
-              className="text-muted-foreground h-5 w-5"
-            />
+            item.issuer.logoAssetId ? (
+              <AssetImage
+                assetId={item.issuer.logoAssetId}
+                alt=""
+                className="h-5 w-5 shrink-0 object-contain"
+              />
+            ) : (
+              <Icon
+                name="fingerprint"
+                className="text-muted-foreground h-5 w-5"
+              />
+            )
           }
           href={orgRoutes.platformRemoteIdentityProviders.issuerDetail.href(
             item.issuer.id,

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -726,6 +727,11 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
+	// Blank entries would leave a non-empty array that matches no device, so a
+	// filter of only empty values has to read as no filter at all.
+	userIDs := nonBlank(payload.UserIds)
+	userEmails := nonBlank(payload.UserEmails)
+
 	rows, err := s.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
 		DeviceLevel:    s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID),
@@ -733,6 +739,8 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 		CursorID:       cursor,
 		Bucket:         conv.PtrToPGTextEmpty(payload.CoverageBucket),
+		UserIds:        userIDs,
+		UserEmails:     userEmails,
 		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
 	})
 	if err != nil {
@@ -810,4 +818,18 @@ func snapshotFromConfig(cfg Config) audit.DeviceIntegrationSnapshot {
 		HasCredentials: true,
 		Settings:       cfg.Settings,
 	}
+}
+
+// nonBlank drops empty and whitespace-only entries from a filter list.
+func nonBlank(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

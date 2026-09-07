@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.18.1
+
+### Patch Changes
+
+- 8cffd65: Update the MCP SDK and Inspector versions used by function templates.
+
 ## 0.18.0
 
 ## 0.17.1

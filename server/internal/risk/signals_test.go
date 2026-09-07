@@ -17,10 +17,10 @@ import (
 )
 
 // TestGetRiskSignals_ClickHouse seeds ClickHouse findings across the current
-// window, the previous comparison window, and the trailing 24h KPI windows,
-// plus rows every signal query must ignore (redelivered duplicate id,
-// excluded, false positive, dead letter, foreign tenant), and asserts the
-// clustered signals, KPI splits, and exposure rollup.
+// window and the previous comparison window, plus rows every signal query
+// must ignore (redelivered duplicate id, excluded, false positive, dead
+// letter, foreign tenant), and asserts the clustered signals, KPI splits, and
+// exposure rollup.
 func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -41,9 +41,8 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	chatB := uuid.Must(uuid.NewV7())
 	msg := func() uuid.UUID { return uuid.Must(uuid.NewV7()) }
 
-	// Current window: three secret findings (alice x2, bob x1; one inside the
-	// trailing 24h), three pii findings (alice; one inside the previous-24h KPI
-	// bucket at to-30h).
+	// Current window: three secret findings (alice x2, bob x1) and three pii
+	// findings (alice).
 	rows := []chrepo.RiskFindingRow{
 		chOverviewFinding(t, projectID, orgID, chatA, msg(), from.Add(36*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com"),
 		chOverviewFinding(t, projectID, orgID, chatB, msg(), from.Add(38*time.Hour), "gitleaks", "secret.github_pat", "bob@example.com"),
@@ -159,8 +158,8 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	require.Equal(t, int64(0), result.CriticalSignals)
 	require.Equal(t, int64(2), result.UsersExposed)
 	require.Equal(t, int64(1), result.PreviousUsersExposed)
-	require.Equal(t, int64(1), result.Findings24h)
-	require.Equal(t, int64(1), result.PreviousFindings24h)
+	require.Equal(t, int64(6), result.Findings)
+	require.Equal(t, int64(1), result.PreviousFindings)
 
 	require.Greater(t, result.OrgRiskScore, 0.0)
 	require.LessOrEqual(t, result.OrgRiskScore, 10.0)
@@ -195,7 +194,7 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	require.Equal(t, int64(0), result.OpenSignals)
 	require.Equal(t, int64(0), result.CriticalSignals)
 	require.Equal(t, int64(0), result.UsersExposed)
-	require.Equal(t, int64(0), result.Findings24h)
+	require.Equal(t, int64(0), result.Findings)
 	require.InDelta(t, 0, result.OrgRiskScore, 0.001)
 	require.InDelta(t, 0, result.PreviousOrgRiskScore, 0.001)
 }

@@ -2,14 +2,16 @@
 
 Mirrors the Go unit tests in
 ``server/internal/risk/presidiofp/classify_test.go``
-(``TestNonPIIIPExactKeysAreCanonical``, ``TestReason``, ``TestReasonByRuleID``)
-and adds broader table coverage of the IP and email catalogs.
+(``TestNonPIIIPExactKeysAreCanonical``, ``TestReason``, ``TestReasonByRuleID``),
+``nhs_test.go`` and ``retired_test.go``, and adds broader table coverage of the
+IP and email catalogs.
 
 (``fp_split_test.go`` is build-tagged dev tooling that regenerates testdata
 rather than a unit test, so it has no counterpart here.)
 """
 
 import ipaddress
+import random
 
 import pytest
 
@@ -18,9 +20,17 @@ from pystreams.risk.presidiofp import ip_asn
 from pystreams.risk.presidiofp.classify import (
     ENTITY_TYPE_EMAIL_ADDRESS,
     ENTITY_TYPE_IP_ADDRESS,
+    ENTITY_TYPE_UK_NHS,
     _entity_type_for_rule_id,
 )
 from pystreams.risk.presidiofp.ip import _NON_PII_IP_EXACT
+from pystreams.risk.presidiofp.nhs import (
+    NHS_ALLOCATED_RANGES,
+    _nhs_check_digit_valid,
+    nhs_context_reason,
+    non_nhs_reason,
+)
+from pystreams.risk.presidiofp.retired import RETIRED_RECOGNIZERS
 
 
 def test_non_pii_ip_exact_keys_are_canonical():
@@ -79,7 +89,13 @@ def test_reason_by_rule_id():
 
     # rule_ids advertises exactly the catalogued rule ids, and the grammar is
     # invertible.
-    assert presidiofp.rule_ids() == ["pii.ip_address", "pii.email_address"]
+    assert presidiofp.rule_ids() == [
+        "pii.ip_address",
+        "pii.email_address",
+        "pii.uk_nhs",
+        "pii.us_driver_license",
+    ]
+    assert presidiofp.context_rule_ids() == ["pii.uk_nhs"]
     assert _entity_type_for_rule_id("pii.ip_address") == "IP_ADDRESS"
     assert _entity_type_for_rule_id("pii.email_address") == "EMAIL_ADDRESS"
     assert _entity_type_for_rule_id("secret.aws_access_key") == ""
@@ -183,3 +199,138 @@ def test_email_trailing_digit_is_ascii_only():
     assert presidiofp.reason("EMAIL_ADDRESS", "pkg@v1") != ""
     # U+00B2 SUPERSCRIPT TWO is a Unicode digit but not ASCII; must not fire.
     assert presidiofp.reason("EMAIL_ADDRESS", "user@example²") == ""
+
+
+@pytest.mark.parametrize(
+    ("match", "expect_fp"),
+    [
+        # Issued ranges, valid check digit: this layer must let them through.
+        ("401 023 2137", False),
+        ("401-023-2137", False),
+        ("4010232137", False),
+        ("6543210982", False),  # Wales range
+        ("1706349017", False),  # Scotland CHI range
+        ("3201234567", False),  # Northern Ireland range
+        # Never issued to anyone.
+        ("9999999999", True),  # NHS England test range
+        ("9434765919", True),  # unallocated above 859
+        ("0000000000", True),  # zero-padded internal id
+        # Not an NHS number at all.
+        ("4010232138", True),  # check digit fails
+        # Out of this catalog's scope: the recognizer only ever emits ten-digit
+        # runs, so anything else is left for another lane.
+        ("40102321", False),
+        ("40102321370", False),
+        ("40102321AB", False),
+        ("", False),
+    ],
+)
+def test_non_nhs_reason(match: str, expect_fp: bool):
+    """Mirror of ``TestNonNHSReason``: the value-only layer, i.e. what a ten-digit
+    run says about itself before any surrounding text is consulted.
+    """
+    assert bool(non_nhs_reason(match)) is expect_fp
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Patient NHS number 401 023 2137",
+        '{"nhsNumber": "4010232137"}',
+        "NHS_NUMBER=4010232137",
+        "the national health service record shows 4010232137",
+        "CHI number 1706349017 for the Scottish record",
+        "hospital number on file, id 4010232137",
+        # Unknown context is not evidence of anything.
+        "",
+    ],
+)
+def test_nhs_context_reason_keeps(text: str):
+    """Mirror of ``TestNHSContextReason``'s kept half."""
+    assert nhs_context_reason(text) == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "https://acme.atlassian.net/wiki/spaces/ENG/pages/4010232137/Runbook",
+        '{"ts": 1706349017, "level": "info"}',
+        "order 4010232137 shipped",
+        "figma node 4010232137",
+    ],
+)
+def test_nhs_context_reason_suppresses(text: str):
+    """Mirror of ``TestNHSContextReason``'s suppressed half."""
+    assert nhs_context_reason(text) != ""
+
+
+def test_nhs_check_digit_matches_presidio():
+    """Mirror of ``TestNHSCheckDigitMatchesPresidio``: lock the reimplemented
+    mod-11 check to the one Presidio's ``NhsRecognizer`` runs.
+    """
+    valid = ("4010232137", "9434765919", "1706349017", "2481160193", "9999999999")
+    for digits in valid:
+        assert _nhs_check_digit_valid(digits), f"{digits} should pass"
+    invalid = ("4010232138", "0001234567", "6543210989", "1234567890", "3201234561")
+    for digits in invalid:
+        assert not _nhs_check_digit_valid(digits), f"{digits} should fail"
+
+
+def test_nhs_allocated_ranges_are_ordered_and_disjoint():
+    """Mirror of ``TestNHSAllocatedRangesAreOrderedAndDisjoint``: a low above its
+    high, or a pair of overlapping ranges, means someone mistyped a boundary.
+    """
+    for i, (low, high) in enumerate(NHS_ALLOCATED_RANGES):
+        assert low <= high, f"range {i} is inverted"
+        if i == 0:
+            continue
+        assert low > NHS_ALLOCATED_RANGES[i - 1][1], (
+            f"range {i} overlaps or backtracks on its predecessor"
+        )
+
+
+def test_nhs_suppresses_opaque_identifiers():
+    """Mirror of ``TestNHSSuppressesOpaqueIdentifiers``, the regression this
+    catalog exists for (AIS-494). Presidio reports any checksum-valid ten-digit
+    run as a UK NHS number at maximum confidence, so roughly one in eleven
+    Confluence page ids, Unix timestamps and order numbers surfaces as a
+    government/health identifier. Every one must now be classified as noise.
+    """
+    # Deterministic corpus, seeded so a failure is reproducible.
+    rng = random.Random(1)
+
+    checked = 0
+    for _ in range(20000):
+        identifier = f"{rng.randrange(1_000_000_000, 10_000_000_000):010d}"
+        if not _nhs_check_digit_valid(identifier):
+            continue  # Presidio would not have reported it in the first place.
+        checked += 1
+        text = f"https://acme.atlassian.net/wiki/spaces/ENG/pages/{identifier}/Runbook"
+        assert presidiofp.reason_in_context(ENTITY_TYPE_UK_NHS, identifier, text), (
+            f"opaque identifier {identifier} must not read as an NHS number"
+        )
+    assert checked > 0, "corpus produced no checksum-valid ids"
+
+
+def test_retired_recognizers():
+    """Mirror of ``TestRetiredRecognizers``: every finding from a retired
+    recognizer is noise regardless of its value, which is what lets the offline
+    sweep clear the rows stored before the live scanners started dropping them.
+    """
+    # The shapes AIS-494 reported: Figma file and node ids read as a driver
+    # license number to the upstream recognizer.
+    for match in ("N1234567", "K9182736450", "X12345678", ""):
+        assert presidiofp.reason("US_DRIVER_LICENSE", match), (
+            f"every US_DRIVER_LICENSE finding is retired noise, including {match!r}"
+        )
+
+    # Retirement is keyed on the entity, not the value: the same string under a
+    # live recognizer is judged on its merits.
+    assert presidiofp.reason("US_DRIVER_LICENSE_OTHER", "N1234567") == ""
+    assert list(RETIRED_RECOGNIZERS) == ["US_DRIVER_LICENSE"]
+
+    # Context cannot rescue it either, and the rule_id entry point agrees.
+    assert presidiofp.reason_in_context(
+        "US_DRIVER_LICENSE", "D1234567", "driver license D1234567"
+    )
+    assert presidiofp.reason_by_rule_id("pii.us_driver_license", "D1234567")

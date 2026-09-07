@@ -6,7 +6,7 @@ import { featuresGet } from "../funcs/featuresGet.js";
 import { featuresSet } from "../funcs/featuresSet.js";
 import { featuresSetRemoteSessionAutoRefreshPolicy } from "../funcs/featuresSetRemoteSessionAutoRefreshPolicy.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
+import { ProductFeatures } from "../models/components/productfeatures.js";
 import {
   GetProductFeaturesRequest,
   GetProductFeaturesSecurity,
@@ -29,10 +29,10 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: GetProductFeaturesRequest | undefined,
+    request: GetProductFeaturesRequest,
     security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<GetProductFeaturesResponseBody> {
+  ): Promise<ProductFeatures> {
     return unwrapAsync(featuresGet(
       this,
       request,
@@ -45,7 +45,7 @@ export class Features extends ClientSDK {
    * setProductFeature features
    *
    * @remarks
-   * Enable or disable an organization feature flag.
+   * Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.
    */
   async set(
     request: SetProductFeatureRequest,

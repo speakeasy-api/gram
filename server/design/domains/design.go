@@ -42,8 +42,41 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatUUID)
 	})
 	Attribute("openai_apps_challenge_token", String, "The token served for OpenAI app-submission domain verification, if configured")
+	Attribute("suggested_record_type", String, func() {
+		Description("The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.")
+		Enum("cname", "a")
+	})
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist", "suggested_record_type")
+})
+
+// DomainDNSConfig describes the DNS targets custom domains must point at.
+var DomainDNSConfig = Type("DomainDNSConfig", func() {
+	Attribute("cname_target", String, "The CNAME target subdomain custom domains should point at, if configured")
+	Attribute("a_records", ArrayOf(String), "The static IP addresses apex custom domains should point A records at")
+
+	Required("a_records")
+})
+
+// RootMcpServerOption is an MCP server an org admin can map to the custom
+// domain root, whether or not it already has an endpoint on the domain.
+var RootMcpServerOption = Type("RootMcpServerOption", func() {
+	Attribute("mcp_server_id", String, "The MCP server", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The MCP server's display name, if set")
+	Attribute("slug", String, "The MCP server's slug, if set")
+	Attribute("project_id", String, "The project the server belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_name", String, "The project's display name")
+	Attribute("attached_endpoint_id", String, "The server's endpoint on this custom domain, when one exists", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attached_endpoint_slug", String, "The attached endpoint's slug (its /mcp/<slug> path on the domain), when one exists")
+	Attribute("is_domain_root", Boolean, "Whether this server currently serves the domain root")
+
+	Required("mcp_server_id", "project_id", "project_name", "is_domain_root")
 })
 
 var _ = Service("domains", func() {
@@ -101,6 +134,8 @@ var _ = Service("domains", func() {
 			Required("domain")
 		})
 
+		Result(CustomDomain)
+
 		HTTP(func() {
 			POST("/rpc/domain.register")
 			security.SessionHeader()
@@ -135,14 +170,17 @@ var _ = Service("domains", func() {
 	})
 
 	Method("setRootMcpEndpoint", func() {
-		Description("Set or clear the MCP endpoint mapped to a custom domain's root")
+		Description("Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("custom_domain_id", String, "The custom domain whose root mapping to change", func() {
 				Format(FormatUUID)
 			})
-			Attribute("mcp_endpoint_id", String, "The MCP endpoint to map to the domain root. Omit to clear the mapping.", func() {
+			Attribute("mcp_endpoint_id", String, "The MCP endpoint to map to the domain root. Omit both ids to clear the mapping.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_server_id", String, "An MCP server to map to the domain root; its domain endpoint is created when missing. Mutually exclusive with mcp_endpoint_id.", func() {
 				Format(FormatUUID)
 			})
 			Required("custom_domain_id")
@@ -159,6 +197,29 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "setRootMcpEndpoint")
 		Meta("openapi:extension:x-speakeasy-name-override", "setRootMcpEndpoint")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRootMcpEndpoint"}`)
+	})
+
+	Method("listRootMcpServers", func() {
+		Description("List the organization's MCP servers that can be mapped to the custom domain root, including servers not yet attached to the domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("mcp_servers", ArrayOf(RootMcpServerOption))
+			Required("mcp_servers")
+		})
+
+		HTTP(func() {
+			GET("/rpc/domain.listRootMcpServers")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRootMcpServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRootMcpServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RootMcpServers", "type": "query"}`)
 	})
 
 	Method("checkHealth", func() {
@@ -232,14 +293,17 @@ var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
 	})
 	Attribute("project_name", String, "The display name of the project the endpoint belongs to")
 	Attribute("project_slug", String, "The url-friendly slug of the project the endpoint belongs to")
-	Attribute("mcp_server_id", String, "The ID of the parent MCP server", func() {
+	Attribute("mcp_server_id", String, "The ID of the parent MCP server. Null for meta-MCP-backed endpoints.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
-	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+	Attribute("meta_mcp_server_id", String, "The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_name", String, "The display name of the parent server. May be empty if the parent has no configured name.")
+	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug or is a meta MCP server.")
 	Attribute("is_domain_root", Boolean, "Whether this endpoint is mapped to the custom-domain root")
 
-	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id", "is_domain_root")
+	Required("id", "slug", "project_id", "project_name", "project_slug", "is_domain_root")
 })
 
 var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {
@@ -253,5 +317,6 @@ var ListCustomDomainsResult = Type("ListCustomDomainsResult", func() {
 	Description("Result of listing an organization's custom domains.")
 
 	Attribute("domains", ArrayOf(CustomDomain))
-	Required("domains")
+	Attribute("dns_config", DomainDNSConfig, "The DNS targets custom domains must point at. Present even when no domain is configured yet, so setup instructions can be shown before registration.")
+	Required("domains", "dns_config")
 })

@@ -108,4 +108,4 @@ const { values, setValue, clearValue, clearAll } = useFilterState(FILTERS);
 - `components/ui/segmented-control.tsx` — shared two-or-more option mode toggle.
 - `components/filters/` — `filter-schema.ts` (`defineFilters`, types, `chipLabel`, `isDimensionActive`), `useFilterState.ts`, and the chip/sheet/control primitives.
 
-Run `pnpm -F dashboard type-check` after changes.
+Run `aube run -F dashboard type-check` after changes.

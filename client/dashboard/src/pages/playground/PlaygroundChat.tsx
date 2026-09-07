@@ -24,7 +24,10 @@ import {
   PlaygroundMcpAppsProvider,
   PlaygroundMcpToolFallback,
 } from "./PlaygroundMcpApps";
-import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
+import {
+  GramThreadWelcome,
+  PlaygroundNoToolsBanner,
+} from "./PlaygroundElementsOverrides";
 
 interface PlaygroundChatProps {
   /** Resolved MCP server URL (Gram origin `/mcp/<slug>`). */
@@ -190,6 +193,7 @@ export function PlaygroundChat({
         composer: {
           placeholder: "Send a message...",
           toolMentions: true,
+          requireMcpTools: true,
         },
         theme: {
           colorScheme: resolvedTheme === "dark" ? "dark" : "light",
@@ -227,6 +231,7 @@ export function PlaygroundChat({
             <div className="flex items-center gap-2">{additionalActions}</div>
           </div>
           {banner}
+          <PlaygroundNoToolsBanner />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Chat />
           </div>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestNewUnsafePolicy(t *testing.T) {
@@ -166,26 +169,54 @@ func TestPolicy_DialerAllowedCIDRBlocksOverridesBlock(t *testing.T) {
 
 func TestPolicy_ClientWrapsTransportWithOtel(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	client := policy.Client()
 
-	require.NotNil(t, client)
-	require.NotNil(t, client.Transport)
-
-	_, ok := client.Transport.(*otelhttp.Transport)
-	require.True(t, ok)
+	requirePolicyClientCreatesHTTPSpan(t, false)
 }
 
 func TestPolicy_PooledClientWrapsTransportWithOtel(t *testing.T) {
 	t.Parallel()
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	client := policy.PooledClient()
 
-	require.NotNil(t, client)
-	require.NotNil(t, client.Transport)
+	requirePolicyClientCreatesHTTPSpan(t, true)
+}
 
-	_, ok := client.Transport.(*otelhttp.Transport)
-	require.True(t, ok)
+func requirePolicyClientCreatesHTTPSpan(t *testing.T, pooled bool) {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() {
+		require.NoError(t, tracerProvider.Shutdown(context.Background()))
+	})
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
+	var client *guardian.HTTPClient
+	if pooled {
+		client = policy.PooledClient()
+	} else {
+		client = policy.Client()
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(server.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	response, err := client.Do(req)
+	require.NoError(t, err)
+	_, err = io.Copy(io.Discard, response.Body)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+
+	var foundHTTPSpan bool
+	for _, span := range recorder.Ended() {
+		if span.SpanKind() == trace.SpanKindClient {
+			foundHTTPSpan = true
+			break
+		}
+	}
+	require.True(t, foundHTTPSpan)
 }
 
 func TestDefaultPolicyBlocksPrivateIPs(t *testing.T) {
@@ -642,4 +673,75 @@ func TestPolicy_ValidateHost_UnsafePolicyPermitsBlockedLiteral(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, policy.ValidateHost(t.Context(), "127.0.0.1"))
 	require.NoError(t, policy.ValidateHost(t.Context(), "10.0.0.1"))
+}
+
+func TestPolicy_ValidateHTTPURL_RejectsNonHTTPScheme(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "ftp://example.com/spec.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPURL_RejectsEmptyHost(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "https:///spec.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPURL_RejectsBlockedIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "http://169.254.169.254/latest/meta-data/")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPURL(t.Context(), "https://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsHTTPPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPSURL_RejectsHTTPScheme(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPSURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPSURL_AllowsPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPSURL(t.Context(), "https://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsPublicHostname(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+			LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+				if host == "cdn.example.com" {
+					return []net.IP{net.ParseIP("8.8.8.8")}, nil
+				}
+				return nil, fmt.Errorf("unexpected host: %s", host)
+			},
+		})),
+	)
+	u, err := policy.ValidateHTTPURL(t.Context(), "https://cdn.example.com/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "cdn.example.com", u.Hostname())
 }

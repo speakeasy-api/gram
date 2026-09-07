@@ -183,16 +183,19 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
         <Text variant="small">{toolset.tools?.length ?? 0}</Text>
       </div>
 
-      <div className="border-border flex items-stretch border-t pt-3">
+      {/* Content-sized halves with one gutter either side of the rule: at
+          flex-1 the rule sat at the container's midpoint, which the longer
+          label crowded while the shorter one left slack. */}
+      <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
         {installPageUrl && (
           <>
             <a
               href={installPageUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
             >
-              Installation page
+              Install page
               <ExternalLink className="h-3 w-3" />
             </a>
             <div className="bg-border w-px self-stretch" />
@@ -200,10 +203,10 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
         )}
         <routes.playground.Link
           queryParams={{ toolset: toolset.slug }}
-          className="flex flex-1 items-center justify-center hover:no-underline"
+          className="flex items-center hover:no-underline"
         >
           <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
-            Test in Playground
+            Playground
             <ArrowRight className="h-3 w-3" />
           </span>
         </routes.playground.Link>

@@ -7,7 +7,7 @@ import { useEffect, useRef, type JSX } from "react";
 import type { CelCompletionItem, CelEngine } from "./cel-wasm";
 
 // oxlint-disable-next-line import/default -- Vite ?worker URL imports lack named defaults
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 
 // CEL has no dedicated worker; the base editor worker drives our Monarch
 // language. Only set the environment if the shared MonacoEditor hasn't already.

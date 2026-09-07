@@ -24,8 +24,8 @@ type TumUsageOverage struct {
 	CycleEnd string
 }
 
-func (t TumUsageOverage) TransactionalID() TransactionalID {
-	return transactionalIDTumUsageOverage
+func (t TumUsageOverage) Key() TemplateKey {
+	return TemplateKeyTumUsageOverage
 }
 
 func (t TumUsageOverage) AddToAudience() bool { return false }

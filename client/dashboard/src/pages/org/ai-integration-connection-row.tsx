@@ -1,4 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -40,7 +42,7 @@ export function AIIntegrationConnectionRow({
   });
   const schedules = useMemo(() => providerSchedules(provider), [provider]);
   const { runtimes, toggle, retry } = useScheduleRuntimes(provider);
-  const Icon = provider.icon;
+  const iconSource = AGENT_PROVIDERS[provider.providerId].iconSource;
 
   const activeCount = schedules.filter(
     (schedule) => runtimeOrDefault(runtimes, schedule.schedule).enabled,
@@ -51,17 +53,15 @@ export function AIIntegrationConnectionRow({
     total: schedules.length,
   });
 
-  const streamRows = schedules.map(
-    (schedule): AIIntegrationStreamRow => ({
-      key: `${provider.provider}:${schedule.schedule}`,
-      schedule,
-      runtime: runtimeOrDefault(runtimes, schedule.schedule),
-      configured: form.isConfigured,
-      connectionEnabled: form.enabled,
-      toggle,
-      retry,
-    }),
-  );
+  const streamRows = schedules.map((schedule): AIIntegrationStreamRow => ({
+    key: `${provider.provider}:${schedule.schedule}`,
+    schedule,
+    runtime: runtimeOrDefault(runtimes, schedule.schedule),
+    configured: form.isConfigured,
+    connectionEnabled: form.enabled,
+    toggle,
+    retry,
+  }));
 
   const handleDelete = () => {
     if (!form.isConfigured) return;
@@ -99,7 +99,10 @@ export function AIIntegrationConnectionRow({
               gap={2}
               className="min-w-0"
             >
-              <Icon className="text-foreground h-4 w-4 shrink-0" />
+              <AgentProviderIcon
+                source={iconSource}
+                className="text-foreground h-4 w-4 shrink-0"
+              />
               <Text variant="body" className="min-w-0 truncate font-medium">
                 {provider.name}
               </Text>

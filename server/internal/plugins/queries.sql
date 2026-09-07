@@ -25,6 +25,18 @@ WHERE organization_id = @organization_id
   AND is_default IS TRUE
   AND deleted IS FALSE;
 
+-- name: GetDefaultPluginForUpdate :one
+-- Serializes mutation of the existing Default plugin with concurrent deletion.
+-- Callers must use this inside the transaction that attaches or removes a
+-- plugin server; a deleted plugin deliberately returns no row.
+SELECT *
+FROM plugins
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: PromoteToDefaultPlugin :one
 -- Self-heals projects that already have a plugin sitting on the reserved
 -- "default" slug (e.g. created manually before this feature shipped) by
@@ -41,8 +53,8 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: IsDefaultProject :one
--- Whether @project_id is the org's default project — the oldest (first by id
--- ASC) non-deleted project, created at org setup. Mirrors the default-project
+-- Whether @project_id is the org's default project — the oldest non-deleted
+-- project by created_at, then id. Mirrors the default-project
 -- definition the agent's getPlugins read path uses, so the audience the seeding
 -- side grants matches the project the delivery side treats as default. Used to
 -- decide whether a new plugin defaults to the org-wide audience: only plugins in
@@ -52,7 +64,7 @@ SELECT (
   FROM projects p
   WHERE p.organization_id = @organization_id
     AND p.deleted IS FALSE
-  ORDER BY p.id ASC
+  ORDER BY p.created_at ASC, p.id ASC
   LIMIT 1
 ) = @project_id AS is_default;
 
@@ -63,6 +75,37 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: GetPluginWithCounts :one
+SELECT
+  p.*,
+  (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
+  (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
+FROM plugins p
+WHERE p.id = @id
+  AND p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE;
 
 -- name: ListPlugins :many
 SELECT
@@ -296,13 +339,24 @@ ON CONFLICT (plugin_id, principal_urn) DO UPDATE
 RETURNING *;
 
 -- name: ListPluginAssignments :many
-SELECT *
-FROM plugin_assignments
-WHERE plugin_id = @plugin_id;
+SELECT pa.*
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id;
 
 -- name: RemoveAllPluginAssignments :execrows
-DELETE FROM plugin_assignments
-WHERE plugin_id = @plugin_id;
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id;
 
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
@@ -672,7 +726,7 @@ WHERE project_id = @project_id;
 
 -- name: GetProjectMarketplaceNameContext :one
 -- Returns a project's slug and whether it's its org's default project (oldest by
--- id ASC), the two inputs needed to resolve its marketplace name — read from the
+-- created_at, then id), the two inputs needed to resolve its marketplace name — read from the
 -- project row rather than trusting auth-context fields that some auth flows
 -- (e.g. project-scoped API keys) leave unset.
 SELECT
@@ -682,7 +736,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = pr.organization_id
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project
 FROM projects pr

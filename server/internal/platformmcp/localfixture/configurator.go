@@ -77,6 +77,8 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 			if err != nil {
 				return err
 			}
+		} else if err := c.restoreClient(client.ClientID); err != nil {
+			return err
 		}
 		return c.attachClient(ctx, request, client.ID, issuer.ID)
 	case !errors.Is(err, pgx.ErrNoRows):
@@ -92,6 +94,16 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 
 func (c *ClientConfigurator) matchesDescriptor(descriptor remotesessionprovider.Descriptor) bool {
 	return descriptor.ProviderKey == ProviderKey && descriptor.RemoteSessionIssuerID == c.config.RemoteSessionIssuerID() && descriptor.StreamableHTTPURL == c.config.RemoteURL() && descriptor.Resource == c.config.RemoteURL()
+}
+
+func (c *ClientConfigurator) restoreClient(clientID string) error {
+	if c.oauth == nil {
+		return fmt.Errorf("%w: local fixture OAuth service is unavailable", platformmcp.ErrProviderAdapterUnavailable)
+	}
+	if err := c.oauth.RestoreRegisteredClient(clientID); err != nil {
+		return fmt.Errorf("restore local fixture client: %w", err)
+	}
+	return nil
 }
 
 func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsrepo.RemoteSessionIssuer, error) {
@@ -118,11 +130,17 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 			Name:                              conv.ToPGText(fixtureServerName),
 			AuthorizationEndpoint:             conv.ToPGText(c.config.OAuthAuthorizationURL()),
 			TokenEndpoint:                     conv.ToPGText(c.config.OAuthTokenURL()),
+			RevocationEndpoint:                conv.ToPGText(c.config.OAuthRevocationURL()),
 			RegistrationEndpoint:              conv.ToPGText(c.config.OAuthRegistrationURL()),
 			ScopesSupported:                   []string{"tools:read"},
 			GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 			ResponseTypesSupported:            []string{"code"},
 			TokenEndpointAuthMethodsSupported: []string{"none"},
+			// Matches what validateMetadata requires the fixture IdP to
+			// advertise. Deliberately absent from validIssuer: rows created
+			// before this column existed hold NULL, and rejecting them would
+			// break existing local environments over a fixture-only field.
+			CodeChallengeMethodsSupported: []string{"S256"},
 		})
 		if err != nil {
 			return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create local fixture issuer: %w", err)
@@ -137,7 +155,7 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 }
 
 func (c *ClientConfigurator) validIssuer(issuer remotesessionsrepo.RemoteSessionIssuer) bool {
-	return issuer.ID == c.config.RemoteSessionIssuerID() && !issuer.ProjectID.Valid && !issuer.OrganizationID.Valid && issuer.Slug == fixtureIssuerSlug && issuer.Issuer == c.config.OAuthIssuerURL() && pgTextEquals(issuer.AuthorizationEndpoint, c.config.OAuthAuthorizationURL()) && pgTextEquals(issuer.TokenEndpoint, c.config.OAuthTokenURL()) && pgTextEquals(issuer.RegistrationEndpoint, c.config.OAuthRegistrationURL()) && slices.Equal(issuer.ScopesSupported, []string{"tools:read"}) && slices.Equal(issuer.GrantTypesSupported, []string{"authorization_code", "refresh_token"}) && slices.Equal(issuer.ResponseTypesSupported, []string{"code"}) && slices.Equal(issuer.TokenEndpointAuthMethodsSupported, []string{"none"}) && !issuer.ClientIDMetadataDocumentSupported && !issuer.Oidc && !issuer.Passthrough
+	return issuer.ID == c.config.RemoteSessionIssuerID() && !issuer.ProjectID.Valid && !issuer.OrganizationID.Valid && issuer.Slug == fixtureIssuerSlug && issuer.Issuer == c.config.OAuthIssuerURL() && pgTextEquals(issuer.AuthorizationEndpoint, c.config.OAuthAuthorizationURL()) && pgTextEquals(issuer.TokenEndpoint, c.config.OAuthTokenURL()) && pgTextEquals(issuer.RevocationEndpoint, c.config.OAuthRevocationURL()) && pgTextEquals(issuer.RegistrationEndpoint, c.config.OAuthRegistrationURL()) && slices.Equal(issuer.ScopesSupported, []string{"tools:read"}) && slices.Equal(issuer.GrantTypesSupported, []string{"authorization_code", "refresh_token"}) && slices.Equal(issuer.ResponseTypesSupported, []string{"code"}) && slices.Equal(issuer.TokenEndpointAuthMethodsSupported, []string{"none"}) && !issuer.ClientIDMetadataDocumentSupported && !issuer.Oidc && !issuer.Passthrough
 }
 
 func (c *ClientConfigurator) validateMetadata(ctx context.Context) error {
@@ -253,7 +271,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	client, err := queries.GetLocalFixtureOrganizationRemoteSessionClient(ctx, remotesessionsrepo.GetLocalFixtureOrganizationRemoteSessionClientParams{OrganizationID: conv.ToPGText(request.OrganizationID), RemoteSessionIssuerID: issuerID})
@@ -304,7 +322,7 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client attachment: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	if err := requireNoCompetingFixtureBinding(ctx, queries, request, issuerID, clientID); err != nil {
@@ -323,7 +341,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 	bound, err := queries.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             request.ProjectID,
 		UserSessionIssuerID:   request.UserSessionIssuerID,
-		OrganizationID:        conv.ToPGText(request.OrganizationID),
+		OrganizationID:        request.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:            2,

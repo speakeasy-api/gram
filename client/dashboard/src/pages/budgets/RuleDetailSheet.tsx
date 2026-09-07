@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import type { IdentityRef } from "@/lib/identity-urn";
 import { Button } from "@/components/ui/Button";
 import {
   Sheet,
@@ -224,8 +226,11 @@ function RuleDetail({
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      {event.displayName || event.email} ·{" "}
-                      {formatUsd(event.spendUsd)} of {formatUsd(event.limitUsd)}
+                      <IdentityLink identifier={identityRefForActor(event)}>
+                        {event.displayName || event.email}
+                      </IdentityLink>{" "}
+                      · {formatUsd(event.spendUsd)} of{" "}
+                      {formatUsd(event.limitUsd)}
                     </p>
                   </li>
                 );
@@ -243,6 +248,19 @@ function RuleDetail({
       </SheetFooter>
     </>
   );
+}
+
+/**
+ * The link target for a budget actor. The Gram user id names the person the
+ * server matched; an address only names them if no alias of theirs resolves
+ * first, so it is the fallback rather than the key.
+ */
+function identityRefForActor(actor: {
+  userId?: string | undefined;
+  email?: string | undefined;
+}): IdentityRef | null {
+  if (actor.userId) return { userId: actor.userId };
+  return actor.email ? { email: actor.email } : null;
 }
 
 /** Number of people shown before the list collapses behind a "show all"
@@ -413,7 +431,9 @@ function ActorRow({ actor }: { actor: SpendRuleActorUsage }): JSX.Element {
       <div className="flex items-center justify-between gap-3 text-xs">
         <div className="min-w-0">
           <div className="truncate font-medium">
-            {actor.displayName || actor.email}
+            <IdentityLink identifier={identityRefForActor(actor)}>
+              {actor.displayName || actor.email}
+            </IdentityLink>
           </div>
           {actor.displayName && (
             <div className="text-muted-foreground truncate">{actor.email}</div>

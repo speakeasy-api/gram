@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -133,7 +134,11 @@ func handleResourcesRead(
 	var functionMem *float64
 	var functionsExecutionTime *float64
 
-	mcpURL := payload.sessionID
+	var mcpURL string
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		mcpURL = requestContext.Host + requestContext.ReqURL
+	}
+
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
@@ -156,6 +161,7 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
 			ResponseStatusCode:    rw.statusCode,
@@ -233,8 +239,10 @@ func handleResourcesRead(
 	if isMCPPassthrough(resourceDef.Meta) {
 		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
 		bs, err := json.Marshal(result[json.RawMessage]{
-			ID:     req.ID,
-			Result: json.RawMessage(rw.body.Bytes()),
+			ID:             req.ID,
+			Result:         json.RawMessage(rw.body.Bytes()),
+			serverIdentity: serverInfoHostedToolset,
+			cacheHints:     cacheHintsCallerVarying,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
@@ -270,6 +278,12 @@ func handleResourcesRead(
 		Result: resourceReadResult{
 			Contents: []resourceContent{content},
 		},
+		serverIdentity: serverInfoHostedToolset,
+		// The body is produced by invoking the resource with the caller's own
+		// configuration, and MCP-* request headers reach that configuration on
+		// every server regardless of visibility or authentication. Two callers
+		// reading the same URI can therefore receive different content.
+		cacheHints: cacheHintsCallerVarying,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)

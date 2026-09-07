@@ -159,18 +159,20 @@ export function parseExclusionExpression(input: string): ParseResult {
     return { ok: false, error: "Enter an exclusion criteria expression." };
   }
 
-  if (primary.matchType === "regex") {
-    if (primary.value.length > REGEX_MAX_LENGTH) {
-      return {
-        ok: false,
-        error: `Regex pattern too long (max ${REGEX_MAX_LENGTH} characters).`,
-      };
-    }
-    try {
-      new RegExp(primary.value);
-    } catch {
-      return { ok: false, error: "Invalid regex pattern." };
-    }
+  // Regex pattern *validity* is deliberately not checked here: patterns are
+  // compiled by Go's RE2 (the suggestion endpoint, the create/update API, the
+  // analyzers), and JS `RegExp` is a different dialect — it throws on RE2's
+  // inline flags ("(?i)") and "(?P<name>)" groups and accepts lookarounds RE2
+  // rejects. The form validates via the wasm CEL engine's RE2 compiler before
+  // submit, and the API is the backstop.
+  if (
+    primary.matchType === "regex" &&
+    primary.value.length > REGEX_MAX_LENGTH
+  ) {
+    return {
+      ok: false,
+      error: `Regex pattern too long (max ${REGEX_MAX_LENGTH} characters).`,
+    };
   }
 
   return {

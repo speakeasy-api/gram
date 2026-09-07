@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const acquireFeatureCacheLock = `-- name: AcquireFeatureCacheLock :exec
+SELECT pg_advisory_lock(hashtextextended('product-feature:' || $1::text || ':' || $2::text, 0))
+`
+
+type AcquireFeatureCacheLockParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Serialize durable feature updates with cache fills and refreshes so an older
+// operation cannot overwrite a newer cache value after the database changes.
+func (q *Queries) AcquireFeatureCacheLock(ctx context.Context, arg AcquireFeatureCacheLockParams) error {
+	_, err := q.db.Exec(ctx, acquireFeatureCacheLock, arg.OrganizationID, arg.FeatureName)
+	return err
+}
+
 const deleteFeature = `-- name: DeleteFeature :one
 UPDATE organization_features
 SET deleted_at = clock_timestamp(),
@@ -58,6 +74,37 @@ type EnableFeatureParams struct {
 
 func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const enableFeatureIfNeverConfigured = `-- name: EnableFeatureIfNeverConfigured :execrows
+INSERT INTO organization_features (
+    organization_id,
+    feature_name
+)
+SELECT $1, $2
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM organization_features
+    WHERE organization_id = $1
+      AND feature_name = $2
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO NOTHING
+`
+
+type EnableFeatureIfNeverConfiguredParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// PAYG activation grants purchased capabilities to legacy organizations while
+// preserving a soft-deleted row as an explicit administrator choice.
+func (q *Queries) EnableFeatureIfNeverConfigured(ctx context.Context, arg EnableFeatureIfNeverConfiguredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enableFeatureIfNeverConfigured, arg.OrganizationID, arg.FeatureName)
 	if err != nil {
 		return 0, err
 	}
@@ -116,4 +163,20 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, organizationID s
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const releaseFeatureCacheLock = `-- name: ReleaseFeatureCacheLock :one
+SELECT pg_advisory_unlock(hashtextextended('product-feature:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseFeatureCacheLockParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+func (q *Queries) ReleaseFeatureCacheLock(ctx context.Context, arg ReleaseFeatureCacheLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseFeatureCacheLock, arg.OrganizationID, arg.FeatureName)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }

@@ -67,6 +67,14 @@ func (p *stubProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	return 0, nil
 }
 
+func (*stubProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*stubProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (p *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	return nil
 }
@@ -80,7 +88,7 @@ func (p *stubProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return 0, nil, p.usageErr
 }
 
-func (p *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (p *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 

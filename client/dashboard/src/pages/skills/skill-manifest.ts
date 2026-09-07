@@ -1,5 +1,15 @@
 export const MAX_SKILL_MANIFEST_BYTES = 65_536;
 
+export const SKILL_MANIFEST_TEMPLATE = `---
+name: my-skill
+description: What this skill does and when to use it.
+---
+
+# My skill
+
+Describe the workflow, constraints, and expected output.
+`;
+
 const encoder = new TextEncoder();
 
 export function manifestByteLength(content: string): number {

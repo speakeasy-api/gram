@@ -121,6 +121,27 @@ WHERE ti.project_id = @project_id
   AND ti.status = 'active'
   AND ti.deleted IS FALSE;
 
+-- name: ListTriggerEvents :many
+SELECT
+    e.id,
+    e.trigger_instance_id,
+    e.status,
+    e.attempts,
+    e.last_error,
+    e.created_at,
+    e.processed_at,
+    t.chat_id
+FROM assistant_thread_events e
+LEFT JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+WHERE e.project_id = @project_id
+  AND e.trigger_instance_id = @trigger_instance_id
+  AND e.deleted IS FALSE
+ORDER BY e.created_at DESC
+LIMIT @row_limit;
+
 -- name: DeleteTriggerInstance :one
 UPDATE trigger_instances
 SET
@@ -130,3 +151,14 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: DeleteTriggerInstancesByTargetExceptDefinition :exec
+UPDATE trigger_instances
+SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND definition_slug <> @excluded_definition_slug
+  AND deleted IS FALSE;

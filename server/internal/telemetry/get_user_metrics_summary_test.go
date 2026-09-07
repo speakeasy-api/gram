@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -476,4 +477,86 @@ func insertToolCallLogWithUser(t *testing.T, ctx context.Context, projectID, dep
 		nil, nil, string(attrsJSON), "{}",
 		projectID, deploymentID, toolURN, "gram-tools")
 	require.NoError(t, err)
+}
+
+// insertHookToolLogWithAccount inserts a hook tool event attributed to a user
+// and a provider account (external org id) — the row shape local agent tool
+// calls arrive as.
+func insertHookToolLogWithAccount(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, userID, toolName, hookEvent, externalOrgID string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.tool.name":       toolName,
+		"gram.hook.event":      hookEvent,
+		"gram.hook.source":     "claude-code",
+		"gram.event.source":    "hook",
+		"gram.external_org_id": externalOrgID,
+		"user.id":              userID,
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool hook",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:hook:"+hookEvent, "gram-server")
+	require.NoError(t, err)
+}
+
+// Scoping the employee page to one account must not zero the tool-call tile:
+// hook tool events carry the account discriminator while Gram MCP tool spans
+// do not, so the default predicate counts both arms — the same shape as the
+// data-flow graph rendered beside the tile.
+func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	userID := uuid.New().String()
+	externalOrgID := "ext-org-" + uuid.New().String()
+
+	now := time.Now().UTC()
+	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-10*time.Minute), userID, "Bash", "PostToolUse", externalOrgID)
+	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-9*time.Minute), userID, "Edit", "PostToolUseFailure", externalOrgID)
+	// A Gram MCP tool span carries no account attribution.
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	scoped, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:          from,
+		To:            to,
+		UserID:        &userID,
+		ExternalOrgID: &externalOrgID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), scoped.Metrics.TotalToolCalls)
+	require.Equal(t, int64(1), scoped.Metrics.ToolCallSuccess)
+	require.Equal(t, int64(1), scoped.Metrics.ToolCallFailure)
+
+	all, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &userID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), all.Metrics.TotalToolCalls)
+	require.Equal(t, int64(2), all.Metrics.ToolCallSuccess)
 }

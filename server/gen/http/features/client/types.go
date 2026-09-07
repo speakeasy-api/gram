@@ -9,12 +9,15 @@ package client
 
 import (
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // SetProductFeatureRequestBody is the type of the "features" service
 // "setProductFeature" endpoint HTTP request body.
 type SetProductFeatureRequestBody struct {
+	// Organization whose product feature to update.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Name of the feature to update
 	FeatureName string `form:"feature_name" json:"feature_name" xml:"feature_name"`
 	// Whether the feature should be enabled
@@ -24,6 +27,8 @@ type SetProductFeatureRequestBody struct {
 // SetRemoteSessionAutoRefreshPolicyRequestBody is the type of the "features"
 // service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP request body.
 type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Organization policy for automatic remote-session refresh
 	Policy string `form:"policy" json:"policy" xml:"policy"`
 }
@@ -58,7 +63,7 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
-	// Whether the organization is eligible for the Gram Platform MCP capability
+	// Whether the organization can use the Gram Platform MCP capability
 	PlatformMcpEnabled *bool `form:"platform_mcp_enabled,omitempty" json:"platform_mcp_enabled,omitempty" xml:"platform_mcp_enabled,omitempty"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -70,6 +75,13 @@ type GetProductFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled *bool `form:"session_portability_enabled,omitempty" json:"session_portability_enabled,omitempty" xml:"session_portability_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -643,8 +655,9 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 // payload of the "setProductFeature" endpoint of the "features" service.
 func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetProductFeatureRequestBody {
 	body := &SetProductFeatureRequestBody{
-		FeatureName: p.FeatureName,
-		Enabled:     p.Enabled,
+		OrganizationID: p.OrganizationID,
+		FeatureName:    string(p.FeatureName),
+		Enabled:        p.Enabled,
 	}
 	return body
 }
@@ -654,32 +667,35 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "features" service.
 func NewSetRemoteSessionAutoRefreshPolicyRequestBody(p *features.SetRemoteSessionAutoRefreshPolicyPayload) *SetRemoteSessionAutoRefreshPolicyRequestBody {
 	body := &SetRemoteSessionAutoRefreshPolicyRequestBody{
-		Policy: p.Policy,
+		OrganizationID: p.OrganizationID,
+		Policy:         p.Policy,
 	}
 	return body
 }
 
-// NewGetProductFeaturesResultOK builds a "features" service
+// NewGetProductFeaturesProductFeaturesOK builds a "features" service
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
-func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
-	v := &features.GetProductFeaturesResult{
-		LogsEnabled:                             *body.LogsEnabled,
-		ToolIoLogsEnabled:                       *body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:                   *body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled:            *body.AuthzChallengeLoggingEnabled,
-		SsoEnabled:                              *body.SsoEnabled,
-		ScimEnabled:                             *body.ScimEnabled,
-		HooksBrowserLoginEnabled:                *body.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:                    *body.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:                  *body.CustomModelKeysEnabled,
-		SkillsEnabled:                           *body.SkillsEnabled,
-		SkillCaptureMetadataOnly:                *body.SkillCaptureMetadataOnly,
-		AiPlatformPushIntegrationsEnabled:       *body.AiPlatformPushIntegrationsEnabled,
-		PlatformMcpEnabled:                      *body.PlatformMcpEnabled,
-		CustomerManagedEncryptionKeysEnabled:    *body.CustomerManagedEncryptionKeysEnabled,
-		RemoteSessionAutoRefreshEnabled:         *body.RemoteSessionAutoRefreshEnabled,
-		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
-		DeviceAgent:                             *body.DeviceAgent,
+func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.ProductFeaturesView {
+	v := &featuresviews.ProductFeaturesView{
+		LogsEnabled:                             body.LogsEnabled,
+		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            body.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              body.SsoEnabled,
+		ScimEnabled:                             body.ScimEnabled,
+		HooksBrowserLoginEnabled:                body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  body.CustomModelKeysEnabled,
+		SkillsEnabled:                           body.SkillsEnabled,
+		SkillCaptureMetadataOnly:                body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      body.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
+		DeviceAgent:                             body.DeviceAgent,
 	}
 
 	return v
@@ -1133,63 +1149,6 @@ func NewSetRemoteSessionAutoRefreshPolicyGatewayError(body *SetRemoteSessionAuto
 	}
 
 	return v
-}
-
-// ValidateGetProductFeaturesResponseBody runs the validations defined on
-// GetProductFeaturesResponseBody
-func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody) (err error) {
-	if body.LogsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logs_enabled", "body"))
-	}
-	if body.ToolIoLogsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_io_logs_enabled", "body"))
-	}
-	if body.SessionCaptureEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "body"))
-	}
-	if body.AuthzChallengeLoggingEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
-	}
-	if body.SsoEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
-	}
-	if body.ScimEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
-	}
-	if body.HooksBrowserLoginEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_browser_login_enabled", "body"))
-	}
-	if body.HooksFailOpenEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_fail_open_enabled", "body"))
-	}
-	if body.CustomModelKeysEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("custom_model_keys_enabled", "body"))
-	}
-	if body.SkillsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
-	}
-	if body.SkillCaptureMetadataOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skill_capture_metadata_only", "body"))
-	}
-	if body.AiPlatformPushIntegrationsEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
-	}
-	if body.PlatformMcpEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("platform_mcp_enabled", "body"))
-	}
-	if body.CustomerManagedEncryptionKeysEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
-	}
-	if body.RemoteSessionAutoRefreshEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enabled", "body"))
-	}
-	if body.RemoteSessionAutoRefreshEnforcedEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "body"))
-	}
-	if body.DeviceAgent == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))
-	}
-	return
 }
 
 // ValidateGetProductFeaturesUnauthorizedResponseBody runs the validations

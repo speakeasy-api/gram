@@ -124,7 +124,7 @@ func (h *Headers) revealHeaders(headers []repo.RemoteMcpServerHeader, redacted b
 }
 
 func (h *Headers) revealHeader(header repo.RemoteMcpServerHeader, redacted bool) (repo.RemoteMcpServerHeader, error) {
-	if !header.IsSecret || !header.Value.Valid {
+	if !header.IsSecret || !header.Value.Valid || header.Value.String == "" {
 		return header, nil
 	}
 

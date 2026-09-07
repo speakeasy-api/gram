@@ -305,14 +305,16 @@ func TestSendMessageRequiresProjectGrant(t *testing.T) {
 func createChatAttachmentFixture(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID, name, contentType string) uuid.UUID {
 	t.Helper()
 
+	ensureAssistantTestOrganization(t, conn)
 	asset, err := assetsrepo.New(conn).CreateAsset(context.Background(), assetsrepo.CreateAssetParams{
-		Name:          name,
-		Url:           "file://" + name,
-		ProjectID:     projectID,
-		Sha256:        uuid.NewString(),
-		Kind:          "chat_attachment",
-		ContentType:   contentType,
-		ContentLength: 12,
+		Name:           name,
+		Url:            "file://" + name,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Sha256:         uuid.NewString(),
+		Kind:           "chat_attachment",
+		ContentType:    contentType,
+		ContentLength:  12,
 	})
 	require.NoError(t, err)
 	return asset.ID

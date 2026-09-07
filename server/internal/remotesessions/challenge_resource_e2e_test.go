@@ -63,6 +63,8 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 	require.NoError(t, err)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		enc,
 		policy,

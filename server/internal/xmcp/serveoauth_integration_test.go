@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
@@ -214,12 +215,13 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	}))
 
 	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   result.UserSessionIssuer.ID,
-		ClientID:              "test-mcp-client",
-		ClientSecretHash:      pgtype.Text{Valid: false},
-		ClientName:            "test-mcp-client",
-		RedirectUris:          []string{"http://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Valid: false},
+		UserSessionIssuerID:     result.UserSessionIssuer.ID,
+		ClientID:                "test-mcp-client",
+		ClientSecretHash:        pgtype.Text{Valid: false},
+		ClientName:              "test-mcp-client",
+		RedirectUris:            []string{"http://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -336,7 +338,7 @@ func buildXmcpChallengeManagerForTest(
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, err)
 
-	mgr := remotesessions.NewChallengeManager(ti.logger, ti.conn, ti.enc, policy, ti.cacheAdapter, ti.serverURL)
+	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, ti.cacheAdapter, ti.serverURL)
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](
 		ti.logger.With(attr.SlogCacheNamespace("authn_challenge")),
 		ti.cacheAdapter,

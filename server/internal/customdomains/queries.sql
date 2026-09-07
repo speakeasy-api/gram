@@ -109,6 +109,66 @@ WHERE custom_domain_id = @custom_domain_id::uuid
 ORDER BY id
 FOR UPDATE;
 
+-- name: ListEligibleRootMcpServersForOrganization :many
+-- Servers an org admin may map to a custom domain root, across every project
+-- in the organization, with one deterministic endpoint per server (a server
+-- can carry several endpoints on a domain: prefer the root one, then the
+-- oldest) so callers can distinguish attach-and-set from set. Slugless
+-- servers are omitted unless already attached: the by-server path needs a
+-- slug to name the endpoint it creates.
+SELECT
+    s.id,
+    s.name,
+    s.slug,
+    p.id AS project_id,
+    p.name AS project_name,
+    COALESCE(e.id, '00000000-0000-0000-0000-000000000000'::uuid) AS attached_endpoint_id,
+    COALESCE(e.is_domain_root, FALSE)::boolean AS is_domain_root,
+    COALESCE(e.slug, '')::text AS endpoint_slug
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT e.id, e.slug, e.is_domain_root
+    FROM mcp_endpoints AS e
+    WHERE e.mcp_server_id = s.id
+      AND e.custom_domain_id = @custom_domain_id::uuid
+      AND e.deleted IS FALSE
+    ORDER BY (e.is_domain_root IS TRUE) DESC, e.id
+    LIMIT 1
+) AS e ON TRUE
+WHERE p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+ORDER BY p.name, s.name NULLS LAST, s.id;
+
+-- name: GetEligibleRootMcpServerForOrganization :one
+-- Org-scoped eligibility check for mapping a server to a domain root when no
+-- endpoint exists yet; mirrors GetEligibleRootMcpEndpoint's server conditions.
+SELECT s.*
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE s.id = @mcp_server_id::uuid
+  AND p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+FOR SHARE OF s;
+
+-- name: GetMcpEndpointByCustomDomainAndServer :one
+-- A server can carry several endpoints on one domain; reuse deterministically:
+-- the current root endpoint when there is one, otherwise the oldest.
+SELECT *
+FROM mcp_endpoints
+WHERE custom_domain_id = @custom_domain_id::uuid
+  AND mcp_server_id = @mcp_server_id::uuid
+  AND deleted IS FALSE
+ORDER BY (is_domain_root IS TRUE) DESC, id
+LIMIT 1;
+
 -- name: GetEligibleRootMcpEndpoint :one
 SELECT e.*
 FROM mcp_endpoints AS e
@@ -191,18 +251,6 @@ WHERE d.activated IS TRUE
   AND d.ingress_name IS NOT NULL
   AND d.deleted IS FALSE;
 
--- name: ListOrganizationUsersForHealthNotification :many
--- Authorization filtering is applied by the caller.
-SELECT users.id, users.email
-FROM organization_user_relationships AS our
-JOIN users
-  ON users.id = our.user_id
-WHERE our.organization_id = @organization_id
-  AND our.deleted IS FALSE
-  AND users.deleted_at IS NULL
-  AND users.email <> ''
-ORDER BY users.email, users.id;
-
 -- name: GetOrganizationSlugForHealthNotification :one
 SELECT slug
 FROM organization_metadata
@@ -234,6 +282,33 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+
+-- name: SetCustomDomainVerified :one
+-- Ownership verification is the sole writer of verified=true (the _gram TXT
+-- check in the verification activity). Reconciliation only manages activation.
+UPDATE custom_domains
+SET
+    verified = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ActivateVerifiedCustomDomain :execrows
+-- Activation re-checks verification at write time: a health auto-disable
+-- during the reconciler's convergence wait revokes verified, and the stale
+-- snapshot the reconciler holds must not resurrect the domain. Never writes
+-- verified — ownership verification is its sole writer.
+UPDATE custom_domains
+SET
+    activated = TRUE,
+    ingress_name = @ingress_name,
+    cert_secret_name = @cert_secret_name,
+    provisioner_kind = @provisioner_kind,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+  AND verified IS TRUE;
 
 -- name: UpdateCustomDomain :one
 UPDATE custom_domains

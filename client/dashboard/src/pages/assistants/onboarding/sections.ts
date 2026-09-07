@@ -12,7 +12,7 @@ type SectionRange = {
 function findSections(text: string): SectionRange[] {
   HEADING_RE.lastIndex = 0;
   const found: Omit<SectionRange, "end">[] = [];
-  for (let m: RegExpExecArray | null; (m = HEADING_RE.exec(text)); ) {
+  for (let m: RegExpExecArray | null; (m = HEADING_RE.exec(text));) {
     found.push({
       name: m[1] as SectionName,
       start: m.index,

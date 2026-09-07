@@ -1,12 +1,10 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
-import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
-import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import React, { ReactElement } from "react";
+import { Link } from "react-router";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
@@ -46,6 +44,8 @@ function PageBody({
   return (
     // Nest the max-width container inside another div so that the entire page area remains scrollable
     <div
+      // Anchor for useTabScrollReset: the one scroll container a page owns.
+      data-page-scroll=""
       className={cn(
         // flex-1 + min-h-0 ensures this pane occupies exactly the remaining
         // space in PageLayout's flex column (after PageHeader). Using h-full
@@ -115,7 +115,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           direction="horizontal"
           justify="space-between"
           align="center"
-          className="mb-6"
+          className="mb-6 max-sm:flex-col max-sm:items-stretch max-sm:gap-4"
         >
           <Stack gap={2} className="min-w-0">
             {slots.title}
@@ -125,7 +125,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
             direction="horizontal"
             gap={2}
             align="center"
-            className="shrink-0"
+            className="shrink-0 max-sm:self-end"
           >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
@@ -234,40 +234,12 @@ export function EmptyState({
   graphicClassName?: string;
 }): React.JSX.Element {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const { isEmpty, isLoading } = useIsProjectEmpty();
 
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
-
-  // For empty projects, show the onboarding choice cards
-  if (isEmpty && !isLoading) {
-    return (
-      <Stack gap={8} className="m-8 w-full max-w-xl">
-        <InitialChoiceStep
-          routes={routes}
-          isFunctionsEnabled={isFunctionsEnabled}
-        />
-      </Stack>
-    );
-  }
-
-  // For non-empty projects or loading state, show the standard empty state
-  let CTA: React.ReactNode = (
-    <routes.sources.Link>
-      <Button size="sm">Get started</Button>
-    </routes.sources.Link>
+  const CTA: React.ReactNode = nonEmptyProjectCTA ?? (
+    <Button asChild size="sm">
+      <Link to={routes.mcp.add.catalog.href()}>Browse catalog</Link>
+    </Button>
   );
-
-  if (isLoading) {
-    CTA = (
-      <Button disabled size="sm">
-        Checking project…
-      </Button>
-    );
-  } else if (!isEmpty && nonEmptyProjectCTA) {
-    CTA = nonEmptyProjectCTA;
-  }
 
   return (
     <div className="bg-background flex h-[600px] w-full items-center justify-center border">

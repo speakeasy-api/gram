@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
@@ -26,7 +30,11 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
+import {
+  getRuleTitleFallback,
+  hasJudgeSource,
+  scoreToRating,
+} from "../risk-utils";
 import { invalidateExclusionSurfaces } from "../exclusion-invalidation";
 import { useDismissFinding } from "../useDismissFinding";
 import {
@@ -40,10 +48,12 @@ import {
   type SignalSeverity,
 } from "./signals-helpers";
 import { collectFindingsForRules } from "./collect-findings";
-import { DismissFindingsDialog } from "./DismissFindingsDialog";
+import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { ExposureBar } from "./ExposureBar";
 import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
+import { SuppressedFindings } from "./SuppressedFindings";
 
 const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
 
@@ -57,6 +67,7 @@ const GROUP_OPTIONS: { value: SignalGroupMode; label: string }[] = [
   { value: "category", label: "Data type" },
   { value: "team", label: "Team" },
   { value: "app", label: "App" },
+  { value: "principal", label: "User" },
 ];
 
 const GROUP_MODES = new Set<SignalGroupMode>(
@@ -164,9 +175,13 @@ function WatchdogContent(): JSX.Element {
     signalCount: number;
   } | null>(null);
   const [collecting, setCollecting] = useState(false);
-  const [pendingExclusions, setPendingExclusions] = useState<
-    RiskSignal[] | null
-  >(null);
+  const [pendingExclusions, setPendingExclusions] = useState<{
+    signals: RiskSignal[];
+    // Judge-backed signals in the selection, dropped from exclusion creation:
+    // their findings can't be excluded (constant rule id per detector), only
+    // dismissed. The dialog names how many were set aside.
+    skippedJudge: number;
+  } | null>(null);
   const [creatingExclusions, setCreatingExclusions] = useState(false);
 
   const handleDismissSelected = async () => {
@@ -174,11 +189,19 @@ function WatchdogContent(): JSX.Element {
     if (selected.length === 0) return;
     setCollecting(true);
     try {
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time — a windowed collection can miss the very
+      // findings the selected signals display.
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: window.from, to: window.to },
+        { from: undefined, to: undefined },
       );
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for the selection.");
+        return;
+      }
       setPendingDismiss({ results, signalCount: selected.length });
     } catch {
       toast.error("Failed to load the selected signals' findings.");
@@ -197,7 +220,19 @@ function WatchdogContent(): JSX.Element {
   const handleExcludeSelected = () => {
     const selected = selection.selectedItems;
     if (selected.length === 0) return;
-    setPendingExclusions(selected);
+    const excludable = selected.filter(
+      (signal) => !hasJudgeSource(signal.detectionSources),
+    );
+    if (excludable.length === 0) {
+      toast.info(
+        "Prompt-based findings can't be excluded — suppress them instead.",
+      );
+      return;
+    }
+    setPendingExclusions({
+      signals: excludable,
+      skippedJudge: selected.length - excludable.length,
+    });
   };
 
   const confirmCreateExclusions = async () => {
@@ -205,7 +240,7 @@ function WatchdogContent(): JSX.Element {
     setCreatingExclusions(true);
     let created = 0;
     const failed: string[] = [];
-    for (const signal of pendingExclusions) {
+    for (const signal of pendingExclusions.signals) {
       try {
         await createExclusionMutation.mutateAsync({
           request: {
@@ -318,32 +353,13 @@ function WatchdogContent(): JSX.Element {
                 </div>
                 {hasSelection ? (
                   <div className="flex items-center gap-2">
-                    <Button
+                    <SuppressMenu
                       variant="secondary"
                       size="sm"
-                      disabled={collecting}
-                      onClick={() => void handleDismissSelected()}
-                    >
-                      {collecting && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Mark as false positive</Button.Text>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={creatingExclusions}
-                      onClick={handleExcludeSelected}
-                    >
-                      {creatingExclusions && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Set up exclusion rules</Button.Text>
-                    </Button>
+                      busy={collecting || creatingExclusions}
+                      onSuppressOnce={() => void handleDismissSelected()}
+                      onCreateRule={handleExcludeSelected}
+                    />
                     <Button
                       variant="secondary"
                       size="sm"
@@ -397,6 +413,13 @@ function WatchdogContent(): JSX.Element {
               />
             </>
           )}
+          {/* Everything the list above deliberately omits. Unfiltered and
+              unwindowed on purpose: it's the audit trail for what is being
+              hidden, not another view of the current window — and outside the
+              signals branch on purpose too, since it reads a different endpoint
+              and has its own loading, error, and empty handling. A failed
+              signals query must not take the audit trail down with it. */}
+          <SuppressedFindings />
           {/* Inside Body on purpose: Page.Section slot-extracts only its known
               child components and silently drops anything else, so the drawer
               must live under a slot to render at all. */}
@@ -404,7 +427,7 @@ function WatchdogContent(): JSX.Element {
             signal={selectedSignal}
             onClose={() => setUrlParam("signal", null)}
           />
-          <DismissFindingsDialog
+          <SuppressFindingsDialog
             results={pendingDismiss?.results ?? null}
             subject={
               pendingDismiss?.signalCount === 1
@@ -415,7 +438,8 @@ function WatchdogContent(): JSX.Element {
             onConfirm={confirmDismissSelected}
           />
           <CreateExclusionsDialog
-            signals={pendingExclusions}
+            signals={pendingExclusions?.signals ?? null}
+            skippedJudge={pendingExclusions?.skippedJudge ?? 0}
             creating={creatingExclusions}
             onCancel={() => setPendingExclusions(null)}
             onConfirm={() => void confirmCreateExclusions()}
@@ -459,6 +483,13 @@ function SeverityChip({
   );
 }
 
+/** Explains how the headline number relates to the per-signal scores.
+ * Mirrors orgRiskScore in server/internal/risk/signals.go: the worst
+ * signal dominates, the top-three mean keeps one outlier from saturating
+ * it, and finding volume contributes the rest. */
+const ORG_RISK_SCORE_TOOLTIP =
+  "Each signal's score is inherited from its policy. The overall score is not a plain average: it weights the most severe signal, the average of the top signals, and the total number of findings.";
+
 /** StatTile tone for the org risk score, mirroring the signal table's
  * severity coding: red for high/critical bands, amber for medium, plain
  * ink for low. */
@@ -483,11 +514,14 @@ function exclusionsDialogDescription(count: number): string {
 
 function CreateExclusionsDialog({
   signals,
+  skippedJudge,
   creating,
   onCancel,
   onConfirm,
 }: {
   signals: RiskSignal[] | null;
+  /** Judge-backed signals dropped from the selection — not excludable. */
+  skippedJudge: number;
   creating: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -513,6 +547,13 @@ function CreateExclusionsDialog({
             <li key={signal.key}>{getRuleTitleFallback(signal.ruleId)}</li>
           ))}
         </ul>
+        {skippedJudge > 0 && (
+          <Text small muted>
+            {skippedJudge} prompt-based{" "}
+            {skippedJudge === 1 ? "signal was" : "signals were"} left out —
+            those findings can't be excluded. Suppress them instead.
+          </Text>
+        )}
         <Dialog.Footer>
           <Button variant="tertiary" disabled={creating} onClick={onCancel}>
             <Button.Text>Cancel</Button.Text>
@@ -557,10 +598,10 @@ function KPIRow({
   if (!data && isLoading) {
     return (
       <StatTileGroup>
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }
@@ -570,6 +611,7 @@ function KPIRow({
     <StatTileGroup>
       <StatTile
         title="Org risk score"
+        tooltip={ORG_RISK_SCORE_TOOLTIP}
         value={data.orgRiskScore}
         displayValue={data.orgRiskScore.toFixed(1)}
         previousValue={data.previousOrgRiskScore}
@@ -584,13 +626,13 @@ function KPIRow({
         }
       />
       <StatTile
-        title="Findings · last 24h"
-        value={data.findings24h}
-        previousValue={data.previousFindings24h}
+        title="Findings"
+        value={data.findings}
+        previousValue={data.previousFindings}
         invertDelta
         tone="neutral"
         icon="flag"
-        comparisonLabel="vs previous 24h"
+        comparisonLabel="vs previous period"
       />
       <StatTile
         title="Open signals"

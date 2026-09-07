@@ -78,3 +78,40 @@ func TestCatalogCursorRejectsTampering(t *testing.T) {
 	_, err = codec.Decode(value+"x", principal, "", "")
 	require.ErrorIs(t, err, ErrCatalogCursorInvalid)
 }
+
+// A connection-less caller has no generation to bind a cursor to. Binding to
+// its subject instead keeps pagination working and still refuses a cursor
+// minted for a different caller.
+func TestCatalogCursorBindsAConnectionlessCallerToItsSubject(t *testing.T) {
+	t.Parallel()
+
+	codec, err := newCatalogCursorCodec("test-cursor-key")
+	require.NoError(t, err)
+	assistant := Principal{OrganizationID: "organization", UserID: "user-1", Surface: SurfaceProjectAssistant}
+	require.False(t, assistant.HasConnection())
+	require.NotEmpty(t, principalCursorBinding(assistant))
+
+	value, err := codec.Encode(catalogCursor{
+		OrganizationID: assistant.OrganizationID,
+		Generation:     principalCursorBinding(assistant),
+		Query:          normalizeCatalogQuery("find mcp"),
+		ProviderKey:    "",
+		Position:       catalogPageSize,
+	})
+	require.NoError(t, err, "a connection-less caller must still be able to paginate")
+
+	position, err := codec.Decode(value, assistant, "find mcp", "")
+	require.NoError(t, err)
+	require.Equal(t, catalogPageSize, position)
+
+	other := assistant
+	other.UserID = "user-2"
+	_, err = codec.Decode(value, other, "find mcp", "")
+	require.ErrorIs(t, err, ErrCatalogCursorInvalid)
+
+	// An OAuth caller's cursors stay bound to its generation, so they cannot be
+	// replayed by the assistant acting for the same user.
+	connected := Principal{OrganizationID: "organization", UserID: "user-1", ConnectionID: "connection-1", Generation: "generation-1"}
+	_, err = codec.Decode(value, connected, "find mcp", "")
+	require.ErrorIs(t, err, ErrCatalogCursorInvalid)
+}

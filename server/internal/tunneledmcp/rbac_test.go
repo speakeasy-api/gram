@@ -56,19 +56,21 @@ func TestCreateServerAllowsProjectScopedMCPWriteGrant(t *testing.T) {
 	authCtx := requireAuthContext(t, ctx)
 
 	_, err := ti.service.CreateServer(authztest.WithExactGrants(t, ctx), &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Name:             "created",
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "created",
+		ResourceIdentifier: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
 	result, err := ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Name:             "created",
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "created",
+		ResourceIdentifier: nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.Server)
@@ -88,7 +90,7 @@ func TestMutatingServerMethodsAllowProjectScopedMCPWriteGrant(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ID:               server.ID.String(),
-		Name:             "renamed",
+		Name:             new("renamed"),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
@@ -98,10 +100,29 @@ func TestMutatingServerMethodsAllowProjectScopedMCPWriteGrant(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ID:               server.ID.String(),
-		Name:             "renamed",
+		Name:             new("renamed"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "renamed", updated.Name)
+
+	// Omitting name is fine (tri-state), but a provided blank one is not.
+	_, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               server.ID.String(),
+		Name:             new("   "),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// An update carrying no fields at all is rejected, not a silent no-op.
+	_, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               server.ID.String(),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	rotated, err := ti.service.RotateServerKey(writeCtx, &gen.RotateServerKeyPayload{
 		SessionToken:     nil,

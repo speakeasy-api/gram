@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -72,34 +73,56 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		clientID = &s
 	}
 
+	credentialKind, declaredAuthMethod := clientcred.ForBoundClient(
+		row.UserSessionClientID.Valid,
+		row.ClientTokenEndpointAuthMethod,
+		row.ClientHasSecret,
+	)
+
+	// Null means the session has not been used since the column was introduced,
+	// which is distinct from the zero time.
+	var lastUsedAt *string
+	if row.LastUsedAt.Valid {
+		s := row.LastUsedAt.Time.Format(time.RFC3339)
+		lastUsedAt = &s
+	}
+
 	return &types.UserSession{
-		ID:                  row.ID.String(),
-		UserSessionIssuerID: row.UserSessionIssuerID.String(),
-		SubjectUrn:          row.SubjectUrn.String(),
-		Jti:                 row.Jti,
-		RefreshExpiresAt:    row.RefreshExpiresAt.Time.Format(time.RFC3339),
-		ExpiresAt:           row.ExpiresAt.Time.Format(time.RFC3339),
-		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
-		IssuerSlug:          row.IssuerSlug,
-		UserSessionClientID: clientID,
-		ClientName:          conv.FromPGText[string](row.ClientName),
-		ClientIDMetadataURI: conv.FromPGText[string](row.ClientIDMetadataUri),
-		SubjectType:         subjectType,
-		SubjectDisplayName:  subjectName,
+		ID:                            row.ID.String(),
+		UserSessionIssuerID:           row.UserSessionIssuerID.String(),
+		SubjectUrn:                    row.SubjectUrn.String(),
+		Jti:                           row.Jti,
+		RefreshExpiresAt:              row.RefreshExpiresAt.Time.Format(time.RFC3339),
+		ExpiresAt:                     row.ExpiresAt.Time.Format(time.RFC3339),
+		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
+		IssuerSlug:                    row.IssuerSlug,
+		UserSessionClientID:           clientID,
+		ClientName:                    conv.FromPGText[string](row.ClientName),
+		ClientIDMetadataURI:           conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientCredentialKind:          credentialKind,
+		ClientTokenEndpointAuthMethod: declaredAuthMethod,
+		SubjectType:                   subjectType,
+		SubjectDisplayName:            subjectName,
 		// Only a user subject resolves to a users row, so the join leaves this
 		// NULL for API key and anonymous subjects.
 		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),
 		RevokedAt:       revokedAt,
+		LastUsedAt:      lastUsedAt,
+		// The platform tool answers "which sessions exist", not "what is this
+		// connection wired to", so it does not pay for the upstream join. Empty
+		// rather than nil: the field is required, and absent upstreams is a
+		// meaningful answer this caller simply is not computing.
+		Upstreams: []*types.UserSessionUpstream{},
 	}
 }
 
-func projectID(ctx context.Context) (uuid.UUID, error) {
+func projectTenancy(ctx context.Context) (uuid.UUID, string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, oops.C(oops.CodeUnauthorized)
+		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
-	return *authCtx.ProjectID, nil
+	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
 }
 
 func parseNullUUID(s string, field string) (uuid.NullUUID, error) {
@@ -137,7 +160,7 @@ func (t *ListTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	pid, err := projectID(ctx)
+	pid, org, err := projectTenancy(ctx)
 	if err != nil {
 		return err
 	}
@@ -176,6 +199,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 
 	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           pid,
+		OrganizationID:      org,
 		Status:              conv.ToPGTextEmpty(in.Status),
 		SubjectUrn:          conv.ToPGTextEmpty(in.SubjectURN),
 		UserSessionIssuerID: issuer,
@@ -223,7 +247,7 @@ func (t *GetTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	pid, err := projectID(ctx)
+	pid, org, err := projectTenancy(ctx)
 	if err != nil {
 		return err
 	}
@@ -244,6 +268,7 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 	// status "all" ensures revoked sessions are visible by ID too.
 	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           pid,
+		OrganizationID:      org,
 		Status:              conv.ToPGTextEmpty("all"),
 		SubjectUrn:          conv.ToPGTextEmpty(""),
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},

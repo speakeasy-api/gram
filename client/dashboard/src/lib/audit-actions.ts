@@ -27,12 +27,22 @@ export const AUDIT_ACTIONS = [
   "aws_kms_key:create",
   "aws_kms_key:delete",
   "aws_kms_key:update",
+  "billing_metadata:cancel_stripe_subscription",
+  "billing_metadata:create_stripe_checkout",
+  "billing_metadata:create_stripe_portal",
+  "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
+  "chat_session:handoff_export",
+  "chat_session:move",
+  "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "data_export_route:create",
+  "data_export_route:delete",
+  "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
@@ -49,6 +59,18 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "json_web_key:activate",
+  "json_web_key:delete",
+  "json_web_key:publish",
+  "json_web_key:retire",
+  "json_web_key:revoke",
+  "json_web_key_set:create",
+  "json_web_key_set:delete",
+  "json_web_key_set:update",
+  "killswitch:activate",
+  "killswitch:change",
+  "killswitch:deactivate",
+  "killswitch:expire",
   "litellm_instance:create",
   "litellm_instance:revoke",
   "litellm_instance:rotate_key",
@@ -59,26 +81,46 @@ export const AUDIT_ACTIONS = [
   "mcp-server:delete",
   "mcp-server:update",
   "mcp-server:update-tool-metadata",
-  "mcp_collection:attach_server",
-  "mcp_collection:create",
-  "mcp_collection:delete",
-  "mcp_collection:detach_server",
-  "mcp_collection:update",
+  "mcp_approval_request:approve",
+  "mcp_approval_request:create",
+  "mcp_approval_request:deny",
+  "mcp_approval_request:evidence_changed",
+  "mcp_approval_request:research_start",
+  "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "meta-mcp:add_member",
+  "meta-mcp:create",
+  "meta-mcp:delete",
+  "meta-mcp:remove_member",
+  "meta-mcp:update",
+  "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "openrouter-key:disable",
+  "openrouter-key:enable",
+  "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_rearmed",
+  "organization:enterprise_trial_converted",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
+  "organization:payg_activated",
+  "organization:payg_deactivated",
+  "organization:product_feature_disabled",
+  "organization:product_feature_enabled",
+  "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
-  "otel_forwarding:delete",
-  "otel_forwarding:upsert",
+  "otel_destination:create",
+  "otel_destination:delete",
+  "otel_destination:update",
+  "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
   "platform-mcp-registration:handoff_redeem",
@@ -99,9 +141,11 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:create",
   "remote-mcp:delete",
   "remote-mcp:update",
+  "remote-session-client:attach-json-web-key-set",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
+  "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:revoke-sessions",
@@ -129,6 +173,8 @@ export const AUDIT_ACTIONS = [
   "risk_result:dismiss",
   "risk_result:restore",
   "risk_result:unmask",
+  "session_quarantine:open",
+  "session_quarantine:release",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -155,6 +201,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:update",
+  "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
   "trigger-instance:create",
   "trigger-instance:delete",
@@ -167,6 +214,7 @@ export const AUDIT_ACTIONS = [
   "tunneled-mcp:update",
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
+  "user-session-client:cimd-refresh",
   "user-session-client:revoke",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
@@ -255,13 +303,43 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "json_web_key_set:create":
+      return "created JSON Web Key Set";
+    case "json_web_key_set:update":
+      return "updated JSON Web Key Set";
+    case "json_web_key_set:delete":
+      return "deleted JSON Web Key Set";
+    case "json_web_key:publish":
+      return "published JSON Web Key";
+    case "json_web_key:activate":
+      return "activated JSON Web Key";
+    case "json_web_key:retire":
+      return "retired JSON Web Key";
+    case "json_web_key:revoke":
+      return "revoked JSON Web Key";
+    case "json_web_key:delete":
+      return "withdrew JSON Web Key";
 
+    case "billing_metadata:create_stripe_checkout":
+      return "started Stripe checkout for";
+    case "billing_metadata:create_stripe_portal":
+      return "opened Stripe billing portal for";
+    case "billing_metadata:cancel_stripe_subscription":
+      return "canceled Stripe subscription for";
+    case "billing_metadata:resume_stripe_subscription":
+      return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
       return "opened chat session";
+    case "chat_session:handoff_export":
+      return "exported chat session handoff";
+    case "chat_session:move":
+      return "moved chat session";
+    case "chat_session:recall":
+      return "recalled chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -269,6 +347,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+
+    case "data_export_route:create":
+      return "created data export route";
+    case "data_export_route:update":
+      return "updated data export route";
+    case "data_export_route:delete":
+      return "deleted data export route";
 
     case "deployments:create":
       return "created deployment";
@@ -293,6 +378,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "environment:delete":
       return "deleted environment";
 
+    case "killswitch:activate":
+      return "activated killswitch";
+    case "killswitch:change":
+      return "changed killswitch";
+    case "killswitch:deactivate":
+      return "deactivated killswitch";
+    case "killswitch:expire":
+      return "recorded killswitch expiry";
+
     case "litellm_instance:create":
       return "created LiteLLM instance";
     case "litellm_instance:rotate_key":
@@ -307,6 +401,19 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp-endpoint:delete":
       return "deleted MCP endpoint";
 
+    case "meta-mcp:create":
+      return "created meta MCP server";
+    case "meta-mcp:update":
+      return "updated meta MCP server";
+    case "meta-mcp:delete":
+      return "deleted meta MCP server";
+    case "meta-mcp:add_member":
+      return "added meta MCP member";
+    case "meta-mcp:update_member":
+      return "updated meta MCP member";
+    case "meta-mcp:remove_member":
+      return "removed meta MCP member";
+
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -316,16 +423,18 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 
-    case "mcp_collection:create":
-      return "created collection";
-    case "mcp_collection:update":
-      return "updated collection";
-    case "mcp_collection:delete":
-      return "deleted collection";
-    case "mcp_collection:attach_server":
-      return "added a server to collection";
-    case "mcp_collection:detach_server":
-      return "removed a server from collection";
+    case "mcp_approval_request:approve":
+      return "approved MCP access to";
+    case "mcp_approval_request:create":
+      return "requested MCP access to";
+    case "mcp_approval_request:deny":
+      return "denied MCP access to";
+    case "mcp_approval_request:evidence_changed":
+      return "detected changed evidence for approved MCP server";
+    case "mcp_approval_request:research_start":
+      return "started research on";
+    case "mcp_approval_request:supersede":
+      return "superseded the access decision for";
 
     case "mcp_metadata:update":
       return "updated MCP metadata for";
@@ -334,6 +443,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated model provider key";
     case "model_provider_key:delete":
       return "removed model provider key";
+
+    case "openrouter-key:disable":
+      return "disabled platform OpenRouter key";
+    case "openrouter-key:enable":
+      return "enabled platform OpenRouter key";
+    case "openrouter-key:set_spend_cap":
+      return "changed inference cap for";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
@@ -349,6 +465,22 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_extended":
+      return "extended enterprise trial";
+    case "organization:enterprise_trial_rearmed":
+      return "restarted enterprise trial";
+    case "organization:enterprise_trial_converted":
+      return "converted enterprise trial for";
+    case "organization:payg_activated":
+      return "activated pay-as-you-go billing for";
+    case "organization:payg_deactivated":
+      return "deactivated pay-as-you-go billing for";
+    case "organization:product_feature_enabled":
+      return "enabled a product feature for";
+    case "organization:product_feature_disabled":
+      return "disabled a product feature for";
+    case "organization:setup_task_updated":
+      return "updated setup task for";
 
     case "organization_invitation:create":
       return "invited";
@@ -357,10 +489,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization_invitation:update_role":
       return "changed invite role for";
 
-    case "otel_forwarding:upsert":
-      return "updated OpenTelemetry forwarding configuration";
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
+    case "otel_destination:create":
+      return "created OpenTelemetry destination";
+    case "otel_destination:update":
+      return "updated OpenTelemetry destination";
+    case "otel_destination:delete":
+      return "deleted OpenTelemetry destination";
+
+    case "platform-mcp-diagnostics:user_status_read":
+      return "read a user's status on";
 
     case "platform-mcp-registration:create":
       return "registered platform MCP server";
@@ -420,6 +557,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a user session issuer to";
     case "remote-session-client:detach-user-session-issuer":
       return "detached a user session issuer from";
+    case "remote-session-client:attach-json-web-key-set":
+      return "attached a JSON Web Key Set to";
+    case "remote-session-client:detach-json-web-key-set":
+      return "detached a JSON Web Key Set from";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -469,6 +610,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored risk finding";
     case "risk_result:unmask":
       return "unmasked risk finding";
+
+    case "session_quarantine:open":
+      return "quarantined agent session";
+    case "session_quarantine:release":
+      return "released quarantined agent session";
 
     case "skill:create":
       return "created skill";
@@ -521,6 +667,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected an external OAuth server to";
     case "toolset:detach_external_oauth":
       return "disconnected an external OAuth server from";
+    case "toolset:update_external_oauth_issuer":
+      return "updated the external OAuth issuer for";
     case "toolset:attach_oauth_proxy":
       return "attached an OAuth proxy to";
     case "toolset:update_oauth_proxy":
@@ -560,6 +708,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "user-session:revoke":
       return "revoked user session";
+    case "user-session-client:cimd-refresh":
+      return "refreshed the client metadata document for";
     case "user-session-client:revoke":
       return "revoked user session client";
     case "user-session-consent:revoke":

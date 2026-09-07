@@ -90,7 +90,12 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		})
 	}
 
-	return none, upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload)
+	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
+		return none, err
+	}
+	// Membership changes alter which emails resolve in the identity map.
+	none.refreshIdentityMap = true
+	return none, nil
 }
 
 // upsertOrganizationMembership records an active membership and declaratively

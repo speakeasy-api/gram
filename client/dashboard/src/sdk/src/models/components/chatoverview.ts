@@ -42,9 +42,17 @@ export type ChatOverview = {
    */
   lastMessageTimestamp: Date;
   /**
+   * True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
+   */
+  litellmProxied?: boolean | undefined;
+  /**
    * The number of messages in the chat
    */
   numMessages: number;
+  /**
+   * The supported client that originated a chat routed through the source, when known
+   */
+  originatingClient?: string | undefined;
   /**
    * True when the chat is pinned
    */
@@ -117,7 +125,9 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      litellm_proxied: z.optional(z.boolean()),
       num_messages: z.int(),
+      originating_client: z.optional(z.string()),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
       source: z.optional(z.string()),
@@ -146,7 +156,9 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",
+        "litellm_proxied": "litellmProxied",
         "num_messages": "numMessages",
+        "originating_client": "originatingClient",
         "risk_findings_count": "riskFindingsCount",
         "summary_generated_at": "summaryGeneratedAt",
         "total_cost": "totalCost",

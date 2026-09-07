@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * There is no `@custom-variant dark`, and that is deliberate. shadcn adds one
+ * to drive the `dark:` variant off a `.dark` class, which suits an app with a
+ * theme switch. This app has no switch and follows the operating system, so it
+ * keeps the Tailwind default, `@media (prefers-color-scheme: dark)`. The theme
+ * then tracks a live system change with no script and no reload.
+ */
+
+/*
+ * The components under `src/components/ui` are stock shadcn/ui. The Speakeasy
+ * look comes from the token values below, which is the customisation point
+ * shadcn expects. Keep the token names as shadcn defines them.
+ */
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Paints the scrollbars, the form controls and the select popup to match. */
+  color-scheme: light;
+
+  --background: hsl(0 0% 98%);
+  --foreground: hsl(0 0% 7%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(0 0% 7%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(0 0% 7%);
+  --primary: hsl(0 0% 0%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(0 0% 92%);
+  --secondary-foreground: hsl(0 0% 7%);
+  --muted: hsl(0 0% 92%);
+  --muted-foreground: hsl(0 0% 7% / 64%);
+  --accent: hsl(0 0% 92%);
+  --accent-foreground: hsl(0 0% 7%);
+  --destructive: hsl(1 64% 32%);
+  --border: hsl(0 0% 86%);
+  --input: hsl(0 0% 73%);
+  --ring: hsl(215 71% 40%);
+
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(0 0% 7%);
+  --sidebar-primary: hsl(0 0% 0%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(0 0% 92%);
+  --sidebar-accent-foreground: hsl(0 0% 7%);
+  --sidebar-border: hsl(0 0% 86%);
+  --sidebar-ring: hsl(215 71% 40%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --background: hsl(0 0% 0%);
+    --foreground: hsl(0 0% 86%);
+    --card: hsl(0 0% 7%);
+    --card-foreground: hsl(0 0% 86%);
+    --popover: hsl(0 0% 0%);
+    --popover-foreground: hsl(0 0% 98%);
+    --primary: hsl(0 0% 100%);
+    --primary-foreground: hsl(0 0% 0%);
+    --secondary: hsl(0 0% 13%);
+    --secondary-foreground: hsl(0 0% 86%);
+    --muted: hsl(0 0% 7%);
+    --muted-foreground: hsl(0 0% 98% / 64%);
+    --accent: hsl(0 0% 20%);
+    --accent-foreground: hsl(0 0% 100%);
+    --destructive: hsl(4 67% 47%);
+    --border: hsl(0 0% 33%);
+    --input: hsl(0 0% 33%);
+    --ring: hsl(215 100% 77%);
+
+    --sidebar: hsl(0 0% 7%);
+    --sidebar-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(0 0% 100%);
+    --sidebar-primary-foreground: hsl(0 0% 0%);
+    --sidebar-accent: hsl(0 0% 20%);
+    --sidebar-accent-foreground: hsl(0 0% 100%);
+    --sidebar-border: hsl(0 0% 33%);
+    --sidebar-ring: hsl(215 100% 77%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}

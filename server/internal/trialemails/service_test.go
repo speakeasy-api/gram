@@ -230,6 +230,7 @@ func newTestServiceWithTrial(t *testing.T, active bool) (context.Context, *testI
 	}))
 	require.NoError(t, trialsrepo.New(conn).InsertTrialFixture(ctx, trialsrepo.InsertTrialFixtureParams{
 		OrganizationID: organizationID,
+		Tier:           "enterprise",
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		EndsAt:         conv.ToPGTimestamptz(endsAt),
 		ConvertedAt:    conv.PtrToPGTimestamptz(nil),

@@ -12,6 +12,7 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -42,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 type Service struct {
@@ -57,6 +59,12 @@ type Service struct {
 	auditLogger  *audit.Logger
 	serverURL    *url.URL
 	refresher    *RefreshService
+	revoker      *UpstreamRevoker
+	// Only the JSON Web Key Set attach and detach paths consult this. The rest
+	// of remote_session_client management is not entitlement-gated, and must
+	// not become so: a set is always backed by a customer-provisioned KMS key,
+	// which is what ties this one link to customer_managed_encryption_keys.
+	productFeatures *productfeatures.Client
 }
 
 var (
@@ -76,7 +84,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
@@ -92,6 +100,9 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
+		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+
+		productFeatures: productFeatures,
 	}
 }
 

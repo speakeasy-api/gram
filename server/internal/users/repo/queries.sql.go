@@ -76,6 +76,7 @@ const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
 SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id
@@ -124,6 +125,57 @@ func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnecte
 	return items, nil
 }
 
+const getConnectedUsersByIDs = `-- name: GetConnectedUsersByIDs :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.id = ANY($1::text[])
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+`
+
+type GetConnectedUsersByIDsParams struct {
+	Ids            []string
+	OrganizationID string
+}
+
+// The org-scoped counterpart to GetConnectedUsersByEmails: resolves gram user
+// ids to the directory rows they own. Callers hold a user id from a client
+// payload, so the org join is what keeps one org's ids from resolving against
+// another org's directory.
+func (q *Queries) GetConnectedUsersByIDs(ctx context.Context, arg GetConnectedUsersByIDsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersByIDs, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
@@ -139,6 +191,57 @@ type GetConnectedUsersByWorkosIDsParams struct {
 
 func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConnectedUsersByWorkosIDsParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, getConnectedUsersByWorkosIDs, arg.WorkosIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getConnectedUsersMatchingEmails = `-- name: GetConnectedUsersMatchingEmails :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), u.created_at, u.id
+`
+
+type GetConnectedUsersMatchingEmailsParams struct {
+	Emails         []string
+	OrganizationID string
+}
+
+// Returns every connected row matching the emails case-insensitively. Callers
+// that assign ownership use this to reject ambiguous case-variant identities.
+func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetConnectedUsersMatchingEmailsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersMatchingEmails, arg.Emails, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +415,33 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+WHERE id = $1
+FOR SHARE
+`
+
+func (q *Queries) LockUserForPlatformAdminCheck(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, lockUserForPlatformAdminCheck, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec

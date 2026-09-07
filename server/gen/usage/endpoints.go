@@ -16,13 +16,23 @@ import (
 
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
-	GetPeriodUsage           goa.Endpoint
-	GetTokensUnderManagement goa.Endpoint
-	SetBillingMetadata       goa.Endpoint
-	GetUsageTiers            goa.Endpoint
-	CreateCustomerSession    goa.Endpoint
-	CreateCheckout           goa.Endpoint
-	CreateTopUpCheckout      goa.Endpoint
+	GetPeriodUsage            goa.Endpoint
+	GetTokensUnderManagement  goa.Endpoint
+	SetBillingMetadata        goa.Endpoint
+	GetBillingEmail           goa.Endpoint
+	SetBillingEmail           goa.Endpoint
+	SetSpendCap               goa.Endpoint
+	GetInferenceSpendCaps     goa.Endpoint
+	GetUsageTiers             goa.Endpoint
+	CreateCustomerSession     goa.Endpoint
+	CreateCheckout            goa.Endpoint
+	CreateStripeCheckout      goa.Endpoint
+	GetStripeSubscription     goa.Endpoint
+	GetPaygBillingSummary     goa.Endpoint
+	CreateStripePortalSession goa.Endpoint
+	CancelStripeSubscription  goa.Endpoint
+	ResumeStripeSubscription  goa.Endpoint
+	CreateTopUpCheckout       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "usage" service with endpoints.
@@ -30,13 +40,23 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPeriodUsage:           NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
-		GetTokensUnderManagement: NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
-		SetBillingMetadata:       NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
-		GetUsageTiers:            NewGetUsageTiersEndpoint(s),
-		CreateCustomerSession:    NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
-		CreateCheckout:           NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
-		CreateTopUpCheckout:      NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
+		GetPeriodUsage:            NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		GetTokensUnderManagement:  NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
+		SetBillingMetadata:        NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
+		GetBillingEmail:           NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetBillingEmail:           NewSetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetSpendCap:               NewSetSpendCapEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendCaps:     NewGetInferenceSpendCapsEndpoint(s, a.APIKeyAuth),
+		GetUsageTiers:             NewGetUsageTiersEndpoint(s),
+		CreateCustomerSession:     NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
+		CreateCheckout:            NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
+		CreateStripeCheckout:      NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:     NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:     NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		CreateStripePortalSession: NewCreateStripePortalSessionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:  NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:  NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CreateTopUpCheckout:       NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -45,9 +65,19 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
 	e.GetTokensUnderManagement = m(e.GetTokensUnderManagement)
 	e.SetBillingMetadata = m(e.SetBillingMetadata)
+	e.GetBillingEmail = m(e.GetBillingEmail)
+	e.SetBillingEmail = m(e.SetBillingEmail)
+	e.SetSpendCap = m(e.SetSpendCap)
+	e.GetInferenceSpendCaps = m(e.GetInferenceSpendCaps)
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
+	e.CreateStripeCheckout = m(e.CreateStripeCheckout)
+	e.GetStripeSubscription = m(e.GetStripeSubscription)
+	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
+	e.CreateStripePortalSession = m(e.CreateStripePortalSession)
+	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
+	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 	e.CreateTopUpCheckout = m(e.CreateTopUpCheckout)
 }
 
@@ -120,6 +150,98 @@ func NewSetBillingMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
+// NewGetBillingEmailEndpoint returns an endpoint function that calls the
+// method "getBillingEmail" of service "usage".
+func NewGetBillingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetBillingEmailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetBillingEmail(ctx, p)
+	}
+}
+
+// NewSetBillingEmailEndpoint returns an endpoint function that calls the
+// method "setBillingEmail" of service "usage".
+func NewSetBillingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetBillingEmailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetBillingEmail(ctx, p)
+	}
+}
+
+// NewSetSpendCapEndpoint returns an endpoint function that calls the method
+// "setSpendCap" of service "usage".
+func NewSetSpendCapEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSpendCapPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSpendCap(ctx, p)
+	}
+}
+
+// NewGetInferenceSpendCapsEndpoint returns an endpoint function that calls the
+// method "getInferenceSpendCaps" of service "usage".
+func NewGetInferenceSpendCapsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetInferenceSpendCapsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetInferenceSpendCaps(ctx, p)
+	}
+}
+
 // NewGetUsageTiersEndpoint returns an endpoint function that calls the method
 // "getUsageTiers" of service "usage".
 func NewGetUsageTiersEndpoint(s Service) goa.Endpoint {
@@ -171,6 +293,144 @@ func NewCreateCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.CreateCheckout(ctx, p)
+	}
+}
+
+// NewCreateStripeCheckoutEndpoint returns an endpoint function that calls the
+// method "createStripeCheckout" of service "usage".
+func NewCreateStripeCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateStripeCheckoutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateStripeCheckout(ctx, p)
+	}
+}
+
+// NewGetStripeSubscriptionEndpoint returns an endpoint function that calls the
+// method "getStripeSubscription" of service "usage".
+func NewGetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStripeSubscription(ctx, p)
+	}
+}
+
+// NewGetPaygBillingSummaryEndpoint returns an endpoint function that calls the
+// method "getPaygBillingSummary" of service "usage".
+func NewGetPaygBillingSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPaygBillingSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPaygBillingSummary(ctx, p)
+	}
+}
+
+// NewCreateStripePortalSessionEndpoint returns an endpoint function that calls
+// the method "createStripePortalSession" of service "usage".
+func NewCreateStripePortalSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateStripePortalSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateStripePortalSession(ctx, p)
+	}
+}
+
+// NewCancelStripeSubscriptionEndpoint returns an endpoint function that calls
+// the method "cancelStripeSubscription" of service "usage".
+func NewCancelStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CancelStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CancelStripeSubscription(ctx, p)
+	}
+}
+
+// NewResumeStripeSubscriptionEndpoint returns an endpoint function that calls
+// the method "resumeStripeSubscription" of service "usage".
+func NewResumeStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ResumeStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ResumeStripeSubscription(ctx, p)
 	}
 }
 

@@ -43,7 +43,11 @@ import {
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientContext,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -62,6 +66,7 @@ type UIMessagePart = UIMessage["parts"][number];
 import {
   ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -245,6 +250,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     data: mcpTools,
     mcpHeaders,
     isLoading: mcpQueryLoading,
+    error: mcpToolsQueryError,
   } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -258,6 +264,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // tool-list consumer would briefly see an empty, settled state before tools
   // arrive.
   const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
+  const mcpToolsError = mcpToolsQueryError ?? null;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -619,8 +626,18 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       plugins,
       mcpTools,
       mcpToolsLoading,
+      mcpToolsError,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
+    [
+      config,
+      model,
+      isExpanded,
+      isOpen,
+      plugins,
+      mcpTools,
+      mcpToolsLoading,
+      mcpToolsError,
+    ],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};
@@ -943,13 +960,17 @@ const ElementsProviderWithoutHistory = ({
   );
 };
 
-const queryClient = new QueryClient();
+const standaloneQueryClient = new QueryClient();
 
 export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
+  // Share a host app's QueryClient so content rendered inside this provider
+  // (the dashboard mounts it around the page outlet) stays in one cache with
+  // the rest of the app. Standalone embeds get their own.
+  const hostQueryClient = useContext(QueryClientContext);
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>
       <ConnectionStatusProvider>
         <ToolApprovalProvider>
           <MarkdownLinkProvider

@@ -172,6 +172,16 @@ func (p cliDestructivePattern) FullName() string {
 	return b.String()
 }
 
+// ReportableRuleIDs returns every stable rule id this scanner can emit.
+func ReportableRuleIDs() []string {
+	ruleIDs := make([]string, 0, len(cliDestructivePatterns))
+	for _, pattern := range cliDestructivePatterns {
+		ruleIDs = append(ruleIDs, pattern.FullName())
+	}
+	sort.Strings(ruleIDs)
+	return ruleIDs
+}
+
 type cliDestructiveSpec struct {
 	Category string
 	Name     string

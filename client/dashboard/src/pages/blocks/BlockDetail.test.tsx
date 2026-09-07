@@ -128,6 +128,7 @@ const sampleBlock = {
   reason: `Speakeasy blocked this tool call: matched policy "Block Secrets" (Attempted to read .env secrets)`,
   policyName: "Block Secrets",
   toolName: "Bash",
+  provider: "openclaw",
   createdAt: "2026-06-24T21:00:00Z",
   feedback: undefined as string | undefined,
 };
@@ -166,6 +167,7 @@ describe("BlockPage", () => {
 
     expect(screen.getByText(/Blocked by policy/)).toBeTruthy();
     expect(screen.getByText(/tool Bash/)).toBeTruthy();
+    expect(screen.getByText(/via OpenClaw/)).toBeTruthy();
     // The reason box renders block.reason exactly as the backend stored it —
     // no client-side parsing of the message wording.
     expect(screen.getByText(sampleBlock.reason)).toBeTruthy();

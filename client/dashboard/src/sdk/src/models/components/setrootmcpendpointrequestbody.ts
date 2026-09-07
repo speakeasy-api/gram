@@ -11,15 +11,20 @@ export type SetRootMcpEndpointRequestBody = {
    */
   customDomainId: string;
   /**
-   * The MCP endpoint to map to the domain root. Omit to clear the mapping.
+   * The MCP endpoint to map to the domain root. Omit both ids to clear the mapping.
    */
   mcpEndpointId?: string | undefined;
+  /**
+   * An MCP server to map to the domain root; its domain endpoint is created when missing. Mutually exclusive with mcp_endpoint_id.
+   */
+  mcpServerId?: string | undefined;
 };
 
 /** @internal */
 export type SetRootMcpEndpointRequestBody$Outbound = {
   custom_domain_id: string;
   mcp_endpoint_id?: string | undefined;
+  mcp_server_id?: string | undefined;
 };
 
 /** @internal */
@@ -30,11 +35,13 @@ export const SetRootMcpEndpointRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     customDomainId: z.string(),
     mcpEndpointId: z.optional(z.string()),
+    mcpServerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       customDomainId: "custom_domain_id",
       mcpEndpointId: "mcp_endpoint_id",
+      mcpServerId: "mcp_server_id",
     });
   }),
 );

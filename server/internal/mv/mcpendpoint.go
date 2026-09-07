@@ -12,14 +12,15 @@ import (
 // type.
 func BuildMcpEndpointView(endpoint repo.McpEndpoint) *types.McpEndpoint {
 	return &types.McpEndpoint{
-		ID:             endpoint.ID.String(),
-		ProjectID:      endpoint.ProjectID.String(),
-		CustomDomainID: conv.FromNullableUUID(endpoint.CustomDomainID),
-		McpServerID:    endpoint.McpServerID.String(),
-		Slug:           types.McpEndpointSlug(endpoint.Slug),
-		IsDomainRoot:   endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool,
-		CreatedAt:      endpoint.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      endpoint.UpdatedAt.Time.Format(time.RFC3339),
+		ID:              endpoint.ID.String(),
+		ProjectID:       endpoint.ProjectID.String(),
+		CustomDomainID:  conv.FromNullableUUID(endpoint.CustomDomainID),
+		McpServerID:     conv.FromNullableUUID(endpoint.McpServerID),
+		MetaMcpServerID: conv.FromNullableUUID(endpoint.MetaMcpServerID),
+		Slug:            types.McpEndpointSlug(endpoint.Slug),
+		IsDomainRoot:    endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool,
+		CreatedAt:       endpoint.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       endpoint.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

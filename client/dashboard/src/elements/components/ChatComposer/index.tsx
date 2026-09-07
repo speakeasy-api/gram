@@ -48,7 +48,15 @@ export const ChatComposer = ({
   <ErrorBoundary>
     <ShadowRoot
       hostClassName={COMPOSER_HOST_CLASS}
-      hostStyle={{ width: "100%" }}
+      // The host's `isolation: isolate` makes a stacking context but leaves
+      // the box static, so the whole shadow subtree paints with in-flow
+      // content — beneath any `position: relative` page chrome sharing the
+      // ancestor stacking context, avatars included. The context popover
+      // can't win that from inside (it is portalled into the shadow root so
+      // the scoped styles apply), so the host itself has to sit in the
+      // positioned paint layer. `z-index: 1` clears bare `z-auto` chrome
+      // while staying under the insights dock (z-30) and dialogs (z-50).
+      hostStyle={{ width: "100%", position: "relative", zIndex: 1 }}
     >
       <AttachmentDropZone className={className}>
         <ClearDraftOnUnmount />

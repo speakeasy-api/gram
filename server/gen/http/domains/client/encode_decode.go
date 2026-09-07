@@ -544,7 +544,20 @@ func DecodeCreateDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 		}
 		switch resp.StatusCode {
 		case http.StatusOK:
-			return nil, nil
+			var (
+				body CreateDomainResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "createDomain", err)
+			}
+			err = ValidateCreateDomainResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "createDomain", err)
+			}
+			res := NewCreateDomainCustomDomainOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
 				body CreateDomainUnauthorizedResponseBody
@@ -1164,6 +1177,237 @@ func DecodeSetRootMcpEndpointResponse(decoder func(*http.Response) goahttp.Decod
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("domains", "setRootMcpEndpoint", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListRootMcpServersRequest instantiates a HTTP request object with
+// method and path set to call the "domains" service "listRootMcpServers"
+// endpoint
+func (c *Client) BuildListRootMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRootMcpServersDomainsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "listRootMcpServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRootMcpServersRequest returns an encoder for requests sent to the
+// domains listRootMcpServers server.
+func EncodeListRootMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.ListRootMcpServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "listRootMcpServers", "*domains.ListRootMcpServersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRootMcpServersResponse returns a decoder for responses returned by
+// the domains listRootMcpServers endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRootMcpServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRootMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRootMcpServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			res := NewListRootMcpServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRootMcpServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRootMcpServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRootMcpServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRootMcpServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRootMcpServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRootMcpServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRootMcpServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRootMcpServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+				}
+				err = ValidateListRootMcpServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+				}
+				return nil, NewListRootMcpServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRootMcpServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+				}
+				err = ValidateListRootMcpServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+				}
+				return nil, NewListRootMcpServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "listRootMcpServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRootMcpServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listRootMcpServers", err)
+			}
+			err = ValidateListRootMcpServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listRootMcpServers", err)
+			}
+			return nil, NewListRootMcpServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "listRootMcpServers", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1865,10 +2109,44 @@ func unmarshalCustomDomainResponseBodyToDomainsCustomDomain(v *CustomDomainRespo
 		ConsecutiveFailures:      v.ConsecutiveFailures,
 		RootMcpEndpointID:        v.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: v.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *v.SuggestedRecordType,
 	}
 	res.IPAllowlist = make([]string, len(v.IPAllowlist))
 	for i, val := range v.IPAllowlist {
 		res.IPAllowlist[i] = val
+	}
+
+	return res
+}
+
+// unmarshalDomainDNSConfigResponseBodyToDomainsDomainDNSConfig builds a value
+// of type *domains.DomainDNSConfig from a value of type
+// *DomainDNSConfigResponseBody.
+func unmarshalDomainDNSConfigResponseBodyToDomainsDomainDNSConfig(v *DomainDNSConfigResponseBody) *domains.DomainDNSConfig {
+	res := &domains.DomainDNSConfig{
+		CnameTarget: v.CnameTarget,
+	}
+	res.ARecords = make([]string, len(v.ARecords))
+	for i, val := range v.ARecords {
+		res.ARecords[i] = val
+	}
+
+	return res
+}
+
+// unmarshalRootMcpServerOptionResponseBodyToDomainsRootMcpServerOption builds
+// a value of type *domains.RootMcpServerOption from a value of type
+// *RootMcpServerOptionResponseBody.
+func unmarshalRootMcpServerOptionResponseBodyToDomainsRootMcpServerOption(v *RootMcpServerOptionResponseBody) *domains.RootMcpServerOption {
+	res := &domains.RootMcpServerOption{
+		McpServerID:          *v.McpServerID,
+		Name:                 v.Name,
+		Slug:                 v.Slug,
+		ProjectID:            *v.ProjectID,
+		ProjectName:          *v.ProjectName,
+		AttachedEndpointID:   v.AttachedEndpointID,
+		AttachedEndpointSlug: v.AttachedEndpointSlug,
+		IsDomainRoot:         *v.IsDomainRoot,
 	}
 
 	return res
@@ -1879,15 +2157,16 @@ func unmarshalCustomDomainResponseBodyToDomainsCustomDomain(v *CustomDomainRespo
 // *CustomDomainMcpEndpointResponseBody.
 func unmarshalCustomDomainMcpEndpointResponseBodyToDomainsCustomDomainMcpEndpoint(v *CustomDomainMcpEndpointResponseBody) *domains.CustomDomainMcpEndpoint {
 	res := &domains.CustomDomainMcpEndpoint{
-		ID:            *v.ID,
-		Slug:          *v.Slug,
-		ProjectID:     *v.ProjectID,
-		ProjectName:   *v.ProjectName,
-		ProjectSlug:   *v.ProjectSlug,
-		McpServerID:   *v.McpServerID,
-		McpServerName: v.McpServerName,
-		McpServerSlug: v.McpServerSlug,
-		IsDomainRoot:  *v.IsDomainRoot,
+		ID:              *v.ID,
+		Slug:            *v.Slug,
+		ProjectID:       *v.ProjectID,
+		ProjectName:     *v.ProjectName,
+		ProjectSlug:     *v.ProjectSlug,
+		McpServerID:     v.McpServerID,
+		MetaMcpServerID: v.MetaMcpServerID,
+		McpServerName:   v.McpServerName,
+		McpServerSlug:   v.McpServerSlug,
+		IsDomainRoot:    *v.IsDomainRoot,
 	}
 
 	return res

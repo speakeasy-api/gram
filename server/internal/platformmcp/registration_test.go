@@ -117,3 +117,32 @@ func TestUserSubjectURN(t *testing.T) {
 
 	require.Equal(t, "user:user-id", userSubjectURN("user-id"))
 }
+
+// Half a connection is an incomplete identity, not an absent one. Taking the
+// connection-less path for it would record a user-attributed write against a
+// connection the caller never proved, and would violate the database's own
+// pair constraint.
+func TestPrincipalConnectionRejectsAHalfPopulatedPair(t *testing.T) {
+	t.Parallel()
+
+	full := Principal{UserID: "user", OrganizationID: "org", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
+	connectionID, generation, err := principalConnection(full)
+	require.NoError(t, err)
+	require.True(t, connectionID.Valid)
+	require.True(t, generation.Valid)
+
+	none := Principal{UserID: "user", OrganizationID: "org"}
+	connectionID, generation, err = principalConnection(none)
+	require.NoError(t, err, "a surface with no connection is legitimate")
+	require.False(t, connectionID.Valid)
+	require.False(t, generation.Valid)
+
+	for _, incomplete := range []Principal{
+		{UserID: "user", OrganizationID: "org", ConnectionID: uuid.NewString()},
+		{UserID: "user", OrganizationID: "org", Generation: uuid.NewString()},
+	} {
+		require.True(t, incomplete.HasConnection(), "either half is a claim to a connection")
+		_, _, err := principalConnection(incomplete)
+		require.Error(t, err, "an incomplete connection identity must not be treated as connection-less")
+	}
+}

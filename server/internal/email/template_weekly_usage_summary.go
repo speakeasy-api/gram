@@ -28,16 +28,12 @@ type WeeklyUsageSummary struct {
 	// PreviousTotalTokens, e.g. "+19%", "-3%", or "New" when the previous
 	// cycle had no usage at this point.
 	TotalChangePercent string
-	// UsageTableHTML is the pre-rendered cycle-total summary table. The Loops
-	// template inserts it unescaped via a standalone data-variable block
-	// (verified to render raw HTML).
-	UsageTableHTML string
 	// ViewUsageURL links to the organization's billing page.
 	ViewUsageURL string
 }
 
-func (t WeeklyUsageSummary) TransactionalID() TransactionalID {
-	return transactionalIDWeeklyUsageSummary
+func (t WeeklyUsageSummary) Key() TemplateKey {
+	return TemplateKeyWeeklyUsageSummary
 }
 
 func (t WeeklyUsageSummary) AddToAudience() bool { return false }
@@ -51,7 +47,6 @@ func (t WeeklyUsageSummary) Variables() map[string]string {
 		"total_tokens":          t.TotalTokens,
 		"previous_total_tokens": t.PreviousTotalTokens,
 		"total_change_percent":  t.TotalChangePercent,
-		"usage_table_html":      t.UsageTableHTML,
 		"view_usage_url":        t.ViewUsageURL,
 	}
 }

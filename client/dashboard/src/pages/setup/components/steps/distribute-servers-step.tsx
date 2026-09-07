@@ -52,11 +52,45 @@ interface DistributeServersStepProps {
   onComplete: () => void;
   onSkip: () => void;
   onBack: () => void;
+  onSetupPlatformMCP?: () => void;
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
 function serverKey(server: PulseMCPServer): string {
   return `${server.registryId}-${server.registrySpecifier}`;
+}
+
+function CatalogErrorBanner({
+  mode,
+  onRetry,
+}: {
+  mode: "initial" | "refetch";
+  onRetry: () => void;
+}): JSX.Element {
+  const initial = mode === "initial";
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "mt-3 flex items-center justify-between gap-3 border p-3",
+        initial ? "border-destructive/20" : "border-warning/20",
+      )}
+    >
+      <p
+        className={cn(
+          "text-sm",
+          initial ? "text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {initial
+          ? "Couldn't load MCP servers. Check that this project exists and that you have access to it."
+          : "We couldn't refresh MCP servers. Showing the last available results."}
+      </p>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        <Button.Text>Retry</Button.Text>
+      </Button>
+    </div>
+  );
 }
 
 type DrawerStep = "adding" | "done";
@@ -65,6 +99,7 @@ export function DistributeServersStep({
   onComplete,
   onSkip,
   onBack,
+  onSetupPlatformMCP,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -88,7 +123,12 @@ export function DistributeServersStep({
 
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
-  const { data, isLoading } = useListMCPCatalog();
+  const {
+    data,
+    isLoading,
+    isError: catalogLoadFailed,
+    refetch: refetchCatalog,
+  } = useListMCPCatalog(undefined, undefined, { throwOnError: false });
   const { data: publishStatus } = usePublishStatus();
 
   // Default-plugin membership: map its mcp_server-backed entries through their
@@ -140,6 +180,9 @@ export function DistributeServersStep({
     [distributedUrls],
   );
 
+  const catalogHasData = data !== undefined;
+  const catalogInitialLoadFailed = catalogLoadFailed && !catalogHasData;
+  const catalogRefetchFailed = catalogLoadFailed && catalogHasData;
   const servers = useMemo(
     () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
@@ -368,7 +411,7 @@ export function DistributeServersStep({
       title="Distribute MCP servers"
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}
-      onSkip={onSkip}
+      onSkip={skipLabel === "Continue" ? onComplete : onSkip}
       skipLabel={skipLabel}
       continueLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
@@ -377,9 +420,30 @@ export function DistributeServersStep({
       onBack={onBack}
     >
       <div className="space-y-6">
+        {onSetupPlatformMCP && (
+          <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-foreground text-sm font-medium">
+                Set up with Platform MCP
+              </p>
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                Connect your AI agent to Platform MCP to explore reviewed MCP
+                servers before setting them up for distribution in the browser.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              onClick={onSetupPlatformMCP}
+            >
+              Set up with Platform MCP
+            </Button>
+          </div>
+        )}
+
         <div>
           <label className="text-foreground text-sm font-medium">
-            Select servers from the catalog
+            Set up in the browser
           </label>
           <div className="mt-3">
             <Input
@@ -403,10 +467,22 @@ export function DistributeServersStep({
             />
           </div>
 
+          {catalogRefetchFailed && (
+            <CatalogErrorBanner
+              mode="refetch"
+              onRetry={() => void refetchCatalog().catch(() => undefined)}
+            />
+          )}
+
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
+          ) : catalogInitialLoadFailed ? (
+            <CatalogErrorBanner
+              mode="initial"
+              onRetry={() => void refetchCatalog().catch(() => undefined)}
+            />
           ) : matchedServers.length === 0 ? (
             <p className="text-muted-foreground mt-3 text-sm">
               {query
@@ -480,15 +556,15 @@ export function DistributeServersStep({
             </button>
           )}
 
-          {!isLoading && (
+          {!isLoading && !catalogInitialLoadFailed && (
             <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
               Only servers that support OAuth dynamic client registration (DCR)
               are shown here — Speakeasy can configure these automatically. More
               servers, including those that need manual OAuth or API key setup,
               are available in the{" "}
-              <routes.catalog.Link className="underline underline-offset-2 hover:text-foreground">
+              <routes.mcp.add.catalog.Link className="underline underline-offset-2 hover:text-foreground">
                 catalog
-              </routes.catalog.Link>
+              </routes.mcp.add.catalog.Link>
               .
             </p>
           )}

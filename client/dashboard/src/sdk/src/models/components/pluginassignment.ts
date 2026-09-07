@@ -15,7 +15,7 @@ export type PluginAssignment = {
    */
   id: string;
   /**
-   * Principal URN (e.g. role:engineering, user:id, or *).
+   * Principal URN (e.g. role:organization:<uuid>, user:id, or *).
    */
   principalUrn: string;
 };

@@ -76,6 +76,34 @@ func TestJoseAlgorithm_RejectsEd25519WithAccurateReason(t *testing.T) {
 	require.NotContains(t, err.Error(), "no JOSE equivalent")
 }
 
+func TestParseSignatureAlgorithm(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"RS256", "ES256"} {
+		alg, err := ParseSignatureAlgorithm(name)
+		require.NoError(t, err, "%s is a supported algorithm", name)
+		require.Equal(t, jose.SignatureAlgorithm(name), alg)
+	}
+}
+
+// A stored algorithm is a plain string, so the parse has to reject values a bare
+// conversion would accept: a JOSE algorithm outside the supported set, one this
+// package has no digest for, and text that names no algorithm at all.
+func TestParseSignatureAlgorithm_RejectsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"PS256", "RS512", "ES384", "EdDSA", "HS256", "none", "rs256"} {
+		_, err := ParseSignatureAlgorithm(name)
+		require.ErrorIs(t, err, ErrUnsupportedAlgorithm, "%q must not be accepted", name)
+		require.ErrorContains(t, err, name, "the rejection must name the value it rejected")
+	}
+
+	// The empty string is checked separately: ErrorContains against "" passes
+	// vacuously, so it would assert nothing in the table above.
+	_, err := ParseSignatureAlgorithm("")
+	require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+}
+
 func TestDigestPayload(t *testing.T) {
 	t.Parallel()
 

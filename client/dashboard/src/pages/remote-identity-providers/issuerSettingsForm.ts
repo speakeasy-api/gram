@@ -8,6 +8,9 @@ import type { DiscoveredEndpoints } from "../mcp/x/tabs/settings/sections/authen
 export type IssuerSettingsFormState = {
   id: string;
   name: string;
+  // The logo's asset id, empty when the issuer has no logo. Like the other
+  // optional strings, "" on update is the explicit "clear to NULL" sentinel.
+  logoAssetId: string;
   slug: string;
   clientSetupDocumentationUrl: string;
   issuerUrl: string;
@@ -45,6 +48,7 @@ export function buildUpdateIssuerForm(
   return {
     id: state.id,
     name: state.name.trim(),
+    logoAssetId: state.logoAssetId.trim(),
     slug: state.slug.trim(),
     clientSetupDocumentationUrl: state.clientSetupDocumentationUrl.trim(),
     issuer,
@@ -57,8 +61,15 @@ export function buildUpdateIssuerForm(
     responseTypesSupported: fromDiscovery?.responseTypesSupported,
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported,
+    // Tri-state: a seeded snapshot of a never-captured record holds null,
+    // which must go out as undefined (omit; the server keeps its stored
+    // value) — sending [] instead would record "the issuer advertises no
+    // methods", a refusal state under future PKCE enforcement.
+    codeChallengeMethodsSupported:
+      fromDiscovery?.codeChallengeMethodsSupported ?? undefined,
     clientIdMetadataDocumentSupported:
       fromDiscovery?.clientIdMetadataDocumentSupported,
+    revocationEndpoint: fromDiscovery?.revocationEndpoint,
     serviceDocumentation: fromDiscovery?.serviceDocumentation,
     opPolicyUri: fromDiscovery?.opPolicyUri,
     opTosUri: fromDiscovery?.opTosUri,
@@ -97,6 +108,7 @@ export function buildCreateIssuerForm(
     slug: state.slug.trim(),
     issuer,
     name: state.name.trim() || undefined,
+    logoAssetId: state.logoAssetId.trim() || undefined,
     clientSetupDocumentationUrl:
       state.clientSetupDocumentationUrl.trim() || undefined,
     authorizationEndpoint: state.authorizationEndpoint.trim() || undefined,
@@ -108,11 +120,22 @@ export function buildCreateIssuerForm(
     responseTypesSupported: fromDiscovery?.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported ?? [],
+    // No `?? []` default, unlike the NOT NULL arrays above: the column is
+    // nullable, and an operator who typed endpoints by hand has not captured
+    // the field — omitting it stores NULL ("not captured"), while [] would
+    // claim the issuer advertises no methods. A fresh discovery snapshot is
+    // never null, so a discovered create records what the document said.
+    codeChallengeMethodsSupported:
+      fromDiscovery?.codeChallengeMethodsSupported ?? undefined,
     // CIMD support is parsed during discovery and persisted here so the issuer
     // can offer the CIMD client type. Defaults false when the operator skipped
     // Discover and typed the endpoints by hand.
     clientIdMetadataDocumentSupported:
       fromDiscovery?.clientIdMetadataDocumentSupported ?? false,
+    // The RFC 7009 revocation endpoint is discovery-only too, and undefined is
+    // the ordinary case: plenty of issuers advertise none, and sessions minted
+    // against those revoke locally with no upstream call.
+    revocationEndpoint: fromDiscovery?.revocationEndpoint || undefined,
     // RFC 8414 documentation URLs are discovery-only — there are no form
     // inputs for them. Undefined when the operator skipped Discover or the
     // issuer advertised nothing usable.

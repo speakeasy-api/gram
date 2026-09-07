@@ -255,6 +255,41 @@ func TestPreferClaudeServiceName(t *testing.T) {
 	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", "claude"))
 }
 
+// The bare "claude" adapter slug names no surface, but only the Claude Code
+// runtimes send it, so a session carrying nothing more specific resolves to
+// claude-code. Leaving the slug in place would stamp chat rows and telemetry
+// with the value the Anthropic compliance import uses for Claude Chat Desktop,
+// and sessions with no OTEL stream (telemetry off, or traffic routed through a
+// proxy) never get a second chance to correct it. Every more specific signal
+// still wins.
+func TestClaudeSessionSurface_ResolvesBareClaudeAdapterToClaudeCode(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	bare := &SessionMetadata{SessionID: uuid.NewString(), ServiceName: "claude"}
+	assert.Equal(t, agentVariantClaudeCode, ti.service.claudeSessionSurface(ctx, bare))
+
+	// A cached SessionStart variant still overrides the slug.
+	coworkSession := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(coworkSession), agentVariantCowork, sessionMCPListTTL))
+	assert.Equal(t, agentVariantCowork, ti.service.claudeSessionSurface(ctx, &SessionMetadata{
+		SessionID:   coworkSession,
+		ServiceName: "claude",
+	}))
+
+	// Concrete surfaces and non-Claude senders are untouched, and a session
+	// with no reported name at all stays unresolved.
+	assert.Equal(t, surfaceClaudeCodeDesktop, ti.service.claudeSessionSurface(ctx, &SessionMetadata{
+		SessionID:   uuid.NewString(),
+		ServiceName: surfaceClaudeCodeDesktop,
+	}))
+	assert.Equal(t, "cursor", ti.service.claudeSessionSurface(ctx, &SessionMetadata{
+		SessionID:   uuid.NewString(),
+		ServiceName: "cursor",
+	}))
+	assert.Empty(t, ti.service.claudeSessionSurface(ctx, &SessionMetadata{SessionID: uuid.NewString()}))
+}
+
 // A session whose OTEL stream reports service.name "cowork" must persist its
 // chat messages with source "cowork" — no SessionStart inventory variant
 // needed. This is the current cowork identification path: the canonical

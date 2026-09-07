@@ -16,6 +16,8 @@ type RemoteSessionIssuerDraft struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI; null when not advertised.
@@ -34,6 +36,9 @@ type RemoteSessionIssuerDraft struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised in the discovery document (RFC 8414
+	// code_challenge_methods_supported). Null when the document omits the field.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -41,6 +46,9 @@ type RemoteSessionIssuerDraft struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool
+	// Whether the issuer advertises the RFC 9207 authorization response iss
+	// parameter.
+	AuthorizationResponseIssParameterSupported bool
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string
 }

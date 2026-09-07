@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -85,6 +87,10 @@ const (
 	eventStatusProcessing = "processing"
 	eventStatusCompleted  = "completed"
 	eventStatusFailed     = "failed"
+	// eventStatusCancelled marks a queued turn the user stopped before any
+	// runner claimed it. Terminal like completed/failed: no admission query
+	// matches it, so the turn is never dispatched.
+	eventStatusCancelled = "cancelled"
 
 	// maxEventAttempts caps how many times a single event will be retried
 	// against a live runtime before it's marked terminally failed. Prevents
@@ -1461,6 +1467,15 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
 	}
+	err = triggerrepo.New(tx).DeleteTriggerInstancesByTargetExceptDefinition(ctx, triggerrepo.DeleteTriggerInstancesByTargetExceptDefinitionParams{
+		ProjectID:              projectID,
+		TargetKind:             bgtriggers.TargetKindAssistant,
+		TargetRef:              assistantID.String(),
+		ExcludedDefinitionSlug: bgtriggers.DefinitionSlugWake,
+	})
+	if err != nil {
+		return fmt.Errorf("delete assistant trigger instances: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit delete assistant tx: %w", err)
 	}
@@ -2561,7 +2576,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// and re-pend the event. Further attempts fall through to the
 			// terminal-fail branch so persistent corruption can't loop.
 			if errors.Is(runErr, ErrHistoryCorrupted) && event.Attempts <= 1 {
-				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID); healErr != nil {
+				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID, thread.AssistantID); healErr != nil {
 					s.logger.ErrorContext(ctx, "assistant self-heal failed",
 						attr.SlogAssistantThreadID(thread.ID.String()),
 						attr.SlogAssistantEventID(event.ID.String()),
@@ -2806,16 +2821,18 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
-// project's managed assistant additionally gets the managed-only toolset,
-// which must never be reachable by any other assistant.
+// project's managed assistant additionally gets exactly one managed-only
+// toolset — legacy or Platform MCP, per the rollout variant — which must never
+// be reachable by any other assistant.
 func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
 				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			} else {
+				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
@@ -2826,27 +2843,27 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	return platformSlugs, nil
 }
 
-// platformMCPReadEnabled reports whether the organization owning projectID is
-// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
-// Platform MCP organization gate: distinct ID is the org ID with the org-slug
-// PostHog group. Errors fail closed but never abort the turn — a flag-provider
-// outage must not take down bootstrap or reconcile, so the toolset is simply
-// withheld until evaluation recovers.
-func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+// assistantToolsVariant reports which managed-assistant platform toolset the
+// organization owning projectID is on. Evaluation mirrors the Platform MCP
+// organization gate: distinct ID is the org ID with the org-slug PostHog
+// group. Every failure path returns the legacy variant but never aborts the
+// turn — a flag-provider outage must not take down bootstrap or reconcile, nor
+// silently strip the managed assistant's tools.
+func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
 	if s.featureFlags == nil {
-		return false
+		return feature.VariantAssistantToolsLegacy
 	}
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
-		return false
+		s.logger.WarnContext(ctx, "resolve organization for assistant tools variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
 	}
-	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
 	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
-		return false
+		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
 	}
-	return enabled
+	return feature.AssistantToolsVariant(variant)
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -2871,7 +2888,6 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	runtimeID uuid.UUID,
 	eventID uuid.UUID,
 ) func() {
-	//nolint:gosec // cancel is returned and invoked by the caller to stop the heartbeat goroutine
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(processingLeaseHeartbeatTick)
@@ -3389,10 +3405,19 @@ const selfHealRecoveryNoticeTemplate = "[gram self-heal] Earlier conversation hi
 // messages (each truncated to selfHealUserMessageMaxLen runes). The next
 // /configure pulls this generation as the live history; assistant/tool
 // turns are dropped — they're the most likely source of the rejection.
-func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) error {
+func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, assistantID uuid.UUID) error {
 	if s.chatWriter == nil {
 		return fmt.Errorf("self-heal: chat writer not configured")
 	}
+
+	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("self-heal: load chat: %w", err)
+	}
+	billingUserID := conv.FromPGTextOrEmpty[string](chatRow.UserID)
 
 	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
@@ -3419,6 +3444,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	nextGen := currentGen + 1
 	empty := conv.ToPGTextEmpty("")
 	base := chatrepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -3446,16 +3472,36 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		Generation:       nextGen,
 	}
 
-	rows := make([]chatrepo.CreateChatMessageParams, 0, len(userMessages)+1)
+	rows := make([]chat.MessageWrite, 0, len(userMessages)+1)
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
-	rows = append(rows, notice)
+	rows = append(rows, chat.MessageWrite{
+		Params:         notice,
+		BillingUserID:  billingUserID,
+		AssistantID:    assistantID,
+		WorkloadSource: metering.WorkloadSourceAssistant,
+		UserEmail:      "",
+		Provider:       "",
+		HookHostname:   "",
+		AccountType:    chatRow.AccountType,
+		BillingMode:    "",
+	})
 	for _, m := range userMessages {
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
-		rows = append(rows, row)
+		rows = append(rows, chat.MessageWrite{
+			Params:         row,
+			BillingUserID:  billingUserID,
+			AssistantID:    assistantID,
+			WorkloadSource: metering.WorkloadSourceAssistant,
+			UserEmail:      "",
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    chatRow.AccountType,
+			BillingMode:    "",
+		})
 	}
 
 	if _, err := s.chatWriter.Write(ctx, projectID, rows); err != nil {

@@ -842,6 +842,22 @@ func TestValidateSkillSuggestionCanonicalizesChangedContent(t *testing.T) {
 	require.Equal(t, validated.CanonicalSHA256, canonical.CanonicalSHA256)
 }
 
+func TestValidateSkillManifestRejectsBodyTextThatLooksLikeFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateSkillManifest(
+		"---\nname: add-mcp-from-catalog\n---\n\ndescription: body text is not frontmatter\n",
+		"add-mcp-from-catalog",
+	)
+	require.ErrorContains(t, err, `field="description" code="required"`)
+
+	err = ValidateSkillManifest(
+		"---\nname: other-skill\ndescription: Valid frontmatter.\n---\n\nname: add-mcp-from-catalog\n",
+		"add-mcp-from-catalog",
+	)
+	require.ErrorContains(t, err, `name "other-skill" does not match skill "add-mcp-from-catalog"`)
+}
+
 func TestValidateSkillSuggestionRejectsInvalidManifest(t *testing.T) {
 	t.Parallel()
 

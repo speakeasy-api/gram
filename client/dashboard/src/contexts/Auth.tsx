@@ -50,6 +50,7 @@ export const emptySession: Session = {
   },
   organizations: [],
   activeOrganizationId: "",
+  organizationOverride: false,
   trial: null,
   hasActiveSubscription: false,
   whitelisted: false,
@@ -115,7 +116,7 @@ export const useSessionData = (): {
     refetch,
     status,
   } = useSessionInfo(undefined, undefined, {
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     retry: false,
     throwOnError: false,
   });

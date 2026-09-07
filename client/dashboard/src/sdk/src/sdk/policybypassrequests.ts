@@ -9,6 +9,7 @@ import { riskPolicyBypassRequestsList } from "../funcs/riskPolicyBypassRequestsL
 import { riskPolicyBypassRequestsRevoke } from "../funcs/riskPolicyBypassRequestsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListRiskPolicyBypassRequestsResult } from "../models/components/listriskpolicybypassrequestsresult.js";
+import { PolicyBypassRedemption } from "../models/components/policybypassredemption.js";
 import { RiskPolicyBypassRequest } from "../models/components/riskpolicybypassrequest.js";
 import {
   ApproveRiskPolicyBypassRequestRequest,
@@ -62,7 +63,7 @@ export class PolicyBypassRequests extends ClientSDK {
     request: CreateRiskPolicyBypassRequestRequest,
     security?: CreateRiskPolicyBypassRequestSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<RiskPolicyBypassRequest> {
+  ): Promise<PolicyBypassRedemption> {
     return unwrapAsync(riskPolicyBypassRequestsCreate(
       this,
       request,

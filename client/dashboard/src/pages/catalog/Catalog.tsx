@@ -7,7 +7,9 @@ import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { CommandBar } from "@/pages/catalog/CommandBar";
+import { useSdkClient } from "@/contexts/Sdk";
+import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type PulseMCPServer,
   useIsCatalogServerInstalled,
@@ -19,7 +21,8 @@ import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate, useSearchParams } from "react-router";
+import { toast } from "sonner";
 import {
   useFilterState as useDimensionFilters,
   type FilterValue,
@@ -32,7 +35,6 @@ import {
 } from "./catalog-filter-schema";
 import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
-import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
 
@@ -61,6 +63,47 @@ function CatalogInner() {
   const routes = useRoutes();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // Deep link from a gateway's Add member sheet: servers installed here get
+  // attached to that gateway as members, and the flow returns to it.
+  const [searchParams] = useSearchParams();
+  const attachToGatewayId = searchParams.get("attachToGateway");
+
+  const attachInstalledToGateway = async (result: {
+    status: "succeeded" | "failed";
+    completedMcpServerIds?: string[];
+  }) => {
+    if (!attachToGatewayId) return;
+    let attachFailures = 0;
+    for (const mcpServerId of result.completedMcpServerIds ?? []) {
+      try {
+        await client.metaMcp.addMember({
+          addMetaMcpMemberForm: {
+            metaMcpServerId: attachToGatewayId,
+            mcpServerId,
+          },
+        });
+      } catch (err) {
+        console.error("failed to attach installed server to gateway", err);
+        attachFailures += 1;
+      }
+    }
+    await invalidateAllMetaMcpMembers(queryClient);
+    if (attachFailures > 0) {
+      toast.error(
+        attachFailures === 1
+          ? "An installed server could not be added to the gateway. Add it from the gateway's overview."
+          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's overview.`,
+      );
+    }
+    // Redirect only when everything worked; otherwise stay so the dialog's
+    // per-server results (and the toast above) remain visible.
+    if (result.status === "succeeded" && attachFailures === 0) {
+      void navigate(routes.mcp.gateway.overview.href(attachToGatewayId));
+    }
+  };
 
   // Category + sort stay page state (no UI to change category today; sort is the
   // SortDropdown). The five granular filters now run through the unified filter
@@ -78,13 +121,8 @@ function CatalogInner() {
     [pageState.category, pageState.sort, filters],
   );
 
-  // Selection state from URL (persists across navigation)
-  const { selectedServers, toggleServerSelection, clearSelection } =
-    useSelectionState();
-
   const [viewMode, setViewMode] = useViewMode();
   const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
-  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   const {
     data,
@@ -125,13 +163,11 @@ function CatalogInner() {
     [filters],
   );
 
-  const getSelectedServerObjects = () =>
-    filteredServers.filter((s) =>
-      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
-    );
-
-  const handleAdd = () => {
-    setAddingServers(getSelectedServerObjects());
+  // One server at a time: the card's own Add button opens the install dialog
+  // for that server. The dialog still takes a list, so a future bulk path can
+  // reuse it unchanged.
+  const handleAdd = (server: PulseMCPServer) => {
+    setAddingServers([server]);
   };
 
   return (
@@ -174,13 +210,6 @@ function CatalogInner() {
           onChange: (v) => pageState.setSort(v as SortOption),
           options: CATALOG_SORT_OPTIONS,
         }}
-        count={
-          isLoading
-            ? undefined
-            : filteredServers.length === allServers.length
-              ? `${allServers.length} servers`
-              : `${filteredServers.length} of ${allServers.length} servers`
-        }
         viewToggle={{ value: viewMode, onChange: setViewMode }}
         onRefresh={() => void refetchCatalog()}
         isRefreshing={isFetching}
@@ -193,28 +222,24 @@ function CatalogInner() {
             ))}
           </div>
         ) : viewMode === "grid" ? (
-          <div
-            ref={setGridElement}
-            className="grid grid-cols-1 gap-6 xl:grid-cols-2"
-          >
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {filteredServers.map((server) => {
               const serverKey = `${server.registryId}-${server.registrySpecifier}`;
               return (
                 <ServerCard
                   key={serverKey}
                   server={server}
-                  detailHref={routes.catalog.detail.href(
+                  detailHref={routes.mcp.add.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
                   isAdded={isServerAdded(server)}
-                  isSelected={selectedServers.has(serverKey)}
-                  onToggleSelect={() => toggleServerSelection(serverKey)}
+                  onAdd={() => handleAdd(server)}
                 />
               );
             })}
           </div>
         ) : (
-          <div ref={setGridElement}>
+          <div>
             <DotTable
               headers={[
                 { label: "", className: "w-10" },
@@ -231,12 +256,11 @@ function CatalogInner() {
                   <ServerTableRow
                     key={serverKey}
                     server={server}
-                    detailHref={routes.catalog.detail.href(
+                    detailHref={routes.mcp.add.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
                     isAdded={isServerAdded(server)}
-                    isSelected={selectedServers.has(serverKey)}
-                    onToggleSelect={() => toggleServerSelection(serverKey)}
+                    onAdd={() => handleAdd(server)}
                   />
                 );
               })}
@@ -268,17 +292,13 @@ function CatalogInner() {
         projectSlug={project.slug}
         open={addingServers.length > 0}
         onOpenChange={(open) => {
-          if (!open) {
-            setAddingServers([]);
-            clearSelection();
-          }
+          if (!open) setAddingServers([]);
         }}
-      />
-      <CommandBar
-        selectedCount={selectedServers.size}
-        onAdd={handleAdd}
-        onClear={clearSelection}
-        containerElement={gridElement}
+        onInstallFinished={
+          attachToGatewayId
+            ? (result) => void attachInstalledToGateway(result)
+            : undefined
+        }
       />
     </>
   );

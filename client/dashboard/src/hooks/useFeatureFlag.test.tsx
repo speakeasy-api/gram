@@ -10,6 +10,9 @@ import { useFeatureFlag } from "./useFeatureFlag";
 
 type FeatureFlagsCallback = Parameters<Telemetry["onFeatureFlags"]>[0];
 type FeatureFlagOptions = Parameters<Telemetry["isFeatureEnabled"]>[1];
+type FeatureFlagOptionsWithDefault = FeatureFlagOptions & {
+  defaultValue: boolean;
+};
 
 function renderFeatureFlag({
   initiallyAvailable = false,
@@ -22,15 +25,32 @@ function renderFeatureFlag({
   let featureFlagsCallback: FeatureFlagsCallback | undefined;
   const unsubscribe = vi.fn();
   const isFeatureEnabled = vi.fn(
-    (_flag: string, _options?: FeatureFlagOptions) => flagValue,
+    (_flag: string, options?: FeatureFlagOptions) =>
+      flagValue ?? options?.defaultValue,
   );
   const onFeatureFlags = vi.fn((callback: FeatureFlagsCallback) => {
     featureFlagsCallback = callback;
     return unsubscribe;
   });
+
+  function telemetryIsFeatureEnabled(
+    flag: string,
+    options: FeatureFlagOptionsWithDefault,
+  ): boolean;
+  function telemetryIsFeatureEnabled(
+    flag: string,
+    options?: FeatureFlagOptions,
+  ): boolean | undefined;
+  function telemetryIsFeatureEnabled(
+    flag: string,
+    options?: FeatureFlagOptions,
+  ): boolean | undefined {
+    return isFeatureEnabled(flag, options);
+  }
+
   const telemetry: Telemetry = {
     ...nullTelemetry,
-    isFeatureEnabled,
+    isFeatureEnabled: telemetryIsFeatureEnabled,
     onFeatureFlags,
   };
 

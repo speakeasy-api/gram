@@ -5,6 +5,9 @@
 ## Both the Gram server and dashboard (client) are accessed on
 ## https://app.getgram.ai.
 GRAM_SERVER_URL = false
+## Unset on purpose: one image serves every environment, so any value here
+## would send the dev admin dashboard into production data. Disables the link.
+GRAM_APP_URL = false
 ## GRAM_API_URL is used primarily during local development. That may change in
 ## the future when we create separate builds per environment but until then we
 ## should unset it so it is not baked into bundles built with vite.

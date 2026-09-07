@@ -12,13 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -86,12 +79,15 @@ import {
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,
@@ -106,6 +102,11 @@ import {
 } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
+import { policyStatusLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 import {
   ALL_CATEGORIES,
   AVAILABLE_CATEGORIES,
@@ -119,6 +120,7 @@ import {
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
@@ -153,26 +155,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
-const PROMPT_STEPS: Step[] = [
+const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -196,7 +183,7 @@ const PROMPT_STEPS: Step[] = [
   },
 ];
 
-const STANDARD_STEPS: Step[] = [
+const STANDARD_STEPS: PolicyStep[] = [
   {
     id: "detect",
     title: "Detect",
@@ -219,10 +206,50 @@ const STANDARD_STEPS: Step[] = [
   },
 ];
 
+const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+};
+
+const POLICY_ACTION_MESSAGE: Record<
+  Exclude<PolicyAction, "flag">,
+  { label: string; description: string; placeholder: string }
+> = {
+  warn: {
+    label: "Warning message",
+    description:
+      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+  },
+  block: {
+    label: "Block message",
+    description:
+      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
+  },
+  quarantine: {
+    label: "Quarantine message",
+    description:
+      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
+  },
+};
+
+interface PolicyStep {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+}
+
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
 // each step change its own history entry.
-function useStepParam(steps: Step[]): [number, (index: number) => void] {
+function useStepParam(steps: PolicyStep[]): [number, (index: number) => void] {
   const [raw, setRaw] = useQueryState("step", { history: "push" });
   const found = steps.findIndex((s) => s.id === raw);
   const index = found >= 0 ? found : 0;
@@ -388,7 +415,7 @@ function HorizontalStepper({
   current,
   onStep,
 }: {
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
 }): JSX.Element {
@@ -447,7 +474,7 @@ function StepperShell({
   children,
 }: {
   header: React.ReactNode;
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;
@@ -530,6 +557,7 @@ function PolicyHeader({
   const isCreate = policy === null;
   const routes = useRoutes();
   const [editingName, setEditingName] = useState(false);
+  const toggleEnabledMutation = useTogglePolicyEnabled();
 
   return (
     <Stack
@@ -575,11 +603,32 @@ function PolicyHeader({
               <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           )}
-          {policy ? <StatusBadge /> : null}
+          {policy ? (
+            <>
+              <StatusBadge enabled={policy.enabled} />
+              <Switch
+                checked={policy.enabled}
+                disabled={saving || toggleEnabledMutation.isPending}
+                onCheckedChange={(checked) =>
+                  toggleEnabledMutation.mutate(
+                    togglePolicyEnabledVariables(
+                      policy.id,
+                      policy.name,
+                      checked,
+                    ),
+                  )
+                }
+                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
+              />
+            </>
+          ) : null}
         </Stack>
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
+            {policy.enabled
+              ? null
+              : " · Inactive — new messages are not scanned"}
           </Text>
         ) : (
           <Text small muted>
@@ -631,8 +680,12 @@ function CreateButton({
   );
 }
 
-function StatusBadge(): JSX.Element {
-  return <Badge variant="success">Enforcing</Badge>;
+function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
+  return (
+    <Badge variant={enabled ? "success" : "neutral"}>
+      {policyStatusLabel(enabled)}
+    </Badge>
+  );
 }
 
 // Vertical section header — title stacked over subtext with breathing room.
@@ -683,7 +736,6 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -713,7 +765,6 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
@@ -789,10 +840,8 @@ function PromptPolicyEditor({
         updateRiskPolicyRequestBody: {
           id: policy.id,
           name: name.trim() || policy.name,
-          enabled: true,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
@@ -815,7 +864,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -844,7 +893,6 @@ function PromptPolicyEditor({
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
       messageTypes: policy?.messageTypes ?? [],
@@ -859,7 +907,6 @@ function PromptPolicyEditor({
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
       policy,
@@ -894,8 +941,6 @@ function PromptPolicyEditor({
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -943,7 +988,6 @@ function PromptPolicyEditor({
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
           customizedScopeCount={scopeOverrides.size}
@@ -1003,18 +1047,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1024,37 +1064,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1266,6 +1278,10 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
   const trimmed = expr.trim();
   const out = new Set<ScopeSurfaceKind>();
   if (trimmed === "") return out;
+
+  const decoded = decodeKindScope(trimmed);
+  if (decoded) return new Set(decoded);
+
   for (const part of trimmed.split("||")) {
     const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
     const kind = match?.[1] as ScopeSurfaceKind | undefined;
@@ -1389,9 +1405,9 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
   }
   return {
-    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
-      .map((kind) => `kind == "${kind}"`)
-      .join(" || "),
+    scopeInclude: encodeKindScope(
+      ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind)),
+    ),
     scopeExempt: "",
   };
 }
@@ -1963,21 +1979,15 @@ function ActionStep({
           {action !== "flag" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {action === "warn" ? "Warning message" : "Custom Message"}
+                {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {action === "warn"
-                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+                {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
                 value={userMessage}
                 onChange={setUserMessage}
-                placeholder={
-                  action === "warn"
-                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                }
+                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
                 rows={3}
               />
             </div>
@@ -1996,7 +2006,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -2012,7 +2021,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2066,7 +2074,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2323,7 +2330,6 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
   customizedScopeCount,
@@ -2336,7 +2342,6 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   customizedScopeCount: number;
@@ -2349,8 +2354,6 @@ function PromptReview({
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
   return (
     <Stack gap={4}>
@@ -2364,7 +2367,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
@@ -2375,11 +2378,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
-              {action === "block"
-                ? "Block"
-                : action === "warn"
-                  ? "Warn"
-                  : "Flag"}
+              {POLICY_ACTION_LABEL[action]}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Severity">
@@ -3531,6 +3530,11 @@ export function StandardPolicyEditor({
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  // Standing decisions the pending save would contradict; non-null opens the
+  // supersede confirmation.
+  const [supersedeConflicts, setSupersedeConflicts] = useState<
+    ShadowMCPDecisionConflict[] | null
+  >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
     useState<ShadowMCPDisposition>(
       () =>
@@ -3663,6 +3667,7 @@ export function StandardPolicyEditor({
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: (_policy, variables) => {
+      setSupersedeConflicts(null);
       const submittedURLs = shadowMCPSelectionBaselineForUpdate(
         variables.request.updateRiskPolicyRequestBody,
       );
@@ -3716,7 +3721,7 @@ export function StandardPolicyEditor({
   };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
-  const save = () => {
+  const save = (options?: { supersedeDecisions?: boolean }) => {
     const {
       sources,
       presidioEntities,
@@ -3766,12 +3771,29 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
+      // A URL toggle that contradicts a recorded decision needs explicit
+      // confirmation before it supersedes that decision.
+      if (
+        !options?.supersedeDecisions &&
+        targetIsShadowMCPBlock &&
+        originalHasShadowMCPBlockConfiguration
+      ) {
+        const conflicts = shadowMCPDecisionConflicts({
+          servers: inventoryQuery.data ?? [],
+          originalURLs: originalShadowMCPURLs,
+          selectedURLs: selectedShadowMCPURLs,
+          disposition: shadowMCPDisposition,
+        });
+        if (conflicts.length > 0) {
+          setSupersedeConflicts(conflicts);
+          return;
+        }
+      }
       updateMutation.mutate({
         request: {
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
-            enabled: true,
             sources,
             presidioEntities,
             promptInjectionRules,
@@ -3792,6 +3814,9 @@ export function StandardPolicyEditor({
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
             ...setupFields,
+            ...(options?.supersedeDecisions
+              ? { supersedeDecisions: true }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3840,12 +3865,18 @@ export function StandardPolicyEditor({
       saving={saving}
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
-      onCreate={save}
+      onCreate={() => save()}
     />
   );
 
   return (
     <>
+      <SupersedeDecisionsDialog
+        conflicts={supersedeConflicts}
+        saving={saving}
+        onCancel={() => setSupersedeConflicts(null)}
+        onConfirm={() => save({ supersedeDecisions: true })}
+      />
       <StepperShell
         header={header}
         steps={STANDARD_STEPS}
@@ -4091,7 +4122,7 @@ function StandardReview({
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
-            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
+            {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Severity">

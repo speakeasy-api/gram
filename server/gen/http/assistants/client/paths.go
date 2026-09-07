@@ -37,6 +37,11 @@ func SendMessageAssistantsPath() string {
 	return "/rpc/assistants.sendMessage"
 }
 
+// InterruptTurnAssistantsPath returns the URL path to the assistants service interruptTurn HTTP endpoint.
+func InterruptTurnAssistantsPath() string {
+	return "/rpc/assistants.interruptTurn"
+}
+
 // GetManagedAssistantAssistantsPath returns the URL path to the assistants service getManagedAssistant HTTP endpoint.
 func GetManagedAssistantAssistantsPath() string {
 	return "/rpc/assistants.getManagedAssistant"

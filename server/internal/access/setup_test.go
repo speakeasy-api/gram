@@ -114,10 +114,12 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
-	emailService := email.NewService(logger, emailSender)
+	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
+		"access_request": "access-request-test-id",
+	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{})
 
 	return ctx, &testInstance{
 		service:     svc,
@@ -194,6 +196,17 @@ func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizatio
 	require.NoError(t, err)
 
 	return row.ID.String()
+}
+
+func seededRolePrincipal(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, roleSlug string) urn.Principal {
+	t.Helper()
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     roleSlug,
+	})
+	require.NoError(t, err)
+	return urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+row.ID.String())
 }
 
 func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {
@@ -296,3 +309,9 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 	})
 	require.NoError(t, err)
 }
+
+// foldAlwaysOn keeps the canonical identity fold enabled in tests, so
+// identity-folded queries are exercised rather than silently skipped.
+type foldAlwaysOn struct{}
+
+func (foldAlwaysOn) CanonicalOrgFor(_ context.Context, orgID string) string { return orgID }

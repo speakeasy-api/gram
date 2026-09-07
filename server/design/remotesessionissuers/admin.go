@@ -45,6 +45,29 @@ var OrganizationIssuerDeletePreflight = Type("OrganizationIssuerDeletePreflight"
 	Required("client_count", "mcp_server_names")
 })
 
+// IssuerFieldMismatch is one issuer field whose value differs between the
+// source and target of a consolidation, carrying both sides' values so the
+// confirmation dialog can show what an administrator is accepting rather than
+// only which field disagrees.
+//
+// Scalar and list values are separate attribute pairs rather than one array
+// pair. A scalar's absence is load-bearing: a target that declares no token
+// endpoint blocks the migration, and has to stay distinguishable from one that
+// declares an empty string, which a single array pair could not express.
+var IssuerFieldMismatch = Type("IssuerFieldMismatch", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("One remote_session_issuer field whose value differs between the source and target of a consolidation, with both sides' values.")
+
+	Attribute("field", String, "The differing field's name: issuer, token_endpoint, authorization_endpoint, oidc, passthrough, or scopes_supported.")
+	Attribute("source_value", String, "The source issuer's value for a scalar field, rendered as a string. Null when the source leaves the field unset, and null for a list-valued field.")
+	Attribute("target_value", String, "The target issuer's value for a scalar field, rendered as a string. Null when the target leaves the field unset, and null for a list-valued field.")
+	Attribute("source_values", ArrayOf(String), "The source issuer's entries for a list-valued field. Absent for a scalar field, and absent when the source's list is empty.")
+	Attribute("target_values", ArrayOf(String), "The target issuer's entries for a list-valued field. Absent for a scalar field, and absent when the target's list is empty.")
+
+	Required("field")
+})
+
 // OrganizationIssuerMigratePreflight describes the impact of consolidating a
 // source issuer onto a target issuer so the confirmation dialog can list every
 // blocker before the mutation runs. can_migrate is FALSE exactly when
@@ -55,9 +78,9 @@ var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePrefligh
 
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to the source issuer's clients.")
-	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.")
+	Attribute("endpoint_mismatches", ArrayOf(IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.")
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
-	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
+	Attribute("warnings", ArrayOf(IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.")
 
 	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "can_migrate")

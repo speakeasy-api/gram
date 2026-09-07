@@ -7,11 +7,13 @@ import { triggersDelete } from "../funcs/triggersDelete.js";
 import { triggersGet } from "../funcs/triggersGet.js";
 import { triggersList } from "../funcs/triggersList.js";
 import { triggersListDefinitions } from "../funcs/triggersListDefinitions.js";
+import { triggersListEvents } from "../funcs/triggersListEvents.js";
 import { triggersPause } from "../funcs/triggersPause.js";
 import { triggersResume } from "../funcs/triggersResume.js";
 import { triggersUpdate } from "../funcs/triggersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListTriggerDefinitionsResult } from "../models/components/listtriggerdefinitionsresult.js";
+import { ListTriggerEventsResult } from "../models/components/listtriggereventsresult.js";
 import { ListTriggerInstancesResult } from "../models/components/listtriggerinstancesresult.js";
 import { TriggerInstance } from "../models/components/triggerinstance.js";
 import {
@@ -30,6 +32,10 @@ import {
   ListTriggerDefinitionsRequest,
   ListTriggerDefinitionsSecurity,
 } from "../models/operations/listtriggerdefinitions.js";
+import {
+  ListTriggerEventsRequest,
+  ListTriggerEventsSecurity,
+} from "../models/operations/listtriggerevents.js";
 import {
   ListTriggerInstancesRequest,
   ListTriggerInstancesSecurity,
@@ -137,6 +143,25 @@ export class Triggers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListTriggerDefinitionsResult> {
     return unwrapAsync(triggersListDefinitions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTriggerEvents triggers
+   *
+   * @remarks
+   * List recent dispatch events for a trigger instance.
+   */
+  async listEvents(
+    request: ListTriggerEventsRequest,
+    security?: ListTriggerEventsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListTriggerEventsResult> {
+    return unwrapAsync(triggersListEvents(
       this,
       request,
       security,

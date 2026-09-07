@@ -1,6 +1,11 @@
 {
   "$comment": "Recommended external agent skills. Installed on opt-in by `mise run skills:recommended` (offered by ./zero); contents land in .agents/skills/<name>/ and are kept out of git via .git/info/exclude. Pin `ref` to a commit SHA.",
   "skills": {
+    "speakeasy-brand": {
+      "repo": "https://github.com/speakeasy-api/marketing-content-generation",
+      "ref": "24edadffa1c632b5a98f15475caca2c82bd552c7",
+      "path": ".claude/skills/speakeasy-brand"
+    },
     "clickhouse-architecture-advisor": {
       "repo": "https://github.com/ClickHouse/agent-skills",
       "ref": "5aec3114379671f33b1c502a51d420a0729c8172",

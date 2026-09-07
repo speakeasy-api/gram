@@ -360,6 +360,55 @@ func TestUpdateIssuer_Name(t *testing.T) {
 	require.Nil(t, cleared.Name)
 }
 
+// TestUpdateIssuer_LogoAssetID sets a logo on an organization-level issuer
+// and then clears it with the explicit empty-string sentinel.
+func TestUpdateIssuer_LogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-update-logo", nil))
+	require.NoError(t, err)
+	require.Nil(t, created.LogoAssetID)
+
+	assetID := createTestImageAsset(t, ctx, ti.conn).String()
+	updated, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &assetID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.LogoAssetID)
+	require.Equal(t, assetID, *updated.LogoAssetID)
+
+	empty := ""
+	cleared, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.LogoAssetID)
+}
+
+// A malformed logo asset id is rejected as a 400 before the update query
+// runs; the query casts the text parameter to uuid, so letting it through
+// would surface as a Postgres cast error.
+func TestUpdateIssuer_InvalidLogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-bad-logo", nil))
+	require.NoError(t, err)
+
+	badID := "not-a-uuid"
+	_, err = ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &badID,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 // TestMoveIssuer_ProjectToOrganizational promotes a project-specific issuer to
 // organization-level (clears project_id) and records an update audit event.
 func TestMoveIssuer_ProjectToOrganizational(t *testing.T) {

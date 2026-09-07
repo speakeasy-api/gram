@@ -7,7 +7,6 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_patchRoleGrants_preservesUnmentionedGrants(t *testing.T) {
@@ -18,11 +17,9 @@ func TestService_patchRoleGrants_preservesUnmentionedGrants(t *testing.T) {
 	roleSlug := "custom-audiences"
 	seedInternalOrganization(t, ctx, conn, organizationID)
 	rolePrincipal := seedInternalRole(t, ctx, conn, organizationID, roleSlug)
-	legacyRolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), "project-old")
 	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-canonical")
-	seedInternalGrant(t, ctx, conn, organizationID, legacyRolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-legacy")
 
 	_, err := authz.PatchRoleGrantsTx(ctx, conn, organizationID, roleSlug, rolePrincipal.String(), []*authz.RoleGrant{
 		{
@@ -59,12 +56,4 @@ func TestService_patchRoleGrants_preservesUnmentionedGrants(t *testing.T) {
 		{scope: string(authz.ScopeProjectWrite), resourceID: authz.WildcardResource},
 		{scope: string(authz.ScopeRiskPolicyEvaluate), resourceID: "policy-canonical"},
 	}, got)
-
-	legacyRows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   legacyRolePrincipal.String(),
-	})
-	require.NoError(t, err)
-	require.Len(t, legacyRows, 1)
-	require.Equal(t, string(authz.ScopeRiskPolicyEvaluate), legacyRows[0].Scope)
 }

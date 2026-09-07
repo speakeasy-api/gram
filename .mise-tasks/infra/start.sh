@@ -7,24 +7,45 @@
 # under emulation on every stack — on Apple Silicon an emulated Postgres
 # backend segfaults under load (exit code 2 → crash recovery → every daemon
 # fails its DB ping mid-boot). Warn-only: emulation mostly works, and a hard
-# fail would strand hosts that have no native variant. Digest-pinned images are
-# skipped because a re-pull cannot change what a digest points at.
+# fail would strand hosts that have no native variant.
+#
+# Digest-pinned images are checked too. A pin is usually the digest of a
+# multi-arch INDEX, not of one platform's manifest, so the cached copy behind it
+# can still be the wrong architecture -- which is exactly how the pubsub
+# emulator ended up running under emulation on every worktree stack while this
+# check stayed silent.
 host_arch="$(docker version --format '{{.Server.Arch}}' 2>/dev/null)"
 if [ -n "$host_arch" ]; then
-    # Keep this advisory check to two daemon round-trips no matter how many
-    # images the stack declares: list local tags once, intersect with the
-    # compose images, then inspect the cached subset in a single call (its
-    # output lines map back to the input by position). A per-image inspect
-    # would add a slow serial round-trip per image on Docker Desktop.
+    # Keep this advisory check to a constant number of daemon round-trips no
+    # matter how many images the stack declares: list local tags and digests
+    # once, intersect with the compose images, then inspect the cached subset in
+    # a single call (its output lines map back to the input by position). A
+    # per-image inspect would add a slow serial round-trip per image on Docker
+    # Desktop.
     local_tags="$(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)"
+    local_digests="$(docker image ls --digests --format '{{.Repository}}@{{.Digest}}' 2>/dev/null)"
     cached_imgs=()
     while IFS= read -r img; do
-        case "$img" in *@sha256:*) continue ;; esac
-        case "$img" in *:*) tag="$img" ;; *) tag="$img:latest" ;; esac
-        if grep -qxF "$tag" <<< "$local_tags"; then
+        case "$img" in
+            *@sha256:*)
+                # `repo:tag@sha256:...` and `repo@sha256:...` both reduce to the
+                # `repo@sha256:...` form that `docker image ls --digests` prints.
+                # Only the final path component can carry a tag, so look for the
+                # separating colon there — stripping from the whole reference
+                # would eat a registry port instead (`host:5000/img@sha256:...`).
+                repo="${img%@*}"
+                case "${repo##*/}" in
+                    *:*) repo="${repo%:*}" ;;
+                esac
+                key="${repo}@${img#*@}"
+                ;;
+            *:*) key="$img" ;;
+            *) key="$img:latest" ;;
+        esac
+        if grep -qxF "$key" <<< "$local_tags"$'\n'"$local_digests"; then
             cached_imgs+=("$img")
         fi
-    done < <(docker compose config --images 2>/dev/null | sort -u)
+    done < <({ docker compose config --images; docker compose -f compose.shared.yml -p gram-shared config --images; } 2>/dev/null | sort -u)
     # `docker pull` honors an exported DOCKER_DEFAULT_PLATFORM, so while it is
     # set the pull just re-fetches the same foreign-arch variant and the
     # warning would never clear — tell the user to unset it first.
@@ -38,20 +59,33 @@ if [ -n "$host_arch" ]; then
             img="${cached_imgs[$i]}"
             i=$((i + 1))
             if [ -n "$img_arch" ] && [ "$img_arch" != "$host_arch" ]; then
-                echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: ${fix_prefix}docker pull $img" >&2
+                # A digest-pinned ref cannot simply be re-pulled: the daemon
+                # refuses to rebind a digest it already has ("cannot overwrite
+                # digest"), so the local copy has to be evicted first — and
+                # `docker rmi` refuses while ANY container still references it,
+                # including sibling worktrees'. Scoping the eviction to this
+                # compose project would therefore just make the remedy fail, so
+                # it stays repo-wide and the caveat is stated instead. The
+                # containers it removes come back with the next `infra:start`.
+                case "$img" in
+                    *@sha256:*)
+                        fix="${fix_prefix}docker rm -f \$(docker ps -aq --filter ancestor=$img) 2>/dev/null; docker rmi $img && docker pull --platform linux/$host_arch $img"
+                        fix="$fix (removes this image's containers in every worktree stack; each is recreated by its next \`mise infra:start\`)"
+                        ;;
+                    *) fix="${fix_prefix}docker pull --platform linux/$host_arch $img" ;;
+                esac
+                echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: $fix" >&2
             fi
         done < <(docker image inspect "${cached_imgs[@]}" --format '{{.Architecture}}' 2>/dev/null)
     fi
 fi
 
-# This worktree's own stack, first — with --remove-orphans. A pre-existing
-# worktree (and the main tree) still runs a gram-presidio container under its own
-# project that compose.yml no longer declares; removing it here, BEFORE asserting
-# the shared analyzer below, frees the old host port (5050 on the main tree,
-# which never remapped it) so the shared `up` can bind it in this same run
-# instead of losing the port to the stale container and only converging next
-# time. Profile-gated services (litellm, tunnel, local-registry) stay declared in
-# compose.yml and are not treated as orphans.
+# This worktree's own stack, first — with --remove-orphans. Pre-existing
+# worktrees can still run Temporal, Pub/Sub, or Presidio containers that
+# compose.yml no longer declares. Removing this worktree's copies before
+# asserting the shared services frees fixed ports in the main tree and removes
+# obsolete remapped copies elsewhere. Profile-gated services (litellm,
+# local-registry) remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
 
 # One-time migration: free host port 5050 for the shared analyzer. Before the
@@ -68,13 +102,50 @@ docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter 
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# Presidio analyzer, shared across all worktrees under a fixed project name so a
-# worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
-# up is idempotent, so every worktree can safely (re)assert it here. A failure
-# here (e.g. a transient pull of the ~1 GB image) must NOT take down this
-# worktree's own databases, so warn and continue rather than aborting.
-docker compose -f compose.shared.yml -p gram-shared up -d \
-  || echo "⚠️  Shared Presidio analyzer failed to start; continuing. PII scanning stays degraded until it is up." >&2
+# One-time migration: the main tree previously bound its per-worktree Pub/Sub
+# emulator to the shared port. Remove only a non-shared emulator actually
+# publishing 8088. Sibling worktrees on remapped ports keep running until their
+# next git:worksync/infra:start migration.
+docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filter "publish=8088" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# One-time migration: Temporal now runs under the shared project too. Remove
+# only a non-shared Temporal container publishing the fixed gRPC port. Sibling
+# worktrees on remapped ports keep running until their next
+# git:worksync/infra:start migration.
+docker ps -a --filter "label=com.docker.compose.service=gram-temporal" --filter "publish=7233" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# Pub/Sub is required by the local streams processes, and Temporal is required
+# by seeding and every background worker. Wait for both healthchecks so a
+# container that starts and immediately exits cannot let infrastructure startup
+# report success.
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
+  pubsub-emulator gram-temporal || exit 1
+
+# The shared Temporal server starts with the main tree's `default` namespace.
+# Every worktree gets a distinct TEMPORAL_NAMESPACE from git:workinit; create it
+# idempotently before any seed or daemon can submit workflows. The second
+# describe handles two concurrent starts racing to create the same namespace.
+if ! docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+     temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1; then
+  echo "Creating Temporal namespace ${TEMPORAL_NAMESPACE}..."
+  docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+    temporal operator namespace create --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1 \
+    || docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+      temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null \
+    || exit 1
+fi
+
+# Presidio and LGTM are shared too, but neither is a synchronous startup
+# dependency. A transient image pull or cold model must not take down this
+# worktree's databases, so warn and continue.
+docker compose -f compose.shared.yml -p gram-shared up -d gram-presidio lgtm \
+  || echo "⚠️  Optional shared Presidio/LGTM services failed to start; continuing with degraded PII scanning or observability." >&2
 
 # Best-effort readiness for the shared analyzer. `up -d` returns once the
 # container is created, not once its ~1 GB spaCy model has loaded, so poll the
@@ -203,13 +274,3 @@ wait_for "Postgres" gram-db \
 wait_for "ClickHouse" clickhouse \
     docker compose exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"
 
-# Temporal is the last of the three to become usable, and the first thing that
-# needs it is `mise run seed`, whose deployment step starts a workflow. Without
-# this probe seed fails with `error starting deployment: context deadline
-# exceeded` — a 10s timeout on a Temporal that isn't serving yet — which on a
-# cold worktree leaves the stack up but only partially seeded.
-#
-# `cluster health` hangs rather than erroring when the dev-server's SQLite
-# persistence is wedged, so it relies on run_bounded to cap each attempt.
-wait_for "Temporal" gram-temporal \
-    docker compose exec -T gram-temporal temporal operator cluster health

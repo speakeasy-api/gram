@@ -486,8 +486,7 @@ func retryTransientDBDisconnect(ctx context.Context, label string, fn func() err
 }
 
 func isTransientDBDisconnect(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pgErr.Code {
 		case "57P01", "57P02", "57P03", "08000", "08003", "08006", "08007", "08P01":
 			return true

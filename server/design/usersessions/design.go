@@ -81,15 +81,18 @@ var _ = Service("userSessions", func() {
 	})
 
 	Method("mintUserSession", func() {
-		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
+		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
 
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_id", String, "Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+			Attribute("toolset_id", String, "Bind the JWT to this toolset's audience. When the toolset has an mcp_servers wrapper the mint resolves to that server (identical to passing its mcp_server_id); otherwise the JWT is bound to the legacy toolset audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("mcp_server_id", String, "Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+			Attribute("mcp_server_id", String, "Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
@@ -173,14 +176,60 @@ var UserSession = Type("UserSession", func() {
 	})
 	Attribute("client_name", String, "Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.")
 	Attribute("client_id_metadata_uri", String, "Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.")
+	Attribute("client_credential_kind", String, "What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.", func() {
+		Enum("public", "secret", "key", "misconfigured")
+	})
+	Attribute("client_token_endpoint_auth_method", String, "The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
 	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")
 	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("last_used_at", String, "When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("upstreams", ArrayOf(UserSessionUpstream), "The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.")
 
-	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type")
+	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type", "upstreams")
+})
+
+// UserSessionUpstream is the outbound leg of a brokered connection. A
+// user_session says an agent can reach Gram; this says what Gram can reach on
+// that subject's behalf. The two are joined on (subject_urn,
+// user_session_issuer_id), which both tables carry.
+var UserSessionUpstream = Type("UserSessionUpstream", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An upstream remote_session held for the same subject and issuer as the user_session that carries it. Token material is never returned.")
+
+	Attribute("remote_session_id", String, "The remote_session id. Target for revoke and force-refresh.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("remote_session_client_id", String, "The remote_session_client the session was minted against.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("remote_session_issuer_id", String, "The remote_session_issuer the client belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("issuer_slug", String, "Display slug of the upstream provider, e.g. 'mcp.linear.app'.")
+	Attribute("access_expires_at", String, "Upstream access-token expiry. Null when the upstream issued a non-expiring token.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session holds no refresh token or the upstream issued a non-expiring one.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("authorization_expires_at", String, "Absolute upstream authorization deadline. Unlike refresh_expires_at, exchanging a token does not extend this.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("has_refresh_token", Boolean, "Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token.")
+	Attribute("auto_refresh", Boolean, "Whether the subject opted this connection into automated keepalive.")
+	Attribute("last_used_at", String, "When this upstream token was last spent on a proxied call. Same five-minute resolution as the inbound leg, so the two are directly comparable.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("scopes", ArrayOf(String), "Scopes held by this upstream session.")
+
+	Required("remote_session_id", "remote_session_client_id", "remote_session_issuer_id", "issuer_slug", "has_refresh_token", "auto_refresh", "scopes")
 })
 
 var ListUserSessionsResult = Type("ListUserSessionsResult", func() {

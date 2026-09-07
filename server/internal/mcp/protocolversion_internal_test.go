@@ -37,24 +37,24 @@ func recordedProtocolVersionAttrs(t *testing.T, requested, negotiated string) ma
 	return got
 }
 
-// TestRecordMCPProtocolVersionSpan_RecordsGramsPinAsADiscrepancy is the case that
-// motivates tracking the two versions separately: the hosted path answers
-// ServedHostedToolset no matter what the client asked for, and collapsing them
-// into one attribute would hide that.
-func TestRecordMCPProtocolVersionSpan_RecordsGramsPinAsADiscrepancy(t *testing.T) {
+// TestRecordMCPProtocolVersionSpan_RecordsDowngradeAsADiscrepancy is the case
+// that motivates tracking the two versions separately: a client requesting a
+// revision outside the supported set is negotiated down to a different one,
+// and collapsing the two into one attribute would hide that.
+func TestRecordMCPProtocolVersionSpan_RecordsDowngradeAsADiscrepancy(t *testing.T) {
 	t.Parallel()
 
-	got := recordedProtocolVersionAttrs(t, mcpversions.Version20260728, mcpversions.ServedHostedToolset)
+	got := recordedProtocolVersionAttrs(t, mcpversions.Version20260728, mcpversions.Version20251125)
 	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, mcpversions.ServedHostedToolset, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }
 
 func TestRecordMCPProtocolVersionSpan_OmitsAbsentRequestedVersion(t *testing.T) {
 	t.Parallel()
 
-	got := recordedProtocolVersionAttrs(t, "", mcpversions.ServedHostedToolset)
+	got := recordedProtocolVersionAttrs(t, "", mcpversions.Version20250326)
 	require.NotContains(t, got, string(attr.McpRequestedProtocolVersionKey))
-	require.Equal(t, mcpversions.ServedHostedToolset, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	require.Equal(t, mcpversions.Version20250326, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }
 
 // TestRecordMCPProtocolVersionSpan_OmitsAbsentNegotiatedVersion covers the
@@ -82,7 +82,7 @@ func TestRecordMCPProtocolVersionSpan_RecordsNothingWhenBothAbsent(t *testing.T)
 func TestRecordMCPProtocolVersionSpan_KeepsUnrecognizedVersions(t *testing.T) {
 	t.Parallel()
 
-	got := recordedProtocolVersionAttrs(t, "1999-12-31", mcpversions.ServedHostedToolset)
+	got := recordedProtocolVersionAttrs(t, "1999-12-31", mcpversions.Version20250326)
 	require.Equal(t, "1999-12-31", got[string(attr.McpRequestedProtocolVersionKey)])
 }
 
@@ -100,6 +100,6 @@ func TestRecordMCPProtocolVersionSpan_ToleratesNonRecordingSpan(t *testing.T) {
 	// Sampled-out requests reach handlers with a non-recording span; recording
 	// must be a no-op rather than a panic.
 	require.NotPanics(t, func() {
-		recordMCPProtocolVersionSpan(t.Context(), mcpversions.Version20250618, mcpversions.ServedHostedToolset)
+		recordMCPProtocolVersionSpan(t.Context(), mcpversions.Version20250618, mcpversions.Version20250326)
 	})
 }

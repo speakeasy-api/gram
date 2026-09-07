@@ -128,6 +128,11 @@ WHERE project_id = @project_id
 ORDER BY seen_at ASC, id ASC;
 
 -- name: UpsertClaudeCodeSession :one
+-- Creates the chat row a captured agent session hangs off, or refreshes the one
+-- already there. The chat id is derived from a client-supplied session id, so a
+-- caller could name another tenant's chat: the conflict update is scoped to the
+-- owning project, and a cross-project id surfaces as a no-rows error rather
+-- than mutating a row across the boundary.
 INSERT INTO chats (
     id
   , project_id
@@ -136,6 +141,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -147,12 +153,15 @@ VALUES (
     @external_user_id,
     sqlc.narg(user_account_id),
     @title,
+    sqlc.narg(cwd),
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec
@@ -267,6 +276,16 @@ SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts
 WHERE organization_id = @organization_id
   AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
+-- name: ListUserAccountsByEmails :many
+-- Resolves account emails back to their directory owner. This supports telemetry
+-- rows whose only identity is a linked personal/provider account email.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
   AND deleted_at IS NULL
 ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 

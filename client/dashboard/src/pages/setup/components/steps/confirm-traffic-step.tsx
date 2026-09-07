@@ -189,10 +189,26 @@ export function ConfirmTrafficStep({
       description="We're listening for events from your agent platforms. Trigger any action in a managed coding agent to confirm the instrumentation works."
       onContinue={onComplete}
       continueLabel="Continue"
+      canContinue={hasEvents}
       showBack
       onBack={onBack}
     >
       <div className="space-y-6">
+        {query.isError ? (
+          <div
+            role="alert"
+            className="border-destructive text-destructive border p-4 text-sm"
+          >
+            <p>We couldn't check for traffic. Try again.</p>
+            <button
+              type="button"
+              className="mt-2 underline"
+              onClick={() => void query.refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
         <div className="border-border bg-card overflow-hidden border">
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">

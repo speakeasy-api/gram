@@ -1,12 +1,19 @@
 package auth_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	authserver "github.com/speakeasy-api/gram/server/gen/http/auth/server"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,6 +36,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -73,6 +81,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // Has active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -118,6 +127,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -163,6 +173,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -185,10 +196,11 @@ func TestService_Register(t *testing.T) {
 			name    string
 			orgName string
 		}{
-			{"with special characters", "Test@Org!"},
-			{"with brackets", "Test[Org]"},
-			{"with slashes", "Test/Org\\"},
-			{"with quotes", "Test\"Org'"},
+			{"with a newline", "Test\nOrg"},
+			{"with a tab", "Test\tOrg"},
+			{"with a bidi override", "Test\u202eOrg"},
+			{"with a zero-width space", "Test\u200bOrg"},
+			{"with invalid utf-8", "Test\xffOrg"},
 		}
 
 		for _, tc := range testCases {
@@ -211,7 +223,7 @@ func TestService_Register(t *testing.T) {
 		}
 	})
 
-	t.Run("register fails when org name slugifies to nothing", func(t *testing.T) {
+	t.Run("register fails when org name has too few letters or numbers", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -223,6 +235,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -240,9 +253,8 @@ func TestService_Register(t *testing.T) {
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-		// Names built entirely from the punctuation the character rule allows
-		// (or with a single surviving alphanumeric) slugify to an empty or
-		// one-character slug and must be rejected server-side.
+		// Names built entirely from punctuation or symbols carry no meaning and
+		// must be rejected server-side, as must a lone initial.
 		testCases := []struct {
 			name    string
 			orgName string
@@ -250,7 +262,8 @@ func TestService_Register(t *testing.T) {
 			{"only hyphens", "-----"},
 			{"only underscores", "___"},
 			{"mixed punctuation", "- _ -"},
-			{"single alphanumeric", "A-"},
+			{"only symbols", "€ £ ¥"},
+			{"single letter", "A-"},
 		}
 
 		for _, tc := range testCases {
@@ -285,6 +298,10 @@ func TestService_Register(t *testing.T) {
 			{"with hyphens", "Test-Organization"},
 			{"with underscores", "Test_Organization"},
 			{"mixed valid characters", "Test-Org_123 Demo"},
+			{"with punctuation", "Test Org, Inc."},
+			{"with an apostrophe", "Test's Organization"},
+			{"with an ampersand", "Test & Organization"},
+			{"accented latin", "Tëst Örganization"},
 		}
 
 		for _, tc := range testCases {
@@ -303,6 +320,7 @@ func TestService_Register(t *testing.T) {
 					UserID:               userInfo.UserID,
 					ActiveOrganizationID: "",
 					WorkOSSessionID:      "",
+					ImpersonatorEmail:    "",
 				}
 				err := instance.sessionManager.StoreSession(ctx, session)
 				require.NoError(t, err)
@@ -377,7 +395,7 @@ func TestService_Register(t *testing.T) {
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
 
-	t.Run("register preserves WorkOSSessionID", func(t *testing.T) {
+	t.Run("register preserves WorkOS session metadata", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -389,6 +407,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
 			WorkOSSessionID:      "workos-sid-register-456",
+			ImpersonatorEmail:    "support@example.com",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -409,6 +428,7 @@ func TestService_Register(t *testing.T) {
 		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
 		require.NoError(t, err)
 		require.Equal(t, "workos-sid-register-456", stored.WorkOSSessionID, "WorkOSSessionID must survive Register")
+		require.Equal(t, "support@example.com", stored.ImpersonatorEmail, "ImpersonatorEmail must survive Register")
 		require.NotEmpty(t, stored.ActiveOrganizationID, "should have an active org after Register")
 	})
 
@@ -423,6 +443,7 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "slug-no-collision",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -465,6 +486,7 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "slug-collision",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -494,4 +516,98 @@ func TestService_Register(t *testing.T) {
 		assert.Contains(t, newOrg.Slug, "collide-me-", "slug should start with base and have a random suffix")
 		assert.Len(t, newOrg.Slug, len("collide-me-")+4, "suffix should be 4 hex chars")
 	})
+}
+
+func TestRegister_CreatesOrganizationForNameWithNoDerivableSlug(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = []MockOrganizationEntry{}
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	session := sessions.Session{
+		SessionID:            "slug-non-latin",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+		ImpersonatorEmail:    "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: "",
+		AccountType:          "test",
+		Email:                &userInfo.Email,
+	})
+
+	const orgName = "アクメ株式会社"
+	require.NoError(t, instance.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stored.ActiveOrganizationID)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, orgName, org.Name)
+	require.Regexp(t, `^org-[a-z1-9]{8}$`, org.Slug)
+}
+
+// TestRegisterHTTP_OrganizationlessSessionProvisionsOrg issues POST
+// /rpc/auth.register through the mounted HTTP stack so session
+// authentication and authz.PrepareContext run before the handler.
+func TestRegisterHTTP_OrganizationlessSessionProvisionsOrg(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = []MockOrganizationEntry{}
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	session := sessions.Session{
+		SessionID:            t.Name(),
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	mux := goahttp.NewMuxer()
+	auth.Attach(mux, instance.service)
+
+	const orgName = "HTTP Register Org"
+	body, err := json.Marshal(map[string]string{"org_name": orgName})
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/rpc/auth.register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Gram-Session", session.SessionID)
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+
+	stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stored.ActiveOrganizationID)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, orgName, org.Name)
+
+	infoReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/auth.info", nil)
+	infoReq.Header.Set("Gram-Session", session.SessionID)
+	infoRec := httptest.NewRecorder()
+	mux.ServeHTTP(infoRec, infoReq)
+	require.Equal(t, http.StatusOK, infoRec.Code, infoRec.Body.String())
+
+	var info authserver.InfoResponseBody
+	require.NoError(t, json.Unmarshal(infoRec.Body.Bytes(), &info))
+	require.Equal(t, stored.ActiveOrganizationID, info.ActiveOrganizationID)
+	require.Len(t, info.Organizations, 1)
+	require.Equal(t, orgName, info.Organizations[0].Name)
+	require.Len(t, info.Organizations[0].Projects, 1)
+	require.Equal(t, "Default", info.Organizations[0].Projects[0].Name)
+	require.Equal(t, "default", info.Organizations[0].Projects[0].Slug)
 }

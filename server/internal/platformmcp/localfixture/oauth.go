@@ -14,9 +14,18 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const oauthRequestMaxBytes int64 = 64 << 10
+
+// supportedAuthMethods is the token_endpoint_auth_method set this fixture
+// accepts, advertised in its metadata document and enforced on registration.
+// Declared here rather than borrowed from usersessions, whose list belongs to
+// the user-session authorization server: this fixture stands in for one
+// specific public client and has no client secret storage at all, so `none`
+// is the only method it could honour whatever that server grows to support.
+var supportedAuthMethods = []string{oauthwire.AuthMethodNone}
 
 type OAuthHTTP struct {
 	config        *Config
@@ -58,6 +67,22 @@ func NewOAuthHTTP(config *Config) *OAuthHTTP {
 	}
 }
 
+// RestoreRegisteredClient rehydrates the reviewed local client after a fixture
+// process restart. Only the local configurator calls this after validating the
+// persisted no-secret client contract and its fixed callback URL.
+func (s *OAuthHTTP) RestoreRegisteredClient(clientID string) error {
+	if s == nil || s.config == nil || clientID == "" {
+		return fmt.Errorf("local fixture client cannot be restored")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[clientID] = registeredClient{
+		redirectURI: s.config.RemoteLoginCallbackURL(),
+		createdAt:   time.Now().UTC(),
+	}
+	return nil
+}
+
 func (s *OAuthHTTP) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s == nil || s.config == nil {
@@ -91,7 +116,7 @@ func (s *OAuthHTTP) handleMetadata(w http.ResponseWriter) {
 		"revocation_endpoint":                   s.config.OAuthRevocationURL(),
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"token_endpoint_auth_methods_supported": []string{"none"},
+		"token_endpoint_auth_methods_supported": supportedAuthMethods,
 		"code_challenge_methods_supported":      []string{"S256"},
 		"scopes_supported":                      []string{"tools:read"},
 	})
@@ -110,11 +135,11 @@ func (s *OAuthHTTP) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.SetDefaults()
-	if err := request.Validate(); err != nil {
+	if err := request.Validate(supportedAuthMethods); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "request does not match the local fixture contract")
 		return
 	}
-	if request.ClientName != OAuthClientName || len(request.RedirectURIs) != 1 || request.RedirectURIs[0] != s.config.RemoteLoginCallbackURL() || request.TokenEndpointAuthMethod != "none" || !sameStrings(request.GrantTypes, []string{"authorization_code", "refresh_token"}) || !sameStrings(request.ResponseTypes, []string{"code"}) {
+	if request.ClientName != OAuthClientName || len(request.RedirectURIs) != 1 || request.RedirectURIs[0] != s.config.RemoteLoginCallbackURL() || request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone || !sameStrings(request.GrantTypes, []string{"authorization_code", "refresh_token"}) || !sameStrings(request.ResponseTypes, []string{"code"}) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "request does not match the local fixture contract")
 		return
 	}

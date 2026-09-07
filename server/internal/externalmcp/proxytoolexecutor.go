@@ -154,14 +154,15 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 	headers := BuildHeaders(systemEnv, userConfig, plan.HeaderDefinitions, tokenForHeaders)
 
 	client, err := NewClient(ctx, e.logger, e.guardianPolicy, plan.RemoteURL, plan.TransportType, &ClientOptions{
-		Authorization:  "",
-		Headers:        headers,
-		DisableRetries: false,
+		Authorization:    "",
+		Headers:          headers,
+		DisableRetries:   false,
+		MaxResponseBytes: 0,
 	})
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, e.logger, client.Close)
+	defer o11y.LogDefer(ctx, e.logger, "failed to close external mcp client", client.Close)
 
 	return client.ListTools(ctx)
 }

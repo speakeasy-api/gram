@@ -38,6 +38,7 @@ func TestBuildCursorUsageEventIncludesIntegrationConfigID(t *testing.T) {
 	}
 	event := cursorapi.UsageEvent{
 		Timestamp:        time.Date(2026, 5, 20, 12, 30, 0, 0, time.UTC),
+		ConversationID:   "33333333-3333-4333-8333-333333333333",
 		Model:            "claude-4",
 		Kind:             "usage",
 		ChargedCents:     0,
@@ -58,5 +59,6 @@ func TestBuildCursorUsageEventIncludesIntegrationConfigID(t *testing.T) {
 
 	require.Equal(t, configID.String(), logParam.Attributes[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "cursor", logParam.Attributes[attr.HookSourceKey])
+	require.Equal(t, event.ConversationID, logParam.Attributes[attr.GenAIConversationIDKey])
 	require.Equal(t, "user@example.com", logParam.UserInfo.Email())
 }

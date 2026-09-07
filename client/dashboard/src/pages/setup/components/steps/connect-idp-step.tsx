@@ -38,6 +38,7 @@ function ProviderIcon({
 interface ConnectIdpStepProps {
   onSkip: () => void;
   onComplete: () => void;
+  onBack?: () => void;
 }
 
 const INITIAL_VISIBLE = 6;
@@ -45,6 +46,7 @@ const INITIAL_VISIBLE = 6;
 export function ConnectIdpStep({
   onSkip,
   onComplete,
+  onBack,
 }: ConnectIdpStepProps): JSX.Element {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -145,6 +147,8 @@ export function ConnectIdpStep({
       title="Connect identity provider"
       description="Connect your SSO provider to enable secure authentication for your team. This allows employees to sign in with their existing credentials."
       onContinue={continueAction}
+      onBack={onBack}
+      showBack={onBack !== undefined}
       onSkip={onSkip}
       skipLabel="Skip for now"
       continueLabel={continueLabel}

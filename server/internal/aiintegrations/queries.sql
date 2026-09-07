@@ -297,13 +297,28 @@ WHERE ai_integration_config_id = @ai_integration_config_id
 
 -- ClearSyncSchedulePauses lifts any automatic pause on all of a config's
 -- schedules and resets their failure streaks. Runs whenever the user saves
--- the integration so a fixed configuration starts polling again.
--- name: ClearSyncSchedulePauses :exec
-UPDATE ai_integration_syncs
-SET auto_paused_at = NULL,
-    consecutive_failures = 0,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+-- the integration so a fixed configuration starts polling again. Schedules
+-- that were failing also become due immediately: failure backoff can leave
+-- next_poll_after hours out, and keeping it would leave a just-fixed
+-- integration dark until the backed-off time arrives. Healthy schedules
+-- keep their cadence.
+-- name: ClearSyncSchedulePauses :one
+WITH cleared AS (
+  UPDATE ai_integration_syncs
+  SET next_poll_after = CASE
+        WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
+        THEN clock_timestamp()
+        ELSE next_poll_after
+      END,
+      auto_paused_at = NULL,
+      consecutive_failures = 0,
+      updated_at = clock_timestamp()
+  WHERE ai_integration_config_id = @ai_integration_config_id
+  RETURNING schedule, next_poll_after, consecutive_failures
+)
+SELECT next_poll_after, consecutive_failures
+FROM cleared
+WHERE schedule = @schedule;
 
 -- name: AdvanceWatermark :exec
 UPDATE ai_integration_syncs
@@ -346,11 +361,34 @@ ORDER BY schedule;
 
 -- SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
 -- sync schedule. Distinct from auto_paused_at: only the user flips this flag.
--- Re-enabling leaves next_poll_after untouched — a stale value is already due,
--- so candidate selection picks the schedule up on the next scheduler tick.
+-- Transitioning a schedule from disabled to enabled starts a fresh run: it
+-- becomes due immediately when it was failing or auto-paused — failure
+-- backoff can leave next_poll_after hours out — its failure streak resets so
+-- polling resumes at full cadence instead of continuing the old backoff
+-- toward the auto-pause threshold, and any automatic pause lifts, since
+-- candidate selection would otherwise never re-enqueue the schedule the user
+-- just asked to run. An already-enabled or healthy schedule keeps its
+-- next_poll_after, streak, and pause state.
 -- name: SetSyncScheduleDisabled :one
 UPDATE ai_integration_syncs
 SET disabled_at = CASE WHEN @disabled::bool THEN clock_timestamp() ELSE NULL END,
+    next_poll_after = CASE
+      WHEN NOT @disabled::bool
+        AND disabled_at IS NOT NULL
+        AND (consecutive_failures > 0 OR auto_paused_at IS NOT NULL)
+      THEN clock_timestamp()
+      ELSE next_poll_after
+    END,
+    consecutive_failures = CASE
+      WHEN NOT @disabled::bool AND disabled_at IS NOT NULL
+      THEN 0
+      ELSE consecutive_failures
+    END,
+    auto_paused_at = CASE
+      WHEN NOT @disabled::bool AND disabled_at IS NOT NULL
+      THEN NULL
+      ELSE auto_paused_at
+    END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule

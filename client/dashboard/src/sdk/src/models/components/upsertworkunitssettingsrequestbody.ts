@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpsertWorkUnitsSettingsRequestBody = {
   /**
+   * Organization whose settings to replace.
+   */
+  organizationId: string;
+  /**
    * Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
    */
   workUnitsDailyCap: number;
@@ -18,6 +22,7 @@ export type UpsertWorkUnitsSettingsRequestBody = {
 
 /** @internal */
 export type UpsertWorkUnitsSettingsRequestBody$Outbound = {
+  organization_id: string;
   work_units_daily_cap: number;
   work_units_enabled: boolean;
 };
@@ -28,11 +33,13 @@ export const UpsertWorkUnitsSettingsRequestBody$outboundSchema: z.ZodMiniType<
   UpsertWorkUnitsSettingsRequestBody
 > = z.pipe(
   z.object({
+    organizationId: z.string(),
     workUnitsDailyCap: z.int(),
     workUnitsEnabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      organizationId: "organization_id",
       workUnitsDailyCap: "work_units_daily_cap",
       workUnitsEnabled: "work_units_enabled",
     });

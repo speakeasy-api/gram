@@ -1,0 +1,14 @@
+<Style themeId="cmsnm620801ug0j2jdxiw79j4" backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="32" bodyYPadding="32" borderColor="#DCDCDC" borderWidth="1" borderRadius="0" buttonBodyColor="#000000" buttonBodyXPadding="20" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FAFAFA" buttonTextFontSize="15" dividerColor="#DCDCDC" dividerBorderWidth="1" textBaseColor="#000000" textBaseFontSize="15" textBaseLineHeight="150" textBaseLetterSpacing="0" textLinkColor="#2873D7" heading1Color="#000000" heading1FontSize="26" heading1LineHeight="115" heading1LetterSpacing="-1" heading2Color="#000000" heading2FontSize="20" heading2LineHeight="120" heading2LetterSpacing="0" heading3Color="#000000" heading3FontSize="16" heading3LineHeight="120" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmt7eueee05e20izu0frdx1jq.png" alt="Speakeasy" width="160" align="left" paddingBottom="28" />
+<Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">BILLING / PAY AS YOU GO ACTIVE</Text></Paragraph>
+<H1>Pay as you go is active</H1>
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png" alt="" width="536" paddingTop="12" paddingBottom="20" />
+<Paragraph paddingBottom="16">{data.organization_name} is on pay as you go with the full feature set. Tokens under management are metered and billed each cycle. Customer-facing and platform-initiated inference are billed at provider cost.</Paragraph>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DCDCDC" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">METERED RATE</Text></Paragraph>
+  <Paragraph fontSize="14" lineHeight="150">${data.tum_price_per_million_usd} per million tokens under management</Paragraph>
+</Section>
+<Paragraph paddingTop="16" paddingBottom="16">Cycle usage, the current invoice estimate, inference caps, and your payment method are all managed from the billing page.</Paragraph>
+<Button href="{data.action_url}" align="left" paddingTop="8" paddingBottom="32">View billing</Button>
+<Divider paddingBottom="16" />
+<Paragraph fontSize="12"><Text textColor="#6E6E6E">You’re receiving this operational email because this address receives billing notifications for {data.organization_name}.</Text></Paragraph>

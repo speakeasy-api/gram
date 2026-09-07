@@ -12,28 +12,38 @@ pin = true
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.0.0"
+"aqua:ariga/atlas" = "1.3.0"
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.791.1"
+"github:speakeasy-api/speakeasy" = "1.796.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
-go = "1.26.5"
-golangci-lint = "2.12.2"
+go = "1.27.0"
+golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.56.5"
+# Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
+# aube resolves its own runtime and cannot read this file, so without that
+# mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
+aube = "1.38.1"
+# Kept for `changeset publish` only. Changesets v3 asks manypkg for the
+# workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
+# Release versioning uses the custom aube command in the release workflow.
+# Changesets formatting is disabled because oxfmt ignores CHANGELOG.md files.
+#
+# Publishing via npm instead is not a drop-in: our public packages carry
+# `workspace:` and `catalog:` specifiers that pnpm rewrites at pack time and
+# npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
 uv = "0.12.1"
 yq = "4.53.3"
-# hk ≥1.47 fails to evaluate the json.Parser usage in hk.pkl
-# ("unknown method 'parse'"); keep 1.46.0 until hk.pkl is ported.
-hk = "1.46.0"
+hk = "1.56.1"
 pkl = "0.32.1"
 "github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"
@@ -42,7 +52,7 @@ pkl = "0.32.1"
 buf = "1.72.0"
 ruff = "0.16.1"
 "github:ast-grep/ast-grep" = "0.45.0"
-pitchfork = "2.20.0"
+pitchfork = "2.22.0"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -77,11 +87,11 @@ CLICKHOUSE_PASSWORD = "gram"
 CLICKHOUSE_HOST = "127.0.0.1"
 CLICKHOUSE_HTTP_PORT = "8123"
 CLICKHOUSE_NATIVE_PORT = "9440"
-CLICKHOUSE_DATABASE = "default"
+CLICKHOUSE_DATABASE = "gram"
 CLICKHOUSE_INSECURE = true
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
-## golang-migrate requires username/password as query parameters instead of in the URL
-GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
+## golang-migrate requires database, username, and password as query parameters.
+GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
 
 ############################
 ## Temporal configuration ##
@@ -122,6 +132,8 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+## Cannot reuse GRAM_SERVER_URL: viteprod unsets it.
+GRAM_APP_URL = "{{env.GRAM_SERVER_URL}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -131,6 +143,13 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Material the local seed provisions (`mise run seed`). These are fixed,
+## well-known local-only values written straight into the database by
+## `gram demo-seed --local`, so they are checked in here rather than written
+## back into mise.local.toml after a seed run — a fresh clone is configured
+## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
+GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
+
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
@@ -194,7 +213,10 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 ##########################
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
+OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
+OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -202,7 +224,9 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-JAEGER_WEB_PORT = "16686"
+GRAFANA_PORT = "13000"
+TEMPO_HTTP_PORT = "13200"
+LOKI_HTTP_PORT = "13100"
 PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
@@ -255,10 +279,17 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Where assistant runtimes run.
 ## Allowed values: local, flyio, gke.
+## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
+## configured" from an intentional override in mise.local.toml or the
+## environment. When unset, that task writes local defaults:
+##   GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+##   GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## and builds `gram-assistant-runtime:dev` if the image is missing.
+## `mise run zero:assistants --restart` rewrites those keys and rebuilds.
 ## The local provider starts runtime containers on demand on this machine's
-## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## Docker daemon. Rebuild anytime with `mise run build:assistants-runtime-image`.
+# GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+# GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##
@@ -270,6 +301,19 @@ PULSE_REGISTRY_KEY = { default = "unset" }
 ## Risk ##
 ##########
 GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
+
+##########################
+## Stripe configuration ##
+##########################
+## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
+## validate the sandbox TUM meter, product, and metered price. The task writes
+## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+STRIPE_API_KEY = { default = "unset" }
+STRIPE_WEBHOOK_SECRET = { default = "unset" }
+STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_METER_ID_TUM = { default = "" }
+STRIPE_METER_EVENT_NAME = { default = "tum" }
+STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
 
 #########################
 ## Polar configuration ##
@@ -289,7 +333,18 @@ GRAM_ADMIN_PORT = "8083"
 GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_PORT}}"
 GRAM_ADMIN_CONTROL_PORT = "8084"
 GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
-GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+GRAM_ADMIN_DASHBOARD_PORT = "5174"
+## Where the admin API itself listens. Only the admin dashboard dev proxy
+## dials this; browsers never do.
+GRAM_ADMIN_BACKEND_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+## The browser-facing admin origin, and therefore the origin the OIDC redirect
+## URI is built from. In production the SPA and the admin API share one origin
+## behind one ingress. Locally the Vite dev server is that origin, because it
+## proxies /admin through to GRAM_ADMIN_BACKEND_URL.
+GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}"
+## AdminOriginCheck rejects every unsafe method whose Origin is not listed, and
+## the flag has no default, so local writes 403 without this.
+GRAM_ADMIN_ALLOWED_ORIGINS = "{{env.GRAM_ADMIN_SERVER_URL}}"
 GRAM_ADMIN_ENCRYPTION_KEY = "unset"
 GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"
@@ -311,7 +366,8 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ################
 ## GCP config ##
 ################
-## Typically this variable is omitted and the GCP SDK will detect project ID
-## from the environment. However, for local development, it can be set to a
-## static value.
+## The Pub/Sub emulator namespaces resources by project ID. The main tree keeps
+## this stable default; git:workinit overrides it with the worktree's unique
+## Compose project so one shared emulator can isolate identical topic and
+## subscription IDs from concurrent worktrees.
 GRAM_GCP_PROJECT_ID = "local-dev-project"

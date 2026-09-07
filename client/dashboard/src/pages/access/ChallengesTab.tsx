@@ -277,17 +277,18 @@ export function ChallengesTab(): JSX.Element {
   const outcomeParam = useOutcomeApiParam(outcomeFilter);
   const offset = (pageCount - 1) * PAGE_SIZE;
 
-  const { data, isLoading, isFetching } = useChallengeBuckets(
-    {
-      ...outcomeParam,
-      principalUrn: principalFilter !== "all" ? principalFilter : undefined,
-      scope: scopeFilter !== "all" ? scopeFilter : undefined,
-      limit: PAGE_SIZE,
-      offset,
-    },
-    undefined,
-    { placeholderData: keepPreviousData },
-  );
+  const { data, isLoading, isFetching, isPlaceholderData } =
+    useChallengeBuckets(
+      {
+        ...outcomeParam,
+        principalUrn: principalFilter !== "all" ? principalFilter : undefined,
+        scope: scopeFilter !== "all" ? scopeFilter : undefined,
+        limit: PAGE_SIZE,
+        offset,
+      },
+      undefined,
+      { placeholderData: keepPreviousData },
+    );
 
   // Reset accumulated data when filters change.
   const filterKey = `${outcomeFilter}|${principalFilter}|${scopeFilter}`;
@@ -298,9 +299,17 @@ export function ChallengesTab(): JSX.Element {
     setPageCount(1);
   }
 
-  // Accumulate results as pages load, excluding buckets with no scope.
+  // Buckets from the page the query currently holds, excluding those with no
+  // scope. Placeholder data still belongs to the previous filter, so it is
+  // ignored until the new filter's page arrives.
+  const currentPageBuckets = useMemo(() => {
+    if (isPlaceholderData || !data?.buckets) return [];
+    return data.buckets.filter(isDisplayableBucket);
+  }, [data, isPlaceholderData]);
+
+  // Accumulate results as pages load.
   useEffect(() => {
-    if (!data?.buckets) return;
+    if (isPlaceholderData || !data?.buckets) return;
     const withScope = data.buckets.filter(isDisplayableBucket);
     if (pageCount === 1) {
       setAccumulated(withScope);
@@ -311,10 +320,23 @@ export function ChallengesTab(): JSX.Element {
         return [...prev, ...newItems];
       });
     }
-  }, [data, pageCount]);
+  }, [data, pageCount, isPlaceholderData]);
+
+  // Derive the visible rows during render rather than reading `accumulated`
+  // directly. A filter switch resets `accumulated` during render while the
+  // effect above only refills it after paint, so switching to a filter already
+  // in the query cache would otherwise commit one frame of the empty state.
+  const rows = useMemo(() => {
+    if (accumulated.length === 0) return currentPageBuckets;
+    const seen = new Set(accumulated.map((b) => b.id));
+    return [
+      ...accumulated,
+      ...currentPageBuckets.filter((b) => !seen.has(b.id)),
+    ];
+  }, [accumulated, currentPageBuckets]);
 
   const totalBuckets = data?.total ?? 0;
-  const hasMore = accumulated.length < totalBuckets;
+  const hasMore = rows.length < totalBuckets;
   const isLoadingMore = isFetching && pageCount > 1;
 
   // Pill counts: fetch totals for each tab (lightweight, limit=1).
@@ -338,7 +360,7 @@ export function ChallengesTab(): JSX.Element {
   // Unique values for filter dropdowns (from loaded data).
   const uniquePrincipals = useMemo(() => {
     const principals = new Map<string, string>();
-    for (const bucket of accumulated) {
+    for (const bucket of rows) {
       const value = bucket.userEmail ?? bucket.principalUrn;
       if (!value) continue;
       principals.set(
@@ -347,12 +369,12 @@ export function ChallengesTab(): JSX.Element {
       );
     }
     return [...principals.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [accumulated]);
+  }, [rows]);
 
   const uniqueScopes = useMemo(() => {
-    const set = new Set(accumulated.map((b) => b.scope));
+    const set = new Set(rows.map((b) => b.scope));
     return [...set].filter(Boolean).sort();
-  }, [accumulated]);
+  }, [rows]);
 
   // Expansion state.
   const [expandedBucketIds, setExpandedBucketIds] = useState<Set<string>>(
@@ -367,24 +389,24 @@ export function ChallengesTab(): JSX.Element {
     });
   }, []);
 
-  const expandedMap = useExpandedChallenges(expandedBucketIds, accumulated);
+  const expandedMap = useExpandedChallenges(expandedBucketIds, rows);
   const flatData = useMemo(
-    () => flattenWithExpanded(accumulated, expandedMap),
-    [accumulated, expandedMap],
+    () => flattenWithExpanded(rows, expandedMap),
+    [rows, expandedMap],
   );
 
   // IDs of individual challenge rows (expanded children) for styling and column hiding.
   // Exclude bucket trigger row IDs so they keep their avatar/identity/outcome.
   const expandedChildIds = useMemo(() => {
-    const bucketIds = new Set(accumulated.map((b) => b.id));
+    const bucketIds = new Set(rows.map((b) => b.id));
     const ids = new Set<string>();
-    for (const rows of expandedMap.values()) {
-      for (const r of rows) {
+    for (const childRows of expandedMap.values()) {
+      for (const r of childRows) {
         if (!bucketIds.has(r.id)) ids.add(r.id);
       }
     }
     return ids;
-  }, [expandedMap, accumulated]);
+  }, [expandedMap, rows]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
@@ -407,6 +429,17 @@ export function ChallengesTab(): JSX.Element {
     ...challengeRowColumns,
     wrappedActionsColumn,
   ];
+
+  // Show the skeleton for the first/active load of the current filter, so a slow
+  // load never flashes the "no challenges" empty state. Two cases need it:
+  //   - initial load: `isLoading` is true (no data yet); and
+  //   - a filter switch under `keepPreviousData`: `isLoading` stays false because
+  //     the previous filter's data lingers, but `isPlaceholderData` is true while
+  //     the new filter's request is in flight (so there is nothing to show yet).
+  // Gating on these (rather than the raw `isFetching`) keeps the empty state
+  // stable during background refetches of a filter that genuinely has no results.
+  const hasRows = rows.length > 0;
+  const showInitialLoading = !hasRows && (isLoading || isPlaceholderData);
 
   return (
     <div>
@@ -467,9 +500,9 @@ export function ChallengesTab(): JSX.Element {
         </Select>
       </div>
 
-      {isLoading && accumulated.length === 0 ? (
+      {showInitialLoading ? (
         <SkeletonTable />
-      ) : accumulated.length === 0 ? (
+      ) : !hasRows ? (
         <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
         <>
@@ -503,10 +536,10 @@ export function ChallengesTab(): JSX.Element {
               })}
             </Table.Body>
           </Table>
-          {(accumulated.length > 0 || isLoadingMore) && (
+          {(hasRows || isLoadingMore) && (
             <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
               <Text muted small>
-                Showing {accumulated.length.toLocaleString()} of{" "}
+                Showing {rows.length.toLocaleString()} of{" "}
                 {totalBuckets.toLocaleString()}
               </Text>
               {hasMore ? (

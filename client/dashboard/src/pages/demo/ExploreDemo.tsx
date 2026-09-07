@@ -1,4 +1,4 @@
-import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
+import { DEMO_LANDING_PATH, DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -6,8 +6,9 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Stable link target for entering the shared read-only demo org: switches the
- * current session into it via auth.enterDemo, then reloads into the demo org
- * route. Logged-out visitors bounce through /login and land back here.
+ * current session into it via auth.enterDemo, then reloads into the demo
+ * default project. Logged-out visitors bounce through /login and land back
+ * here.
  */
 export default function ExploreDemo(): JSX.Element {
   const client = useSdkClient();
@@ -34,9 +35,12 @@ export default function ExploreDemo(): JSX.Element {
       }
       return client.auth.enterDemo();
     })().then(
-      // Land directly on the demo org route: a bare "/" gets reconciled
-      // against the last-visited org, which would switch the session back.
-      () => window.location.replace(`/${DEMO_ORG_SLUG}`),
+      // Land on the default project, not org home: a bare "/" gets
+      // reconciled against the last-visited org and would switch the
+      // session back, and org home has nothing interesting for a new
+      // visitor. The org slug must stay in the URL so AuthProvider does
+      // not bounce them out of the demo session.
+      () => window.location.replace(DEMO_LANDING_PATH),
       (err: unknown) => {
         // No session yet — bounce through login and come back here.
         if (err instanceof GramError && err.statusCode === 401) {

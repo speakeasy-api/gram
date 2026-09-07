@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -92,7 +93,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy)
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -158,11 +160,12 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	t.Helper()
 
 	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      "test tunneled mcp server " + uuid.NewString(),
-		KeyHash:   "test-key-hash-" + uuid.NewString(),
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "test tunneled mcp server " + uuid.NewString(),
+		KeyHash:            "test-key-hash-" + uuid.NewString(),
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -213,7 +216,7 @@ func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpoo
 	require.NoError(t, err)
 
 	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        server.Name,
+		Name:        pgtype.Text{String: server.Name, Valid: true},
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServerID,
 		ProjectID:   projectID,

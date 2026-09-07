@@ -40,6 +40,16 @@ func TestValidateSetupHandoffBinding(t *testing.T) {
 	require.ErrorIs(t, validateSetupHandoffBinding("organization", binding), ErrSetupHandoffInvalid)
 }
 
+func TestIsSetupMilestone(t *testing.T) {
+	t.Parallel()
+
+	for _, milestone := range []string{"provider_setup_started", "provider_setup_failed", "provider_setup_succeeded", "platform_flow_ready"} {
+		require.True(t, isSetupMilestone(milestone), milestone)
+	}
+	require.False(t, isSetupMilestone("registration_succeeded"))
+	require.False(t, isSetupMilestone(""))
+}
+
 func TestValidateReadinessAcceptsOnlyRFCStates(t *testing.T) {
 	t.Parallel()
 

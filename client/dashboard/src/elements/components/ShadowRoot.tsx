@@ -98,6 +98,12 @@ export const ShadowRoot = ({
     <div
       ref={hostRef}
       className={hostClassName}
+      // `isolation` alone makes a stacking context on a STATIC box, which
+      // paints with in-flow content — below every positioned sibling, however
+      // low its z-index. A surface whose overlays have to clear surrounding
+      // page chrome therefore has to position its own host (see
+      // ChatComposer); doing it here would re-anchor absolute descendants and
+      // re-stack every embed, including ones meant to sit behind page chrome.
       style={{ isolation: "isolate", ...hostStyle }}
     >
       {shadowRoot

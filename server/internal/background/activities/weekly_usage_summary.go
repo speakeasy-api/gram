@@ -1,15 +1,13 @@
 package activities
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"math"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -31,6 +29,7 @@ type WeeklyUsageSummaryTarget struct {
 	OrganizationID   string
 	OrganizationName string
 	OrganizationSlug string
+	AccountType      string
 	AlertEmail       string
 	AnchorDay        int
 }
@@ -71,7 +70,7 @@ func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, chConn clickho
 }
 
 // ListTargets resolves the organizations due a weekly usage summary:
-// enabled orgs with a billing alert email configured.
+// enabled enterprise and PAYG organizations eligible for billing email.
 func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSummaryTarget, error) {
 	rows, err := a.repo.ListWeeklyUsageSummaryTargets(ctx)
 	if err != nil {
@@ -80,15 +79,12 @@ func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSumm
 
 	targets := make([]WeeklyUsageSummaryTarget, 0, len(rows))
 	for _, row := range rows {
-		alertEmail := conv.FromPGText[string](row.AlertEmail)
-		if alertEmail == nil {
-			continue
-		}
 		targets = append(targets, WeeklyUsageSummaryTarget{
 			OrganizationID:   row.OrganizationID,
 			OrganizationName: row.OrganizationName,
 			OrganizationSlug: row.OrganizationSlug,
-			AlertEmail:       *alertEmail,
+			AccountType:      row.GramAccountType,
+			AlertEmail:       conv.FromPGTextOrEmpty[string](row.AlertEmail),
 			AnchorDay:        int(row.BillingCycleAnchorDay),
 		})
 	}
@@ -152,9 +148,16 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		return nil
 	}
 
-	tableHTML, err := renderWeeklyUsageTable(currentTotal, previousTotal)
-	if err != nil {
-		return fmt.Errorf("render weekly usage table: %w", err)
+	configuredEmail := conv.PtrEmpty(target.AlertEmail)
+	// Targets persisted by workflows started before AccountType was added came
+	// only from the legacy enterprise-with-email query.
+	accountType := conv.Default(target.AccountType, string(billing.TierEnterprise))
+	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.db, target.OrganizationID, accountType, configuredEmail)
+	if len(recipients) == 0 {
+		if resolutionErr == nil {
+			logger.InfoContext(ctx, "skipping weekly usage summary without eligible recipient")
+		}
+		return resolutionErr
 	}
 
 	viewUsageURL := ""
@@ -171,13 +174,18 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		TotalTokens:         formatTokenCount(currentTotal),
 		PreviousTotalTokens: formatTokenCount(previousTotal),
 		TotalChangePercent:  usageChangePercent(currentTotal, previousTotal),
-		UsageTableHTML:      tableHTML,
 		ViewUsageURL:        viewUsageURL,
 	}
 
-	idempotencyKey := fmt.Sprintf("weekly-usage-summary:%s:%s", target.OrganizationID, now.Format(time.DateOnly))
-	if err := a.emails.SendIdempotent(ctx, target.AlertEmail, idempotencyKey, tmpl); err != nil {
-		return fmt.Errorf("dispatch weekly usage summary email: %w", err)
+	deliveryErrors := []error{resolutionErr}
+	for _, recipient := range recipients {
+		idempotencyKey := recipientEmailIdempotencyKey(recipient, "weekly-usage-summary", target.OrganizationID, now.Format(time.DateOnly))
+		if err := a.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
+			deliveryErrors = append(deliveryErrors, fmt.Errorf("dispatch weekly usage summary email: %w", err))
+		}
+	}
+	if err := errors.Join(deliveryErrors...); err != nil {
+		return err
 	}
 
 	logger.InfoContext(ctx, "sent weekly usage summary")
@@ -227,41 +235,4 @@ func usageChangePercent(current, previous int64) string {
 	}
 	pct := int(math.Round(float64(current-previous) / float64(previous) * 100))
 	return fmt.Sprintf("%+d%%", pct)
-}
-
-// weeklyUsageTableTemplate renders the cycle-total summary table injected
-// into the Loops template as a single HTML variable. Styling is inline and
-// minimal — email clients ignore stylesheets — and kept visually neutral so
-// it sits inside whatever chrome the Loops template provides.
-var weeklyUsageTableTemplate = template.Must(template.New("weekly_usage_table").Parse(strings.TrimSpace(`
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;font-size:14px;color:#111111;">
-	<tr>
-		<td style="padding:8px 0;color:#666666;font-weight:600;">Usage so far this cycle</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Tokens</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Change</td>
-	</tr>
-	<tr>
-		<td style="padding:12px 0;border-top:2px solid #111111;font-weight:700;">Total<br /><span style="color:#8a8a8a;font-size:12px;font-weight:400;">Previous cycle at this point: {{.Previous}}</span></td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Total}}</td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Change}}</td>
-	</tr>
-</table>
-`)))
-
-// renderWeeklyUsageTable renders the tokens-under-management total with its
-// previous-cycle comparison as the email's summary table.
-func renderWeeklyUsageTable(currentTotal, previousTotal int64) (string, error) {
-	var html bytes.Buffer
-	if err := weeklyUsageTableTemplate.Execute(&html, struct {
-		Total    string
-		Previous string
-		Change   string
-	}{
-		Total:    formatTokenCount(currentTotal),
-		Previous: formatTokenCount(previousTotal),
-		Change:   usageChangePercent(currentTotal, previousTotal),
-	}); err != nil {
-		return "", fmt.Errorf("execute weekly usage table template: %w", err)
-	}
-	return html.String(), nil
 }

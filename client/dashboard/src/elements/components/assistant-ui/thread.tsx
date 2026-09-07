@@ -60,7 +60,6 @@ import {
 import { AttachmentDropZone } from "@/elements/components/assistant-ui/attachment-dropzone";
 import { FollowOnSuggestions } from "@/elements/components/assistant-ui/follow-on-suggestions";
 import { MarkdownText } from "@/elements/components/assistant-ui/markdown-text";
-import { MentionedToolsBadges } from "@/elements/components/assistant-ui/mentioned-tools-badges";
 import { MessageFeedback } from "@/elements/components/assistant-ui/message-feedback";
 import {
   Reasoning,
@@ -81,6 +80,7 @@ import { useChatId } from "@/elements/contexts/ChatIdContext";
 import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 import { useAuth } from "@/elements/hooks/useAuth";
+import { useComposerMenuOpen } from "@/elements/hooks/useComposerMenuOpen";
 import { useDensity } from "@/elements/hooks/useDensity";
 import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
@@ -92,9 +92,18 @@ import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
+import {
+  composerContextToolsEmptyMessage,
+  composerMcpServersPresence,
+  mcpToolsAvailability,
+  mcpToolsListPending,
+  mcpToolsSendBlocked,
+  mcpToolsSendTooltip,
+} from "@/elements/lib/mcpToolsAvailability";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
+  isPartialToolCallAnnotation,
   stripTrailingAnnotationLine,
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
@@ -105,9 +114,14 @@ import type {
   SkillContextConfig,
 } from "@/elements/types";
 import {
+  appendToken,
   type MentionableTool,
+  removeToken,
+  skillTokensIn,
+  splitComposerSegments,
   toolSetToMentionableTools,
 } from "@/elements/lib/tool-mentions";
+import { ComposerRichInput } from "@/elements/components/assistant-ui/composer-rich-input";
 import { cn, initialsOf } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
@@ -387,11 +401,22 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const r = useRadius();
   const d = useDensity();
   const suggestions = config.welcome?.suggestions ?? [];
   const isStandalone = config.variant === "standalone";
+
+  if (
+    mcpToolsSendBlocked(
+      config.composer?.requireMcpTools,
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+    )
+  ) {
+    return null;
+  }
 
   if (suggestions.length === 0) return null;
 
@@ -452,7 +477,8 @@ const ThreadSuggestions: FC = () => {
 
 /**
  * Component that handles tool mentions (@tool) in the composer.
- * Shows autocomplete dropdown and badges for mentioned tools.
+ * Shows the autocomplete dropdown; the picked tool is then named by the
+ * highlighted token in the draft itself.
  */
 const ComposerToolMentions: FC<{
   tools: Record<string, unknown> | undefined;
@@ -461,13 +487,11 @@ const ComposerToolMentions: FC<{
 
   const {
     mentionableTools,
-    mentionedToolIds,
     value,
     cursorPosition,
     textareaRef,
     updateCursorPosition,
     handleAutocompleteChange,
-    removeMention,
     isActive,
   } = useToolMentions({ tools });
 
@@ -528,14 +552,8 @@ const ComposerToolMentions: FC<{
 
   return (
     <div ref={containerRef} className="aui-composer-tool-mentions relative">
-      {/* Badges showing mentioned tools */}
-      <MentionedToolsBadges
-        mentionedToolIds={mentionedToolIds}
-        tools={mentionableTools}
-        onRemove={removeMention}
-      />
-
-      {/* Autocomplete dropdown */}
+      {/* Autocomplete dropdown. The mention itself is named by the colored
+          token in the draft, so there is no badge row above the input. */}
       <AnimatePresence>
         <ToolMentionAutocomplete
           tools={mentionableTools}
@@ -621,7 +639,7 @@ export const Composer: FC<ComposerProps> = ({
   showThreadAffordances = true,
   autoFocus = true,
 }) => {
-  const { config, mcpTools } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
   const d = useDensity();
@@ -654,9 +672,22 @@ export const Composer: FC<ComposerProps> = ({
   const aui = useAui();
   const composerText = useAuiState(({ composer }) => composer.text);
   const slashCommands = composerConfig.slashCommands ?? [];
-  const slashQuery = composerText.startsWith("/")
-    ? composerText.slice(1).trim().toLowerCase()
-    : null;
+  const skillContext = composerConfig.skillContext;
+  const skillNames = useMemo(
+    () => (skillContext?.skills ?? []).map((skill) => skill.name),
+    [skillContext?.skills],
+  );
+  // A draft that opens with `/skill` names a skill, not a command — without
+  // this the command menu would claim it, and Enter would run a command
+  // instead of sending the message. Tokenized the same way the composer paints
+  // it, so a skill named `help` cannot swallow the `/helper` command.
+  const startsWithSkill =
+    splitComposerSegments(composerText, undefined, skillNames)[0]?.kind ===
+    "skill";
+  const slashQuery =
+    composerText.startsWith("/") && !startsWithSkill
+      ? composerText.slice(1).trim().toLowerCase()
+      : null;
   const slashMatches = useMemo(() => {
     if (slashQuery === null) return [];
     if (!slashQuery) return slashCommands;
@@ -669,6 +700,35 @@ export const Composer: FC<ComposerProps> = ({
   }, [slashQuery, slashCommands]);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
   const slashOpen = slashMatches.length > 0;
+  useComposerMenuOpen(slashOpen, composerRootRef);
+
+  // The draft owns which skills are attached: a `/skill` token puts one on the
+  // next message, deleting the token takes it back off. Deriving the host's
+  // selection from the text is what lets the token BE the control, instead of
+  // a label for state living somewhere else.
+  const selectedSkillIds = skillContext?.selectedSkillIds;
+  const onSelectedSkillIdsChange = skillContext?.onSelectedSkillIdsChange;
+  const skills = skillContext?.skills;
+  useEffect(() => {
+    if (!skills || !selectedSkillIds || !onSelectedSkillIdsChange) return;
+    const named = new Set(
+      skillTokensIn(composerText, skillNames).map((name) => name.toLowerCase()),
+    );
+    const next = skills
+      .filter((skill) => named.has(skill.name.toLowerCase()))
+      .map((skill) => skill.id);
+    const unchanged =
+      next.length === selectedSkillIds.length &&
+      next.every((id, index) => id === selectedSkillIds[index]);
+    if (unchanged) return;
+    onSelectedSkillIdsChange(next);
+  }, [
+    composerText,
+    skillNames,
+    skills,
+    selectedSkillIds,
+    onSelectedSkillIdsChange,
+  ]);
 
   useEffect(() => {
     setActiveSlashIndex(0);
@@ -681,7 +741,23 @@ export const Composer: FC<ComposerProps> = ({
   const composerTextRef = useRef(composerText);
   composerTextRef.current = composerText;
 
+  const toolsAvailability = mcpToolsAvailability(
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendBlocked = mcpToolsSendBlocked(
+    composerConfig.requireMcpTools,
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendTooltip = sendBlocked
+    ? mcpToolsSendTooltip(toolsAvailability)
+    : "Send message";
+
   const runSlashCommand = (command: ComposerSlashCommand) => {
+    if (sendBlocked) return;
     const composer = aui.composer();
     composer.setText(command.prompt);
     composer.send();
@@ -770,7 +846,11 @@ export const Composer: FC<ComposerProps> = ({
           ref={composerRootRef}
           // Capture: the menu owns Up/Down/Enter while it is open, before the
           // textarea inserts a newline or the composer sends the raw query.
-          onSubmit={() => {
+          onSubmit={(event) => {
+            if (sendBlocked) {
+              event.preventDefault();
+              return;
+            }
             promptHistory.record(composerTextRef.current);
           }}
           onKeyDownCapture={(event) => {
@@ -821,8 +901,6 @@ export const Composer: FC<ComposerProps> = ({
 
           {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
-          <ComposerSkillContextBadges />
-
           {/* Speech lands in the input as the recognizer finalizes it, which
               reads as text writing itself. Hide the draft while the session is
               live and show a single "Listening…" label instead; the text is
@@ -838,16 +916,21 @@ export const Composer: FC<ComposerProps> = ({
               Listening…
             </span>
           )}
-          <ComposerPrimitive.Input
+          <ComposerRichInput
             placeholder={composerConfig.placeholder}
-            // Bubble phase, on the textarea itself: the slash menu (form,
-            // capture) and the @-mention menu (textarea, capture + stopPropagation)
-            // both get the arrow keys first, so recall only sees the ones nobody
-            // else claimed.
+            tools={toolMentionsEnabled ? mcpTools : undefined}
+            skillNames={skillNames}
+            autoFocus={autoFocus && !isReplay}
+            disabled={isReplay}
+            onSubmit={() => composerRootRef.current?.requestSubmit()}
+            // Bubble phase, on the input itself: the slash menu (form, capture)
+            // and the @-mention menu (input, capture + stopPropagation) both get
+            // the arrow keys first, so recall only sees the ones nobody else
+            // claimed.
             onKeyDown={(event) => {
               if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
               // Modified arrows select, jump by word, or move the caret to the
-              // ends of the field — all of them the textarea's to handle.
+              // ends of the field — all of them the input's to handle.
               if (
                 event.shiftKey ||
                 event.altKey ||
@@ -860,23 +943,26 @@ export const Composer: FC<ComposerProps> = ({
               // capture on the form and calls preventDefault, but the event
               // still reaches this handler.
               if (slashOpen || isDictating || isReplay) return;
-              const textarea = event.currentTarget;
+              // The element answers `value` / `selectionStart` / `selectionEnd`
+              // like a textarea — see ComposerRichInput's facade.
+              const input =
+                event.currentTarget as unknown as HTMLTextAreaElement;
               const direction = event.key === "ArrowUp" ? "up" : "down";
-              if (!canRecall(textarea, direction)) return;
-              if (recallPrompt(textarea, direction)) event.preventDefault();
+              if (!canRecall(input, direction)) return;
+              if (recallPrompt(input, direction)) event.preventDefault();
             }}
             className={cn(
-              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-4 pt-0.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-0",
+              "mb-1 max-h-32 w-full overflow-y-auto px-4 pt-0.5 pb-3 text-foreground outline-none",
               d("h-input"),
               d("text-base"),
               isDictating && "invisible",
             )}
-            rows={1}
-            autoFocus={autoFocus && !isReplay}
-            disabled={isReplay}
-            aria-label="Message input"
           />
-          <ComposerAction showRunState={showThreadAffordances} />
+          <ComposerAction
+            showRunState={showThreadAffordances}
+            sendBlocked={sendBlocked}
+            sendTooltip={sendTooltip}
+          />
         </ComposerPrimitive.Root>
       )}
     </div>
@@ -1230,8 +1316,9 @@ const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
  * `@mention` into the draft — but the user makes one trip to one list.
  */
 const ComposerContextPicker: FC = () => {
-  const { config, mcpTools, mcpToolsLoading } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const aui = useAui();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // Read the composer text from the same reactive source the tool-mention
   // badges parse, so an inserted mention renders a pill just like the type-`@`
   // autocomplete does.
@@ -1252,6 +1339,15 @@ const ComposerContextPicker: FC = () => {
       composerConfig.toolMentions.enabled !== false);
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+  const serversPresence = composerMcpServersPresence(config.mcp, config.mcps);
+  const toolsListPending =
+    serversPresence === "unknown" ||
+    mcpToolsListPending(
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+      serversPresence === "some",
+    );
 
   const categories = useMemo<ToolCategory[]>(() => {
     const grouped = new Map<string, MentionableTool[]>();
@@ -1271,11 +1367,11 @@ const ComposerContextPicker: FC = () => {
 
   // Both halves stay visible while their source is still loading, so the
   // button appears immediately rather than popping in once the async list
-  // resolves — but a half that loaded empty is dropped, and a button with
-  // nothing behind it at all is not rendered.
+  // resolves. An empty tools/list stays visible too — hiding it would read
+  // as "this assistant has no tools" with no explanation.
   const hasSkills =
     !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
-  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  const hasTools = toolMentionsEnabled;
   if (!hasSkills && !hasTools) {
     return null;
   }
@@ -1333,35 +1429,56 @@ const ComposerContextPicker: FC = () => {
     }
   };
 
-  const toggleSkill = (skillID: string) => {
-    if (!skillContext) return;
-    if (selectedIDs.has(skillID)) {
-      skillContext.onSelectedSkillIdsChange(
-        skillContext.selectedSkillIds.filter((id) => id !== skillID),
+  /**
+   * Hands the caret to the draft after a pick, instead of the popover's own
+   * focus restore (which targets the trigger and would leave the user one
+   * click short of typing the message the reference was meant to open).
+   *
+   * Deferred a frame: the pick sets composer text, and the input rebuilds its
+   * tree on that render — focusing before it does would put the caret in nodes
+   * that are about to be replaced.
+   */
+  const focusDraftEnd = () => {
+    const root = triggerRef.current?.getRootNode();
+    const scope: ParentNode = root instanceof ShadowRoot ? root : document;
+    requestAnimationFrame(() => {
+      const textarea = scope.querySelector<HTMLTextAreaElement>(
+        ".aui-composer-input",
       );
+      if (!textarea) return;
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+    });
+  };
+
+  // Picking a skill writes its `/name` token into the draft; the composer
+  // derives the host's selection from that text, so the token is the only
+  // place the choice is recorded.
+  const toggleSkill = (skillID: string) => {
+    const skill = skillContext?.skills.find((entry) => entry.id === skillID);
+    if (!skill) return;
+    if (selectedIDs.has(skillID)) {
+      aui.composer().setText(removeToken(composerText, `/${skill.name}`));
       setOpen(false);
       reset();
+      focusDraftEnd();
       return;
     }
-    if (skillContext.selectedSkillIds.length >= maxSelected) {
+    if (selectedIDs.size >= maxSelected) {
       return;
     }
-    skillContext.onSelectedSkillIdsChange([
-      ...skillContext.selectedSkillIds,
-      skillID,
-    ]);
+    aui.composer().setText(appendToken(composerText, `/${skill.name}`));
     setOpen(false);
     reset();
+    focusDraftEnd();
   };
 
   const insertMention = (toolName: string) => {
-    const base =
-      composerText && !/\s$/.test(composerText)
-        ? `${composerText} `
-        : composerText;
-    aui.composer().setText(`${base}@${toolName} `);
+    aui.composer().setText(appendToken(composerText, `@${toolName}`));
     setOpen(false);
     reset();
+    focusDraftEnd();
   };
 
   const showSkills = hasSkills && (!searching || matchingSkills.length > 0);
@@ -1371,6 +1488,7 @@ const ComposerContextPicker: FC = () => {
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           type="button"
           variant="ghost"
           size="icon"
@@ -1389,6 +1507,11 @@ const ComposerContextPicker: FC = () => {
         // mount Elements outside the dashboard's own theme leave `--popover`
         // unset, and the pane renders see-through over the page behind it.
         className="aui-composer-context-popover w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden bg-background p-0"
+        // Radix hands focus back to the trigger on close; the draft wants it.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          focusDraftEnd();
+        }}
         onEscapeKeyDown={(event) => {
           if (query !== "") {
             event.preventDefault();
@@ -1483,7 +1606,7 @@ const ComposerContextPicker: FC = () => {
                 {/* A search that outruns the fetch has nothing to match yet;
                     saying "nothing found" there reports absence when the
                     answer is simply not back. */}
-                {skillContext?.loading || mcpToolsLoading
+                {skillContext?.loading || toolsListPending
                   ? "Loading…"
                   : "Nothing found"}
               </div>
@@ -1519,7 +1642,12 @@ const ComposerContextPicker: FC = () => {
                   />
                   <ContextToolResults
                     tools={matchingTools}
-                    loading={mcpToolsLoading}
+                    emptyMessage={composerContextToolsEmptyMessage(
+                      mcpToolsLoading,
+                      mcpTools,
+                      mcpToolsError,
+                      serversPresence,
+                    )}
                     onSelect={insertMention}
                   />
                 </>
@@ -1533,17 +1661,17 @@ const ComposerContextPicker: FC = () => {
 
 function ContextToolResults({
   tools,
-  loading,
+  emptyMessage,
   onSelect,
 }: {
   tools: MentionableTool[];
-  loading: boolean;
+  emptyMessage: string;
   onSelect: (toolName: string) => void;
 }): React.ReactElement {
   if (tools.length === 0) {
     return (
       <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-        {loading ? "Loading tools…" : "No tools found"}
+        {emptyMessage}
       </div>
     );
   }
@@ -1584,44 +1712,6 @@ function ContextToolResults({
     </div>
   );
 }
-
-const ComposerSkillContextBadges: FC = () => {
-  const skillContext = useElements().config.composer?.skillContext;
-  if (!skillContext || skillContext.selectedSkillIds.length === 0) {
-    return null;
-  }
-
-  const selectedIDs = new Set(skillContext.selectedSkillIds);
-  const selectedSkills = skillContext.skills.filter((skill) =>
-    selectedIDs.has(skill.id),
-  );
-
-  return (
-    <div className="aui-composer-skill-context-badges flex flex-wrap gap-1 px-3 pt-1">
-      {selectedSkills.map((skill) => (
-        <span
-          key={skill.id}
-          className="flex max-w-full items-center gap-1 rounded-md border border-input bg-muted px-2 py-1 text-xs text-foreground"
-        >
-          <AtSign className="size-3 shrink-0 text-muted-foreground" />
-          <span className="truncate">{skill.displayName}</span>
-          <button
-            type="button"
-            onClick={() =>
-              skillContext.onSelectedSkillIdsChange(
-                skillContext.selectedSkillIds.filter((id) => id !== skill.id),
-              )
-            }
-            className="ml-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label={`Remove ${skill.displayName} context`}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-    </div>
-  );
-};
 
 function ContextSkillResults({
   skillContext,
@@ -1746,8 +1836,14 @@ const ComposerDictate: FC = () => {
   );
 };
 
-const ComposerAction: FC<{ showRunState?: boolean }> = ({
+const ComposerAction: FC<{
+  showRunState?: boolean;
+  sendBlocked?: boolean;
+  sendTooltip?: string;
+}> = ({
   showRunState = true,
+  sendBlocked = false,
+  sendTooltip = "Send message",
 }) => {
   const { config } = useElements();
   const r = useRadius();
@@ -1787,13 +1883,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
         {!showRunState && (
           <ComposerPrimitive.Send asChild>
             <TooltipIconButton
-              tooltip="Send message"
+              tooltip={sendTooltip}
               side="bottom"
               type="submit"
               variant="default"
               size="icon"
+              disabled={sendBlocked}
               className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-              aria-label="Send message"
+              aria-label={sendTooltip}
             >
               <ArrowUpIcon className="aui-composer-send-icon size-5" />
             </TooltipIconButton>
@@ -1804,13 +1901,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
           <ThreadPrimitive.If running={false}>
             <ComposerPrimitive.Send asChild>
               <TooltipIconButton
-                tooltip="Send message"
+                tooltip={sendTooltip}
                 side="bottom"
                 type="submit"
                 variant="default"
                 size="icon"
+                disabled={sendBlocked}
                 className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-                aria-label="Send message"
+                aria-label={sendTooltip}
               >
                 <ArrowUpIcon className="aui-composer-send-icon size-5" />
               </TooltipIconButton>
@@ -1863,12 +1961,32 @@ const withToolCallAnnotationSuppression = (
     const aui = useAui();
     const partQuery = aui.part.query;
     const partIndex = partQuery?.type === "index" ? partQuery.index : undefined;
-    const followedByToolCall = useAuiState(
+    const ownedByToolGroup = useAuiState(
       ({ message }) =>
         partIndex !== undefined &&
         message.parts[partIndex + 1]?.type === "tool-call",
     );
-    if (!followedByToolCall || !trailingAnnotationLine(props.text)) {
+    // The tool call lands only after its annotation has finished streaming, so
+    // waiting for parts[i + 1] means rendering the annotation as prose first
+    // and yanking it into the group heading a moment later. While the message
+    // is still streaming and nothing follows this part yet, hold a part that
+    // still looks like it is growing into an annotation.
+    const streaming = useAuiState(
+      ({ message }) =>
+        partIndex !== undefined &&
+        message.parts[partIndex + 1] === undefined &&
+        message.status?.type === "running",
+    );
+    // Whole-part test, not the trailing line: mid-stream every line is briefly
+    // one or two words long, so matching the tail would blink each new line of
+    // a long answer out of the render as it arrives. A multi-line part can
+    // never be an annotation, which is what makes the whole-part test safe.
+    if (streaming && !ownedByToolGroup) {
+      return isPartialToolCallAnnotation(props.text) ? null : (
+        <Inner {...props} />
+      );
+    }
+    if (!ownedByToolGroup || !trailingAnnotationLine(props.text)) {
       return <Inner {...props} />;
     }
     const remainder = stripTrailingAnnotationLine(props.text);
@@ -1998,7 +2116,6 @@ const AssistantActionBar: FC = () => {
 };
 
 const UserMessage: FC = () => {
-  const r = useRadius();
   const { config } = useElements();
   const allowEdit = config.allowMessageEdit !== false;
   // An attachment-only turn carries no text part (or an empty one). Without
@@ -2022,8 +2139,11 @@ const UserMessage: FC = () => {
           {hasText && (
             <div
               className={cn(
-                "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
-                r("xl"),
+                // A bordered white card rather than a filled ink pill: the
+                // bubble now carries `@tool` / `/skill` chips, and those read
+                // in one palette only if their background is the page's, not
+                // an inverted one.
+                "aui-user-message-content ml-auto w-fit border border-foreground bg-card px-5 py-2.5 text-foreground wrap-break-word",
               )}
             >
               <MessagePrimitive.Parts components={{ Text: UserMessageText }} />

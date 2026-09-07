@@ -2,12 +2,12 @@ package activities
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,14 +38,15 @@ type CustomDomainInfrastructureChecker interface {
 }
 
 type CustomDomainHealth struct {
-	db             *pgxpool.Pool
-	logger         *slog.Logger
-	infrastructure CustomDomainInfrastructureChecker
-	resolver       dns.Resolver
-	probe          func(ctx context.Context, domain string) error
-	expectedTarget string
-	emails         *email.Service
-	siteURL        *url.URL
+	db               *pgxpool.Pool
+	logger           *slog.Logger
+	infrastructure   CustomDomainInfrastructureChecker
+	resolver         dns.Resolver
+	probe            func(ctx context.Context, domain string) error
+	expectedTarget   string
+	expectedARecords []netip.Addr
+	emails           *email.Service
+	siteURL          *url.URL
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -72,7 +73,7 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
 	}
@@ -82,14 +83,15 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		}
 	}
 	return &CustomDomainHealth{
-		db:             db,
-		logger:         logger,
-		infrastructure: infrastructure,
-		resolver:       dns.NewNetResolver(),
-		probe:          probe,
-		expectedTarget: expectedTarget,
-		emails:         emails,
-		siteURL:        siteURL,
+		db:               db,
+		logger:           logger,
+		infrastructure:   infrastructure,
+		resolver:         dns.NewNetResolver(),
+		probe:            probe,
+		expectedTarget:   expectedTarget,
+		expectedARecords: expectedARecords,
+		emails:           emails,
+		siteURL:          siteURL,
 	}
 }
 
@@ -123,8 +125,8 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (NotifyCustomDomainUnhealthyArgs, error) {
 	var noNotification NotifyCustomDomainUnhealthyArgs
 
-	if c.expectedTarget == "" {
-		c.logger.WarnContext(ctx, "skipping custom domain health check: expected target CNAME not configured")
+	if c.expectedTarget == "" && len(c.expectedARecords) == 0 {
+		c.logger.WarnContext(ctx, "skipping custom domain health check: no expected CNAME target or A records configured")
 		return noNotification, nil
 	}
 
@@ -164,7 +166,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		Issue:                "",
 		CertificateExpiresAt: nil,
 	}
-	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget)
+	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget, c.expectedARecords)
 	if routingErr == nil && routingIssue == customdomains.HealthIssueDNSTargetMismatch {
 		// DNS shape says the domain points elsewhere, but proxied/CDN setups
 		// legitimately do that. If the domain still answers HTTPS, traffic is
@@ -319,11 +321,6 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	organizationID := args.OrganizationID
 	repository := customdomainsrepo.New(c.db)
 
-	users, err := repository.ListOrganizationUsersForHealthNotification(ctx, organizationID)
-	if err != nil {
-		return fmt.Errorf("list custom domain health notification recipients: %w", err)
-	}
-
 	domainLink := ""
 	if c.siteURL != nil {
 		slug, err := repository.GetOrganizationSlugForHealthNotification(ctx, organizationID)
@@ -333,44 +330,21 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 		domainLink = c.siteURL.JoinPath(slug, "domains").String()
 	}
 
-	check := authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   organizationID,
-		Dimensions:   nil,
-	}
-	seen := make(map[string]struct{}, len(users))
-	var notificationErrors []error
-	for _, user := range users {
-		principals, err := authz.ResolveUserPrincipals(ctx, c.db, organizationID, user.ID)
-		if err != nil {
-			notificationErrors = append(notificationErrors, fmt.Errorf("resolve custom domain health notification recipient: %w", err))
-			continue
-		}
-		grants, err := authz.LoadGrants(ctx, c.db, organizationID, principals)
-		if err != nil {
-			notificationErrors = append(notificationErrors, fmt.Errorf("load custom domain health notification recipient grants: %w", err))
-			continue
-		}
-		if !authz.GrantsSatisfy(grants, check) {
-			continue
-		}
-		// Dedupe case-insensitively: user rows can carry the same mailbox with
-		// different casing, and the idempotency digest must collapse them too.
-		emailKey := strings.ToLower(user.Email)
-		if _, ok := seen[emailKey]; ok {
-			continue
-		}
-		seen[emailKey] = struct{}{}
+	recipients, resolutionErr := authz.ResolveOrganizationAdminEmails(ctx, c.db, organizationID)
+	notificationErrors := []error{resolutionErr}
+	for _, recipient := range recipients {
 		tmpl := email.CustomDomainUnhealthy{
-			Email:        user.Email,
-			Domain:       args.Domain,
-			IssueMessage: customdomains.HealthIssueMessage(args.Issue, c.expectedTarget),
-			DomainLink:   domainLink,
+			Email:  recipient,
+			Domain: args.Domain,
+			IssueMessage: customdomains.HealthIssueMessage(args.Issue, customdomains.DNSRemediation{
+				Domain:           args.Domain,
+				ExpectedCNAME:    c.expectedTarget,
+				ExpectedARecords: customdomains.FormatARecords(c.expectedARecords),
+			}),
+			DomainLink: domainLink,
 		}
-		// CheckedAt is stable across retries; hashing satisfies Loops's 100-character key limit.
-		digest := sha256.Sum256(fmt.Appendf(nil, "custom-domain-unhealthy:%s:%d:%s", args.CustomDomainID, args.CheckedAt.UnixMicro(), emailKey))
-		if err := c.emails.SendIdempotent(ctx, user.Email, hex.EncodeToString(digest[:]), tmpl); err != nil {
+		idempotencyKey := recipientEmailIdempotencyKey(recipient, "custom-domain-unhealthy", args.CustomDomainID.String(), strconv.FormatInt(args.CheckedAt.UnixMicro(), 10))
+		if err := c.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
 			notificationErrors = append(notificationErrors, fmt.Errorf("send custom domain health notification: %w", err))
 		}
 	}
@@ -386,7 +360,7 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 		attr.SlogURLDomain(args.Domain),
 		attr.SlogOrganizationID(organizationID),
 		attr.SlogCustomDomainHealthIssue(string(args.Issue)),
-		attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
+		attr.SlogCustomDomainNotifyRecipientCount(len(recipients)),
 	)
 	return nil
 }

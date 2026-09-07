@@ -7,6 +7,7 @@ import { domainsDeleteDomain } from "../funcs/domainsDeleteDomain.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
 import { domainsListDomains } from "../funcs/domainsListDomains.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
+import { domainsListRootMcpServers } from "../funcs/domainsListRootMcpServers.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { domainsSetRootMcpEndpoint } from "../funcs/domainsSetRootMcpEndpoint.js";
 import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
@@ -14,6 +15,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CustomDomain } from "../models/components/customdomain.js";
 import { ListCustomDomainMcpEndpointsResult } from "../models/components/listcustomdomainmcpendpointsresult.js";
 import { ListCustomDomainsResult } from "../models/components/listcustomdomainsresult.js";
+import { ListRootMcpServersResponseBody } from "../models/components/listrootmcpserversresponsebody.js";
 import {
   CheckDomainHealthRequest,
   CheckDomainHealthSecurity,
@@ -34,6 +36,10 @@ import {
   ListDomainsRequest,
   ListDomainsSecurity,
 } from "../models/operations/listdomains.js";
+import {
+  ListRootMcpServersRequest,
+  ListRootMcpServersSecurity,
+} from "../models/operations/listrootmcpservers.js";
 import {
   RegisterDomainRequest,
   RegisterDomainSecurity,
@@ -145,6 +151,25 @@ export class Domains extends ClientSDK {
   }
 
   /**
+   * listRootMcpServers domains
+   *
+   * @remarks
+   * List the organization's MCP servers that can be mapped to the custom domain root, including servers not yet attached to the domain
+   */
+  async listRootMcpServers(
+    request?: ListRootMcpServersRequest | undefined,
+    security?: ListRootMcpServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRootMcpServersResponseBody> {
+    return unwrapAsync(domainsListRootMcpServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * createDomain domains
    *
    * @remarks
@@ -154,7 +179,7 @@ export class Domains extends ClientSDK {
     request: RegisterDomainRequest,
     security?: RegisterDomainSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<void> {
+  ): Promise<CustomDomain> {
     return unwrapAsync(domainsRegisterDomain(
       this,
       request,
@@ -167,7 +192,7 @@ export class Domains extends ClientSDK {
    * setRootMcpEndpoint domains
    *
    * @remarks
-   * Set or clear the MCP endpoint mapped to a custom domain's root
+   * Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.
    */
   async setRootMcpEndpoint(
     request: SetRootMcpEndpointRequest,

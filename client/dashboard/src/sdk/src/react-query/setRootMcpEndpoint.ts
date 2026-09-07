@@ -54,7 +54,7 @@ export type SetRootMcpEndpointMutationError =
  * setRootMcpEndpoint domains
  *
  * @remarks
- * Set or clear the MCP endpoint mapped to a custom domain's root
+ * Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.
  */
 export function useSetRootMcpEndpointMutation(
   options?: MutationHookOptions<

@@ -11,13 +11,17 @@ export type GetAgentPluginsSecurity = {
 
 export type GetAgentPluginsRequest = {
   /**
-   * Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+   * Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.
    */
-  email: string;
+  email?: string | undefined;
   /**
    * API Key header
    */
   gramKey?: string | undefined;
+  /**
+   * Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+   */
+  gramUserEmail?: string | undefined;
   /**
    * Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
    */
@@ -26,6 +30,10 @@ export type GetAgentPluginsRequest = {
    * Hostname of the machine the agent runs on, when it can be read.
    */
   gramDeviceHostname?: string | undefined;
+  /**
+   * What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.
+   */
+  gramDeviceEnvironment?: string | undefined;
 };
 
 /** @internal */
@@ -58,10 +66,12 @@ export function getAgentPluginsSecurityToJSON(
 
 /** @internal */
 export type GetAgentPluginsRequest$Outbound = {
-  email: string;
+  email?: string | undefined;
   "Gram-Key"?: string | undefined;
+  "Gram-User-Email"?: string | undefined;
   "Gram-Device-Serial"?: string | undefined;
   "Gram-Device-Hostname"?: string | undefined;
+  "Gram-Device-Environment"?: string | undefined;
 };
 
 /** @internal */
@@ -70,16 +80,20 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
   GetAgentPluginsRequest
 > = z.pipe(
   z.object({
-    email: z.string(),
+    email: z.optional(z.string()),
     gramKey: z.optional(z.string()),
+    gramUserEmail: z.optional(z.string()),
     gramDeviceSerial: z.optional(z.string()),
     gramDeviceHostname: z.optional(z.string()),
+    gramDeviceEnvironment: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
+      gramUserEmail: "Gram-User-Email",
       gramDeviceSerial: "Gram-Device-Serial",
       gramDeviceHostname: "Gram-Device-Hostname",
+      gramDeviceEnvironment: "Gram-Device-Environment",
     });
   }),
 );

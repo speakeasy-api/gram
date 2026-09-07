@@ -22,11 +22,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -58,9 +61,10 @@ type AuthorizationURLParams struct {
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken    string
-	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
-	User           AuthenticatedUser
+	AccessToken       string
+	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
+	User              AuthenticatedUser
+	impersonatorEmail string
 }
 
 type MagicAuthChallenge struct {
@@ -80,7 +84,9 @@ type AuthenticatedUser struct {
 }
 
 // WorkOSClient is the subset of workos.Client needed for identity resolution:
-// org membership sync, cross-system ID synchronization, and org provisioning.
+// org membership sync, cross-system ID synchronization, org provisioning, and
+// the signup-time email lookup that keeps existing AuthKit users off the
+// hosted sign-up screen.
 type WorkOSClient interface {
 	ListUserMemberships(ctx context.Context, userID string) ([]workos.Member, error)
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
@@ -91,17 +97,28 @@ type WorkOSClient interface {
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
+	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub             string  `json:"sub"`
-	Email           string  `json:"email"`
-	Name            string  `json:"name"`
-	Picture         *string `json:"picture,omitempty"`
-	ExternalID      string  `json:"-"`
-	WorkOSSessionID string  `json:"-"`
-	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	Sub               string  `json:"sub"`
+	Email             string  `json:"email"`
+	Name              string  `json:"name"`
+	Picture           *string `json:"picture,omitempty"`
+	ExternalID        string  `json:"-"`
+	WorkOSSessionID   string  `json:"-"`
+	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
+	impersonatorEmail string
+}
+
+// ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
+// impersonation session. It is empty for ordinary authentication.
+func (u *IDPUserInfo) ImpersonatorEmail() string {
+	if u == nil {
+		return ""
+	}
+	return u.impersonatorEmail
 }
 
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
@@ -118,6 +135,7 @@ type Resolver struct {
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
+	growth        *growthsignals.Emitter
 }
 
 func NewResolver(
@@ -132,6 +150,7 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	growth *growthsignals.Emitter,
 	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
@@ -147,6 +166,7 @@ func NewResolver(
 		userRepo:      userRepo,
 		pylon:         pylon,
 		posthog:       posthog,
+		growth:        growth,
 	}
 }
 
@@ -213,13 +233,14 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:             resp.User.ID,
-		Email:           resp.User.Email,
-		Name:            name,
-		Picture:         picture,
-		ExternalID:      resp.User.ExternalID,
-		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:  resp.OrganizationID,
+		Sub:               resp.User.ID,
+		Email:             resp.User.Email,
+		Name:              name,
+		Picture:           picture,
+		ExternalID:        resp.User.ExternalID,
+		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:    resp.OrganizationID,
+		impersonatorEmail: resp.impersonatorEmail,
 	}
 }
 
@@ -294,6 +315,8 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		}); err != nil {
 			r.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
 		}
+
+		r.emitSignup(ctx, user.Email, user.DisplayName)
 	}
 
 	return user.ID, nil
@@ -466,9 +489,9 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		gramOrgID = orgid.FromWorkOSID(m.OrganizationID)
 	}
 
-	slug := orgslug.Slugify(org.Name)
-	if slug == "" {
-		slug = m.OrganizationID
+	slug, err := orgslug.StableBase(org.Name, m.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("derive slug for WorkOS organization %q: %w", m.OrganizationID, err)
 	}
 
 	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
@@ -576,6 +599,22 @@ func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) e
 
 const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
 
+// HasWorkOSUser reports whether WorkOS already has an account for email.
+// An unset client is treated as "no such user" so local and test environments
+// keep the current signup flow. Callers must fail open on error: a temporary
+// WorkOS problem must not block new signups.
+func (r *Resolver) HasWorkOSUser(ctx context.Context, email string) (bool, error) {
+	if r.workosClient == nil || email == "" {
+		return false, nil
+	}
+
+	user, err := r.workosClient.GetUserByEmail(ctx, email)
+	if err != nil {
+		return false, fmt.Errorf("lookup workos user by email: %w", err)
+	}
+	return user != nil, nil
+}
+
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
 func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
@@ -586,8 +625,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
-	// Both hints are AuthKit features and both are sign-up only, so an
-	// ordinary login produces the same URL it always has.
+	// Both hints are AuthKit features. Ordinary login leaves them empty so
+	// the authorization URL stays unchanged. Signup may set login_hint for
+	// either screen, and screen_hint only when the address is new.
 	if params.LoginHint != "" {
 		q.Set("login_hint", params.LoginHint)
 	}
@@ -640,28 +680,60 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		return ProvisionedOrganization{}, fmt.Errorf("user %s has no workos_id", gramUserID)
 	}
 
-	// Create the WorkOS org first, then derive the Gram org ID from it.
-	workosOrgID, err := r.workosClient.CreateOrganization(ctx, orgName, "")
+	created, err := orgprovision.CreateInWorkOS(ctx, r.workosClient, orgName)
 	if err != nil {
-		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization: %w", err)
+		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	gramOrgID := orgid.FromWorkOSID(workosOrgID)
-
-	// Back-fill the external_id so WorkOS knows the Gram org ID.
-	if err := r.workosClient.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
-		return ProvisionedOrganization{}, fmt.Errorf("set external_id on WorkOS organization: %w", err)
-	}
-
-	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin")
+	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
 	if err != nil {
 		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 
 	return ProvisionedOrganization{
-		WorkOSOrganizationID: workosOrgID,
-		GramOrganizationID:   gramOrgID,
+		WorkOSOrganizationID: created.WorkOSOrganizationID,
+		GramOrganizationID:   created.GramOrganizationID,
 		WorkOSUserID:         user.WorkosID.String,
 		WorkOSMembershipID:   membershipID,
 	}, nil
+}
+
+// emitSignup reports a first-time signup and says whether it was invited or
+// organic. The distinction is asked for at exactly this moment because it is
+// only knowable here: the user row has just been created, so a live invitation
+// addressed to them means somebody asked them to join, and its absence means
+// they arrived on their own. A moment later the invitation is accepted and the
+// evidence is gone.
+//
+// A failed lookup reports neither, rather than guessing "organic" and
+// overstating self-serve growth.
+func (r *Resolver) emitSignup(ctx context.Context, email, displayName string) {
+	extra := map[string]string{}
+	// Invitations are stored normalized, and the address arriving from the IDP
+	// is not. Comparing them raw classified an invited user with a mixed-case
+	// address as organic, which is the exact distinction this event exists for.
+	invited, err := r.orgRepo.HasPendingInvitationForEmail(ctx, conv.NormalizeEmail(email))
+	switch {
+	case err != nil:
+		r.logger.ErrorContext(ctx, "failed to classify signup source", attr.SlogError(err))
+	case invited:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceInvited
+	default:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceOrganic
+	}
+
+	r.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityUserSignedUp,
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      displayName,
+		SubjectName:    displayName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          extra,
+	})
 }

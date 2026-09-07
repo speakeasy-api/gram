@@ -5,13 +5,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  UserSessionUpstream,
+  UserSessionUpstream$inboundSchema,
+} from "./usersessionupstream.js";
+
+/**
+ * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
+ */
+export const ClientCredentialKind = {
+  Public: "public",
+  Secret: "secret",
+  Key: "key",
+  Misconfigured: "misconfigured",
+} as const;
+/**
+ * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
+ */
+export type ClientCredentialKind = ClosedEnum<typeof ClientCredentialKind>;
 
 /**
  * An issued user_session record. refresh_token_hash is never returned.
  */
 export type UserSession = {
+  /**
+   * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
+   */
+  clientCredentialKind?: ClientCredentialKind | undefined;
   /**
    * Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
    */
@@ -20,6 +43,10 @@ export type UserSession = {
    * Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.
    */
   clientName?: string | undefined;
+  /**
+   * The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.
+   */
+  clientTokenEndpointAuthMethod?: string | undefined;
   createdAt: Date;
   /**
    * Terminal session expiry; ceiling on refresh_expires_at.
@@ -37,6 +64,10 @@ export type UserSession = {
    * Current access-token JTI; used by the revocation path.
    */
   jti: string;
+  /**
+   * When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.
+   */
+  lastUsedAt?: Date | undefined;
   /**
    * Next refresh deadline.
    */
@@ -63,6 +94,10 @@ export type UserSession = {
   subjectUrn: string;
   updatedAt: Date;
   /**
+   * The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
+   */
+  upstreams: Array<UserSessionUpstream>;
+  /**
    * The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
    */
   userSessionClientId?: string | undefined;
@@ -73,11 +108,18 @@ export type UserSession = {
 };
 
 /** @internal */
+export const ClientCredentialKind$inboundSchema: z.ZodMiniEnum<
+  typeof ClientCredentialKind
+> = z.enum(ClientCredentialKind);
+
+/** @internal */
 export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
   .pipe(
     z.object({
+      client_credential_kind: z.optional(ClientCredentialKind$inboundSchema),
       client_id_metadata_uri: z.optional(z.string()),
       client_name: z.optional(z.string()),
+      client_token_endpoint_auth_method: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -89,6 +131,9 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       id: z.string(),
       issuer_slug: z.string(),
       jti: z.string(),
+      last_used_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       refresh_expires_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -104,16 +149,20 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      upstreams: z.array(UserSessionUpstream$inboundSchema),
       user_session_client_id: z.optional(z.string()),
       user_session_issuer_id: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        "client_credential_kind": "clientCredentialKind",
         "client_id_metadata_uri": "clientIdMetadataUri",
         "client_name": "clientName",
+        "client_token_endpoint_auth_method": "clientTokenEndpointAuthMethod",
         "created_at": "createdAt",
         "expires_at": "expiresAt",
         "issuer_slug": "issuerSlug",
+        "last_used_at": "lastUsedAt",
         "refresh_expires_at": "refreshExpiresAt",
         "revoked_at": "revokedAt",
         "subject_display_name": "subjectDisplayName",

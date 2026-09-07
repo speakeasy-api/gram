@@ -36,6 +36,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			ID:      mcpID,
 			Code:    MCPCodeInternalError,
 			Message: MCPCodeInternalError.Message(),
+			Data:    nil,
 		}
 
 		var shareableErr *ShareableError
@@ -98,10 +99,24 @@ func (c MCPCode) Message() string {
 	}
 }
 
+// MCPErrorDataCode is a stable machine-readable JSON-RPC error code.
+type MCPErrorDataCode string
+
+const (
+	// MCPErrorDataCodeToolCallsPaused identifies a matched MCP tool-execution pause.
+	MCPErrorDataCodeToolCallsPaused MCPErrorDataCode = "mcp_tool_calls_paused"
+)
+
+// MCPErrorData is the shared typed data envelope for MCP JSON-RPC errors.
+type MCPErrorData struct {
+	Code MCPErrorDataCode `json:"code"`
+}
+
 type MCPError struct {
 	ID      mcpjsonrpc.ID
 	Code    MCPCode
 	Message string
+	Data    *MCPErrorData
 }
 
 func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
@@ -119,12 +134,14 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 			ID:      id,
 			Code:    shareableErr.Code.MCPCode(),
 			Message: shareableErr.Error(),
+			Data:    nil,
 		}
 	default:
 		return &MCPError{
 			ID:      id,
 			Code:    MCPCodeInternalError,
 			Message: MCPCodeInternalError.Message(),
+			Data:    nil,
 		}
 	}
 }
@@ -144,6 +161,9 @@ func (e *MCPError) MarshalJSON() ([]byte, error) {
 	errorBody := map[string]any{
 		"code":    e.Code,
 		"message": e.message(),
+	}
+	if e.Data != nil {
+		errorBody["data"] = e.Data
 	}
 
 	payload := map[string]any{

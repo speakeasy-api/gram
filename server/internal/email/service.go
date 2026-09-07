@@ -15,45 +15,54 @@ import (
 // from transport failures.
 var ErrEmptyRecipient = errors.New("email: recipient is required")
 
-// ErrUnregisteredTemplate is returned when the supplied template's
-// TransactionalID is empty, indicating the template has not been registered
-// with a Loops transactional ID.
-var ErrUnregisteredTemplate = errors.New("email: template has no transactional ID")
+// ErrUnregisteredTemplate is returned when the deployment has no Loops ID for
+// the supplied template key.
+var ErrUnregisteredTemplate = errors.New("email: template has no configured transactional ID")
 
 // Service is the application-facing facade for sending transactional emails.
 // Callers depend on this type instead of the underlying transport so we can
 // swap providers without touching feature code.
 type Service struct {
-	logger *slog.Logger
-	sender loops.Client
+	logger  *slog.Logger
+	sender  loops.Client
+	ids     TemplateIDs
+	enabled bool
 }
 
 // NewService returns an email Service backed by the supplied Loops client.
 // The sender is expected to be a usable client — pass loops.New(...) which
-// returns a no-op when the API key is unset.
-func NewService(logger *slog.Logger, sender loops.Client) *Service {
+// returns a no-op when the API key is unset. Enabled must reflect whether that
+// API key configures real delivery; disabled services intentionally drop sends.
+func NewService(logger *slog.Logger, sender loops.Client, ids TemplateIDs, enabled bool) *Service {
 	return &Service{
-		logger: logger.With(attr.SlogComponent("email")),
-		sender: sender,
+		logger:  logger.With(attr.SlogComponent("email")),
+		sender:  sender,
+		ids:     ids,
+		enabled: enabled,
 	}
 }
 
 // Send dispatches a transactional email rendered from the supplied template.
-// The template carries the strongly typed variables and the transactional ID
-// it targets, so a misuse such as passing the wrong variable shape is a
-// compile-time error.
+// The template carries strongly typed variables and a stable key resolved
+// against the deployment's environment-specific Loops IDs.
 func (s *Service) Send(ctx context.Context, recipient string, template Template) error {
 	return s.SendIdempotent(ctx, recipient, "", template)
 }
 
+// SendIdempotent dispatches a transactional email with a provider-level
+// idempotency key.
 func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempotencyKey string, template Template) error {
 	if recipient == "" {
 		return ErrEmptyRecipient
 	}
+	if !s.enabled {
+		return nil
+	}
 
-	id := template.TransactionalID()
+	key := template.Key()
+	id := s.ids[key]
 	if id == "" {
-		return ErrUnregisteredTemplate
+		return fmt.Errorf("%w: %q", ErrUnregisteredTemplate, key)
 	}
 
 	if err := s.sender.SendTransactional(ctx, loops.SendTransactionalInput{

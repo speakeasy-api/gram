@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -205,6 +206,27 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 	require.Contains(t, partsByDisplayPath, "missing.txt")
 	require.Equal(t, validContent, partsByDisplayPath["valid.txt"].Content)
 	require.Empty(t, partsByDisplayPath["missing.txt"].Content)
+}
+
+func TestLoadChat_LiteLLMOriginatingClient(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "LiteLLM session")
+	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:            chatID,
+		ProjectID:         uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:            pgtype.Text{String: "litellm", Valid: true},
+		OriginatingClient: pgtype.Text{String: "claude-code", Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Equal(t, "litellm", conv.PtrValOr(result.Source, ""))
+	require.Equal(t, "claude-code", conv.PtrValOr(result.OriginatingClient, ""))
 }
 
 // TestLoadChat_ContentPartsScopedToPage asserts a page only carries the content

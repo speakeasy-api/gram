@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,6 +126,53 @@ func TestInsertSkillEfficacyScores_EmptyInputIsNoop(t *testing.T) {
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{}))
 }
 
+func TestMappedSessionFilterUsesChatIDSkippingIndex(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	sessionID := uuid.NewString()
+	now := time.Now().UTC()
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, 'INFO', '', NULL, NULL, ?, '{}', ?, 'claude-code:otel:logs', 'claude-code')
+	`, uuid.NewString(), now.UnixNano(), now.UnixNano(), `{"gen_ai.conversation.id":"`+sessionID+`"}`, projectID)
+	require.NoError(t, err)
+
+	rows, err := conn.Query(ctx, `
+		EXPLAIN indexes = 1
+		WITH mappings AS (
+			SELECT project_id, session_id
+			FROM skill_session_versions
+			WHERE project_id = toUUID(?)
+			GROUP BY project_id, session_id
+		)
+		SELECT count()
+		FROM telemetry_logs
+		WHERE gram_project_id = toUUID(?)
+		  AND time_unix_nano >= ?
+		  AND time_unix_nano <= ?
+		  AND chat_id IN (SELECT session_id FROM mappings)
+	`, projectID.String(), projectID.String(), now.Add(-time.Hour).UnixNano(), now.Add(time.Hour).UnixNano())
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	var planLines []string
+	for rows.Next() {
+		var line string
+		require.NoError(t, rows.Scan(&line))
+		planLines = append(planLines, line)
+	}
+	require.NoError(t, rows.Err())
+	require.Contains(t, strings.Join(planLines, "\n"), "idx_telemetry_logs_mat_chat_id")
+}
+
 func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T) {
 	t.Parallel()
 
@@ -176,13 +224,14 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
-		OrganizationID:  orgID,
-		ProjectID:       projectID.String(),
-		SkillIDs:        []string{score.SkillID.String()},
-		SkillVersionIDs: nil,
-		From:            observedAt.Add(-time.Hour),
-		To:              observedAt.Add(time.Hour),
-		IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		OrganizationID:      orgID,
+		ProjectID:           projectID.String(),
+		SkillIDs:            []string{score.SkillID.String()},
+		SkillVersionIDs:     nil,
+		From:                observedAt.Add(-time.Hour),
+		To:                  observedAt.Add(time.Hour),
+		IntervalSeconds:     int64((24 * time.Hour).Seconds()),
+		IncludeSessionUsage: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -239,6 +288,7 @@ func TestQuerySkillInsightsDeduplicatesPhysicalScoresByEventID(t *testing.T) {
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{score.SkillID.String()}, SkillVersionIDs: nil,
 		From: observedAt.Add(-time.Hour), To: observedAt.Add(time.Hour), IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		IncludeSessionUsage: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

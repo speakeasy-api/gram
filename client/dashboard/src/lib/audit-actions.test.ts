@@ -55,6 +55,34 @@ describe("AUDIT_ACTIONS", () => {
     }
   });
 
+  it("describes enterprise conversion against its organization subject", () => {
+    expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
+      "converted enterprise trial for",
+    );
+  });
+
+  it("describes data export actions", () => {
+    expect(
+      (
+        [
+          "data_export_route:create",
+          "data_export_route:update",
+          "data_export_route:delete",
+          "otel_destination:create",
+          "otel_destination:update",
+          "otel_destination:delete",
+        ] as const
+      ).map((action) => staticActionPhrase(action)),
+    ).toEqual([
+      "created data export route",
+      "updated data export route",
+      "deleted data export route",
+      "created OpenTelemetry destination",
+      "updated OpenTelemetry destination",
+      "deleted OpenTelemetry destination",
+    ]);
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);

@@ -62,7 +62,7 @@ export type AgentPluginsQueryError =
  * Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
  */
 export function useAgentPlugins(
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: QueryHookOptions<AgentPluginsQueryData, AgentPluginsQueryError>,
 ): UseQueryResult<AgentPluginsQueryData, AgentPluginsQueryError> {
@@ -85,7 +85,7 @@ export function useAgentPlugins(
  * Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
  */
 export function useAgentPluginsSuspense(
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AgentPluginsQueryData,
@@ -108,10 +108,12 @@ export function setAgentPluginsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      email: string;
+      email?: string | undefined;
       gramKey?: string | undefined;
+      gramUserEmail?: string | undefined;
       gramDeviceSerial?: string | undefined;
       gramDeviceHostname?: string | undefined;
+      gramDeviceEnvironment?: string | undefined;
     },
   ],
   data: AgentPluginsQueryData,
@@ -125,10 +127,12 @@ export function invalidateAgentPlugins(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      email: string;
+      email?: string | undefined;
       gramKey?: string | undefined;
+      gramUserEmail?: string | undefined;
       gramDeviceSerial?: string | undefined;
       gramDeviceHostname?: string | undefined;
+      gramDeviceEnvironment?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

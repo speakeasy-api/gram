@@ -37,7 +37,9 @@ type deprovisionOrganizationAccessParams struct {
 // status=inactive, and directory user deactivation. It marks the organization
 // relationship and the user's role assignments deleted, and requests a
 // user-info cache invalidation so org-access checks observe the change
-// without waiting out the cache TTL.
+// without waiting out the cache TTL, plus an identity map refresh so the
+// ClickHouse fold stops resolving the departed member's emails before the
+// sync schedule's next tick.
 func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p deprovisionOrganizationAccessParams) (postCommitEffects, error) {
 	var effects postCommitEffects
 
@@ -76,5 +78,6 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p de
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID
+	effects.refreshIdentityMap = true
 	return effects, nil
 }

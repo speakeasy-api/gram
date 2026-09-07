@@ -206,7 +206,7 @@ func TestResolve_StaysOpaqueAfterInspectRefactor(t *testing.T) {
 		}
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 
 	require.Error(t, err)
 	// A parse failure is still reported as an opaque wrapped error carrying

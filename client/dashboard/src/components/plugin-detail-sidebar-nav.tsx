@@ -22,6 +22,7 @@ import {
   type PluginSection,
 } from "@/pages/plugins/plugin-detail-sections";
 import {
+  audienceMapByUrn,
   describePrincipal,
   individualMemberFacepile,
   isIndividualMemberPrincipal,
@@ -32,6 +33,7 @@ import {
 import { usePluginAssignmentsVisible } from "@/pages/plugins/use-plugin-assignments-visible";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { usePlugin } from "@gram/client/react-query/plugin";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useRoles } from "@gram/client/react-query/roles";
@@ -57,6 +59,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   const { data: publishStatus } = usePublishStatus();
   const { data: membersData } = useMembers();
   const { data: rolesData } = useRoles();
+  const { data: audiencesData } = useAudiences();
   const showAssignments = usePluginAssignmentsVisible();
 
   const memberByUrn = React.useMemo(
@@ -66,6 +69,10 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   const roleByUrn = React.useMemo(
     () => roleMapByUrn(rolesData?.roles ?? []),
     [rolesData?.roles],
+  );
+  const audienceByUrn = React.useMemo(
+    () => audienceMapByUrn(audiencesData?.audiences ?? []),
+    [audiencesData?.audiences],
   );
 
   if (!pluginId) return null;
@@ -179,6 +186,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
                   assignment.principalUrn,
                   roleByUrn,
                   memberByUrn,
+                  audienceByUrn,
                 );
                 const PrincipalIcon = principalIcon(kind);
                 return (

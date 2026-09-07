@@ -1,5 +1,16 @@
 import "./App.css";
 import NotFound from "@/pages/not-found/NotFound";
+import {
+  RedirectToAddFunction,
+  RedirectToAddOpenAPI,
+  RedirectToAddRemoteMcp,
+  RedirectToAddTunneledMcp,
+  RedirectToAddUnproxiedMcp,
+  RedirectToCatalog,
+  RedirectToCatalogDetail,
+  RedirectToSourceDetail,
+  RedirectToSources,
+} from "@/pages/mcp/add/LegacyRedirects";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -15,15 +26,22 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
+import { AppRouteContentErrorBoundary } from "./components/app-route-content-error-boundary.tsx";
+import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
+  pageLabel,
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
+  removeVisitsMatching,
+  shouldRemoveRestrictedRecents,
 } from "./components/command-palette/recentlyVisited";
 import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
+import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -40,7 +58,7 @@ import { BlockPage } from "./pages/blocks/BlockDetail";
 import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
-import TalkToUs from "./pages/demo/TalkToUs";
+import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
@@ -61,20 +79,6 @@ export default function App(): JSX.Element {
     if (root.classList.contains(theme)) return;
     root.classList.add(theme);
     root.classList.remove(theme === "dark" ? "light" : "dark");
-
-    // Update favicon based on theme
-    const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    const faviconAlt = document.getElementById(
-      "favicon-alt",
-    ) as HTMLLinkElement;
-
-    if (favicon) {
-      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-    }
-
-    if (faviconAlt) {
-      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
-    }
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
@@ -159,6 +163,7 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const { hasAnyScope } = useRBAC();
+  const killswitchAccess = useKillswitchAccess();
   // RouteProvider is inside AuthProvider, so reuse the already-fetched session
   // instead of issuing another auth.info request.
   const recentsUserId = useUser().id || undefined;
@@ -199,6 +204,33 @@ const RouteProvider = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
+  useEffect(() => {
+    if (
+      !shouldRemoveRestrictedRecents({
+        canAccess: killswitchAccess.canAccess,
+        isLoading: killswitchAccess.isLoading,
+      }) ||
+      !recentsUserId
+    )
+      return;
+    const killswitchHref = orgRoutes.killswitch.href();
+    removeVisitsMatching(
+      recentsUserId,
+      orgSlug,
+      projectSlug,
+      (entry) =>
+        entry.href === killswitchHref ||
+        entry.href.startsWith(`${killswitchHref}/`),
+    );
+  }, [
+    killswitchAccess.canAccess,
+    killswitchAccess.isLoading,
+    recentsUserId,
+    orgRoutes.killswitch,
+    orgSlug,
+    projectSlug,
+  ]);
+
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
@@ -211,6 +243,7 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
+    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -228,8 +261,8 @@ const RouteProvider = () => {
       });
 
     // Prefer a label a detail page registered for this href (e.g. the assistant
-    // name) over the URL-derived fallback, which for id-keyed pages is an opaque
-    // id like "Assistant · 0190abcd".
+    // or conversation name) over the URL-derived fallback, which for id-keyed
+    // pages is just the section title until the override arrives.
     record(
       getRecentLabelOverride(href) ??
         pageLabel(active.title, active.href(), location.pathname),
@@ -237,7 +270,7 @@ const RouteProvider = () => {
 
     // A detail page may register its label *after* this first record (its data
     // loads async). Re-record when that happens so the entry upgrades from the
-    // id fallback to the resource name.
+    // section title to the resource name.
     const onOverride = (event: Event) => {
       const detail = (event as CustomEvent<{ href: string }>).detail;
       if (detail?.href !== href) return;
@@ -254,6 +287,7 @@ const RouteProvider = () => {
     recentsUserId,
     orgSlug,
     projectSlug,
+    killswitchAccess.canAccess,
   ]);
 
   // Register command palette navigation actions. Project "Pages" mirror the
@@ -283,7 +317,9 @@ const RouteProvider = () => {
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
     const paletteOrgRoutes = Object.fromEntries(
       Object.entries(orgRoutes).filter(
-        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+        ([key, route]) =>
+          (showPlatformAdmin || !route.url.startsWith("platform-")) &&
+          (key !== "killswitch" || killswitchAccess.canAccess),
       ),
     );
     const orgActions = routesToNavActions(
@@ -304,6 +340,7 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
+    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
@@ -340,8 +377,8 @@ const RouteProvider = () => {
         {/* Outside the app layout because it is a full-page gate, but behind
             LoginCheck: an expired trial still has a session, and a logged-out
             visitor has no trial to talk about. */}
-        <Route path="/talk-to-us" element={<LoginCheck />}>
-          <Route index element={<TalkToUs />} />
+        <Route path="/trial-ended" element={<LoginCheck />}>
+          <Route index element={<TrialEnded />} />
         </Route>
         <Route
           path="/shadow-mcp/request"
@@ -361,11 +398,13 @@ const RouteProvider = () => {
           element={<SharedSkillPage />}
         />
         <Route path="/" element={<LoginCheck />}>
+          <Route path="guide" element={<GuideEntryRedirect />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            {legacyMcpRedirects}
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
@@ -383,31 +422,9 @@ const RouteProvider = () => {
     );
   }, [routes, orgRoutes]);
 
-  return routeElements;
-};
-
-// Opaque ids make poor Recents labels; detect UUIDs so detail pages keyed by id
-// fall back to "<Section> <short id>" instead of a raw UUID.
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Label a visited page for the Recents list. Section/list pages keep the route
-// title; detail pages prefer the human-readable last path segment (a slug like
-// "notion"), falling back to "<Title> <short id>" when that segment is opaque.
-const pageLabel = (
-  title: string,
-  baseHref: string,
-  pathname: string,
-): string => {
-  if (pathname === baseHref || !pathname.startsWith(baseHref)) return title;
-  const segment = decodeURIComponent(
-    pathname.split("/").filter(Boolean).pop() ?? "",
-  );
-  if (!segment) return title;
-  if (UUID_RE.test(segment) || segment.length > 24) {
-    return `${title} · ${segment.slice(0, 8)}`;
-  }
-  return segment;
+  // Above the router: the mode-switch animation spans the route swap between
+  // its shrink and zoom beats, so its state has to outlive that navigation.
+  return <ModeSwitchProvider>{routeElements}</ModeSwitchProvider>;
 };
 
 // Convert a single route into a command-palette navigation action.
@@ -451,6 +468,31 @@ const routesToNavActions = (
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
 
+// S-853 moved Sources and the catalog under /mcp. These keep the old top-level
+// URLs resolving. They live here rather than in the route structure so they
+// stay out of the sidebar, breadcrumbs, and the command palette.
+const legacyMcpRedirects = (
+  <>
+    <Route path="sources">
+      <Route index element={<RedirectToSources />} />
+      <Route path="add-openapi" element={<RedirectToAddOpenAPI />} />
+      <Route path="add-function" element={<RedirectToAddFunction />} />
+      <Route path="add-from-catalog" element={<RedirectToCatalog />} />
+      <Route path="add-remote-mcp" element={<RedirectToAddRemoteMcp />} />
+      <Route path="add-tunneled-mcp" element={<RedirectToAddTunneledMcp />} />
+      <Route path="add-unproxied-mcp" element={<RedirectToAddUnproxiedMcp />} />
+      <Route
+        path=":sourceKind/:sourceSlug"
+        element={<RedirectToSourceDetail />}
+      />
+    </Route>
+    <Route path="catalog">
+      <Route index element={<RedirectToCatalog />} />
+      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
+    </Route>
+  </>
+);
+
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes
     .filter((item) => !item.external)
@@ -458,10 +500,27 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       <Route
         key={item.title}
         path={item.url}
-        element={item.component ? <item.component /> : null}
+        element={
+          item.component ? (
+            <AppRouteContentErrorBoundary
+              fallback={<div className="p-8 text-sm">Loading…</div>}
+            >
+              <item.component />
+            </AppRouteContentErrorBoundary>
+          ) : null
+        }
       >
         {item.indexComponent && (
-          <Route index element={<item.indexComponent />} />
+          <Route
+            index
+            element={
+              <AppRouteContentErrorBoundary
+                fallback={<div className="p-8 text-sm">Loading…</div>}
+              >
+                <item.indexComponent />
+              </AppRouteContentErrorBoundary>
+            }
+          />
         )}
         {/* Check for any children routes stored on this item */}
         {routesWithSubroutes(

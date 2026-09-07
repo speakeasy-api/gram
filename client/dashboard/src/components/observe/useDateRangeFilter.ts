@@ -27,7 +27,7 @@ export function useDateRangeFilter(
     label?: string,
     extraUpdates?: Record<string, string | null>,
   ) => void;
-  clearCustomRange: () => void;
+  clearCustomRange: (extraUpdates?: Record<string, string | null>) => void;
 } {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -106,9 +106,17 @@ export function useDateRangeFilter(
     [updateSearchParams],
   );
 
-  const clearCustomRange = useCallback(() => {
-    updateSearchParams({ from: null, to: null, label: null });
-  }, [updateSearchParams]);
+  const clearCustomRange = useCallback(
+    (extraUpdates?: Record<string, string | null>) => {
+      updateSearchParams({
+        from: null,
+        to: null,
+        label: null,
+        ...extraUpdates,
+      });
+    },
+    [updateSearchParams],
+  );
 
   const { from, to } = useMemo(
     () => customRange ?? getPresetRange(dateRange),

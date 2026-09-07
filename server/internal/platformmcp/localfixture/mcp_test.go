@@ -85,6 +85,22 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	require.Len(t, listResponse.Result.Tools, 1)
 	require.Equal(t, fixtureToolName, listResponse.Result.Tools[0].Name)
 
+	toolCall := mcpToolCallRequest(t, handler, accessToken, sessionID, 3, fixtureToolName)
+	require.Equal(t, http.StatusOK, toolCall.Code, toolCall.Body.String())
+	var toolCallResponse struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(toolCall.Body.Bytes(), &toolCallResponse))
+	require.Len(t, toolCallResponse.Result.Content, 1)
+	require.Equal(t, "local fixture status: ready", toolCallResponse.Result.Content[0].Text)
+
+	unknownTool := mcpToolCallRequest(t, handler, accessToken, sessionID, 4, "unknown")
+	require.Equal(t, http.StatusBadRequest, unknownTool.Code)
+
 	deleteRequest := httptest.NewRequest(http.MethodDelete, "/platform-mcp/local-fixture/mcp", nil)
 	deleteRequest.Header.Set("Authorization", "Bearer "+accessToken)
 	deleteRequest.Header.Set(fixtureMCPSessionHeader, sessionID)
@@ -96,7 +112,7 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	handler.ServeHTTP(deleteResponse, deleteRequest)
 	require.Equal(t, http.StatusNoContent, deleteResponse.Code)
 
-	deletedSession := mcpRequest(t, handler, accessToken, sessionID, 3, "tools/list")
+	deletedSession := mcpRequest(t, handler, accessToken, sessionID, 5, "tools/list")
 	require.Equal(t, http.StatusBadRequest, deletedSession.Code)
 }
 
@@ -138,7 +154,17 @@ func TestMCPHTTPRejectsRevokedBearer(t *testing.T) {
 
 func mcpRequest(t *testing.T, handler http.Handler, accessToken, sessionID string, id int, method string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/local-fixture/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":`+strconv.Itoa(id)+`,"method":"`+method+`"}`))
+	return serveMCPRequest(t, handler, accessToken, sessionID, `{"jsonrpc":"2.0","id":`+strconv.Itoa(id)+`,"method":"`+method+`"}`)
+}
+
+func mcpToolCallRequest(t *testing.T, handler http.Handler, accessToken, sessionID string, id int, toolName string) *httptest.ResponseRecorder {
+	t.Helper()
+	return serveMCPRequest(t, handler, accessToken, sessionID, `{"jsonrpc":"2.0","id":`+strconv.Itoa(id)+`,"method":"tools/call","params":{"name":"`+toolName+`","arguments":{}}}`)
+}
+
+func serveMCPRequest(t *testing.T, handler http.Handler, accessToken, sessionID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/local-fixture/mcp", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	if accessToken != "" {
 		request.Header.Set("Authorization", "Bearer "+accessToken)

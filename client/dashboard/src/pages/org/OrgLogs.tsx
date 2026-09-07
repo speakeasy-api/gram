@@ -1,4 +1,5 @@
 import { SettingsPage } from "@/components/page-templates";
+import { useOrganization } from "@/contexts/Auth";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
@@ -6,19 +7,37 @@ import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@/components/ui/Stack";
-import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
+import { Eye, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
-import { OtelForwardingSection } from "./OtelForwardingSection";
+import {
+  ENABLE_LOGS_PAGE_DESCRIPTION,
+  EnableLogsSetting,
+} from "./EnableLogsSetting";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function OrgLogs(): JSX.Element {
-  return <OrgLogsInner />;
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <OrgLogsInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
+  );
 }
 
-function OrgLogsInner() {
-  const { data: featuresData } = useProductFeatures();
+function OrgLogsInner({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}) {
+  const { data: featuresData } = useProductFeatures({ organizationId });
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
@@ -32,6 +51,7 @@ function OrgLogsInner() {
   const [hooksFailOpenEnabled, setHooksFailOpenEnabled] = useState<
     boolean | null
   >(null);
+  const [logsSettingPending, setLogsSettingPending] = useState(false);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -47,11 +67,10 @@ function OrgLogsInner() {
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: (_, variables) => {
+        if (!isCurrentOrganization()) return;
         const { featureName, enabled } =
           variables.request.setProductFeatureRequestBody;
-        if (featureName === FeatureName.Logs) {
-          setLogsEnabled(enabled);
-        } else if (featureName === FeatureName.ToolIoLogs) {
+        if (featureName === FeatureName.ToolIoLogs) {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
@@ -62,40 +81,20 @@ function OrgLogsInner() {
         }
       },
       onError: (error) => {
+        if (!isCurrentOrganization()) return;
         // On error the optimistic state above never runs, so the switch
         // reverts to the server value.
         handleAPIError(error, "Failed to update setting");
       },
     });
 
-  const isMutatingLogs = logsMutationStatus === "pending";
-
-  const handleSetLogs = (enabled: boolean) => {
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.Logs,
-          enabled,
-        },
-      },
-    });
-
-    if (!enabled && effectiveToolIoLogsEnabled) {
-      setLogsFeature({
-        request: {
-          setProductFeatureRequestBody: {
-            featureName: FeatureName.ToolIoLogs,
-            enabled: false,
-          },
-        },
-      });
-    }
-  };
+  const isMutatingLogs = logsMutationStatus === "pending" || logsSettingPending;
 
   const handleSetToolIoLogs = (enabled: boolean) => {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.ToolIoLogs,
           enabled,
         },
@@ -107,6 +106,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.SessionCapture,
           enabled,
         },
@@ -118,6 +118,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksBrowserLogin,
           enabled,
         },
@@ -129,6 +130,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksFailOpen,
           enabled,
         },
@@ -140,37 +142,18 @@ function OrgLogsInner() {
     <SettingsPage
       scope={["org:read", "org:admin"]}
       title="Logs"
-      description="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+      description={ENABLE_LOGS_PAGE_DESCRIPTION}
     >
       <LogDataRetentionBanner />
       <div className="border-border bg-card border p-4">
         <Stack gap={4}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Enable Logs
-                </Text>
-              </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Record tool call traces and telemetry data
-              </Text>
-            </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveLogsEnabled}
-                  onCheckedChange={handleSetLogs}
-                  disabled={isMutatingLogs}
-                  aria-label="Enable logs"
-                />
-              </RequireScope>
-            )}
-          </Stack>
+          <EnableLogsSetting
+            onEnabledChange={(enabled) => {
+              setLogsEnabled(enabled);
+              if (!enabled) setToolIoLogsEnabled(null);
+            }}
+            onPendingChange={setLogsSettingPending}
+          />
 
           <div className="border-border border-t" />
 
@@ -250,9 +233,11 @@ function OrgLogsInner() {
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
                 Let tool calls proceed while Speakeasy is unreachable, instead
-                of blocking them (the default). Blocking policies go unenforced
-                during the outage; events are still recorded and scanned after
-                recovery. Invalid credentials always block.
+                of blocking them (the default). Tool calls then only ever block
+                when a blocking policy fires — with no blocking policies,
+                nothing blocks (formerly Observability Mode). Events are still
+                recorded and scanned after recovery. Invalid credentials always
+                block.
               </Text>
             </Stack>
             {featuresData && (
@@ -299,8 +284,6 @@ function OrgLogsInner() {
           </Stack>
         </Stack>
       </div>
-
-      <OtelForwardingSection />
     </SettingsPage>
   );
 }

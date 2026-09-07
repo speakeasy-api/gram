@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
@@ -69,9 +71,15 @@ import {
 } from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
+import { KillswitchUserBadgeLink } from "@/components/killswitch/KillswitchUserBadgeLink";
+import {
+  killswitchStatusHref,
+  useKillswitchUserBadges,
+} from "@/components/killswitch/KillswitchUserStatus";
+import { getMemberKillswitchMenuModel } from "./team-member-killswitch-menu";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -83,6 +91,8 @@ type MemberMenuDeps = {
   adminCount: number;
   adminRoleId: string | undefined;
   challengesHref: string;
+  killswitchHref: string;
+  canUseKillswitch: boolean;
   navigate: ReturnType<typeof useNavigate>;
   roleIdsByUserId: Map<string, string[]>;
   scimManaged: boolean;
@@ -95,10 +105,13 @@ type MemberMenuModel = {
   accessMember: AccessMember | undefined;
   canRemove: boolean;
   openChallenges: () => void;
+  openKillswitch: () => void;
   openManageRoles: () => void;
+  openViewKillswitches: () => void;
   openRemove: () => void;
   scimManaged: boolean;
   showChallenges: boolean;
+  showKillswitch: boolean;
   showManageRoles: boolean;
 };
 
@@ -112,6 +125,10 @@ function getMemberMenuModel(
   deps: MemberMenuDeps,
 ): MemberMenuModel {
   const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
+  const killswitchMenu = getMemberKillswitchMenuModel(
+    deps.killswitchHref,
+    member.userId,
+  );
   const isLastAdmin =
     deps.adminRoleId != null &&
     memberRoleIds.includes(deps.adminRoleId) &&
@@ -141,6 +158,12 @@ function getMemberMenuModel(
         );
       }, 0);
     },
+    openKillswitch: () => {
+      void deps.navigate(killswitchMenu.newHref);
+    },
+    openViewKillswitches: () => {
+      void deps.navigate(killswitchMenu.viewHref);
+    },
     openManageRoles: () => {
       if (!accessMember) return;
       void setTimeout(() => deps.setChangingMember(accessMember), 0);
@@ -150,6 +173,7 @@ function getMemberMenuModel(
     },
     scimManaged: deps.scimManaged,
     showChallenges: true,
+    showKillswitch: deps.canUseKillswitch,
     showManageRoles: true,
   };
 }
@@ -169,11 +193,14 @@ function MemberRowContextMenu({
   children: React.ReactElement;
 }): React.JSX.Element {
   const model = getMemberMenuModel(member, deps);
+  const identityHref = useIdentityHrefBuilder();
+  const profileHref = identityHref({ userId: member.userId });
   const hasManageRoles =
     model.showManageRoles && (model.scimManaged || model.accessMember != null);
-  const hasItemsAbove = hasManageRoles || model.showChallenges;
+  const hasItemsAbove =
+    hasManageRoles || model.showChallenges || model.showKillswitch;
 
-  if (!hasItemsAbove && !model.canRemove) {
+  if (!profileHref && !hasItemsAbove && !model.canRemove) {
     return <>{children}</>;
   }
 
@@ -181,6 +208,11 @@ function MemberRowContextMenu({
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-[10rem]">
+        {profileHref && (
+          <ContextMenuItem asChild>
+            <Link to={profileHref}>View profile</Link>
+          </ContextMenuItem>
+        )}
         {model.showManageRoles &&
           (model.scimManaged ? (
             <ContextMenuItem disabled>Manage roles</ContextMenuItem>
@@ -198,9 +230,19 @@ function MemberRowContextMenu({
             View challenges
           </ContextMenuItem>
         )}
+        {model.showKillswitch && (
+          <>
+            <ContextMenuItem onSelect={model.openViewKillswitches}>
+              View killswitches
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={model.openKillswitch}>
+              New killswitch…
+            </ContextMenuItem>
+          </>
+        )}
         {model.canRemove && (
           <>
-            {hasItemsAbove && <ContextMenuSeparator />}
+            <ContextMenuSeparator />
             <RequireScope scope="org:admin" level="component">
               <ContextMenuItem
                 variant="destructive"
@@ -225,10 +267,12 @@ export default function Team(): JSX.Element {
 }
 
 function TeamInner() {
+  const isDark = useIsDarkTheme();
   const organization = useOrganization();
   const user = useUser();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const identityHref = useIdentityHrefBuilder();
   const orgRoutes = useOrgRoutes();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -276,6 +320,9 @@ function TeamInner() {
   const visibleMembers = members.slice(
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
+  );
+  const killswitchBadges = useKillswitchUserBadges(
+    visibleMembers.map((member) => member.userId),
   );
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
@@ -499,6 +546,8 @@ function TeamInner() {
     adminCount,
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
+    killswitchHref: orgRoutes.killswitch.href(),
+    canUseKillswitch: killswitchBadges.canAccess,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -523,7 +572,7 @@ function TeamInner() {
           ) : (
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(member.id)}
+              style={getIdentityTint(member.id, isDark)}
             >
               {member.name
                 .split(" ")
@@ -534,9 +583,27 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Text variant="body" className="font-medium">
-              {member.name}
-            </Text>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* The row click opens the same page, but a handler is not a
+                  link: no cmd+click, no middle-click, no copy-link, and nothing
+                  a screen reader announces as navigation. Keyed on userId, the
+                  same field the row click uses. */}
+              <Text variant="body" className="font-medium">
+                <IdentityLink identifier={{ userId: member.userId }}>
+                  {member.name}
+                </IdentityLink>
+              </Text>
+              <KillswitchUserBadgeLink
+                badge={killswitchBadges.badges.get(member.userId)}
+                unavailable={killswitchBadges.unavailableUserIds.has(
+                  member.userId,
+                )}
+                href={killswitchStatusHref(
+                  orgRoutes.killswitch.href(),
+                  member.userId,
+                )}
+              />
+            </div>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Text>
@@ -621,6 +688,7 @@ function TeamInner() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                aria-label={`Actions for ${member.name}`}
                 className={cn(
                   "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
@@ -629,6 +697,13 @@ function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {identityHref({ userId: member.userId }) && (
+                <DropdownMenuItem asChild>
+                  <Link to={identityHref({ userId: member.userId }) ?? ""}>
+                    View profile
+                  </Link>
+                </DropdownMenuItem>
+              )}
               {model.showManageRoles &&
                 (model.scimManaged ? (
                   <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
@@ -652,9 +727,19 @@ function TeamInner() {
                   View challenges
                 </DropdownMenuItem>
               )}
+              {model.showKillswitch && (
+                <>
+                  <DropdownMenuItem onSelect={model.openViewKillswitches}>
+                    View killswitches
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={model.openKillswitch}>
+                    New killswitch…
+                  </DropdownMenuItem>
+                </>
+              )}
               {model.canRemove && (
                 <>
-                  {model.showManageRoles && <DropdownMenuSeparator />}
+                  <DropdownMenuSeparator />
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
@@ -688,7 +773,7 @@ function TeamInner() {
           >
             <div
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(invite.email)}
+              style={getIdentityTint(invite.email, isDark)}
             >
               {invite.email
                 .split("@")[0]
@@ -746,25 +831,27 @@ function TeamInner() {
         if (!inviter) return <span className="text-muted-foreground">—</span>;
         return (
           <SimpleTooltip tooltip={inviter.email}>
-            {inviter.photoUrl ? (
-              <img
-                src={inviter.photoUrl}
-                alt={inviter.name}
-                className="h-7 w-7 rounded-full"
-              />
-            ) : (
-              <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
-                style={getIdentityTint(inviter.id)}
-              >
-                {inviter.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .toUpperCase()
-                  .slice(0, 2)}
-              </div>
-            )}
+            <IdentityLink identifier={{ userId: inviter.userId }}>
+              {inviter.photoUrl ? (
+                <img
+                  src={inviter.photoUrl}
+                  alt={inviter.name}
+                  className="h-7 w-7 rounded-full"
+                />
+              ) : (
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                  style={getIdentityTint(inviter.id, isDark)}
+                >
+                  {inviter.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </div>
+              )}
+            </IdentityLink>
           </SimpleTooltip>
         );
       },
@@ -871,6 +958,7 @@ function TeamInner() {
 
   return (
     <>
+      {killswitchBadges.loader}
       <ResourceListPage
         title="Team Members"
         description={`Manage who has access to ${organization.name}`}
@@ -917,6 +1005,12 @@ function TeamInner() {
               columns={memberColumns}
               data={visibleMembers}
               rowKey={(row) => row.userId}
+              // The row is where most people first look for someone, so the
+              // whole row opens their profile rather than one link inside it.
+              onRowClick={(row) => {
+                const href = identityHref({ userId: row.userId });
+                if (href) void navigate(href);
+              }}
               renderRow={(row, rowElement) => (
                 <MemberRowContextMenu
                   key={row.userId}
@@ -930,7 +1024,7 @@ function TeamInner() {
               noResultsMessage={
                 <Stack
                   gap={2}
-                  className="bg-background h-full p-8"
+                  className="bg-background -mx-4 -my-6 h-full p-8"
                   align="center"
                   justify="center"
                 >

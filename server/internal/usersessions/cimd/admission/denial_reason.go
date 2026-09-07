@@ -12,8 +12,9 @@ const (
 
 	// DenialNotListed: presets mode, and the client_id is neither an
 	// enabled catalog entry nor one of the issuer's custom URLs. This is
-	// the reason an operator sees when the catalog is missing a real
-	// client, so it is the one worth alerting on.
+	// what a missing catalog entry looks like on an issuer that enforces.
+	// Alerting wants AdmitOpenNotListed too: it carries the same gap from
+	// the issuers that admit rather than refuse, which is most of them.
 	DenialNotListed DenialReason = "denied_not_listed"
 
 	// DenialOversized: presets mode, and the client_id exceeds

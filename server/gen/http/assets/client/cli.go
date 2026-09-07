@@ -157,6 +157,45 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 	return v, nil
 }
 
+// BuildFetchImageFromURLPayload builds the payload for the assets
+// fetchImageFromURL endpoint from CLI flags.
+func BuildFetchImageFromURLPayload(assetsFetchImageFromURLBody string, assetsFetchImageFromURLApikeyToken string, assetsFetchImageFromURLProjectSlugInput string, assetsFetchImageFromURLSessionToken string) (*assets.FetchImageFromURLForm, error) {
+	var err error
+	var body FetchImageFromURLRequestBody
+	{
+		err = json.Unmarshal([]byte(assetsFetchImageFromURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if assetsFetchImageFromURLApikeyToken != "" {
+			apikeyToken = &assetsFetchImageFromURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsFetchImageFromURLProjectSlugInput != "" {
+			projectSlugInput = &assetsFetchImageFromURLProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsFetchImageFromURLSessionToken != "" {
+			sessionToken = &assetsFetchImageFromURLSessionToken
+		}
+	}
+	v := &assets.FetchImageFromURLForm{
+		URL: body.URL,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildFetchOpenAPIv3FromURLPayload builds the payload for the assets
 // fetchOpenAPIv3FromURL endpoint from CLI flags.
 func BuildFetchOpenAPIv3FromURLPayload(assetsFetchOpenAPIv3FromURLBody string, assetsFetchOpenAPIv3FromURLApikeyToken string, assetsFetchOpenAPIv3FromURLProjectSlugInput string, assetsFetchOpenAPIv3FromURLSessionToken string) (*assets.FetchOpenAPIv3FromURLForm, error) {

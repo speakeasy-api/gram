@@ -361,29 +361,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  elements: [
-    {
-      title: "How many chat sessions?",
-      label: "Embedded chat sessions",
-      icon: "chat",
-      prompt:
-        "How many chat sessions have come through embedded clients recently, and how is that trending?",
-    },
-    {
-      title: "What do users ask?",
-      label: "What users ask",
-      icon: "search",
-      prompt: "What are end users asking most often in chat sessions?",
-    },
-    {
-      title: "Which chats failed?",
-      label: "Chats that errored",
-      icon: "alert",
-      prompt:
-        "Find recent chat sessions that ended in errors and summarize what went wrong.",
-    },
-  ],
-
   integrations: [
     {
       title: "Which integrations are used?",
@@ -905,28 +882,6 @@ export const INSIGHTS_SUGGESTIONS = {
       icon: "search",
       prompt:
         "Based on recent risk findings, where might detection coverage be missing?",
-    },
-  ],
-
-  "approval-requests": [
-    {
-      title: "What's pending?",
-      label: "What's waiting",
-      icon: "history",
-      prompt: "Summarize pending approval requests. Which are oldest?",
-    },
-    {
-      title: "What triggers approvals?",
-      label: "What triggers approvals",
-      icon: "search",
-      prompt: "What kinds of tool calls trigger approval requests most often?",
-    },
-    {
-      title: "Are approvals slow?",
-      label: "How long requests wait",
-      icon: "gauge",
-      prompt:
-        "Are approvals slowing anyone down? Look at how long requests wait before a decision.",
     },
   ],
 

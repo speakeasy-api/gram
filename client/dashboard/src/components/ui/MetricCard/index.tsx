@@ -26,6 +26,9 @@ const valueTone = cva("font-display font-thin", {
       warning: "text-default-warning",
     },
     size: {
+      // For a strip sharing a row rather than owning one: at half width the
+      // sm figures crowd their labels and each other.
+      xs: "text-[1.75rem] leading-[0.95]",
       sm: "text-[2.5rem] leading-[0.85]",
       md: "text-[3.625rem] leading-[0.82]",
       lg: "text-[4.75rem] leading-[0.8]",

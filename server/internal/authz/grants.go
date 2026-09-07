@@ -118,17 +118,13 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 			}
 		}
 
-		rp, err := loadRolePrincipals(ctx, dbtx, organizationID, roleSlug, "")
+		principal, err := loadRolePrincipal(ctx, dbtx, organizationID, roleSlug, "")
 		if err != nil {
 			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
 		}
-		principalURNs, err := principalURNStrings(rp.MatchPrincipals)
-		if err != nil {
-			return fmt.Errorf("build %s role principals: %w", roleSlug, err)
-		}
 		existingGrants, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
 			OrganizationID: organizationID,
-			PrincipalUrns:  principalURNs,
+			PrincipalUrns:  []string{principal.String()},
 		})
 		if err != nil {
 			return fmt.Errorf("list %s grants: %w", roleSlug, err)
@@ -141,7 +137,7 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err != nil {
 			return fmt.Errorf("build %s grants: %w", roleSlug, err)
 		}
-		if err := rp.insertGrantsIfAbsent(ctx, q, organizationID, rows); err != nil {
+		if err := insertRoleGrantsIfAbsent(ctx, q, organizationID, roleSlug, principal, rows); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
@@ -155,7 +151,7 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 		return nil, fmt.Errorf("organization id is required")
 	}
 
-	rp, err := loadRolePrincipals(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
+	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +161,7 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	if err != nil {
 		return nil, err
 	}
-	if err := rp.deleteGrants(ctx, q, orgID, removeRows); err != nil {
+	if err := deletePrincipalGrants(ctx, q, orgID, principal, removeRows); err != nil {
 		return nil, err
 	}
 
@@ -173,17 +169,13 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	if err != nil {
 		return nil, err
 	}
-	if err := rp.upsertGrants(ctx, q, orgID, addRows); err != nil {
+	if err := upsertPrincipalGrants(ctx, q, orgID, principal, addRows); err != nil {
 		return nil, err
 	}
 
-	principalURNs, err := principalURNStrings(rp.MatchPrincipals)
-	if err != nil {
-		return nil, fmt.Errorf("build role principals: %w", err)
-	}
 	rows, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
 		OrganizationID: orgID,
-		PrincipalUrns:  principalURNs,
+		PrincipalUrns:  []string{principal.String()},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list grants for role: %w", err)
@@ -244,22 +236,15 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 	return rows, nil
 }
 
-func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string) ([]*ScopedGrant, error) {
-	// TODO(AGE-1954): remove dual-read after legacy role:<slug> grants are backfilled.
-	// During the role-principal migration, reads include both the canonical
-	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
-	rp, err := newRolePrincipals(roleSlug, rolePrincipalURN)
+func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, rolePrincipalURN string) ([]*ScopedGrant, error) {
+	principal, err := parseRolePrincipalURN(rolePrincipalURN)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
-	}
-	principalURNs, err := principalURNStrings(rp.MatchPrincipals)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "parse role principal").LogError(ctx, logger)
 	}
 
 	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
 		OrganizationID: orgID,
-		PrincipalUrns:  principalURNs,
+		PrincipalUrns:  []string{principal.String()},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").LogError(ctx, logger)
@@ -421,22 +406,17 @@ func allScopeGrants() []Grant {
 	return grants
 }
 
-// DemoScopeGrants returns the fixed read-only grant set for sessions pointed
-// at the shared demo organization. Deliberately excludes environment:read
-// (secrets-adjacent) and every write scope.
+// DemoScopeGrants returns the grant set for sessions pointed at the shared
+// demo organization: every user-visible scope, unrestricted — including
+// org:admin. It is the same set access.ListGrants reports to the dashboard, so
+// a demo visitor never sees a page or control the server then refuses to
+// serve.
+//
+// Demo visitors can therefore mutate demo data. That is intended: the demo
+// organization is a sandbox, and `gram demo-seed` deletes and reinserts its
+// data daily, so anything a visitor changes is reverted on the next run.
 func DemoScopeGrants() []Grant {
-	scopes := []Scope{
-		ScopeOrgRead,
-		ScopeProjectRead,
-		ScopeMCPRead,
-		ScopeSkillRead,
-		ScopeChatRead,
-	}
-	grants := make([]Grant, 0, len(scopes))
-	for _, s := range scopes {
-		grants = append(grants, NewGrant(s, WildcardResource))
-	}
-	return grants
+	return allScopeGrants()
 }
 
 func roleGrantsForScopes(scopes []Scope) []*RoleGrant {

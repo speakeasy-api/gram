@@ -21,8 +21,12 @@ type CreateMcpEndpointRequestBody struct {
 	// The ID of the custom domain to register the endpoint slug under. Omit for a
 	// platform-domain endpoint.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
+	// The ID of the MCP server this endpoint addresses. Mutually exclusive with
+	// meta_mcp_server_id.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Mutually exclusive
+	// with mcp_server_id.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
@@ -35,8 +39,12 @@ type UpdateMcpEndpointRequestBody struct {
 	// The ID of the custom domain to register the endpoint slug under. Omit to
 	// move the endpoint to a platform domain.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
+	// The ID of the MCP server this endpoint addresses. Mutually exclusive with
+	// meta_mcp_server_id.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Mutually exclusive
+	// with mcp_server_id.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
@@ -51,8 +59,12 @@ type CreateMcpEndpointResponseBody struct {
 	// The ID of the custom domain this endpoint slug is registered under. Null for
 	// platform-domain endpoints.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed
+	// endpoints.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Null for
+	// MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Whether this endpoint is mapped to its custom-domain root
@@ -73,8 +85,12 @@ type GetMcpEndpointResponseBody struct {
 	// The ID of the custom domain this endpoint slug is registered under. Null for
 	// platform-domain endpoints.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed
+	// endpoints.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Null for
+	// MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Whether this endpoint is mapped to its custom-domain root
@@ -101,8 +117,12 @@ type UpdateMcpEndpointResponseBody struct {
 	// The ID of the custom domain this endpoint slug is registered under. Null for
 	// platform-domain endpoints.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed
+	// endpoints.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Null for
+	// MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Whether this endpoint is mapped to its custom-domain root
@@ -1259,8 +1279,12 @@ type McpEndpointResponseBody struct {
 	// The ID of the custom domain this endpoint slug is registered under. Null for
 	// platform-domain endpoints.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed
+	// endpoints.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the meta MCP server this endpoint addresses. Null for
+	// MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Whether this endpoint is mapped to its custom-domain root
@@ -1275,14 +1299,15 @@ type McpEndpointResponseBody struct {
 // result of the "createMcpEndpoint" endpoint of the "mcpEndpoints" service.
 func NewCreateMcpEndpointResponseBody(res *types.McpEndpoint) *CreateMcpEndpointResponseBody {
 	body := &CreateMcpEndpointResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		CustomDomainID: res.CustomDomainID,
-		McpServerID:    res.McpServerID,
-		Slug:           string(res.Slug),
-		IsDomainRoot:   res.IsDomainRoot,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CustomDomainID:  res.CustomDomainID,
+		McpServerID:     res.McpServerID,
+		MetaMcpServerID: res.MetaMcpServerID,
+		Slug:            string(res.Slug),
+		IsDomainRoot:    res.IsDomainRoot,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	return body
 }
@@ -1291,14 +1316,15 @@ func NewCreateMcpEndpointResponseBody(res *types.McpEndpoint) *CreateMcpEndpoint
 // of the "getMcpEndpoint" endpoint of the "mcpEndpoints" service.
 func NewGetMcpEndpointResponseBody(res *types.McpEndpoint) *GetMcpEndpointResponseBody {
 	body := &GetMcpEndpointResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		CustomDomainID: res.CustomDomainID,
-		McpServerID:    res.McpServerID,
-		Slug:           string(res.Slug),
-		IsDomainRoot:   res.IsDomainRoot,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CustomDomainID:  res.CustomDomainID,
+		McpServerID:     res.McpServerID,
+		MetaMcpServerID: res.MetaMcpServerID,
+		Slug:            string(res.Slug),
+		IsDomainRoot:    res.IsDomainRoot,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	return body
 }
@@ -1326,14 +1352,15 @@ func NewListMcpEndpointsResponseBody(res *mcpendpoints.ListMcpEndpointsResult) *
 // result of the "updateMcpEndpoint" endpoint of the "mcpEndpoints" service.
 func NewUpdateMcpEndpointResponseBody(res *types.McpEndpoint) *UpdateMcpEndpointResponseBody {
 	body := &UpdateMcpEndpointResponseBody{
-		ID:             res.ID,
-		ProjectID:      res.ProjectID,
-		CustomDomainID: res.CustomDomainID,
-		McpServerID:    res.McpServerID,
-		Slug:           string(res.Slug),
-		IsDomainRoot:   res.IsDomainRoot,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CustomDomainID:  res.CustomDomainID,
+		McpServerID:     res.McpServerID,
+		MetaMcpServerID: res.MetaMcpServerID,
+		Slug:            string(res.Slug),
+		IsDomainRoot:    res.IsDomainRoot,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	return body
 }
@@ -2216,9 +2243,10 @@ func NewDeleteMcpEndpointGatewayErrorResponseBody(res *goa.ServiceError) *Delete
 // endpoint payload.
 func NewCreateMcpEndpointPayload(body *CreateMcpEndpointRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.CreateMcpEndpointPayload {
 	v := &mcpendpoints.CreateMcpEndpointPayload{
-		CustomDomainID: body.CustomDomainID,
-		McpServerID:    *body.McpServerID,
-		Slug:           types.McpEndpointSlug(*body.Slug),
+		CustomDomainID:  body.CustomDomainID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Slug:            types.McpEndpointSlug(*body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2246,9 +2274,10 @@ func NewGetMcpEndpointPayload(id *string, customDomainID *string, slug *string, 
 
 // NewListMcpEndpointsPayload builds a mcpEndpoints service listMcpEndpoints
 // endpoint payload.
-func NewListMcpEndpointsPayload(mcpServerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.ListMcpEndpointsPayload {
+func NewListMcpEndpointsPayload(mcpServerID *string, metaMcpServerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.ListMcpEndpointsPayload {
 	v := &mcpendpoints.ListMcpEndpointsPayload{}
 	v.McpServerID = mcpServerID
+	v.MetaMcpServerID = metaMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2260,10 +2289,11 @@ func NewListMcpEndpointsPayload(mcpServerID *string, sessionToken *string, apike
 // endpoint payload.
 func NewUpdateMcpEndpointPayload(body *UpdateMcpEndpointRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.UpdateMcpEndpointPayload {
 	v := &mcpendpoints.UpdateMcpEndpointPayload{
-		ID:             *body.ID,
-		CustomDomainID: body.CustomDomainID,
-		McpServerID:    *body.McpServerID,
-		Slug:           types.McpEndpointSlug(*body.Slug),
+		ID:              *body.ID,
+		CustomDomainID:  body.CustomDomainID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Slug:            types.McpEndpointSlug(*body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2300,9 +2330,6 @@ func NewDeleteMcpEndpointPayload(id string, sessionToken *string, apikeyToken *s
 // ValidateCreateMcpEndpointRequestBody runs the validations defined on
 // CreateMcpEndpointRequestBody
 func ValidateCreateMcpEndpointRequestBody(body *CreateMcpEndpointRequestBody) (err error) {
-	if body.McpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
-	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2311,6 +2338,9 @@ func ValidateCreateMcpEndpointRequestBody(body *CreateMcpEndpointRequestBody) (e
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -2329,9 +2359,6 @@ func ValidateUpdateMcpEndpointRequestBody(body *UpdateMcpEndpointRequestBody) (e
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.McpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
-	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2343,6 +2370,9 @@ func ValidateUpdateMcpEndpointRequestBody(body *UpdateMcpEndpointRequestBody) (e
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))

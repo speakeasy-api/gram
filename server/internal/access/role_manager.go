@@ -121,6 +121,11 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
 				RoleIds:      nil,
 				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
+				// Null when no directory row was matched, or when the row
+				// reports no non-empty department — the query collapses both
+				// to an empty string, so the two cannot be told apart here.
+				Department: conv.PtrEmpty(row.Department),
+				Groups:     row.GroupNames,
 			}
 			memberMap[row.ID] = m
 			order = append(order, row.ID)
@@ -155,6 +160,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	if err != nil {
 		return roleCreateResult{}, err
 	}
+	description := conv.PtrValOr(payload.Description, "")
 	grants := roleGrantPayloads(payload.Grants)
 	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
 		return roleCreateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
@@ -171,7 +177,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        roleSlug,
 		WorkosName:        payload.Name,
-		WorkosDescription: conv.ToPGTextEmpty(payload.Description),
+		WorkosDescription: conv.ToPGTextEmpty(description),
 		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
@@ -208,7 +214,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 			_, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 				Name:        payload.Name,
 				Slug:        roleSlug,
-				Description: payload.Description,
+				Description: description,
 			})
 			var apiErr *workos.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {
@@ -548,7 +554,7 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		return localRole{}, oops.E(oops.CodeNotFound, nil, "role not found").LogError(ctx, r.logger)
 	}
 
-	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.Slug, currentRole.PrincipalURN); err != nil {
+	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.PrincipalURN); err != nil {
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").LogError(ctx, r.logger)
 	}
 
@@ -713,6 +719,9 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		MembershipID: membershipID,
 		WorkosUserID: connectedUser.WorkosID.String,
 		UserID:       connectedUser.ID,
+		// These two are the audit record of a role change, so they carry the
+		// roles and nothing the directory owns: a profile this update cannot
+		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
 			ID:           connectedUser.ID,
 			PrincipalUrn: memberPrincipalURN,
@@ -721,6 +730,8 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
 			RoleIds:      existingRoleIDs,
 			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:   nil,
+			Groups:       nil,
 		},
 		After: &gen.AccessMember{
 			ID:           connectedUser.ID,
@@ -730,6 +741,8 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
 			RoleIds:      afterRoleIDs,
 			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:   nil,
+			Groups:       nil,
 		},
 	}
 
@@ -1057,9 +1070,7 @@ func retryWorkOSError(err error) bool {
 
 // roleViewFromLocalRole converts a local role record into the public API role view and attaches local grants.
 func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID string, role localRole) (*gen.Role, error) {
-	// Role grant reads intentionally include both canonical role URNs and
-	// legacy role slugs until old principal_grants rows are backfilled.
-	grants, err := authz.GrantsForRole(ctx, r.logger, r.db, organizationID, role.Slug, role.PrincipalURN)
+	grants, err := authz.GrantsForRole(ctx, r.logger, r.db, organizationID, role.PrincipalURN)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load role grants").LogError(ctx, r.logger)
 	}

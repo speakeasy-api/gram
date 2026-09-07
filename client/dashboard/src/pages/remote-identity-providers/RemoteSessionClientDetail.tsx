@@ -20,7 +20,8 @@ import { OverviewTab } from "./tabs/client/OverviewTab";
 import { McpServersTab } from "./tabs/client/McpServersTab";
 import { SessionsTab } from "./tabs/client/SessionsTab";
 import { SettingsTab } from "./tabs/client/SettingsTab";
-import { activeDetailTab, CLIENT_TABS, type ClientTab } from "./tabs";
+import { activeDetailTab } from "@/lib/detail-tabs";
+import { CLIENT_TABS, type ClientTab } from "./tabs";
 
 // Maps a client tab value to its route subpage key (the MCP Servers tab's URL
 // segment is "mcp-servers" but its route key is camelCase "mcpServers").

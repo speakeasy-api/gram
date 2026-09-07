@@ -8,7 +8,6 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -108,6 +107,8 @@ func newCIMDChallengeManager(t *testing.T, ti *testInstance, serverURL string) *
 	require.NoError(t, err)
 	return remotesessions.NewChallengeManager(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
@@ -351,24 +352,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	var spy upstreamSpy
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		form, err := url.ParseQuery(string(body))
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		spy.form = form
-		spy.authHdr = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":3600,"refresh_token":"refreshed-refresh"}`))
-	}))
+	tokenServer := httptest.NewServer(spyRefreshHandler(&spy))
 	t.Cleanup(tokenServer.Close)
 
 	// One encryption client shared between the manager (which decrypts the
@@ -377,7 +361,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), ti.conn, enc, policy, cache.NoopCache, mustURL(t, cimdServerURL))
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NoopCache, mustURL(t, cimdServerURL))
 
 	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-refresh", tokenServer.URL+"/authorize", tokenServer.URL+"/token")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-refresh-usi")

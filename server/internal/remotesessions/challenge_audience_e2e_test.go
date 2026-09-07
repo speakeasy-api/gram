@@ -64,6 +64,8 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			require.NoError(t, err)
 			mgr := remotesessions.NewChallengeManager(
 				logger,
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
 				ti.conn,
 				enc,
 				policy,

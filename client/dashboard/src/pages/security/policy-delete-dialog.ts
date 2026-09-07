@@ -90,7 +90,13 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
 }
 
 export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
-  return policy.action === "block" ? "block" : "flag";
+  const labels: Record<RiskPolicy["action"], string> = {
+    flag: "flag",
+    warn: "warn",
+    block: "block",
+    quarantine: "quarantine",
+  };
+  return labels[policy.action];
 }
 
 export function getPolicyDeleteImpactText(
@@ -98,6 +104,9 @@ export function getPolicyDeleteImpactText(
   hasRuleGroups: boolean,
 ): string {
   const action = getPolicyDeleteRuleActionLabel(policy);
+  if (policy.action === "quarantine") {
+    return "This policy will stop opening new session quarantines. Existing quarantines remain active until an admin releases them.";
+  }
   if (hasRuleGroups) {
     return `The following ${action} rules will no longer be enforced.`;
   }

@@ -123,6 +123,7 @@ const SESSION_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
   {
     id: "min_risk_score",
@@ -130,6 +131,7 @@ const SESSION_FILTERS = defineFilters([
     kind: "number",
     min: 1,
     placeholder: "e.g. 3 (≥ 3 findings)",
+    description: "Only sessions with at least this many risk findings.",
   },
 ]);
 
@@ -544,6 +546,20 @@ export function LogsAgentsContent(): JSX.Element {
     [setSearchParams],
   );
 
+  // Open a chat by bare id — used by the detail panel's Linked-sessions rows,
+  // whose far end may not be on the current list page, so there is no
+  // ChatOverview to hand to setSelectedChat. The panel loads by id.
+  const openChatByID = useCallback(
+    (chatID: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chatId", chatID);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
   const dateRangeContext = useMemo(() => {
     const formatDate = (d: Date) =>
       d.toLocaleDateString("en-US", {
@@ -603,6 +619,7 @@ export function LogsAgentsContent(): JSX.Element {
         selectedChat={selectedChat}
         selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
+        onOpenChat={openChatByID}
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
@@ -651,6 +668,7 @@ function AgentSessionsPageContent({
   selectedChat,
   selectedChatId,
   setSelectedChat,
+  onOpenChat,
   isLoading,
   error,
   isLogsDisabled,
@@ -694,6 +712,7 @@ function AgentSessionsPageContent({
   selectedChat: ChatOverview | null;
   selectedChatId: string | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
+  onOpenChat: (chatID: string) => void;
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;
@@ -893,6 +912,7 @@ function AgentSessionsPageContent({
         chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
+        onOpenChat={onOpenChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
       />
     </>

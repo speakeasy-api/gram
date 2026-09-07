@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   slug TEXT NOT NULL,
   account_type TEXT NOT NULL DEFAULT 'enterprise',
   workos_id TEXT,
+  -- The caller's own identifier for this organization, echoed back on every
+  -- organization response. Gram writes its organization id here and then reads
+  -- it back through the WorkOS event sync.
+  external_id TEXT,
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

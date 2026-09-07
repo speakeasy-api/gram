@@ -480,6 +480,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Messages:                  messages,
 		ProjectID:                 req.ProjectID,
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               &c.temperature,
 		Model:                     c.model,
 		Stream:                    false,
@@ -496,6 +497,8 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Reasoning:                 &gramopenrouter.Reasoning{Effort: c.reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return Verdict{}, fmt.Errorf("openrouter completion: %w", err)

@@ -3,9 +3,7 @@ package unproxiedmcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -106,7 +104,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, err
 	}
 
-	if err := validateServerURL(ctx, s.policy, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
 	}
 
@@ -251,9 +249,14 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	return mv.BuildUnproxiedMcpServerView(server), nil
 }
 
-// listToolsTimeout bounds the live MCP handshake + tools/list round trip so a
-// slow or unresponsive vendor server can't hang the management API request.
-const listToolsTimeout = 10 * time.Second
+const (
+	// listToolsTimeout bounds the live MCP handshake + tools/list round trip so
+	// a slow or unresponsive vendor server can't hang the management API request.
+	listToolsTimeout = 10 * time.Second
+	// listToolsMaxResponseBytes bounds each untrusted initialize or tools/list
+	// response; exceeding it is reported as unavailable probe evidence.
+	listToolsMaxResponseBytes = 1 << 20
+)
 
 func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (*gen.ListUnproxiedMcpServerToolsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -288,7 +291,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	// bounding the probe's own context isn't enough to bound *this call's*
 	// latency. The goroutine keeps running to let that cleanup finish
 	// naturally; only the response to the caller is time-boxed.
-	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout) //nolint:gosec // cancel is deferred inside the goroutine below
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout)
 	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
 	go func() {
 		defer cancel()
@@ -325,13 +328,13 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 	// long-lived connection — retries would let an unreachable server take
 	// minutes to report as such instead of ~10s.
 	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: listToolsMaxResponseBytes,
 	})
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
@@ -348,8 +351,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 
 	discovered, err := client.ListTools(probeCtx)
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
@@ -433,32 +435,6 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	return nil
-}
-
-// validateServerURL checks that rawURL is an absolute http(s) URL whose host
-// isn't blocked by the guardian SSRF policy. Mirrors remotemcp.validateURL:
-// this only validates the URL string and resolves its host, it doesn't
-// connect to it. ListTools does later connect to this same host for live
-// tool discovery, so the same SSRF guard applies here at creation time too.
-func validateServerURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("url scheme must be http or https")
-	}
-
-	if u.Host == "" {
-		return fmt.Errorf("url must include a host")
-	}
-
-	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
-		return fmt.Errorf("validate host: %w", err)
 	}
 
 	return nil

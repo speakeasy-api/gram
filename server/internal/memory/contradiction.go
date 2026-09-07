@@ -92,21 +92,22 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 	}
 
 	req := openrouter.ObjectCompletionRequest{
-		OrgID:          orgID,
-		ProjectID:      projectID,
-		Model:          s.contradictionModel,
-		SystemPrompt:   contradictionSystemPrompt,
-		Prompt:         fmt.Sprintf("A: %q\nB: %q", a, b),
-		Temperature:    contradictionTemperature,
-		JSONSchema:     &jsonSchemaConfig,
-		UsageSource:    billing.ModelUsageSourceGram,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        "",
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		Reasoning:      nil,
+		OrgID:                  orgID,
+		ProjectID:              projectID,
+		Model:                  s.contradictionModel,
+		SystemPrompt:           contradictionSystemPrompt,
+		Prompt:                 fmt.Sprintf("A: %q\nB: %q", a, b),
+		Temperature:            contradictionTemperature,
+		JSONSchema:             &jsonSchemaConfig,
+		UsageSource:            billing.ModelUsageSourceGram,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                "",
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	}
 
 	response, err := s.completions.GetObjectCompletion(ctx, req)

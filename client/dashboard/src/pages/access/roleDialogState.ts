@@ -1,3 +1,4 @@
+import { isProjectSelectableResourceType } from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
@@ -88,13 +89,10 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
   );
 }
 
-/** Whether the form fields are valid enough to submit */
+/** Whether the form fields are valid enough to submit.
+ *  Description is optional. */
 function isFormValid(input: SaveButtonInput): boolean {
-  return (
-    input.name.trim().length > 0 &&
-    input.description.trim().length > 0 &&
-    effectiveGrantCount(input.grants) > 0
-  );
+  return input.name.trim().length > 0 && effectiveGrantCount(input.grants) > 0;
 }
 
 /** Returns true when the Save/Create button should be disabled */
@@ -130,8 +128,9 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
-    if (resourceType === "skill") return "All projects";
-    return resourceType === "project" ? "All projects" : "All servers";
+    return isProjectSelectableResourceType(resourceType)
+      ? "All projects"
+      : "All servers";
   }
   if (selectors.length === 0) return "Select\u2026";
 
@@ -161,7 +160,10 @@ export function computeRuleLabel(
     return `${projectSels.length} projects`;
   }
 
-  if (resourceType === "skill") {
+  // Project-selectable resource types (skill, project) store a
+  // project id in resourceId, so the remaining selectors name projects rather
+  // than servers.
+  if (isProjectSelectableResourceType(resourceType)) {
     if (selectors.length === 1) {
       const name = projects.find(
         (p) => p.id === selectors[0]!.resourceId,
@@ -188,7 +190,7 @@ export function computeRuleTooltip(
     if (resourceType === "skill") {
       return `${verb} access to skills in all projects in your org`;
     }
-    return resourceType === "project"
+    return isProjectSelectableResourceType(resourceType)
       ? `${verb} access to all projects in your org`
       : `${verb} access to all servers across your org`;
   }
@@ -231,6 +233,18 @@ export function computeRuleTooltip(
         : `${verb} access to skills in 1 project`;
     }
     return `${verb} access to skills in ${selectors.length} projects`;
+  }
+
+  // The other project-selectable resource type (project) also stores project
+  // ids in resourceId, so the rule covers projects, not servers.
+  if (isProjectSelectableResourceType(resourceType)) {
+    if (selectors.length === 1) {
+      const name = projects.find(
+        (p) => p.id === selectors[0]!.resourceId,
+      )?.name;
+      return name ? `${verb} access in ${name}` : `${verb} access to 1 project`;
+    }
+    return `${verb} access to ${selectors.length} projects`;
   }
 
   if (selectors.length === 1) return `${verb} access to 1 server`;

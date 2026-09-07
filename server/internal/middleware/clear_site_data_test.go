@@ -29,7 +29,7 @@ func TestClearSiteDataOnLogout_SetsDirectiveOnOK(t *testing.T) {
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/auth.logout", nil))
 
-	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
 }
 
 // Any success status carries the directive, not just 200 — a bodiless logout
@@ -44,7 +44,7 @@ func TestClearSiteDataOnLogout_SetsDirectiveOnNoContent(t *testing.T) {
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/auth.logout", nil))
 
-	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
 }
 
 // A handler that writes a body without calling WriteHeader still sends a 200,
@@ -62,7 +62,7 @@ func TestClearSiteDataOnLogout_SetsDirectiveOnImplicitOK(t *testing.T) {
 
 	require.NoError(t, writeErr)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
 }
 
 // A logout that never invalidated anything must leave the caller's state alone:
@@ -127,7 +127,7 @@ func TestClearSiteDataOnLogout_SetsDirectiveAfterEarlyHints(t *testing.T) {
 	// Only the header is asserted: httptest.ResponseRecorder records the first
 	// WriteHeader it sees, so rec.Code reports the 103 that a real server would
 	// have sent as an informational response ahead of the final status.
-	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
 }
 
 // 101 is terminal, not informational: nothing follows it, and a protocol switch
@@ -154,12 +154,12 @@ func TestClearSiteDataOnLogout_SetsDirectiveBeforeFlush(t *testing.T) {
 	w.Flush()
 
 	require.True(t, inner.flushed)
-	require.Equal(t, `"cookies", "storage"`, w.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, w.Header().Get("Clear-Site-Data"))
 
 	// The flush committed the headers, so a later error status must not be
 	// able to un-commit them — but it must not gain a directive either.
 	w.WriteHeader(http.StatusInternalServerError)
-	require.Equal(t, `"cookies", "storage"`, w.Header().Get("Clear-Site-Data"))
+	require.Equal(t, `"cache", "cookies", "storage"`, w.Header().Get("Clear-Site-Data"))
 }
 
 // A flush the underlying writer cannot serve commits nothing, so the directive

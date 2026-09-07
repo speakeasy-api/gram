@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                 []*MountPoint
 	ListTriggerDefinitions http.Handler
 	ListTriggerInstances   http.Handler
+	ListTriggerEvents      http.Handler
 	GetTriggerInstance     http.Handler
 	CreateTriggerInstance  http.Handler
 	UpdateTriggerInstance  http.Handler
@@ -58,6 +59,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListTriggerDefinitions", "GET", "/rpc/triggers.listDefinitions"},
 			{"ListTriggerInstances", "GET", "/rpc/triggers.list"},
+			{"ListTriggerEvents", "GET", "/rpc/triggers.listEvents"},
 			{"GetTriggerInstance", "GET", "/rpc/triggers.get"},
 			{"CreateTriggerInstance", "POST", "/rpc/triggers.create"},
 			{"UpdateTriggerInstance", "POST", "/rpc/triggers.update"},
@@ -67,6 +69,7 @@ func New(
 		},
 		ListTriggerDefinitions: NewListTriggerDefinitionsHandler(e.ListTriggerDefinitions, mux, decoder, encoder, errhandler, formatter),
 		ListTriggerInstances:   NewListTriggerInstancesHandler(e.ListTriggerInstances, mux, decoder, encoder, errhandler, formatter),
+		ListTriggerEvents:      NewListTriggerEventsHandler(e.ListTriggerEvents, mux, decoder, encoder, errhandler, formatter),
 		GetTriggerInstance:     NewGetTriggerInstanceHandler(e.GetTriggerInstance, mux, decoder, encoder, errhandler, formatter),
 		CreateTriggerInstance:  NewCreateTriggerInstanceHandler(e.CreateTriggerInstance, mux, decoder, encoder, errhandler, formatter),
 		UpdateTriggerInstance:  NewUpdateTriggerInstanceHandler(e.UpdateTriggerInstance, mux, decoder, encoder, errhandler, formatter),
@@ -83,6 +86,7 @@ func (s *Server) Service() string { return "triggers" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListTriggerDefinitions = m(s.ListTriggerDefinitions)
 	s.ListTriggerInstances = m(s.ListTriggerInstances)
+	s.ListTriggerEvents = m(s.ListTriggerEvents)
 	s.GetTriggerInstance = m(s.GetTriggerInstance)
 	s.CreateTriggerInstance = m(s.CreateTriggerInstance)
 	s.UpdateTriggerInstance = m(s.UpdateTriggerInstance)
@@ -98,6 +102,7 @@ func (s *Server) MethodNames() []string { return triggers.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListTriggerDefinitionsHandler(mux, h.ListTriggerDefinitions)
 	MountListTriggerInstancesHandler(mux, h.ListTriggerInstances)
+	MountListTriggerEventsHandler(mux, h.ListTriggerEvents)
 	MountGetTriggerInstanceHandler(mux, h.GetTriggerInstance)
 	MountCreateTriggerInstanceHandler(mux, h.CreateTriggerInstance)
 	MountUpdateTriggerInstanceHandler(mux, h.UpdateTriggerInstance)
@@ -194,6 +199,59 @@ func NewListTriggerInstancesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listTriggerInstances")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "triggers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTriggerEventsHandler configures the mux to serve the "triggers"
+// service "listTriggerEvents" endpoint.
+func MountListTriggerEventsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/triggers.listEvents", f)
+}
+
+// NewListTriggerEventsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "triggers" service "listTriggerEvents" endpoint.
+func NewListTriggerEventsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTriggerEventsRequest(mux, decoder)
+		encodeResponse = EncodeListTriggerEventsResponse(encoder)
+		encodeError    = EncodeListTriggerEventsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTriggerEvents")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "triggers")
 		payload, err := decodeRequest(r)
 		if err != nil {

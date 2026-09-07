@@ -1,5 +1,7 @@
 package oops
 
+import "slices"
+
 import "errors"
 
 // ClientFaulter is implemented by error types that can attribute themselves to
@@ -43,10 +45,8 @@ func IsClientFault(err error) bool {
 	// errors.Unwrap only follows a single child. Inspect the []error shape
 	// directly for multi-child error trees such as errors.Join.
 	if wrapped, ok := any(err).(interface{ Unwrap() []error }); ok {
-		for _, child := range wrapped.Unwrap() {
-			if IsClientFault(child) {
-				return true
-			}
+		if slices.ContainsFunc(wrapped.Unwrap(), IsClientFault) {
+			return true
 		}
 	}
 

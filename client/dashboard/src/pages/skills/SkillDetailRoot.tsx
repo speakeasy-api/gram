@@ -4,6 +4,7 @@ import {
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
@@ -17,6 +18,7 @@ export default function SkillDetailRoot(): JSX.Element {
     throwOnError: false,
     enabled: !!skillId,
   });
+  useRecentLabelOverride(location.pathname, skillQuery.data?.skill.displayName);
   if (skillId) {
     const isBaseRoute =
       location.pathname === routes.skills.detail.href(skillId);

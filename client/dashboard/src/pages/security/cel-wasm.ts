@@ -74,6 +74,11 @@ export interface CelEngine {
   compile(expr: string): CelCompileResult;
   complete(srcUpToCursor: string): CelCompletion;
   evalDetection(expr: string, message: CelMessage): CelEvalResult;
+  /** Compile a bare regex with Go's RE2 `regexp` — the dialect the server
+   * validates against and the analyzers match with. JS `RegExp` is the wrong
+   * checker for these patterns: it rejects RE2's inline flags ("(?i)") and
+   * "(?P<name>)" groups and accepts lookarounds RE2 refuses. */
+  compileRegex(pattern: string): CelCompileResult;
 }
 
 // Raw shapes of the wasm globals (set by server/cmd/celwasm).
@@ -91,6 +96,7 @@ interface CelGlobals {
     expr: string,
     messageJSON: string,
   ) => { ok: boolean; matched?: boolean; spans?: string; error?: string };
+  __celRegexCompile?: (pattern: string) => CelCompileResult;
 }
 
 const WASM_URL = "/cel/cel.wasm";
@@ -162,7 +168,8 @@ async function start(): Promise<CelEngine> {
     !g.__celReference ||
     !g.__celComplete ||
     !g.__celCompile ||
-    !g.__celEval
+    !g.__celEval ||
+    !g.__celRegexCompile
   ) {
     throw new Error("CEL engine did not expose its interface");
   }
@@ -171,10 +178,12 @@ async function start(): Promise<CelEngine> {
   const compile = g.__celCompile;
   const rawComplete = g.__celComplete;
   const rawEval = g.__celEval;
+  const regexCompile = g.__celRegexCompile;
 
   return {
     reference,
     compile: (expr) => compile(expr),
+    compileRegex: (pattern) => regexCompile(pattern),
     complete: (src) => JSON.parse(rawComplete(src)) as CelCompletion,
     evalDetection: (expr, message) => {
       const r = rawEval(expr, JSON.stringify(message));

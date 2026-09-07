@@ -11,6 +11,7 @@ import { TierLimits, TierLimits$inboundSchema } from "./tierlimits.js";
 export type UsageTiers = {
   enterprise: TierLimits;
   free: TierLimits;
+  payg: TierLimits;
   pro: TierLimits;
 };
 
@@ -19,6 +20,7 @@ export const UsageTiers$inboundSchema: z.ZodMiniType<UsageTiers, unknown> = z
   .object({
     enterprise: TierLimits$inboundSchema,
     free: TierLimits$inboundSchema,
+    payg: TierLimits$inboundSchema,
     pro: TierLimits$inboundSchema,
   });
 

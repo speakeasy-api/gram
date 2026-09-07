@@ -2,6 +2,8 @@ package remotesessions_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/url"
 	"os"
@@ -15,7 +17,9 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -30,11 +34,14 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -72,6 +79,7 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	envEntries     *environments.EnvironmentEntries
 	redisCache     *cache.RedisCacheAdapter
+	features       *productfeatures.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -102,9 +110,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
+		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
@@ -113,7 +124,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
+		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, redisCache),
+		features,
 	)
 
 	return ctx, &testInstance{
@@ -122,6 +134,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		envEntries:     envEntries,
 		redisCache:     redisCache,
+		features:       features,
 	}
 }
 
@@ -153,6 +166,18 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+// mismatchedFields reduces a preflight's or candidate's mismatch set to the
+// field names alone, for assertions about which fields disagree rather than
+// about what their values are.
+func mismatchedFields(mismatches []*types.IssuerFieldMismatch) []string {
+	fields := make([]string, 0, len(mismatches))
+	for _, mismatch := range mismatches {
+		fields = append(fields, mismatch.Field)
+	}
+
+	return fields
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -301,6 +326,32 @@ func createRemoteIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpoo
 	return issuer.ID
 }
 
+// createTestImageAsset inserts an image asset row owned by the auth context's
+// project so issuer logo tests have a valid assets FK target. The sha256 is
+// derived from a fresh uuid so repeated calls never collide on the
+// per-project content-dedupe unique index.
+func createTestImageAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sum := sha256.Sum256([]byte(uuid.NewString()))
+	asset, err := assetsrepo.New(conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name:           "issuer-logo.png",
+		Url:            "https://assets.example.com/issuer-logo.png",
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         hex.EncodeToString(sum[:]),
+		Kind:           "image",
+		ContentType:    "image/png",
+		ContentLength:  1024,
+	})
+	require.NoError(t, err)
+	return asset.ID
+}
+
 // seedOrgLevelRemoteIssuer creates an organization-level (cross-project,
 // project_id IS NULL) remote session issuer owned by the supplied organization.
 // Org-level issuers are addressed only by id; pass the caller's active org to
@@ -393,6 +444,29 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		}))
 	}
 	return created.ID
+}
+
+// attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
+// so clients on that issuer derive serverURL as their resource.
+func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+	t.Helper()
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "sse",
+		Url:           serverURL,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
+	})
+	require.NoError(t, err)
 }
 
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP
@@ -511,4 +585,80 @@ func seedProjectRemoteClientNoOrg(t *testing.T, ctx context.Context, conn *pgxpo
 	})
 	require.NoError(t, err)
 	return created.ID
+}
+
+// enableCustomerManagedKeys grants the entitlement the JSON Web Key Set attach
+// and detach paths are gated on. Every other remote_session_client method is
+// ungated, so tests that do not touch a key set never need to call this.
+//
+// Takes an explicit organization id rather than reading it back out of the auth
+// context. The product-feature cache is Redis-backed and keyed by organization
+// id, while this package's harness hands every test the same seeded
+// organization, so a test asserting the *refusal* has to run against an
+// organization of its own or a parallel sibling's enable lands in the very
+// cache entry it reads.
+func (ti *testInstance) enableCustomerManagedKeys(t *testing.T, ctx context.Context, organizationID string) {
+	t.Helper()
+
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, organizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+}
+
+// activeOrganizationID returns the organization the context's principal acts in.
+func activeOrganizationID(t *testing.T, ctx context.Context) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	return authCtx.ActiveOrganizationID
+}
+
+// withOrganization rebinds the auth context to another organization and grants
+// it org:admin. RBAC then passes in that organization, which is what leaves the
+// entitlement as the only remaining thing that can refuse.
+func withOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	authCtx.ActiveOrganizationID = organizationID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	return withExactAccessGrants(t, ctx, conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID),
+	})
+}
+
+// createJsonWebKeySet builds a set through the shared testenv fixture, which
+// writes the credential / external key / set chain directly. Going through the
+// jsonwebkeysets service instead would mean minting a real key through a KMS
+// signing client, which is more machinery than these tests need: nothing here
+// reads the set's keys, only the reference to the set row.
+func createJsonWebKeySet(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, name string) uuid.UUID {
+	t.Helper()
+
+	setID, err := testrepo.New(conn).SeedJsonWebKeySetFixture(ctx, testrepo.SeedJsonWebKeySetFixtureParams{
+		OrganizationID: organizationID,
+		Name:           name,
+	})
+	require.NoError(t, err)
+
+	return setID
+}
+
+// forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum
+// does not yet accept. private_key_jwt arrives with AIM-156; until then the only
+// way to exercise the rules that guard it is to plant the value directly.
+func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
+	t.Helper()
+
+	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
+		TokenEndpointAuthMethod: conv.ToPGText(method),
+		ID:                      clientID,
+		ProjectID:               conv.ToNullUUID(projectID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
 }

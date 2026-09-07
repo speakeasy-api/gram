@@ -1,11 +1,11 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { OnboardingHeader } from "./onboarding-header";
-import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
+import { SetupShell } from "./setup-shell";
 import {
   ConnectIdpStep,
   DirectorySyncStep,
@@ -15,9 +15,10 @@ import {
   AdditionalAgentConfigStep,
   ConfirmTrafficStep,
   ConfigurePoliciesStep,
+  PlatformMCPSetupStep,
 } from "./steps";
 
-const STEPS: Step[] = [
+const CORE_STEPS: Step[] = [
   {
     id: "connect-idp",
     title: "Connect identity provider",
@@ -53,20 +54,49 @@ const STEPS: Step[] = [
     title: "Distribute MCP servers",
     description: "Choose some MCP Servers to distribute to your organization",
   },
-  {
-    id: "configure-policies",
-    title: "Configure policies",
-    description: "Pick the categories to flag in agent traffic",
-  },
 ];
+
+const CONFIGURE_POLICIES_STEP: Step = {
+  id: "configure-policies",
+  title: "Configure policies",
+  description: "Pick the categories to flag in agent traffic",
+};
+
+const PLATFORM_MCP_STEP: Step = {
+  id: "platform-mcp",
+  title: "Set up Platform MCP",
+  description: "Optional agent-assisted MCP setup",
+  badge: "Optional",
+};
+
+function indexOfStep(steps: Step[], id: string): number {
+  const index = steps.findIndex((step) => step.id === id);
+  return index === -1 ? 0 : index;
+}
 
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { markSetupStarted } = useOrgSetupStarted(orgSlug);
+
+  useEffect(() => {
+    markSetupStarted();
+  }, [markSetupStarted]);
+
+  const setupProjectSlug = searchParams.get("projectSlug") ?? undefined;
+  const setupPath = searchParams.get("setupPath");
+  const usesPlatformMcpPath = setupPath === "platform-mcp";
+  const steps = useMemo(
+    () =>
+      usesPlatformMcpPath
+        ? [...CORE_STEPS, PLATFORM_MCP_STEP, CONFIGURE_POLICIES_STEP]
+        : [...CORE_STEPS, CONFIGURE_POLICIES_STEP, PLATFORM_MCP_STEP],
+    [usesPlatformMcpPath],
+  );
 
   // All steps are accessible — SSO and DSYNC are both skippable.
-  const maxAllowedStep = STEPS.length - 1;
+  const maxAllowedStep = steps.length - 1;
 
   const stepSlug = searchParams.get("step");
 
@@ -76,10 +106,14 @@ export function SetupWizard(): JSX.Element {
   // additional-agent-config, confirm-traffic, distribute-servers) have no
   // server signal — once marketplace is published we land on instrument-agents
   // and let the user click forward.
+  // throwOnError: false so a failed resume check degrades to step 0 (as the
+  // effect below assumes) instead of throwing to the page error boundary. The
+  // QueryClient default only suppresses 401/403, so a 500 here would otherwise
+  // replace the whole wizard with an error screen.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
-    useOnboardingStatus();
+    useOnboardingStatus(undefined, undefined, { throwOnError: false });
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
-    usePublishStatus();
+    usePublishStatus(undefined, undefined, { throwOnError: false });
   const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
 
   useEffect(() => {
@@ -89,16 +123,16 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → instrument-agents
+      resumeStep = indexOfStep(steps, "instrument-agents");
     } else if (onboardingStatus?.dsyncConfigured) {
-      resumeStep = 2; // dsync done → create-marketplace
+      resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
-      resumeStep = 1; // sso done → directory-sync
+      resumeStep = indexOfStep(steps, "directory-sync");
     }
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", STEPS[resumeStep]!.id!);
+        next.set("step", steps[resumeStep]!.id!);
         return next;
       },
       { replace: true },
@@ -109,12 +143,13 @@ export function SetupWizard(): JSX.Element {
     onboardingStatus,
     publishStatus,
     setSearchParams,
+    steps,
   ]);
 
   const requestedStep = stepSlug
     ? Math.max(
         0,
-        STEPS.findIndex((s) => s.id === stepSlug),
+        steps.findIndex((s) => s.id === stepSlug),
       )
     : 0;
 
@@ -125,13 +160,13 @@ export function SetupWizard(): JSX.Element {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("step", STEPS[index]!.id!);
+          next.set("step", steps[index]!.id!);
           return next;
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, steps],
   );
 
   // Clicking a step in the stepper previews that step (forward or back) by
@@ -149,12 +184,20 @@ export function SetupWizard(): JSX.Element {
 
   const completeCurrentStep = useCallback(() => {
     const nextIndex = currentStep + 1;
-    if (nextIndex < STEPS.length) {
+    if (nextIndex < steps.length) {
       setCurrentStep(nextIndex);
     } else {
-      void navigate(`/${orgSlug}`);
+      const projectSlug = searchParams.get("projectSlug") ?? "default";
+      void navigate(`/${orgSlug}/projects/${projectSlug}`);
     }
-  }, [currentStep, navigate, orgSlug, setCurrentStep]);
+  }, [
+    currentStep,
+    navigate,
+    orgSlug,
+    searchParams,
+    setCurrentStep,
+    steps.length,
+  ]);
 
   const goBack = useCallback(() => {
     if (currentStep > 0) {
@@ -162,9 +205,17 @@ export function SetupWizard(): JSX.Element {
     }
   }, [currentStep, setCurrentStep]);
 
-  const handleLeave = () => {
-    void navigate(`/${orgSlug}`);
-  };
+  const leavePlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("setupPath");
+        next.set("step", "distribute-servers");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   // While we're still figuring out where to resume (no slug + queries in
   // flight), keep the page shell visible with skeletons rather than briefly
@@ -172,34 +223,50 @@ export function SetupWizard(): JSX.Element {
   // as the queries resolve (or error, which falls back to step 0).
   const resolvingResume = !stepSlug && statusLoading;
 
+  const startPlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("setupPath", "platform-mcp");
+        next.set("step", PLATFORM_MCP_STEP.id);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    switch (steps[currentStep]?.id) {
+      case "connect-idp":
         return (
           <ConnectIdpStep
             onSkip={completeCurrentStep}
             onComplete={completeCurrentStep}
           />
         );
-      case 1:
+      case "directory-sync":
         return (
-          <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />
+          <DirectorySyncStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
+            onBack={goBack}
+          />
         );
-      case 2:
+      case "create-marketplace":
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 3:
+      case "instrument-agents":
         return (
           <InstrumentAgentsStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 4:
+      case "additional-agent-config":
         return (
           <AdditionalAgentConfigStep
             onComplete={completeCurrentStep}
@@ -207,49 +274,62 @@ export function SetupWizard(): JSX.Element {
             onBack={goBack}
           />
         );
-      case 5:
+      case "confirm-traffic":
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 6:
+      case "distribute-servers":
         return (
           <DistributeServersStep
             onComplete={completeCurrentStep}
             onSkip={completeCurrentStep}
             onBack={goBack}
+            onSetupPlatformMCP={startPlatformMcpPath}
           />
         );
-      case 7:
+      case "configure-policies":
         return (
           <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      default:
+      case "platform-mcp":
+        return (
+          <PlatformMCPSetupStep
+            onComplete={completeCurrentStep}
+            onBack={usesPlatformMcpPath ? leavePlatformMcpPath : goBack}
+            onSkip={completeCurrentStep}
+            currentProjectSlug={setupProjectSlug}
+            continueLabel={
+              usesPlatformMcpPath
+                ? "Continue to Configure policies"
+                : "Finish setup"
+            }
+          />
+        );
+      case undefined:
         return null;
     }
   };
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
-      <OnboardingHeader onLeave={handleLeave} />
-
-      <main className="flex flex-1 items-start justify-center px-8 py-16">
+    <SetupShell view="wizard">
+      <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
         <div className="flex w-full max-w-5xl gap-24">
-          <div className="w-64 flex-shrink-0">
+          <div className="order-first hidden w-64 flex-shrink-0 md:block">
             {resolvingResume ? (
               <Skeleton>
-                {STEPS.map((step) => (
+                {steps.map((step) => (
                   <div key={step.id} className="h-8 w-full" />
                 ))}
               </Skeleton>
             ) : (
               <OnboardingStepper
-                steps={STEPS}
+                steps={steps}
                 currentStep={currentStep}
                 onStepClick={goToStep}
                 maxAllowedStep={maxAllowedStep}
@@ -258,7 +338,7 @@ export function SetupWizard(): JSX.Element {
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="order-last min-w-0 flex-1">
             {resolvingResume ? (
               <Skeleton>
                 <div className="h-12 w-2/3" />
@@ -271,8 +351,6 @@ export function SetupWizard(): JSX.Element {
           </div>
         </div>
       </main>
-
-      <OnboardingFooter />
-    </div>
+    </SetupShell>
   );
 }

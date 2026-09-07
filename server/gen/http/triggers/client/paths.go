@@ -17,6 +17,11 @@ func ListTriggerInstancesTriggersPath() string {
 	return "/rpc/triggers.list"
 }
 
+// ListTriggerEventsTriggersPath returns the URL path to the triggers service listTriggerEvents HTTP endpoint.
+func ListTriggerEventsTriggersPath() string {
+	return "/rpc/triggers.listEvents"
+}
+
 // GetTriggerInstanceTriggersPath returns the URL path to the triggers service getTriggerInstance HTTP endpoint.
 func GetTriggerInstanceTriggersPath() string {
 	return "/rpc/triggers.get"

@@ -3,6 +3,12 @@ SELECT *
 FROM toolsets
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetToolsetForUpdate :one
+SELECT *
+FROM toolsets
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetToolsetByIDAndProject :one
 SELECT *
 FROM toolsets
@@ -230,10 +236,17 @@ INSERT INTO toolset_prompts (
 ) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id, @prompt_name);
 
 -- name: CheckMCPSlugAvailability :one
+-- Deprecated inline-editor probe: taken when any live toolset or endpoint
+-- holds the slug in any scope. Removed with the mcp_slug fallback (AIS-646).
 SELECT EXISTS (
   SELECT 1
   FROM toolsets
   WHERE mcp_slug = @mcp_slug
+  AND deleted IS FALSE
+) OR EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = @mcp_slug
   AND deleted IS FALSE
 );
 
@@ -282,7 +295,9 @@ UPDATE toolsets
 SET
     external_oauth_server_id = @external_oauth_server_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug
+  AND project_id = @project_id
+  AND external_oauth_server_id IS NULL
 RETURNING *;
 
 -- name: UpdateToolsetUserSessionIssuer :one
@@ -349,6 +364,39 @@ FROM toolset_versions
 WHERE toolset_id = ANY(@toolset_ids::uuid[])
   AND deleted IS FALSE
 ORDER BY toolset_id, version DESC;
+
+-- name: ToolsetHasExternalMCPProxy :one
+WITH latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM toolsets t
+  JOIN toolset_versions tv ON tv.toolset_id = t.id
+  WHERE t.id = @toolset_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+  ORDER BY d.id DESC
+  LIMIT 1
+)
+SELECT EXISTS (
+  SELECT 1
+  FROM latest_toolset_version tv
+  CROSS JOIN LATERAL unnest(tv.tool_urns) AS tool_urn(value)
+  JOIN external_mcp_tool_definitions etd ON etd.tool_urn = tool_urn.value
+  JOIN external_mcp_attachments ea ON ea.id = etd.external_mcp_attachment_id
+  WHERE ea.deployment_id = (SELECT id FROM active_deployment)
+    AND etd.type = 'proxy'
+    AND etd.deleted IS FALSE
+    AND ea.deleted IS FALSE
+);
 
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name

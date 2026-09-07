@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTumUsageOverage_TransactionalID(t *testing.T) {
+func TestTumUsageOverage_Key(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, transactionalIDTumUsageOverage, TumUsageOverage{}.TransactionalID())
+	require.Equal(t, TemplateKeyTumUsageOverage, TumUsageOverage{}.Key())
 }
 
 func TestTumUsageOverage_Variables_RendersExpectedKeys(t *testing.T) {

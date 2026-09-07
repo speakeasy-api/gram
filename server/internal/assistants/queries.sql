@@ -1016,6 +1016,23 @@ SET
 WHERE id = @event_id
   AND project_id = @project_id;
 
+-- name: CancelPendingAssistantThreadEvents :execrows
+-- Drops every turn queued on a thread that no runner has claimed yet. Used by
+-- the stop button: a turn still waiting on a cold runtime has no in-flight
+-- generation to cancel, so unless it is taken out of the queue here it starts
+-- generating moments after the user asked it not to. Claimed ('processing')
+-- events are deliberately untouched — those are already dispatched, and the
+-- runner's own interrupt is what stops them.
+UPDATE assistant_thread_events
+SET
+  status = @cancelled_status,
+  processed_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_thread_id = @thread_id
+  AND status = @pending_status
+  AND deleted IS FALSE;
+
 -- name: ResetAssistantThreadEventToPending :exec
 UPDATE assistant_thread_events
 SET
@@ -1503,7 +1520,7 @@ WHERE project_id = @project_id
 -- project so a leaked asset id from another project cannot be attached.
 SELECT id, name, url, content_type, content_length
 FROM assets
-WHERE project_id = @project_id
+WHERE project_id = @project_id::uuid
   AND id = ANY(@ids::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;

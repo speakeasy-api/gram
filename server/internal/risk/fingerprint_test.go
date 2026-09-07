@@ -104,6 +104,11 @@ func TestParsePepperKeyRing_Errors(t *testing.T) {
 			payload: []byte(`{"current":"v9","keys":{"v1":"00112233"}}`),
 			wantErr: risk.ErrInvalidFingerprintPepperKeyRing,
 		},
+		{
+			name:    "current pepper shorter than 16 bytes",
+			payload: []byte(`{"current":"v1","keys":{"v1":"c2hvcnQ="}}`),
+			wantErr: risk.ErrInvalidFingerprintPepperKeyRing,
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,7 +125,7 @@ func TestParsePepperKeyRing_Errors(t *testing.T) {
 func TestFingerprinter_HS256WithVersion_UnknownVersion(t *testing.T) {
 	t.Parallel()
 
-	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("k")})
+	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("key-material-for-v1")})
 	fp, err := risk.ParsePepperKeyRing(payload)
 	require.NoError(t, err)
 
@@ -226,7 +231,7 @@ func TestFingerprinter_TenantedHS256_WithKeyCache(t *testing.T) {
 func TestFingerprinter_TenantedHS256WithVersion_UnknownVersion(t *testing.T) {
 	t.Parallel()
 
-	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("k")})
+	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("key-material-for-v1")})
 	fp, err := risk.ParsePepperKeyRing(payload)
 	require.NoError(t, err)
 
@@ -244,4 +249,19 @@ func TestFingerprinter_TenantedHS256_PanicsWithoutCurrentVersion(t *testing.T) {
 	assert.Panics(t, func() {
 		_, _, _ = fp.TenantedHS256("tenant-a", []byte("msg"))
 	})
+}
+
+func TestFingerprinter_Versions(t *testing.T) {
+	t.Parallel()
+
+	// Zero value: no keyring -> nil, the "fingerprinting unavailable" signal.
+	var zero risk.Fingerprinter
+	require.Nil(t, zero.Versions())
+
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, "v2", map[string][]byte{
+		"v2": []byte("current-pepper-key-material-0002"),
+		"v1": []byte("retired-pepper-key-material-0001"),
+	}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"v1", "v2"}, fp.Versions())
 }

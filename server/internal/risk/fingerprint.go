@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/inv"
 )
@@ -16,6 +17,10 @@ import (
 // deriving per-tenant fingerprint keys. It domain-separates these keys from any
 // other use of the same pepper.
 const hkdfInfo = "gram/risk/fingerprint/tenant"
+
+// minCurrentPepperBytes is the minimum length of the key that signs new
+// fingerprints; an HMAC pepper shorter than this is guessable.
+const minCurrentPepperBytes = 16
 
 var (
 	ErrInvalidFingerprintPepperJSON    = errors.New("invalid fingerprint pepper keyring json")
@@ -48,6 +53,29 @@ func WithKeyCache(cache map[string][]byte) TenantedOption {
 	return func(o *tenantedOptions) {
 		o.keyCache = cache
 	}
+}
+
+// EncodeFingerprint renders a fingerprint sum in the encoding stored on
+// ClickHouse rows (unpadded base64url, matching the ingest writer).
+func EncodeFingerprint(sum []byte) string {
+	return base64.RawURLEncoding.EncodeToString(sum)
+}
+
+// Versions returns every pepper version in the keyring, sorted, for callers
+// that must match fingerprints written under any historical pepper (e.g. the
+// retroactive exclusion reconcile matching rows across rotations). A zero
+// Fingerprinter returns nil, which such callers treat as "fingerprinting
+// unavailable".
+func (p Fingerprinter) Versions() []string {
+	if len(p.keys) == 0 {
+		return nil
+	}
+	versions := make([]string, 0, len(p.keys))
+	for v := range p.keys {
+		versions = append(versions, v)
+	}
+	slices.Sort(versions)
+	return versions
 }
 
 func (p Fingerprinter) get(version string) ([]byte, error) {
@@ -206,6 +234,12 @@ func ParsePepperKeyRing(jsonSecret []byte) (Fingerprinter, error) {
 
 	if len(keyring.keys) == 0 {
 		return empty, fmt.Errorf("no keys found in keyring: %w", ErrInvalidFingerprintPepperKeyRing)
+	}
+
+	// Only the current key signs new fingerprints; retired keys may be any
+	// length. Mirrors the pystreams keyring validation.
+	if len(keyring.keys[keyring.currentVersion]) < minCurrentPepperBytes {
+		return empty, fmt.Errorf("current pepper %s is %d bytes; minimum is %d: %w", keyring.currentVersion, len(keyring.keys[keyring.currentVersion]), minCurrentPepperBytes, ErrInvalidFingerprintPepperKeyRing)
 	}
 
 	return keyring, nil

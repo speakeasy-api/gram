@@ -2,12 +2,21 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   // Vite entry (index.html → src/main.tsx) is auto-detected.
-  // Emitted programmatically by themeInitPlugin, which Knip cannot infer.
-  entry: ["src/theme-init.ts"],
+  // theme-init.ts is emitted programmatically by themeInitPlugin, and the two
+  // consent entries live in vite.consent.config.ts and
+  // vite.consent-page.config.ts, non-default config filenames — Knip cannot
+  // infer any of them. The consent page's entry is the stylesheet itself: that
+  // build emits CSS for the server-rendered page and has no JS.
+  entry: [
+    "src/theme-init.ts",
+    "src/consent-tools/main.tsx",
+    "src/consent-page/consent-page.css",
+  ],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
-    // Invoked from the lint:format script; not on the dep tree.
-    "oxfmt",
+    // The package manager itself, used to chain scripts and to reach the
+    // workspace-root oxfmt binary; not on the dep tree.
+    "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
   ],

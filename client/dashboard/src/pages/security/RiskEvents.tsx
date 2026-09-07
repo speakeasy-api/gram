@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForUserKey } from "@/lib/identity-urn";
 import { LogWorkbench } from "@/components/log-workbench";
 import {
   defineFilters,
@@ -38,6 +40,7 @@ import {
 } from "./risk-ui";
 import {
   isJudgeSource,
+  isShadowMcpSource,
   scoreToRating,
   SEVERITY_RATING_LABEL,
   type SeverityRating,
@@ -135,7 +138,12 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
-  { id: "unique", label: "Unique matches only", kind: "boolean" },
+  {
+    id: "unique",
+    label: "Unique matches only",
+    kind: "boolean",
+    description: "Keep the latest row per policy, rule and matched value.",
+  },
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 
@@ -366,7 +374,7 @@ export default function RiskEvents(): JSX.Element {
   return (
     <RevealAllProvider>
       <LogWorkbench
-        eyebrow="Secure"
+        eyebrow="Security and Policy"
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
@@ -413,11 +421,11 @@ export default function RiskEvents(): JSX.Element {
               selectedCount={selection.selectedCount}
               actions={[
                 {
-                  label: "Mark as false positive",
+                  label: "Suppress Once",
                   onClick: handleDismissSelected,
                 },
                 {
-                  label: "Set up exclusion rule",
+                  label: "Create Rule",
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
@@ -659,7 +667,7 @@ function RiskEventsRow({
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
 }) {
-  const isShadowMCP = result.source === "shadow_mcp";
+  const isShadowMCP = isShadowMcpSource(result.source);
   const isEventSource = isJudgeSource(result.source);
   // The 2px left edge carries the severity band color; rows whose policy
   // hasn't loaded a score keep a transparent edge so the grid stays aligned.
@@ -689,8 +697,8 @@ function RiskEventsRow({
     ...(result.chatId
       ? [{ label: "Copy link", onClick: () => void handleShare() }]
       : []),
-    { label: "Mark as false positive", onClick: () => onDismiss(result) },
-    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
+    { label: "Suppress Once", onClick: () => onDismiss(result) },
+    { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (
@@ -758,7 +766,9 @@ function RiskEventsRow({
         {result.chatTitle ?? "Untitled"}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        {result.userId ?? "-"}
+        <IdentityLink identifier={identityRefForUserKey(result.userId)}>
+          {result.userId ?? "-"}
+        </IdentityLink>
       </div>
       {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
       <div className={cn("min-w-0", !isEventSource && "truncate")}>

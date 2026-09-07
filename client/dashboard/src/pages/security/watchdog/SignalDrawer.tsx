@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -10,16 +11,33 @@ import {
 } from "@/components/ui/Sheet";
 import { Separator } from "@/components/ui/Separator";
 import { Text } from "@/components/ui/Text";
+import { useSdkClient } from "@/contexts/Sdk";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
-import { MaskedMatch, RevealAllProvider, RevealAllToggle } from "../risk-ui";
-import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
+import {
+  EventMatchDialog,
+  MaskedMatch,
+  RevealAllProvider,
+  RevealAllToggle,
+} from "../risk-ui";
+import {
+  getCategoryCodeForFinding,
+  getRuleTitleFallback,
+  hasJudgeSource,
+  isJudgeSource,
+  scoreToRating,
+} from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
+import { collectFindingsForRules } from "./collect-findings";
+import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -101,6 +119,15 @@ function EvidenceRow({
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
 }): JSX.Element {
+  // A judge finding's "match" is the entire flagged event (often absent on
+  // the realtime path), and its description carries the verdict rationale —
+  // so the evidence cell shows the rationale with the audited event dialog
+  // behind it instead of a redaction chip over content that may not exist.
+  // Judge findings also can't be excluded (their rule id is a constant for
+  // the whole detector), so the row offers only suppression. Every other
+  // detector gets the shared Suppress menu: a one-off manual suppression or
+  // exclusion rule creation, same affordance as the drawer and list actions.
+  const judge = isJudgeSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -111,36 +138,51 @@ function EvidenceRow({
           {formatDistanceToNow(result.createdAt, { addSuffix: true })}
         </span>
       </div>
-      {/* The redacted match sits on an inverse code-block backdrop so the
-          red redaction chip carries the reference design's contrast. */}
-      <div className="bg-foreground px-3 py-4">
-        <MaskedMatch
-          tone="contrast"
-          wrap
-          resultId={result.id}
-          matchRedacted={result.matchRedacted}
-        />
-      </div>
+      {judge ? (
+        <div className="px-3 py-3">
+          <EventMatchDialog
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+            rationale={result.description}
+          />
+        </div>
+      ) : (
+        // The redacted match sits on an inverse code-block backdrop so the
+        // red redaction chip carries the reference design's contrast.
+        <div className="bg-foreground px-3 py-4">
+          <MaskedMatch
+            tone="contrast"
+            wrap
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
-          Triggered: {result.source} · {getRuleTitleFallback(result.ruleId)}{" "}
-          (conf {(result.confidence ?? 0).toFixed(2)})
+          {/* Category code, never the raw scanner source — and no rule title
+              for judge findings, whose single rule restates the category. */}
+          Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
+          {!judge && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => onExclude(result)}
-          >
-            <Button.Text>Exclude</Button.Text>
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => onDismiss(result)}
-          >
-            <Button.Text>False positive</Button.Text>
-          </Button>
+          {judge ? (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => onDismiss(result)}
+            >
+              <Button.Text>Suppress</Button.Text>
+            </Button>
+          ) : (
+            <SuppressMenu
+              variant="tertiary"
+              size="sm"
+              onSuppressOnce={() => onDismiss(result)}
+              onCreateRule={() => onExclude(result)}
+            />
+          )}
         </span>
       </div>
     </div>
@@ -159,9 +201,14 @@ export function SignalDrawer({
   signal: RiskSignal | null;
   onClose: () => void;
 }): JSX.Element {
+  const client = useSdkClient();
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
+  const [pendingDismiss, setPendingDismiss] = useState<RiskResult[] | null>(
+    null,
+  );
+  const [collecting, setCollecting] = useState(false);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -196,11 +243,87 @@ export function SignalDrawer({
 
   const openSignalExclusion = () => {
     if (!signal) return;
-    // The sheet derives its ready-made rule options from the findings it is
-    // handed; the loaded evidence rows all share this signal's rule, so the
-    // "Any <rule> finding" option is on offer. Before evidence loads the
-    // sheet still opens, just without ready-made options.
-    setExclusionState({ mode: "create", results: evidence });
+    // The signal itself carries the rule, so the sheet offers — and defaults
+    // to — the "Any <rule> finding" option even before evidence rows load.
+    // Whatever evidence has arrived by now rides along for the custom branch's
+    // findings context — and, only where the rule has a lone evidence row, the
+    // exact-value option, which needs a single finding. Opening before the
+    // query resolves makes this a rule-only create, since the snapshot
+    // deliberately doesn't refill as rows land — that would rebuild the form
+    // under an operator who is already typing.
+    setExclusionState({
+      mode: "create",
+      results: evidence,
+      presetRuleId: signal.ruleId,
+    });
+  };
+
+  // Judge-backed signals get suppression as the signal-level action instead of
+  // an exclusion rule. Same collect-then-confirm shape as the list's bulk
+  // action, scoped to this signal's rule.
+  const judgeSignal =
+    signal !== null && hasJudgeSource(signal.detectionSources);
+
+  // The signal lives in the URL, so back/forward can swap it mid-collection;
+  // bumping the token makes an in-flight collection drop its result instead
+  // of confirming the previous signal's findings under the new one's name.
+  // Keyed by signal key (not object identity) so refetches don't cancel;
+  // useLayoutEffect so the swap can't paint one frame of the old dialog.
+  const collectionToken = useRef(0);
+  useLayoutEffect(() => {
+    collectionToken.current += 1;
+    setPendingDismiss(null);
+    setCollecting(false);
+  }, [signal?.key]);
+
+  // Editor state follows the signal alone: an open editor would go on targeting
+  // the previous signal's rule (and keep the sheet's close affordance hidden),
+  // and the back-from-editor slide would replay for a signal whose editor was
+  // never opened. The window is deliberately absent — the rule and evidence the
+  // editor seeds from are unwindowed, so a date change must not discard a
+  // half-filled form.
+  useLayoutEffect(() => {
+    setExclusionState(null);
+    setReturningFromEditor(false);
+  }, [signal?.key]);
+
+  const openSignalDismiss = async () => {
+    if (!signal) return;
+    const token = collectionToken.current;
+    setCollecting(true);
+    try {
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time, so a windowed collection can miss the
+      // very findings the signal displays. See the evidence query above.
+      const results = await collectFindingsForRules(client, [signal.ruleId], {
+        from: undefined,
+        to: undefined,
+      });
+      if (collectionToken.current !== token) return;
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for this signal.");
+        return;
+      }
+      setPendingDismiss(results);
+    } catch {
+      if (collectionToken.current !== token) return;
+      toast.error("Failed to load this signal's findings.");
+    } finally {
+      // Same guard: the switch already cleared the flag for the new selection,
+      // so a late-settling request must not clear it out from under a
+      // collection the operator started there.
+      if (collectionToken.current === token) setCollecting(false);
+    }
+  };
+
+  const confirmSignalDismiss = () => {
+    if (!pendingDismiss) return;
+    dismiss(pendingDismiss);
+    setPendingDismiss(null);
+    // The whole signal was just suppressed, so the drawer has nothing left to
+    // show — close it rather than leaving it open over a vanished signal.
+    onClose();
   };
 
   return (
@@ -211,6 +334,7 @@ export function SignalDrawer({
           if (!open) {
             setExclusionState(null);
             setReturningFromEditor(false);
+            setPendingDismiss(null);
             onClose();
           }
         }}
@@ -290,9 +414,32 @@ export function SignalDrawer({
                 </SheetHeader>
                 <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="primary" onClick={openSignalExclusion}>
-                      <Button.Text>Create exclusion rule</Button.Text>
-                    </Button>
+                    {judgeSignal ? (
+                      <>
+                        <Button
+                          variant="primary"
+                          disabled={collecting}
+                          onClick={() => void openSignalDismiss()}
+                        >
+                          {collecting && (
+                            <Button.LeftIcon>
+                              <Loader2 className="size-4 animate-spin" />
+                            </Button.LeftIcon>
+                          )}
+                          <Button.Text>Suppress all</Button.Text>
+                        </Button>
+                        <Text small muted>
+                          Prompt-based findings can't be excluded.
+                        </Text>
+                      </>
+                    ) : (
+                      <SuppressMenu
+                        variant="primary"
+                        busy={collecting}
+                        onSuppressOnce={() => void openSignalDismiss()}
+                        onCreateRule={openSignalExclusion}
+                      />
+                    )}
                   </div>
                   <div className="relative flex-1">
                     <div className="space-y-6">
@@ -310,12 +457,14 @@ export function SignalDrawer({
                           {signal.teams > 0 ? signal.teams : "-"}
                         </StatCell>
                         <StatCell label="Trend">
-                          <SignalTrend
-                            findings={signal.findings}
-                            previousFindings={signal.previousFindings}
-                          />
+                          <SignalTrend sparkline={signal.sparkline} />
                         </StatCell>
                       </div>
+                      {/* Windowed stats vs unwindowed evidence can disagree
+                          — say so. */}
+                      <Text small muted>
+                        Counts reflect the page's selected time window.
+                      </Text>
 
                       {signal.topUsers.length > 0 && (
                         <>
@@ -340,7 +489,23 @@ export function SignalDrawer({
                                   </Avatar>
                                   <div className="min-w-0 flex-1">
                                     <Text small className="truncate">
-                                      {user.email}
+                                      {/* Risk keys on the reported agent id
+                                          when it has one; the address is the
+                                          fallback. */}
+                                      <IdentityLink
+                                        identifier={
+                                          user.externalUserId
+                                            ? {
+                                                externalUserId:
+                                                  user.externalUserId,
+                                              }
+                                            : user.email.includes("@")
+                                              ? { email: user.email }
+                                              : null
+                                        }
+                                      >
+                                        {user.email}
+                                      </IdentityLink>
                                     </Text>
                                     {user.team && (
                                       <Text small muted className="truncate">
@@ -366,9 +531,15 @@ export function SignalDrawer({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Text small muted className="font-medium uppercase">
-                            Evidence · redacted
+                            {/* Judge evidence shows rationales, not redacted
+                                matches, so the label and the reveal-all
+                                toggle (which only drives MaskedMatch rows)
+                                would both mislead there. */}
+                            {judgeSignal
+                              ? "Latest evidence"
+                              : "Latest evidence · redacted"}
                           </Text>
-                          <RevealAllToggle />
+                          {!judgeSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
                           <Text small muted>
@@ -393,7 +564,7 @@ export function SignalDrawer({
                           !evidenceQuery.isError &&
                           evidence.length === 0 && (
                             <Text small muted>
-                              No evidence rows in this window.
+                              No evidence rows for this rule.
                             </Text>
                           )}
                         <ExpandableList
@@ -423,6 +594,12 @@ export function SignalDrawer({
           )}
         </SheetContent>
       </Sheet>
+      <SuppressFindingsDialog
+        results={pendingDismiss}
+        subject="this signal"
+        onCancel={() => setPendingDismiss(null)}
+        onConfirm={confirmSignalDismiss}
+      />
     </>
   );
 }

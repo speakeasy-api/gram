@@ -380,6 +380,28 @@ func BuildSetPluginAssignmentsPayload(pluginsSetPluginAssignmentsBody string, pl
 	return v, nil
 }
 
+// BuildListAudiencesPayload builds the payload for the plugins listAudiences
+// endpoint from CLI flags.
+func BuildListAudiencesPayload(pluginsListAudiencesSessionToken string, pluginsListAudiencesProjectSlugInput string) (*plugins.ListAudiencesPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsListAudiencesSessionToken != "" {
+			sessionToken = &pluginsListAudiencesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsListAudiencesProjectSlugInput != "" {
+			projectSlugInput = &pluginsListAudiencesProjectSlugInput
+		}
+	}
+	v := &plugins.ListAudiencesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDownloadPluginPackagePayload builds the payload for the plugins
 // downloadPluginPackage endpoint from CLI flags.
 func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID string, pluginsDownloadPluginPackagePlatform string, pluginsDownloadPluginPackageSessionToken string, pluginsDownloadPluginPackageProjectSlugInput string) (*plugins.DownloadPluginPackagePayload, error) {
@@ -430,8 +452,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"}))
 		}
 		if err != nil {
 			return nil, err

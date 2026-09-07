@@ -245,6 +245,56 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	return v, nil
 }
 
+// BuildGetAssistantSessionSummaryPayload builds the payload for the chat
+// getAssistantSessionSummary endpoint from CLI flags.
+func BuildGetAssistantSessionSummaryPayload(chatGetAssistantSessionSummaryAssistantID string, chatGetAssistantSessionSummaryFrom string, chatGetAssistantSessionSummaryTo string, chatGetAssistantSessionSummarySessionToken string, chatGetAssistantSessionSummaryProjectSlugInput string) (*chat.GetAssistantSessionSummaryPayload, error) {
+	var err error
+	var assistantID string
+	{
+		assistantID = chatGetAssistantSessionSummaryAssistantID
+		err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", assistantID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from string
+	{
+		from = chatGetAssistantSessionSummaryFrom
+		err = goa.MergeErrors(err, goa.ValidateFormat("from", from, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var to string
+	{
+		to = chatGetAssistantSessionSummaryTo
+		err = goa.MergeErrors(err, goa.ValidateFormat("to", to, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGetAssistantSessionSummarySessionToken != "" {
+			sessionToken = &chatGetAssistantSessionSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGetAssistantSessionSummaryProjectSlugInput != "" {
+			projectSlugInput = &chatGetAssistantSessionSummaryProjectSlugInput
+		}
+	}
+	v := &chat.GetAssistantSessionSummaryPayload{}
+	v.AssistantID = assistantID
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetWorkUnitsTrendPayload builds the payload for the chat
 // getWorkUnitsTrend endpoint from CLI flags.
 func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string) (*chat.GetWorkUnitsTrendPayload, error) {
@@ -608,6 +658,45 @@ func BuildSummarizePayload(chatSummarizeBody string, chatSummarizeSessionToken s
 	return v, nil
 }
 
+// BuildSummarizeToolCallPayload builds the payload for the chat
+// summarizeToolCall endpoint from CLI flags.
+func BuildSummarizeToolCallPayload(chatSummarizeToolCallBody string, chatSummarizeToolCallSessionToken string, chatSummarizeToolCallProjectSlugInput string) (*chat.SummarizeToolCallPayload, error) {
+	var err error
+	var body SummarizeToolCallRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSummarizeToolCallBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_call_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.message_id", body.MessageID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSummarizeToolCallSessionToken != "" {
+			sessionToken = &chatSummarizeToolCallSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSummarizeToolCallProjectSlugInput != "" {
+			projectSlugInput = &chatSummarizeToolCallProjectSlugInput
+		}
+	}
+	v := &chat.SummarizeToolCallPayload{
+		ID:         body.ID,
+		MessageID:  body.MessageID,
+		ToolCallID: body.ToolCallID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
 // endpoint from CLI flags.
 func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {
@@ -676,6 +765,56 @@ func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSources
 		}
 	}
 	v := &chat.ListSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildListSessionLinksPayload builds the payload for the chat
+// listSessionLinks endpoint from CLI flags.
+func BuildListSessionLinksPayload(chatListSessionLinksChatIds string, chatListSessionLinksSessionToken string, chatListSessionLinksProjectSlugInput string, chatListSessionLinksChatSessionsToken string) (*chat.ListSessionLinksPayload, error) {
+	var err error
+	var chatIds []string
+	{
+		err = json.Unmarshal([]byte(chatListSessionLinksChatIds), &chatIds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for chatIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+		}
+		if len(chatIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("chat_ids", chatIds, len(chatIds), 1, true))
+		}
+		if len(chatIds) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("chat_ids", chatIds, len(chatIds), 100, false))
+		}
+		for _, e := range chatIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatListSessionLinksSessionToken != "" {
+			sessionToken = &chatListSessionLinksSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListSessionLinksProjectSlugInput != "" {
+			projectSlugInput = &chatListSessionLinksProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListSessionLinksChatSessionsToken != "" {
+			chatSessionsToken = &chatListSessionLinksChatSessionsToken
+		}
+	}
+	v := &chat.ListSessionLinksPayload{}
+	v.ChatIds = chatIds
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

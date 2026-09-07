@@ -42,6 +42,7 @@ type Service struct {
 	auth   *auth.Auth
 	app    *bgtriggers.App
 	audit  *audit.Logger
+	repo   *triggerrepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,6 +64,7 @@ func NewService(
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		app:    app,
 		audit:  auditLogger,
+		repo:   triggerrepo.New(db),
 	}
 }
 
@@ -119,6 +121,38 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 	}
 
 	return &gen.ListTriggerInstancesResult{Triggers: result}, nil
+}
+
+func (s *Service) ListTriggerEvents(ctx context.Context, payload *gen.ListTriggerEventsPayload) (*gen.ListTriggerEventsResult, error) {
+	authCtx, err := requireProjectAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	triggerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").LogError(ctx, s.logger)
+	}
+
+	if _, err := s.app.GetInstance(ctx, *authCtx.ProjectID, triggerID); err != nil {
+		return nil, toTriggerError(ctx, s.logger, err, "get trigger instance")
+	}
+
+	rows, err := s.repo.ListTriggerEvents(ctx, triggerrepo.ListTriggerEventsParams{
+		ProjectID:         *authCtx.ProjectID,
+		TriggerInstanceID: uuid.NullUUID{UUID: triggerID, Valid: true},
+		RowLimit:          int32(payload.Limit), //nolint:gosec // limit is validated to 1..200 by the design
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list trigger events").LogError(ctx, s.logger)
+	}
+
+	events := make([]*types.TriggerEvent, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, mv.BuildTriggerEventView(row))
+	}
+
+	return &gen.ListTriggerEventsResult{Events: events}, nil
 }
 
 func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTriggerInstancePayload) (*types.TriggerInstance, error) {

@@ -15,10 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -71,7 +71,7 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx dat
 		}
 		return none, upsertDirectoryUser(ctx, dbtx, event, payload)
 	case workos.EventKindDirectorySyncUserDeleted:
-		existing, err := workosrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
+		existing, err := directoryrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return none, nil
 		}
@@ -86,7 +86,7 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx dat
 		if !ShouldProcessEvent(conv.FromPGText[string](existing.WorkosLastEventID), rowUpdatedAt, event.ID, eventUpdatedAt) {
 			return none, nil
 		}
-		if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
+		if _, err := directoryrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
 			WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
 			WorkosLastEventID:     conv.ToPGText(event.ID),
 			WorkosDirectoryUserID: payload.ID,
@@ -143,7 +143,7 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.
 		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
 	}
 
-	existing, err := workosrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, payload.ID)
+	existing, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, payload.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, err, "get directory group sync state")
 	}
@@ -161,7 +161,7 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.
 	if len(attributes) == 0 || string(attributes) == "null" {
 		attributes = []byte("{}")
 	}
-	if _, err := workosrepo.New(dbtx).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	if _, err := directoryrepo.New(dbtx).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         org.ID,
 		WorkosDirectoryGroupID: payload.ID,
 		Name:                   payload.Name,
@@ -184,7 +184,7 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
 	}
 
-	existing, err := workosrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
+	existing, err := directoryrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, err, "get directory user sync state")
 	}
@@ -215,7 +215,7 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 	if len(attributes) == 0 || string(attributes) == "null" {
 		attributes = []byte("{}")
 	}
-	if _, err := workosrepo.New(dbtx).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	if _, err := directoryrepo.New(dbtx).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        org.ID,
 		UserID:                userID,
 		WorkosDirectoryUserID: payload.ID,
@@ -249,7 +249,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 
 	eventUpdatedAt := conv.Default(payload.UpdatedAt, event.CreatedAt)
 
-	existing, err := workosrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
+	existing, err := directoryrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return none, oops.E(oops.CodeUnexpected, err, "get directory user sync state")
 	}
@@ -278,7 +278,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 		}
 	}
 	if gramUserID == "" {
-		directoryUser, err := workosrepo.New(dbtx).GetDirectoryUserByWorkOSID(ctx, payload.ID)
+		directoryUser, err := directoryrepo.New(dbtx).GetDirectoryUserByWorkOSID(ctx, payload.ID)
 		switch {
 		case err == nil && directoryUser.UserID.Valid:
 			gramUserID = directoryUser.UserID.String
@@ -287,7 +287,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 		}
 	}
 
-	if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
+	if _, err := directoryrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
 		WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
 		WorkosLastEventID:     conv.ToPGText(event.ID),
 		WorkosDirectoryUserID: payload.ID,
@@ -347,7 +347,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 }
 
 func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupEventPayload) error {
-	existing, err := workosrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, payload.ID)
+	existing, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, payload.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group deletion for unknown group",
 			attr.SlogWorkOSDirectoryGroupID(payload.ID),
@@ -365,7 +365,7 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 		return nil
 	}
 
-	_, err = workosrepo.New(dbtx).DeleteDirectoryGroupByWorkOSID(ctx, workosrepo.DeleteDirectoryGroupByWorkOSIDParams{
+	_, err = directoryrepo.New(dbtx).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
 		WorkosDeletedAt:        conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
 		WorkosLastEventID:      conv.ToPGText(event.ID),
 		WorkosDirectoryGroupID: payload.ID,
@@ -373,7 +373,7 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete directory group")
 	}
-	if _, err := workosrepo.New(dbtx).CloseDirectoryUserGroupMembershipsForGroup(ctx, existing.ID); err != nil {
+	if _, err := directoryrepo.New(dbtx).CloseDirectoryUserGroupMembershipsForGroup(ctx, existing.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "close directory group memberships")
 	}
 
@@ -381,7 +381,7 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 }
 
 func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
-	latest, err := workosrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, workosrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
+	latest, err := directoryrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, directoryrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,
 	})
@@ -392,7 +392,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 		return nil
 	}
 
-	userID, err := workosrepo.New(dbtx).GetDirectoryUserIDByWorkOSID(ctx, payload.User.ID)
+	userID, err := directoryrepo.New(dbtx).GetDirectoryUserIDByWorkOSID(ctx, payload.User.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown user",
 			attr.SlogWorkOSDirectoryUserID(payload.User.ID),
@@ -403,7 +403,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 		return oops.E(oops.CodeUnexpected, err, "get directory user ID by WorkOS ID")
 	}
 
-	groupID, err := workosrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
+	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
 			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
@@ -414,7 +414,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 		return oops.E(oops.CodeUnexpected, err, "get directory group ID by WorkOS ID")
 	}
 
-	if _, err := workosrepo.New(dbtx).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+	if _, err := directoryrepo.New(dbtx).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        userID,
 		DirectoryGroupID:       groupID,
 		WorkosDirectoryUserID:  payload.User.ID,
@@ -427,7 +427,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 }
 
 func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
-	latest, err := workosrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, workosrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
+	latest, err := directoryrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, directoryrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,
 	})
@@ -438,7 +438,7 @@ func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbt
 		return nil
 	}
 
-	rowsAffected, err := workosrepo.New(dbtx).CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx, workosrepo.CloseDirectoryUserGroupMembershipByWorkOSIDsParams{
+	rowsAffected, err := directoryrepo.New(dbtx).CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx, directoryrepo.CloseDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosCreatedAt:        conv.ToPGTimestamptz(event.CreatedAt),
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,

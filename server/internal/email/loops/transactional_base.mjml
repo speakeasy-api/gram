@@ -1,0 +1,130 @@
+<mjml>
+  <mj-head>
+    <mj-title>{DATA_VARIABLE:email_title}</mj-title>
+    <mj-preview>{DATA_VARIABLE:email_preview}</mj-preview>
+
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+      <mj-body background-color="#fafafa" width="600px" />
+      <mj-section background-color="#ffffff" padding="0" />
+      <mj-text color="#000000" font-size="15px" line-height="1.5" padding="0" />
+      <mj-button
+        background-color="#000000"
+        border-radius="0"
+        color="#fafafa"
+        font-size="15px"
+        font-weight="400"
+        inner-padding="12px 20px"
+        padding="0"
+      />
+    </mj-attributes>
+
+    <mj-style>
+      .eyebrow {
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+      }
+
+      @media only screen and (max-width: 480px) {
+        .mobile-pad > table > tbody > tr > td {
+          padding-left: 24px !important;
+          padding-right: 24px !important;
+        }
+      }
+    </mj-style>
+  </mj-head>
+
+  <mj-body>
+    <mj-section css-class="mobile-pad" padding="28px 32px 8px">
+      <mj-column>
+        <mj-image
+          src="speakeasy-lockup-black.png"
+          alt="Speakeasy"
+          width="160px"
+          align="left"
+          padding="0"
+        />
+      </mj-column>
+    </mj-section>
+
+    <!-- MESSAGE SLOT: replace or extend only this slot for event-specific data. -->
+    <mj-section css-class="mobile-pad" padding="36px 32px 0">
+      <mj-column>
+        <mj-text
+          css-class="eyebrow"
+          color="#6e6e6e"
+          font-size="12px"
+          line-height="1.4"
+          padding="0 0 8px"
+        >
+          {DATA_VARIABLE:email_eyebrow}
+        </mj-text>
+        <mj-text
+          font-size="26px"
+          font-weight="700"
+          letter-spacing="-0.5px"
+          line-height="1.15"
+          padding="0"
+        >
+          {DATA_VARIABLE:email_headline}
+        </mj-text>
+        <mj-image
+          src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png"
+          alt=""
+          padding="16px 0 0"
+        />
+      </mj-column>
+    </mj-section>
+
+    <mj-section css-class="mobile-pad" padding="20px 32px 24px">
+      <mj-column>
+        <mj-text padding="0"> {DATA_VARIABLE:email_body} </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Optional detail block: delete when the message has no key detail. -->
+    <mj-section css-class="mobile-pad" padding="0 32px 28px">
+      <mj-column border="1px solid #dcdcdc" padding="18px 20px 16px">
+        <mj-text
+          css-class="eyebrow"
+          color="#6e6e6e"
+          font-size="12px"
+          line-height="1.4"
+          padding="0 0 6px"
+        >
+          {DATA_VARIABLE:detail_label}
+        </mj-text>
+        <mj-text
+          font-family="'Courier New', Courier, monospace"
+          font-size="14px"
+          line-height="1.55"
+          padding="0"
+        >
+          {DATA_VARIABLE:detail_value}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Optional CTA: delete when the recipient has no useful next action. -->
+    <mj-section css-class="mobile-pad" padding="0 32px 40px">
+      <mj-column>
+        <mj-button align="left" href="{DATA_VARIABLE:action_url}">
+          {DATA_VARIABLE:action_label}
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section css-class="mobile-pad" padding="0 32px 24px">
+      <mj-column>
+        <mj-divider
+          border-width="1px"
+          border-color="#dcdcdc"
+          padding="0 0 16px"
+        />
+        <mj-text color="#6e6e6e" font-size="12px" line-height="1.6" padding="0">
+          {DATA_VARIABLE:footer_reason}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

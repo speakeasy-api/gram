@@ -187,9 +187,11 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 
 	resolvedID := uuid.NewString()
 	unresolvedID := uuid.NewString()
+	unresolvedID2 := uuid.NewString()
 	// Different principals so they land in different buckets.
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, resolvedID, "deny", "user:resolved-user", "org:read")
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID, "deny", "user:unresolved-user", "org:read")
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID2, "deny", "user:unresolved-user-2", "org:read")
 
 	// Resolve only the first.
 	_, err := accessrepo.New(ti.conn).InsertChallengeResolutions(ctx, accessrepo.InsertChallengeResolutionsParams{
@@ -228,6 +230,7 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 		if !assert.Len(c, result.Buckets, 1) {
 			return
 		}
+		assert.Equal(c, 1, result.Total)
 		assert.NotNil(c, result.Buckets[0].ResolvedAt)
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -239,6 +242,90 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 		Scope:        nil,
 		ProjectID:    nil,
 		Resolved:     &resolvedFalse,
+		Limit:        1,
+		Offset:       0,
+		ApikeyToken:  nil,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Buckets, 1)
+	require.Equal(t, 2, result.Total)
+	require.Contains(t, []string{"user:unresolved-user", "user:unresolved-user-2"}, result.Buckets[0].PrincipalUrn)
+}
+
+func TestListChallengeBuckets_FilterByResolvedWithLargeResolutionSet(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
+
+	resolvedID := uuid.NewString()
+	unresolvedID := uuid.NewString()
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, resolvedID, "deny", "user:resolved-user", "org:read")
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID, "deny", "user:unresolved-user", "org:read")
+
+	resolvedIDs := make([]string, 8_000)
+	resolvedIDs[0] = resolvedID
+	for i := 1; i < len(resolvedIDs); i++ {
+		resolvedIDs[i] = uuid.NewString()
+	}
+	_, err := accessrepo.New(ti.conn).InsertChallengeResolutions(ctx, accessrepo.InsertChallengeResolutionsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ChallengeIds:   resolvedIDs,
+		PrincipalUrn:   "user:resolved-user",
+		Scope:          "org:read",
+		ResourceKind:   "",
+		ResourceID:     "",
+		ResolutionType: "dismissed",
+		RoleSlug:       conv.PtrToPGText(nil),
+		ResolvedBy:     "user:admin1",
+	})
+	require.NoError(t, err)
+
+	resolved := true
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     &resolved,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.Equal(c, 1, result.Total)
+		assert.Equal(c, resolvedID, result.Buckets[0].ID)
+	}, 10*time.Second, 100*time.Millisecond)
+	stalePage, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+		Outcome:      nil,
+		PrincipalUrn: nil,
+		Scope:        nil,
+		ProjectID:    nil,
+		Resolved:     &resolved,
+		Limit:        20,
+		Offset:       10,
+		ApikeyToken:  nil,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stalePage.Buckets)
+	require.Equal(t, 1, stalePage.Total)
+
+	resolved = false
+	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+		Outcome:      nil,
+		PrincipalUrn: nil,
+		Scope:        nil,
+		ProjectID:    nil,
+		Resolved:     &resolved,
 		Limit:        20,
 		Offset:       0,
 		ApikeyToken:  nil,
@@ -246,7 +333,8 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Buckets, 1)
-	require.Equal(t, "user:unresolved-user", result.Buckets[0].PrincipalUrn)
+	require.Equal(t, 1, result.Total)
+	require.Equal(t, unresolvedID, result.Buckets[0].ID)
 }
 
 func TestListChallengeBuckets_Pagination(t *testing.T) {

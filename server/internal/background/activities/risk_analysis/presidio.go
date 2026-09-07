@@ -236,6 +236,19 @@ func isFindingLevelDropped(entityType string) bool {
 	return drop
 }
 
+// FilterPinnedEntities trims blocklisted entity types from a pinned list so
+// callers outside this package (the realtime pub/sub path) apply the same
+// policy as the local scanner. Nil stays nil (default entity set).
+func FilterPinnedEntities(entities []string) []string {
+	return filterEntities(entities)
+}
+
+// IsEntityFindingDropped reports whether findings of this entity type must
+// never surface regardless of how the scan was scoped.
+func IsEntityFindingDropped(entityType string) bool {
+	return isFindingLevelDropped(entityType)
+}
+
 // filterEntities removes blocklisted entity types from the caller's list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the
@@ -667,7 +680,7 @@ func convertPresidioFindings(text string, results []presidioResult) []scanners.F
 			continue
 		}
 
-		if isPresidioFalsePositive(r.EntityType, match) {
+		if isPresidioFalsePositive(r.EntityType, match, text) {
 			continue
 		}
 
@@ -699,9 +712,15 @@ func convertPresidioFindings(text string, results []presidioResult) []scanners.F
 // type is noise the policy author would not want surfaced. The catalogs and
 // dispatch live in the leaf package internal/risk/presidiofp so they can be
 // reused outside the scanner (e.g. the offline sweep that re-evaluates stored
-// findings); see presidiofp.Reason for the per-entity coverage.
-func isPresidioFalsePositive(entityType, match string) bool {
-	return presidiofp.Reason(entityType, match) != ""
+// findings); see presidiofp.ReasonInContext for the per-entity coverage.
+//
+// text is the payload the match came from. Most catalogs judge the match alone,
+// but some need it: a ten-digit run only reads as a UK NHS number when the
+// surrounding text talks about health care, because Presidio's recognizer pins
+// any checksum-valid run at maximum confidence without ever consulting its own
+// context words.
+func isPresidioFalsePositive(entityType, match, text string) bool {
+	return presidiofp.ReasonInContext(entityType, match, text) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the

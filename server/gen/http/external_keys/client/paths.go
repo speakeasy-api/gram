@@ -52,6 +52,11 @@ func GetGcpKmsKeyExternalKeysPath() string {
 	return "/rpc/externalKeys.getGcpKms"
 }
 
+// VerifyGcpKmsKeyExternalKeysPath returns the URL path to the externalKeys service verifyGcpKmsKey HTTP endpoint.
+func VerifyGcpKmsKeyExternalKeysPath() string {
+	return "/rpc/externalKeys.verifyGcpKms"
+}
+
 // DeleteAwsKmsKeyExternalKeysPath returns the URL path to the externalKeys service deleteAwsKmsKey HTTP endpoint.
 func DeleteAwsKmsKeyExternalKeysPath() string {
 	return "/rpc/externalKeys.deleteAwsKms"

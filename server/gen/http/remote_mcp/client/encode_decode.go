@@ -261,6 +261,249 @@ func DecodeCreateServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildCreateServerAndMcpServerRequest instantiates a HTTP request object with
+// method and path set to call the "remoteMcp" service
+// "createServerAndMcpServer" endpoint
+func (c *Client) BuildCreateServerAndMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateServerAndMcpServerRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "createServerAndMcpServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateServerAndMcpServerRequest returns an encoder for requests sent
+// to the remoteMcp createServerAndMcpServer server.
+func EncodeCreateServerAndMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.CreateServerAndMcpServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "createServerAndMcpServer", "*remotemcp.CreateServerAndMcpServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateServerAndMcpServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "createServerAndMcpServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateServerAndMcpServerResponse returns a decoder for responses
+// returned by the remoteMcp createServerAndMcpServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateServerAndMcpServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateServerAndMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateServerAndMcpServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			res := NewCreateServerAndMcpServerResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateServerAndMcpServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateServerAndMcpServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateServerAndMcpServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateServerAndMcpServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateServerAndMcpServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateServerAndMcpServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateServerAndMcpServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateServerAndMcpServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+				}
+				err = ValidateCreateServerAndMcpServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+				}
+				return nil, NewCreateServerAndMcpServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateServerAndMcpServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+				}
+				err = ValidateCreateServerAndMcpServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+				}
+				return nil, NewCreateServerAndMcpServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "createServerAndMcpServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateServerAndMcpServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			err = ValidateCreateServerAndMcpServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "createServerAndMcpServer", err)
+			}
+			return nil, NewCreateServerAndMcpServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "createServerAndMcpServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListServersRequest instantiates a HTTP request object with method and
 // path set to call the "remoteMcp" service "listServers" endpoint
 func (c *Client) BuildListServersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2912,6 +3155,29 @@ func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServ
 		TransportType: *v.TransportType,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMcpServerResponseBodyToTypesMcpServer builds a value of type
+// *types.McpServer from a value of type *McpServerResponseBody.
+func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *types.McpServer {
+	res := &types.McpServer{
+		ID:                    *v.ID,
+		ProjectID:             *v.ProjectID,
+		Name:                  v.Name,
+		Slug:                  v.Slug,
+		EnvironmentID:         v.EnvironmentID,
+		UserSessionIssuerID:   v.UserSessionIssuerID,
+		RemoteMcpServerID:     v.RemoteMcpServerID,
+		TunneledMcpServerID:   v.TunneledMcpServerID,
+		ToolsetID:             v.ToolsetID,
+		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
+		ToolVariationsGroupID: v.ToolVariationsGroupID,
+		Visibility:            types.McpServerVisibility(*v.Visibility),
+		CreatedAt:             *v.CreatedAt,
+		UpdatedAt:             *v.UpdatedAt,
 	}
 
 	return res

@@ -42,6 +42,10 @@ export type ListRiskResultsRequest = {
    */
   userId?: string | undefined;
   /**
+   * Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.
+   */
+  externalUserIds?: Array<string> | undefined;
+  /**
    * If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
    */
   uniqueMatch?: boolean | undefined;
@@ -191,6 +195,7 @@ export type ListRiskResultsRequest$Outbound = {
   category?: string | undefined;
   rule_id?: string | undefined;
   user_id?: string | undefined;
+  external_user_ids?: Array<string> | undefined;
   unique_match?: boolean | undefined;
   non_assistant?: boolean | undefined;
   assistant_id?: string | undefined;
@@ -214,6 +219,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
     userId: z.optional(z.string()),
+    externalUserIds: z.optional(z.array(z.string())),
     uniqueMatch: z.optional(z.boolean()),
     nonAssistant: z.optional(z.boolean()),
     assistantId: z.optional(z.string()),
@@ -231,6 +237,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
       chatId: "chat_id",
       ruleId: "rule_id",
       userId: "user_id",
+      externalUserIds: "external_user_ids",
       uniqueMatch: "unique_match",
       nonAssistant: "non_assistant",
       assistantId: "assistant_id",

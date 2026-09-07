@@ -258,7 +258,7 @@ func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 	} {
 		require.Equal(t,
 			"There is a problem with the domain's TLS certificate. We're working to resolve it.",
-			HealthIssueMessage(issue, "cname.example.com."),
+			HealthIssueMessage(issue, DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "cname.example.com.", ExpectedARecords: nil}),
 		)
 	}
 }
@@ -266,24 +266,50 @@ func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 func TestHealthIssueMessageNamesExpectedCNAME(t *testing.T) {
 	t.Parallel()
 
+	cnameOnly := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "cname.example.com.", ExpectedARecords: nil}
 	require.Equal(t,
-		"The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at cname.example.com..",
-		HealthIssueMessage(HealthIssueDNSTargetMismatch, "cname.example.com."),
+		"The domain's DNS no longer resolves to the expected target. Create a CNAME record pointing the domain at cname.example.com.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, cnameOnly),
 	)
 	require.Equal(t,
-		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.com..",
-		HealthIssueMessage(HealthIssueDNSNotFound, "cname.example.com."),
+		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.com.",
+		HealthIssueMessage(HealthIssueDNSNotFound, cnameOnly),
 	)
 
 	// An unconfigured target must not leak an empty parenthetical or name the
 	// platform.
+	empty := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "", ExpectedARecords: nil}
 	require.Equal(t,
 		"The domain's DNS no longer resolves to the expected target.",
-		HealthIssueMessage(HealthIssueDNSTargetMismatch, ""),
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, empty),
 	)
 	require.Equal(t,
 		"DNS records for the domain could not be found.",
-		HealthIssueMessage(HealthIssueDNSNotFound, ""),
+		HealthIssueMessage(HealthIssueDNSNotFound, empty),
+	)
+}
+
+func TestHealthIssueMessageApexNamesARecords(t *testing.T) {
+	t.Parallel()
+
+	apex := DNSRemediation{Domain: "example.com", ExpectedCNAME: "cname.example.net.", ExpectedARecords: []string{"34.127.46.134"}}
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create an A record pointing the domain at 34.127.46.134.",
+		HealthIssueMessage(HealthIssueDNSNotFound, apex),
+	)
+	require.Equal(t,
+		"The domain's DNS no longer resolves to the expected target. Create an A record pointing the domain at 34.127.46.134.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, apex),
+	)
+}
+
+func TestHealthIssueMessageSubdomainOffersBothRecordTypes(t *testing.T) {
+	t.Parallel()
+
+	both := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "cname.example.net.", ExpectedARecords: []string{"34.127.46.134"}}
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.net (or, for an apex domain, an A record pointing at 34.127.46.134).",
+		HealthIssueMessage(HealthIssueDNSNotFound, both),
 	)
 }
 
@@ -323,4 +349,14 @@ func TestShouldAutoDisableRequiresAllThresholds(t *testing.T) {
 	noAnchor := eligible
 	noAnchor.UnhealthySince = nil
 	require.False(t, ShouldAutoDisable(noAnchor, now))
+}
+
+func TestHealthIssueMessageApexPluralizesMultipleARecords(t *testing.T) {
+	t.Parallel()
+
+	apex := DNSRemediation{Domain: "example.com", ExpectedCNAME: "cname.example.net.", ExpectedARecords: []string{"34.127.46.134", "34.83.69.209"}}
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create A records pointing the domain at 34.127.46.134, 34.83.69.209.",
+		HealthIssueMessage(HealthIssueDNSNotFound, apex),
+	)
 }

@@ -65,11 +65,13 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
 interface ContentErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
+  resetKeys?: unknown[];
 }
 
 export function ContentErrorBoundary({
   children,
   fallback,
+  resetKeys,
 }: ContentErrorBoundaryProps): JSX.Element {
   const defaultFallback = (
     <div className="flex items-center justify-center p-8">
@@ -80,6 +82,7 @@ export function ContentErrorBoundary({
   return (
     <ReactErrorBoundary
       FallbackComponent={ContentErrorFallback}
+      resetKeys={resetKeys}
       onError={(error, errorInfo) => {
         console.error(
           "Content Error Boundary caught an error:",

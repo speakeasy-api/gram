@@ -1,7 +1,6 @@
 package activities
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -86,25 +85,4 @@ func TestElapsedPercent_Clamped(t *testing.T) {
 	}
 	require.Equal(t, 0, elapsedPercent(cycle, cycle.Start.Add(-time.Hour)))
 	require.Equal(t, 100, elapsedPercent(cycle, cycle.End.Add(time.Hour)))
-}
-
-func TestRenderWeeklyUsageTable_RendersTotals(t *testing.T) {
-	t.Parallel()
-
-	html, err := renderWeeklyUsageTable(45120890, 37882410)
-	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(html, "<table"), "must be raw HTML for the Loops data-variable block")
-	require.Contains(t, html, "45,120,890")
-	require.Contains(t, html, "Previous cycle at this point: 37,882,410")
-	// html/template entity-escapes '+', which renders as "+19%" in clients.
-	require.Contains(t, html, "&#43;19%")
-}
-
-func TestRenderWeeklyUsageTable_NoPreviousUsageReadsAsNew(t *testing.T) {
-	t.Parallel()
-
-	html, err := renderWeeklyUsageTable(4200, 0)
-	require.NoError(t, err)
-	require.Contains(t, html, "New")
-	require.Contains(t, html, "Previous cycle at this point: 0")
 }

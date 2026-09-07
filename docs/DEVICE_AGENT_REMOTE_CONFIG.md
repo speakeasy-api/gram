@@ -6,8 +6,9 @@ organization. Enrolled agents receive it in the existing
 legacy organization `agent` install key).
 
 The dashboard reads and updates the same document through
-`agent.getConfiguration` and `agent.updateConfiguration`. Reads require
-`org:read`; updates require `org:admin`.
+`agent.getConfiguration` and `agent.updateConfiguration`. Both require
+`org:admin`: the fleet configuration surface is organization administration, so
+viewing it — not just changing it — is admin-only.
 
 ## Version 1 settings
 

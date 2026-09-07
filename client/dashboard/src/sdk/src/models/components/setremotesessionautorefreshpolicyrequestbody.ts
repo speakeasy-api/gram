@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
@@ -22,6 +23,10 @@ export type SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy = ClosedEnum<
 
 export type SetRemoteSessionAutoRefreshPolicyRequestBody = {
   /**
+   * Organization whose automatic remote-session refresh policy to update.
+   */
+  organizationId: string;
+  /**
    * Organization policy for automatic remote-session refresh
    */
   policy: SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy;
@@ -34,6 +39,7 @@ export const SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy$outboundSchema:
 
 /** @internal */
 export type SetRemoteSessionAutoRefreshPolicyRequestBody$Outbound = {
+  organization_id: string;
   policy: string;
 };
 
@@ -42,9 +48,17 @@ export const SetRemoteSessionAutoRefreshPolicyRequestBody$outboundSchema:
   z.ZodMiniType<
     SetRemoteSessionAutoRefreshPolicyRequestBody$Outbound,
     SetRemoteSessionAutoRefreshPolicyRequestBody
-  > = z.object({
-    policy: SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy$outboundSchema,
-  });
+  > = z.pipe(
+    z.object({
+      organizationId: z.string(),
+      policy: SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        organizationId: "organization_id",
+      });
+    }),
+  );
 
 export function setRemoteSessionAutoRefreshPolicyRequestBodyToJSON(
   setRemoteSessionAutoRefreshPolicyRequestBody:

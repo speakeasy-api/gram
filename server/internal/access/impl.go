@@ -39,17 +39,35 @@ import (
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
+// CanonicalFoldGate reports the organization id an identity-folded query
+// should run under: the org id when the canonical identity fold is rolled out
+// to it, "" when it is not. Injected rather than reimplemented so the rollout
+// flag stays one switch across every service that folds.
+type CanonicalFoldGate interface {
+	CanonicalOrgFor(ctx context.Context, orgID string) string
+}
+
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	chConn  driver.Conn
-	auth    *auth.Auth
-	authz   *authz.Engine
-	roleMgr *RoleManager
-	audit   *audit.Logger
-	email   *email.Service
-	siteURL *url.URL
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	chConn   driver.Conn
+	auth     *auth.Auth
+	authz    *authz.Engine
+	roleMgr  *RoleManager
+	audit    *audit.Logger
+	email    *email.Service
+	siteURL  *url.URL
+	foldGate CanonicalFoldGate
+}
+
+// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
+// caller wired the rollout flag in, which fails closed: no fold.
+func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
+	if s.foldGate == nil {
+		return ""
+	}
+	return s.foldGate.CanonicalOrgFor(ctx, orgID)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -66,20 +84,22 @@ func NewService(
 	auditLogger *audit.Logger,
 	emailService *email.Service,
 	siteURL *url.URL,
+	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:  logger,
-		db:      db,
-		chConn:  chConn,
-		auth:    auth.New(logger, db, sessions, authz),
-		authz:   authz,
-		roleMgr: roleMgr,
-		audit:   auditLogger,
-		email:   emailService,
-		siteURL: siteURL,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:   logger,
+		db:       db,
+		chConn:   chConn,
+		auth:     auth.New(logger, db, sessions, authz),
+		authz:    authz,
+		roleMgr:  roleMgr,
+		audit:    auditLogger,
+		email:    emailService,
+		siteURL:  siteURL,
+		foldGate: foldGate,
 	}
 }
 
@@ -113,12 +133,31 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -266,8 +305,12 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
+		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
+		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
+		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -303,8 +346,9 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	}
 }
 
-// ListMembers follows the original access API contract by returning WorkOS user
-// identifiers while decorating them with the role information the UI needs.
+// ListMembers returns the active organization's members. Organization readers
+// use it for access management; project readers use the same roster for the
+// Employee Enrollment surface.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -320,12 +364,31 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -370,21 +433,18 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	// Sessions in the shared demo org have no membership rows. Return the
 	// full user-visible scope set so every dashboard page is browsable in the
-	// demo (page gates like Costs require org:admin). This is display-only:
-	// enforcement still uses the fixed read-only DemoScopeGrants set, and the
-	// write-guard middleware rejects mutations, so any action the wider UI
-	// exposes fails server-side.
+	// demo (page gates like Costs require org:admin). This is the same set
+	// authz.DemoScopeGrants installs on the request context;
+	// TestDemoGrantsMatchEnforcedScopes holds the two together.
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
-	if acPre.IsAdmin {
-		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			trace.SpanFromContext(ctx).SetAttributes(
-				attr.OrganizationID(acPre.ActiveOrganizationID),
-				attr.UserID(acPre.UserID),
-			)
-			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
-		}
+	if contextvalues.IsSupportSession(ctx) {
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(acPre.ActiveOrganizationID),
+			attr.UserID(acPre.UserID),
+		)
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -480,10 +540,7 @@ func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
 	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
 		return true
 	}
-	if !ac.IsAdmin {
-		return false
-	}
-	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {
+	if !contextvalues.IsSupportSession(ctx) {
 		return false
 	}
 
@@ -619,6 +676,10 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
+		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
+		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
 	}
 }
 
@@ -760,16 +821,28 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: a caller that sends neither
+	// bound still gets the whole history, which is what every existing caller
+	// of this endpoint expects.
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+
 	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
+		From:           from,
+		To:             to,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
@@ -962,7 +1035,18 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		attr.UserID(authCtx.UserID),
 	)
 
-	skipPagination := payload.Resolved != nil
+	pgQueries := repo.New(s.db)
+	var resolvedChallengeIDs []string
+	if payload.Resolved != nil {
+		ids, err := pgQueries.ListRetainedResolvedChallengeIDs(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resolved challenge ids").LogError(ctx, s.logger)
+		}
+		if *payload.Resolved && len(ids) == 0 {
+			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
+		}
+		resolvedChallengeIDs = ids
+	}
 
 	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
 	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
@@ -970,39 +1054,33 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		return nil, err
 	}
 
-	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
-		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
-		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
-		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
+	filters := chrepo.ChallengeBucketFilters{
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
+		Resolved:             payload.Resolved,
+		ResolvedChallengeIDs: resolvedChallengeIDs,
+		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
+		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
 	chQueries := chrepo.New(s.chConn)
 
-	var total uint64
-	if !skipPagination {
-		count, err := chQueries.CountChallengeBuckets(ctx, filters)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").LogError(ctx, s.logger)
-		}
-		if count == 0 {
-			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
-		}
-		total = count
-	}
-
-	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
+	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(buckets) == 0 {
-		return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: int(total)}, nil
+		return &gen.ListChallengeBucketsResult{
+			Buckets: []*gen.ChallengeBucket{},
+			Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
+		}, nil
 	}
 
 	// Batch-lookup resolutions from PG using all challenge IDs across buckets.
@@ -1011,7 +1089,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		allChallengeIDs = append(allChallengeIDs, b.ChallengeIDs...)
 	}
 
-	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+	resolutions, err := pgQueries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeIds:   allChallengeIDs,
 	})
@@ -1021,28 +1099,6 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
 		resolutionMap[r.ChallengeID] = r
-	}
-
-	// Apply resolved filter post-join if requested, then paginate in Go.
-	if payload.Resolved != nil {
-		wantResolved := *payload.Resolved
-		filtered := buckets[:0]
-		for _, b := range buckets {
-			_, hasResolution := resolutionMap[b.ID]
-			if hasResolution == wantResolved {
-				filtered = append(filtered, b)
-			}
-		}
-		buckets = filtered
-		total = uint64(len(buckets))
-		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
-		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
-		if offset >= total {
-			buckets = nil
-		} else {
-			end := min(offset+limit, total)
-			buckets = buckets[offset:end]
-		}
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1142,7 +1198,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	return &gen.ListChallengeBucketsResult{
 		Buckets: result,
-		Total:   int(total),
+		Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
 	}, nil
 }
 

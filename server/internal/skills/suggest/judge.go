@@ -207,9 +207,10 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 			Description: nil,
 			Strict:      optionalnullable.From(&strict),
 		},
-		KeyType:   openrouter.KeyTypeInternal,
-		KeySlot:   billing.ModelUsageSourceSkillSuggestions,
-		Reasoning: nil,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceSkillSuggestions,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

@@ -1,0 +1,27 @@
+<Style themeId="cmsnm620801ug0j2jdxiw79j4" backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="32" bodyYPadding="32" borderColor="#DCDCDC" borderWidth="1" borderRadius="0" buttonBodyColor="#000000" buttonBodyXPadding="20" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FAFAFA" buttonTextFontSize="15" dividerColor="#DCDCDC" dividerBorderWidth="1" textBaseColor="#000000" textBaseFontSize="15" textBaseLineHeight="150" textBaseLetterSpacing="0" textLinkColor="#2873D7" heading1Color="#000000" heading1FontSize="26" heading1LineHeight="115" heading1LetterSpacing="-1" heading2Color="#000000" heading2FontSize="20" heading2LineHeight="120" heading2LetterSpacing="0" heading3Color="#000000" heading3FontSize="16" heading3LineHeight="120" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmt7eueee05e20izu0frdx1jq.png" alt="Speakeasy" width="160" align="left" paddingBottom="28" />
+<Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">WEEKLY USAGE / {data.organization_name}</Text></Paragraph>
+<H1>Your usage at a glance</H1>
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png" alt="" width="536" paddingTop="12" paddingBottom="20" />
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DCDCDC" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">TOKENS MANAGED / CYCLE TO DATE</Text></Paragraph>
+  <H2 fontSize="32">{data.total_tokens}</H2>
+  <Paragraph fontSize="12" paddingTop="6"><Text textColor="#6E6E6E">{data.total_change_percent} vs. the same point last cycle</Text></Paragraph>
+</Section>
+<Paragraph fontSize="12" lineHeight="100"><Br /></Paragraph>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DCDCDC" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Columns gap="24" widths="50,50">
+    <ColumnItem>
+      <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">PREVIOUS CYCLE</Text></Paragraph>
+      <Paragraph fontSize="14" lineHeight="150">{data.previous_total_tokens}</Paragraph>
+    </ColumnItem>
+    <ColumnItem>
+      <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">REMAINING</Text></Paragraph>
+      <Paragraph fontSize="14" lineHeight="150">{data.days_remaining}</Paragraph>
+    </ColumnItem>
+  </Columns>
+</Section>
+<Paragraph paddingTop="16" paddingBottom="16">Your current cycle ends on {data.cycle_end_date}.</Paragraph>
+<Button href="{data.view_usage_url}" align="left" paddingTop="8" paddingBottom="32">View detailed usage</Button>
+<Divider paddingBottom="16" />
+<Paragraph fontSize="12"><Text textColor="#6E6E6E">You’re receiving this operational report because this address is configured for billing alerts in Speakeasy.</Text></Paragraph>

@@ -3,7 +3,11 @@ import { Icon } from "@/components/ui/Icon";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
 import { HooksSetupDialog } from "./HooksSetupDialog";
-import { ClaudeCodeIcon, CursorIcon, CodexIcon } from "./HookSourceIcon";
+import {
+  ClaudeCodeIcon,
+  CursorIcon,
+  CodexIcon,
+} from "@/components/agent-providers/AgentProviderIcon";
 
 interface ProviderCardProps {
   name: string;

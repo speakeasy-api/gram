@@ -9,7 +9,9 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 
+	adminviews "github.com/speakeasy-api/gram/server/gen/admin/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -22,20 +24,89 @@ type Service interface {
 	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
 	// Logout implements logout.
 	Logout(context.Context, *LogoutPayload) (err error)
+	// GetSession implements getSession.
+	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
+	// GetOrganizationFeatures implements getOrganizationFeatures.
+	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
+	// SetOrganizationFeature implements setOrganizationFeature.
+	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
+	// GetOrganizationChatAnalysisSettings implements
+	// getOrganizationChatAnalysisSettings.
+	GetOrganizationChatAnalysisSettings(context.Context, *GetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// SetOrganizationChatAnalysisSettings implements
+	// setOrganizationChatAnalysisSettings.
+	SetOrganizationChatAnalysisSettings(context.Context, *SetOrganizationChatAnalysisSettingsPayload) (res *AdminChatAnalysisSettings, err error)
+	// TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.
+	TriggerOrganizationChatAnalysis(context.Context, *TriggerOrganizationChatAnalysisPayload) (res *AdminChatAnalysisTriggerResult, err error)
+	// OpenOrganizationInDashboard implements openOrganizationInDashboard.
+	OpenOrganizationInDashboard(context.Context, *OpenOrganizationInDashboardPayload) (res *AdminDashboardRedirect, err error)
 	// Returns full admin details for a project by id or slug, including aggregated
 	// counts of child resources.
 	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Sets one account type on many organizations in a single statement. An ID
+	// that matches no organization is reported back rather than failing the batch,
+	// so a stale ID costs the operator that row and not the whole call.
+	BulkUpdateAccountType(context.Context, *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error)
+	// Disables an organization, recording the moment of the action in disabled_at.
+	// Idempotent: disabling an already-disabled organization keeps the original
+	// timestamp.
+	DisableOrganization(context.Context, *DisableOrganizationPayload) (res *AdminOrganization, err error)
+	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
+	// organization that is already active is unaffected.
+	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
 	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
+	// Lists activity belonging to an organization for admin operators.
+	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+	// Extends a running enterprise trial by adding days to its current end date.
+	// Only a running trial can be extended: one that has converted, has been
+	// demoted, or has already expired is rejected rather than re-armed.
+	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
+	// Creates an organization in WorkOS and in Gram, so an operator does not have
+	// to leave the admin app for the WorkOS dashboard. The organization starts
+	// with no members, is not whitelisted, and gets no trial. Idempotent against
+	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
+	// so both writers converge on one row.
+	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
+	// Puts a demoted enterprise trial back on: restores the organization's account
+	// type and whitelist flag, revives its model provider keys, and gives the
+	// trial a fresh run of the given length counted from now. Only a demoted trial
+	// can be re-armed; one that has converted or is already running is rejected.
+	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
+	// Returns platform-wide organization counts for the strip above the
+	// organizations list. Every figure counts the whole platform: none of them
+	// narrows to the caller's list filters, so the strip does not move when an
+	// operator filters.
+	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
+	// Returns the configured state of every materialized platform-managed
+	// OpenRouter key for an organization.
+	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
+	// Sets the monthly limit for one materialized platform-managed OpenRouter key.
+	SetInferenceKeyMonthlyLimit(context.Context, *SetInferenceKeyMonthlyLimitPayload) (res *AdminInferenceKeyLimit, err error)
+	// Returns up to twelve complete UTC calendar months of recorded inference
+	// spend for an organization.
+	GetInferenceSpendHistory(context.Context, *GetInferenceSpendHistoryPayload) (res []*AdminInferenceSpendMonth, err error)
+	// Returns current PAYG usage and estimated cost for an organization.
+	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
+	// Returns the live Stripe subscription and payment state for an organization.
+	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Schedules an organization's PAYG subscription to cancel at period end.
+	CancelStripeSubscription(context.Context, *CancelStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Removes a scheduled period-end cancellation from an organization's PAYG
+	// subscription.
+	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Records that an organization's enterprise trial converted to a signed
+	// contract.
+	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -58,7 +129,80 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [32]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
+
+// AdminBulkUpdateAccountTypeResult is the result type of the admin service
+// bulkUpdateAccountType method.
+type AdminBulkUpdateAccountTypeResult struct {
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
+	UpdatedIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
+}
+
+// AdminChatAnalysisSettings is the result type of the admin service
+// getOrganizationChatAnalysisSettings method.
+type AdminChatAnalysisSettings struct {
+	OrganizationID         string
+	WorkUnitsEnabled       bool
+	WorkUnitsDailyCap      int
+	BusinessMemoryEnabled  bool
+	BusinessMemoryDailyCap int
+	IsDefault              bool
+}
+
+// AdminChatAnalysisTriggerResult is the result type of the admin service
+// triggerOrganizationChatAnalysis method.
+type AdminChatAnalysisTriggerResult struct {
+	ProjectsSignaled int
+}
+
+// AdminDashboardRedirect is the result type of the admin service
+// openOrganizationInDashboard method.
+type AdminDashboardRedirect struct {
+	Location     string
+	CacheControl string
+}
+
+// Current usage and configured state for one materialized platform-managed
+// OpenRouter key, without key material or provider identifiers.
+type AdminInferenceKey struct {
+	KeyType string
+	// Credits spent this month in USD.
+	CreditsUsed    float64
+	MonthlyCredits int64
+	Disabled       bool
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified bool
+}
+
+// AdminInferenceKeyLimit is the result type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type AdminInferenceKeyLimit struct {
+	KeyType        string
+	MonthlyCredits int64
+}
+
+type AdminInferenceSpendMonth struct {
+	PeriodStart string
+	// Exclusive end of the UTC calendar month.
+	PeriodEnd string
+	SpendUsd  string
+}
+
+// AdminListOrganizationActivityResult is the result type of the admin service
+// listOrganizationActivity method.
+type AdminListOrganizationActivityResult struct {
+	// List of organization activity.
+	Logs []*AuditLog
+	// Cursor for the next page of results.
+	NextCursor *string
+}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -79,8 +223,10 @@ type AdminListOrganizationProjectsResult struct {
 type AdminListOrganizationsResult struct {
 	// The page of organizations.
 	Organizations []*AdminOrganization
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string
+	// Number of organizations matching the filters, before paging.
+	Total int64
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -92,7 +238,7 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, enterprise).
+	// Gram account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
@@ -100,10 +246,17 @@ type AdminOrganization struct {
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.
@@ -126,6 +279,39 @@ type AdminOrganizationMember struct {
 	UpdatedAt string
 }
 
+// AdminOrganizationStats is the result type of the admin service
+// getOrganizationStats method.
+type AdminOrganizationStats struct {
+	// Every organization on the platform, disabled ones included.
+	Total int64
+	// Organizations created in the last 7 days, whatever their current status.
+	CreatedLast7Days int64
+	// Organizations on a paid account type (payg or enterprise), disabled ones
+	// included.
+	Customers int64
+	// Customers created in the last 7 days, whatever their current status.
+	CustomersCreatedLast7Days int64
+	// Organizations whose trial_state is ending_soon.
+	TrialsEndingSoon int64
+	// Organizations with disabled_at set.
+	Disabled int64
+	// Organizations disabled in the last 7 days.
+	DisabledLast7Days int64
+}
+
+// AdminPaygBillingSummary is the result type of the admin service
+// getPaygBillingSummary method.
+type AdminPaygBillingSummary struct {
+	PeriodStart            string
+	PeriodEnd              string
+	TumTokens              int64
+	TumUnitPriceUsd        string
+	TumCostUsd             string
+	OtherInferenceSpendUsd string
+	RecordedThrough        *string
+	EstimatedTotalUsd      string
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -134,6 +320,9 @@ type AdminProject struct {
 	Name string
 	// The slug of the project
 	Slug string
+	// Number of MCP servers in the project, counting both toolset-backed servers
+	// and mcp_servers rows.
+	McpServerCount int
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.
@@ -170,6 +359,63 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// AdminSession is the result type of the admin service getSession method.
+type AdminSession struct {
+	Email string
+	Name  *string
+}
+
+// AdminStripeSubscription is the result type of the admin service
+// getStripeSubscription method.
+type AdminStripeSubscription struct {
+	Status             string
+	CurrentPeriodStart string
+	CurrentPeriodEnd   string
+	TrialStart         *string
+	TrialEnd           *string
+	CancelAtPeriodEnd  bool
+	CancelAt           *string
+	CanceledAt         *string
+	PaymentFailed      bool
+}
+
+type AuditLog struct {
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName *string
+	SubjectSlug        *string
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
+	Metadata           map[string]any
+	// The creation date of the audit log.
+	CreatedAt string
+}
+
+// BulkUpdateAccountTypePayload is the payload type of the admin service
+// bulkUpdateAccountType method.
+type BulkUpdateAccountTypePayload struct {
+	AdminSessionToken *string
+	// Organization IDs to update.
+	Ids []string
+	// New gram_account_type for every listed organization.
+	AccountType string
+}
+
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
 	// The authorization code returned by the provider on success
@@ -194,6 +440,75 @@ type CallbackResult struct {
 	SessionID string
 }
 
+// CancelStripeSubscriptionPayload is the payload type of the admin service
+// cancelStripeSubscription method.
+type CancelStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// CreateOrganizationPayload is the payload type of the admin service
+// createOrganization method.
+type CreateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Display name for the new organization.
+	Name string
+}
+
+// DisableOrganizationPayload is the payload type of the admin service
+// disableOrganization method.
+type DisableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// EnableOrganizationPayload is the payload type of the admin service
+// enableOrganization method.
+type EnableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// ExtendTrialPayload is the payload type of the admin service extendTrial
+// method.
+type ExtendTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days to add to the trial's current end date.
+	Days int
+}
+
+// GetInferenceKeysPayload is the payload type of the admin service
+// getInferenceKeys method.
+type GetInferenceKeysPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetInferenceSpendHistoryPayload is the payload type of the admin service
+// getInferenceSpendHistory method.
+type GetInferenceSpendHistoryPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service getOrganizationChatAnalysisSettings method.
+type GetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationFeaturesPayload is the payload type of the admin service
+// getOrganizationFeatures method.
+type GetOrganizationFeaturesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -202,11 +517,50 @@ type GetOrganizationPayload struct {
 	IDOrSlug string
 }
 
+// GetOrganizationStatsPayload is the payload type of the admin service
+// getOrganizationStats method.
+type GetOrganizationStatsPayload struct {
+	AdminSessionToken *string
+}
+
+// GetPaygBillingSummaryPayload is the payload type of the admin service
+// getPaygBillingSummary method.
+type GetPaygBillingSummaryPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetProjectPayload is the payload type of the admin service getProject method.
 type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+	// Organization the project must belong to, by id or slug. A project outside it
+	// is reported as not found. Optional, because the global project lookup has no
+	// organization to scope by.
+	OrganizationIDOrSlug *string
+}
+
+// GetSessionPayload is the payload type of the admin service getSession method.
+type GetSessionPayload struct {
+	AdminSessionToken *string
+}
+
+// GetStripeSubscriptionPayload is the payload type of the admin service
+// getStripeSubscription method.
+type GetStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// ListOrganizationActivityPayload is the payload type of the admin service
+// listOrganizationActivity method.
+type ListOrganizationActivityPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+	// Cursor for paginating through organization activity.
+	Cursor *string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service
@@ -229,16 +583,48 @@ type ListOrganizationProjectsPayload struct {
 // listOrganizations method.
 type ListOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Search term applied to name and slug (case-insensitive substring).
+	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
+	// case-insensitive substring, with % and _ taken literally, and matches
+	// organization id and WorkOS id exactly, ignoring case. An id match also
+	// returns an organization that disabled_states or include_disabled would
+	// otherwise hide; it still respects account_type, account_types, trial_states
+	// and cursor.
 	Q *string
-	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
+	// Superseded by account_types, which it joins as one more member of the same
+	// set.
 	AccountType *string
-	// Include organizations with disabled_at set. Defaults to false.
+	// Match any of these gram_account_type values. Empty matches every account
+	// type. A value no organization carries matches nothing rather than failing
+	// the request.
+	AccountTypes []string
+	// Match any of running, ending_soon, expired, demoted, converted or none.
+	// Empty matches every trial state. An unrecognised value matches nothing
+	// rather than failing the request.
+	TrialStates []string
+	// Match any of active or disabled. Empty falls back to include_disabled. An
+	// unrecognised value matches nothing rather than failing the request.
+	DisabledStates []string
+	// Include organizations with disabled_at set. Defaults to false. Superseded by
+	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page.
+	// Pagination cursor: id of the last item from the previous page. Ignored when
+	// sort or page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
+	// Column to sort by: name, slug, account_type, member_count, created_at,
+	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
+	// selects offset paging.
+	Sort *string
+	// Sort direction, asc or desc, applied to the column named by sort. Any other
+	// value sorts ascending. On its own it does nothing: without sort there is no
+	// column to reverse, so it neither reorders the results nor selects offset
+	// paging.
+	Direction *string
+	// 1-based page number for offset paging (default 1). Supplying it selects
+	// offset paging.
+	Page *int
 }
 
 // LoginPayload is the payload type of the admin service login method.
@@ -265,13 +651,145 @@ type LogoutPayload struct {
 	SessionID *string
 }
 
+// MarkEnterpriseTrialConvertedPayload is the payload type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// MarkEnterpriseTrialConvertedResult is the result type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedResult struct {
+	// The converted organization ID.
+	OrganizationID string
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt string
+}
+
+// OpenOrganizationInDashboardPayload is the payload type of the admin service
+// openOrganizationInDashboard method.
+type OpenOrganizationInDashboardPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+type ProductFeatureName string
+
+// ProductFeatures is the result type of the admin service
+// getOrganizationFeatures method.
+type ProductFeatures struct {
+	// Whether logging is enabled
+	LogsEnabled bool
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool
+	// Whether the organization can use the Gram Platform MCP capability
+	PlatformMcpEnabled bool
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled bool
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool
+}
+
+// RearmTrialPayload is the payload type of the admin service rearmTrial method.
+type RearmTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the re-armed trial runs for, counted from now.
+	Days int
+}
+
+// ResumeStripeSubscriptionPayload is the payload type of the admin service
+// resumeStripeSubscription method.
+type ResumeStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type SetInferenceKeyMonthlyLimitPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	KeyType           string
+	MonthlyCredits    int
+}
+
+// SetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
+// service setOrganizationChatAnalysisSettings method.
+type SetOrganizationChatAnalysisSettingsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	Judge             string
+	Enabled           bool
+	DailyCap          int
+}
+
+// SetOrganizationFeaturePayload is the payload type of the admin service
+// setOrganizationFeature method.
+type SetOrganizationFeaturePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	FeatureName       ProductFeatureName
+	Enabled           bool
+}
+
+// TriggerOrganizationChatAnalysisPayload is the payload type of the admin
+// service triggerOrganizationChatAnalysis method.
+type TriggerOrganizationChatAnalysisPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // UpdateOrganizationPayload is the payload type of the admin service
 // updateOrganization method.
 type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type (free, pro, payg, or enterprise).
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
@@ -325,4 +843,113 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
+}
+
+// NewProductFeatures initializes result type ProductFeatures from viewed
+// result type ProductFeatures.
+func NewProductFeatures(vres *adminviews.ProductFeatures) *ProductFeatures {
+	return newProductFeatures(vres.Projected)
+}
+
+// NewViewedProductFeatures initializes viewed result type ProductFeatures from
+// result type ProductFeatures using the given view.
+func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.ProductFeatures {
+	p := newProductFeaturesView(res)
+	return &adminviews.ProductFeatures{Projected: p, View: "default"}
+}
+
+// newProductFeatures converts projected type ProductFeatures to service type
+// ProductFeatures.
+func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
+	res := &ProductFeatures{}
+	if vres.LogsEnabled != nil {
+		res.LogsEnabled = *vres.LogsEnabled
+	}
+	if vres.ToolIoLogsEnabled != nil {
+		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
+	}
+	if vres.SessionCaptureEnabled != nil {
+		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
+	}
+	if vres.AuthzChallengeLoggingEnabled != nil {
+		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
+	}
+	if vres.SsoEnabled != nil {
+		res.SsoEnabled = *vres.SsoEnabled
+	}
+	if vres.ScimEnabled != nil {
+		res.ScimEnabled = *vres.ScimEnabled
+	}
+	if vres.HooksBrowserLoginEnabled != nil {
+		res.HooksBrowserLoginEnabled = *vres.HooksBrowserLoginEnabled
+	}
+	if vres.HooksFailOpenEnabled != nil {
+		res.HooksFailOpenEnabled = *vres.HooksFailOpenEnabled
+	}
+	if vres.CustomModelKeysEnabled != nil {
+		res.CustomModelKeysEnabled = *vres.CustomModelKeysEnabled
+	}
+	if vres.SkillsEnabled != nil {
+		res.SkillsEnabled = *vres.SkillsEnabled
+	}
+	if vres.SkillCaptureMetadataOnly != nil {
+		res.SkillCaptureMetadataOnly = *vres.SkillCaptureMetadataOnly
+	}
+	if vres.AiPlatformPushIntegrationsEnabled != nil {
+		res.AiPlatformPushIntegrationsEnabled = *vres.AiPlatformPushIntegrationsEnabled
+	}
+	if vres.PlatformMcpEnabled != nil {
+		res.PlatformMcpEnabled = *vres.PlatformMcpEnabled
+	}
+	if vres.CustomerManagedEncryptionKeysEnabled != nil {
+		res.CustomerManagedEncryptionKeysEnabled = *vres.CustomerManagedEncryptionKeysEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnabled != nil {
+		res.RemoteSessionAutoRefreshEnabled = *vres.RemoteSessionAutoRefreshEnabled
+	}
+	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
+		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
+	}
+	if vres.ConsentToolFilteringEnabled != nil {
+		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
+	}
+	if vres.SessionPortabilityEnabled != nil {
+		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
+	}
+	if vres.DeviceAgent != nil {
+		res.DeviceAgent = *vres.DeviceAgent
+	}
+	return res
+}
+
+// newProductFeaturesView projects result type ProductFeatures to projected
+// type ProductFeaturesView using the "default" view.
+func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
+	vres := &adminviews.ProductFeaturesView{
+		LogsEnabled:                             &res.LogsEnabled,
+		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            &res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              &res.SsoEnabled,
+		ScimEnabled:                             &res.ScimEnabled,
+		HooksBrowserLoginEnabled:                &res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    &res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  &res.CustomModelKeysEnabled,
+		SkillsEnabled:                           &res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                &res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       &res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      &res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
+		DeviceAgent:                             &res.DeviceAgent,
+	}
+	return vres
 }

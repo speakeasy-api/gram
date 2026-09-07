@@ -70,7 +70,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		ToolCallID:               "call_abc123",
 	}
 
-	// An excluded row: excluded_at / exclusion_id are populated.
+	// An excluded row: the full suppression annotation is populated.
 	excludedAt := createdAt.Add(time.Minute)
 	exclusionID := uuid.Must(uuid.NewV7())
 	excluded := plain
@@ -78,6 +78,8 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	excluded.Tags = []string{}
 	excluded.ExcludedAt = &excludedAt
 	excluded.ExclusionID = &exclusionID
+	excluded.ExcludedReason = chrepo.ExcludedReasonRule
+	excluded.ExcludedDetail = "looks like a placeholder"
 
 	require.NoError(t, q.InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{plain, excluded}))
 
@@ -85,7 +87,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	// flushes, so poll until both are visible.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, message_created_at, assistant_id, surface, field, path, tool_call_id
+			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, excluded_reason, excluded_detail, message_created_at, assistant_id, surface, field, path, tool_call_id
 			FROM risk_findings
 			WHERE organization_id = ?
 			ORDER BY created_at
@@ -104,6 +106,8 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 			category         string
 			excludedAt       *time.Time
 			exclusionID      *uuid.UUID
+			excludedReason   string
+			excludedDetail   string
 			messageCreatedAt time.Time
 			assistantID      string
 			surface          string
@@ -117,7 +121,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 				id  uuid.UUID
 				row foundRow
 			)
-			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID)) {
+			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.excludedReason, &row.excludedDetail, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID)) {
 				return
 			}
 			got[id] = row
@@ -136,6 +140,8 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		assert.Equal(c, plain.Category, p.category, "category round-trips")
 		assert.Nil(c, p.excludedAt, "non-excluded row stores NULL excluded_at")
 		assert.Nil(c, p.exclusionID, "non-excluded row stores NULL exclusion_id")
+		assert.Empty(c, p.excludedReason, "non-excluded row stores empty excluded_reason")
+		assert.Empty(c, p.excludedDetail, "non-excluded row stores empty excluded_detail")
 		assert.True(c, plain.MessageCreatedAt.Equal(p.messageCreatedAt), "message_created_at round-trips")
 		assert.Equal(c, plain.AssistantID, p.assistantID, "assistant_id round-trips")
 		assert.Equal(c, plain.Surface, p.surface, "surface round-trips")
@@ -150,5 +156,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		if assert.NotNil(c, e.exclusionID, "excluded row stores exclusion_id") {
 			assert.Equal(c, exclusionID, *e.exclusionID)
 		}
+		assert.Equal(c, chrepo.ExcludedReasonRule, e.excludedReason, "excluded_reason round-trips")
+		assert.Equal(c, excluded.ExcludedDetail, e.excludedDetail, "excluded_detail round-trips")
 	}, 5*time.Second, 100*time.Millisecond)
 }

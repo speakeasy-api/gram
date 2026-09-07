@@ -21,6 +21,10 @@ type Client struct {
 	// createServer endpoint.
 	CreateServerDoer goahttp.Doer
 
+	// CreateServerAndMcpServer Doer is the HTTP client used to make requests to
+	// the createServerAndMcpServer endpoint.
+	CreateServerAndMcpServerDoer goahttp.Doer
+
 	// ListServers Doer is the HTTP client used to make requests to the listServers
 	// endpoint.
 	ListServersDoer goahttp.Doer
@@ -86,6 +90,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateServerDoer:                      doer,
+		CreateServerAndMcpServerDoer:          doer,
 		ListServersDoer:                       doer,
 		GetServerDoer:                         doer,
 		UpdateServerDoer:                      doer,
@@ -124,6 +129,30 @@ func (c *Client) CreateServer() goa.Endpoint {
 		resp, err := c.CreateServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "createServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateServerAndMcpServer returns an endpoint that makes HTTP requests to the
+// remoteMcp service createServerAndMcpServer server.
+func (c *Client) CreateServerAndMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateServerAndMcpServerRequest(c.encoder)
+		decodeResponse = DecodeCreateServerAndMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateServerAndMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateServerAndMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "createServerAndMcpServer", err)
 		}
 		return decodeResponse(resp)
 	}

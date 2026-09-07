@@ -964,22 +964,65 @@ func EncodeRevokeUserSessionError(encoder func(context.Context, http.ResponseWri
 // *UserSessionResponseBody from a value of type *types.UserSession.
 func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *UserSessionResponseBody {
 	res := &UserSessionResponseBody{
-		ID:                  v.ID,
-		UserSessionIssuerID: v.UserSessionIssuerID,
-		SubjectUrn:          v.SubjectUrn,
-		Jti:                 v.Jti,
-		RefreshExpiresAt:    v.RefreshExpiresAt,
-		ExpiresAt:           v.ExpiresAt,
-		CreatedAt:           v.CreatedAt,
-		UpdatedAt:           v.UpdatedAt,
-		IssuerSlug:          v.IssuerSlug,
-		UserSessionClientID: v.UserSessionClientID,
-		ClientName:          v.ClientName,
-		ClientIDMetadataURI: v.ClientIDMetadataURI,
-		SubjectType:         v.SubjectType,
-		SubjectDisplayName:  v.SubjectDisplayName,
-		SubjectPhotoURL:     v.SubjectPhotoURL,
-		RevokedAt:           v.RevokedAt,
+		ID:                            v.ID,
+		UserSessionIssuerID:           v.UserSessionIssuerID,
+		SubjectUrn:                    v.SubjectUrn,
+		Jti:                           v.Jti,
+		RefreshExpiresAt:              v.RefreshExpiresAt,
+		ExpiresAt:                     v.ExpiresAt,
+		CreatedAt:                     v.CreatedAt,
+		UpdatedAt:                     v.UpdatedAt,
+		IssuerSlug:                    v.IssuerSlug,
+		UserSessionClientID:           v.UserSessionClientID,
+		ClientName:                    v.ClientName,
+		ClientIDMetadataURI:           v.ClientIDMetadataURI,
+		ClientCredentialKind:          v.ClientCredentialKind,
+		ClientTokenEndpointAuthMethod: v.ClientTokenEndpointAuthMethod,
+		SubjectType:                   v.SubjectType,
+		SubjectDisplayName:            v.SubjectDisplayName,
+		SubjectPhotoURL:               v.SubjectPhotoURL,
+		RevokedAt:                     v.RevokedAt,
+		LastUsedAt:                    v.LastUsedAt,
+	}
+	if v.Upstreams != nil {
+		res.Upstreams = make([]*UserSessionUpstreamResponseBody, len(v.Upstreams))
+		for i, val := range v.Upstreams {
+			if val == nil {
+				res.Upstreams[i] = nil
+				continue
+			}
+			res.Upstreams[i] = marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody(val)
+		}
+	} else {
+		res.Upstreams = []*UserSessionUpstreamResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody builds a
+// value of type *UserSessionUpstreamResponseBody from a value of type
+// *types.UserSessionUpstream.
+func marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody(v *types.UserSessionUpstream) *UserSessionUpstreamResponseBody {
+	res := &UserSessionUpstreamResponseBody{
+		RemoteSessionID:        v.RemoteSessionID,
+		RemoteSessionClientID:  v.RemoteSessionClientID,
+		RemoteSessionIssuerID:  v.RemoteSessionIssuerID,
+		IssuerSlug:             v.IssuerSlug,
+		AccessExpiresAt:        v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		HasRefreshToken:        v.HasRefreshToken,
+		AutoRefresh:            v.AutoRefresh,
+		LastUsedAt:             v.LastUsedAt,
+	}
+	if v.Scopes != nil {
+		res.Scopes = make([]string, len(v.Scopes))
+		for i, val := range v.Scopes {
+			res.Scopes[i] = val
+		}
+	} else {
+		res.Scopes = []string{}
 	}
 
 	return res

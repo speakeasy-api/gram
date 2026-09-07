@@ -47,6 +47,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 
 	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
 		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		SubjectUrn:            subjectFilter,
 		RemoteSessionClientID: clientFilter,
 		Cursor:                cursor,
@@ -99,8 +100,9 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
-		ID:        sessionID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             sessionID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -124,6 +126,17 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Tell the upstream to drop the credentials the row was holding. Strictly
+	// after the commit and strictly best-effort: the local revoke the caller
+	// asked for has already taken effect, and an issuer that is slow, down, or
+	// simply advertises no revocation endpoint must not turn a successful
+	// revoke into a failed request. See upstreamrevoke.go.
+	s.revoker.RevokeDetached(ctx, RevokedCredentials{
+		RemoteSessionClientID: revoked.RemoteSessionClientID,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+	})
 
 	return nil
 }

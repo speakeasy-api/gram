@@ -58,7 +58,8 @@ type RiskPolicy struct {
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), or block (deny in real-time).
+	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
+	// and freeze the hook session).
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string

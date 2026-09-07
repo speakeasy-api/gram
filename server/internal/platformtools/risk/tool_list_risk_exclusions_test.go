@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 )
 
 // An exact or regex exclusion's match_value is the literal string someone chose
@@ -27,12 +28,13 @@ func TestExclusionViewRedactsOnlyFreeTextMatchValues(t *testing.T) {
 	}
 
 	const secret = "AKIAIOSFODNN7EXAMPLE"
+	redactor := exclusioncore.NewRedactor("test-redaction-key")
 
 	for _, tt := range tests {
 		t.Run(tt.matchType, func(t *testing.T) {
 			t.Parallel()
 
-			view := toExclusionView(&types.RiskExclusion{
+			view := toExclusionView(redactor, &types.RiskExclusion{
 				ID:           "0192bd2a-0000-7000-8000-000000000000",
 				ProjectID:    "0192bd2a-0000-7000-8000-000000000001",
 				RiskPolicyID: nil,
@@ -47,7 +49,7 @@ func TestExclusionViewRedactsOnlyFreeTextMatchValues(t *testing.T) {
 
 			if tt.redacted {
 				require.NotContains(t, view.MatchValue, secret)
-				require.Contains(t, view.MatchValue, "redacted:sha256:")
+				require.Regexp(t, `^redacted:hmac-sha256:[0-9a-f]{16}$`, view.MatchValue)
 			} else {
 				require.Equal(t, secret, view.MatchValue)
 			}

@@ -100,9 +100,83 @@ type MessageMetadata struct {
 	DeliveryAttempt *int
 }
 
+// BatchMessage is a decoded Pub/Sub message delivered as part of a batch.
+// Fail stages a nack for this message; the subscriber settles every message
+// after the batch handler returns.
+type BatchMessage[M any] struct {
+	// Message is the decoded message payload.
+	Message M
+
+	// Metadata contains the message's broker-assigned delivery metadata.
+	Metadata MessageMetadata
+
+	result *batchResult
+	index  int
+}
+
+// Fail stages a nack for this message. A nil error has no effect. The first
+// non-nil error wins when Fail is called more than once. Fail is safe to call
+// concurrently while the batch handler is running.
+func (m BatchMessage[M]) Fail(err error) {
+	if err == nil {
+		return
+	}
+	if m.result == nil {
+		panic("batch message is not associated with a receive batch")
+	}
+	m.result.fail(m.index, err)
+}
+
+type batchMessageState uint8
+
+const (
+	batchMessagePending batchMessageState = iota
+	batchMessageReady
+	batchMessageUnmarshalFailed
+)
+
+type batchMessageOutcome struct {
+	state   batchMessageState
+	failure error
+}
+
+type batchResult struct {
+	mu       sync.Mutex
+	outcomes []batchMessageOutcome
+	sealed   bool
+}
+
+func (r *batchResult) fail(index int, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// A handler may retain a copied BatchMessage or return before joining its
+	// goroutines. Once settlement starts, late failures cannot alter it.
+	if r.sealed {
+		return
+	}
+	if index < 0 || index >= len(r.outcomes) {
+		panic(fmt.Sprintf("batch message index %d out of range", index))
+	}
+	if r.outcomes[index].state != batchMessageReady {
+		panic(fmt.Sprintf("batch message index %d is not deliverable", index))
+	}
+	if r.outcomes[index].failure == nil {
+		r.outcomes[index].failure = err
+	}
+}
+
+func (r *batchResult) seal() []batchMessageOutcome {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sealed = true
+	return r.outcomes
+}
+
 type Subscriber[M proto.Message] interface {
 	Receive(context.Context, func(context.Context, M, MessageMetadata) error) error
 	ReceiveBatch(context.Context, BatchReceiveSettings, func(context.Context, []M, []MessageMetadata) error) error
+	ReceiveBatchWithResult(context.Context, BatchReceiveSettings, func(context.Context, []BatchMessage[M]) error) error
 }
 
 // incomingMessage decouples per-message processing from the concrete
@@ -204,22 +278,68 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 	}, f)
 }
 
-// batchLoop holds the buffering, count/byte/latency flushing, and drain logic
-// shared by ReceiveBatch. The latency timer is armed when a message starts a new
-// batch and stopped when the batch is detached, so the window is measured from
-// each batch's first message. On cancellation a drainer goroutine flushes the
-// in-flight batch while receive is still running, because ack/nack must reach
-// the live iterator: Subscriber.Receive only returns once every outstanding
-// message is acked/nacked, so the drain cannot wait until after it returns. The
-// delivery source is abstracted behind receive so the loop can be exercised in
-// tests (with a synthetic source and a fake clock) without a live pubsub
-// subscriber: receive must call deliver once per incoming message and return
-// when ctx is cancelled (or on a terminal error).
+// ReceiveBatchWithResult consumes messages in batches whose members may have
+// independent processing outcomes. Use ReceiveBatch when the batch is one unit
+// of work and any handler failure should retry every message. Use this method
+// when some messages may succeed while others fail; call BatchMessage.Fail to
+// stage a nack for only the messages that should be retried.
+//
+// Returning nil from f commits the staged nacks and acks every other message.
+// Returning an error, panicking, or completing after ctx is cancelled nacks the
+// whole batch. Messages that fail to unmarshal are nacked individually and
+// excluded from f.
+func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
+	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
+		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
+			deliver(incomingMessage{
+				id:              m.ID,
+				data:            m.Data,
+				attributes:      m.Attributes,
+				deliveryAttempt: m.DeliveryAttempt,
+				ack:             m.Ack,
+				nack:            m.Nack,
+			})
+		})
+	}, f)
+}
+
+// batchLoop adapts the all-or-nothing batch callback to the shared buffering
+// loop. The delivery source is injectable so tests can exercise count, byte,
+// latency, and shutdown flushing without a live Pub/Sub subscriber.
 func (s *psSubscriber[M]) batchLoop(
 	ctx context.Context,
 	settings BatchReceiveSettings,
 	receive func(ctx context.Context, deliver func(incomingMessage)) error,
 	f func(context.Context, []M, []MessageMetadata) error,
+) error {
+	return s.batchLoopMessages(ctx, settings, receive, func(ctx context.Context, batch []incomingMessage) {
+		s.handleBatch(ctx, batch, f)
+	})
+}
+
+func (s *psSubscriber[M]) batchLoopWithResult(
+	ctx context.Context,
+	settings BatchReceiveSettings,
+	receive func(ctx context.Context, deliver func(incomingMessage)) error,
+	f func(context.Context, []BatchMessage[M]) error,
+) error {
+	return s.batchLoopMessages(ctx, settings, receive, func(ctx context.Context, batch []incomingMessage) {
+		s.handleBatchWithResult(ctx, batch, f)
+	})
+}
+
+// batchLoopMessages holds the buffering, count/byte/latency flushing, and drain
+// logic shared by both batch handling modes. The latency timer is armed when a
+// message starts a new batch and stopped when the batch is detached, so the
+// window is measured from each batch's first message. On cancellation a drainer
+// goroutine flushes the in-flight batch while receive is still running, because
+// ack/nack must reach the live iterator: Subscriber.Receive only returns once
+// every outstanding message is settled.
+func (s *psSubscriber[M]) batchLoopMessages(
+	ctx context.Context,
+	settings BatchReceiveSettings,
+	receive func(ctx context.Context, deliver func(incomingMessage)) error,
+	handle func(context.Context, []incomingMessage),
 ) error {
 	size := settings.MaxMessages
 	if size <= 0 {
@@ -273,8 +393,8 @@ func (s *psSubscriber[M]) batchLoop(
 		return batch
 	}
 
-	// handlerMu serializes handleBatch so the latency callback and the
-	// size/byte-trigger path never invoke f concurrently. Buffering (under mu)
+	// handlerMu serializes batch handlers so the latency callback and the
+	// size/byte-trigger path never invoke one concurrently. Buffering (under mu)
 	// continues while a batch is in flight; only the handler call is serialized.
 	var handlerMu sync.Mutex
 	runBatch := func(batch []incomingMessage) {
@@ -283,7 +403,7 @@ func (s *psSubscriber[M]) batchLoop(
 		}
 		handlerMu.Lock()
 		defer handlerMu.Unlock()
-		s.handleBatch(ctx, batch, f)
+		handle(ctx, batch)
 	}
 	flush := func() { runBatch(take()) }
 
@@ -471,6 +591,105 @@ func (s *psSubscriber[M]) handleBatch(ctx context.Context, batch []incomingMessa
 	if err := f(ctx, msgs, metas); err != nil {
 		nackAll()
 		return
+	}
+}
+
+func (s *psSubscriber[M]) handleBatchWithResult(ctx context.Context, batch []incomingMessage, f func(context.Context, []BatchMessage[M]) error) {
+	if len(batch) == 0 {
+		return
+	}
+
+	result := &batchResult{
+		mu:       sync.Mutex{},
+		outcomes: make([]batchMessageOutcome, len(batch)),
+		sealed:   false,
+	}
+
+	nackReady := func() {
+		outcomes := result.seal()
+		for i, m := range batch {
+			if outcomes[i].state == batchMessageReady {
+				m.nack()
+			}
+		}
+	}
+
+	// Panics can occur while decoding or in the handler. Messages already
+	// rejected during decoding remain settled; every other message is nacked.
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.ErrorContext(ctx, "panic recovered while processing pubsub message batch with results",
+				attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
+				attr.SlogErrorStack(string(debug.Stack())),
+				attr.SlogTopicProtoName(s.topicProtoName),
+				attr.SlogSubscriptionProtoName(s.subscriptionProtoName),
+				attr.SlogSubscriberMessageID(batch[0].id),
+				attr.SlogSubscriberBatchSize(len(batch)),
+			)
+			outcomes := result.seal()
+			for i, m := range batch {
+				if outcomes[i].state != batchMessageUnmarshalFailed {
+					m.nack()
+				}
+			}
+		}
+	}()
+
+	messages := make([]BatchMessage[M], 0, len(batch))
+	for i, m := range batch {
+		msg := s.new()
+		if err := proto.Unmarshal(m.data, msg); err != nil {
+			s.logger.ErrorContext(
+				ctx,
+				"failed to unmarshal pubsub message",
+				attr.SlogError(err),
+				attr.SlogTopicProtoName(s.topicProtoName),
+				attr.SlogSubscriptionProtoName(s.subscriptionProtoName),
+				attr.SlogSubscriberMessageID(m.id),
+				attr.SlogSubscriberDeliveryAttempt(m.deliveryAttempt),
+			)
+			m.nack()
+			result.outcomes[i].state = batchMessageUnmarshalFailed
+			continue
+		}
+
+		result.outcomes[i].state = batchMessageReady
+		messages = append(messages, BatchMessage[M]{
+			Message: msg,
+			Metadata: MessageMetadata{
+				ID:              m.id,
+				Attributes:      m.attributes,
+				DeliveryAttempt: m.deliveryAttempt,
+			},
+			result: result,
+			index:  i,
+		})
+	}
+
+	if len(messages) == 0 {
+		result.seal()
+		return
+	}
+
+	if err := f(ctx, messages); err != nil {
+		nackReady()
+		return
+	}
+	if ctx.Err() != nil {
+		nackReady()
+		return
+	}
+
+	outcomes := result.seal()
+	for i, m := range batch {
+		if outcomes[i].state != batchMessageReady {
+			continue
+		}
+		if outcomes[i].failure != nil {
+			m.nack()
+		} else {
+			m.ack()
+		}
 	}
 }
 

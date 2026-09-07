@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	goa "goa.design/goa/v3/pkg"
@@ -17,15 +18,23 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
-	var email string
+func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
+	var legacyEmail *string
 	{
-		email = agentGetPluginsEmail
+		if agentGetPluginsLegacyEmail != "" {
+			legacyEmail = &agentGetPluginsLegacyEmail
+		}
 	}
 	var apikeyToken *string
 	{
 		if agentGetPluginsApikeyToken != "" {
 			apikeyToken = &agentGetPluginsApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetPluginsEmail != "" {
+			email = &agentGetPluginsEmail
 		}
 	}
 	var serialNumber *string
@@ -40,11 +49,19 @@ func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyTo
 			hostname = &agentGetPluginsHostname
 		}
 	}
+	var environment *string
+	{
+		if agentGetPluginsEnvironment != "" {
+			environment = &agentGetPluginsEnvironment
+		}
+	}
 	v := &agent.GetPluginsPayload{}
-	v.Email = email
+	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
+	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
+	v.Environment = environment
 
 	return v, nil
 }
@@ -112,6 +129,238 @@ func BuildUpdateConfigurationPayload(agentUpdateConfigurationBody string, agentU
 		}
 	}
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetSessionMetaPayload builds the payload for the agent getSessionMeta
+// endpoint from CLI flags.
+func BuildGetSessionMetaPayload(agentGetSessionMetaSessionIds string, agentGetSessionMetaApikeyToken string) (*agent.GetSessionMetaPayload, error) {
+	var err error
+	var sessionIds []string
+	{
+		err = json.Unmarshal([]byte(agentGetSessionMetaSessionIds), &sessionIds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for sessionIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(sessionIds) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("session_ids", sessionIds, len(sessionIds), 50, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentGetSessionMetaApikeyToken != "" {
+			apikeyToken = &agentGetSessionMetaApikeyToken
+		}
+	}
+	v := &agent.GetSessionMetaPayload{}
+	v.SessionIds = sessionIds
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildReportSessionMovedPayload builds the payload for the agent
+// reportSessionMoved endpoint from CLI flags.
+func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentReportSessionMovedApikeyToken string, agentReportSessionMovedSerialNumber string, agentReportSessionMovedHostname string) (*agent.ReportSessionMovedPayload, error) {
+	var err error
+	var body ReportSessionMovedRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportSessionMovedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\",\n      \"target_session_id\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
+		}
+		if utf8.RuneCountInString(body.TargetHarness) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_harness", body.TargetHarness, utf8.RuneCountInString(body.TargetHarness), 64, false))
+		}
+		if body.TargetSessionID != nil {
+			if utf8.RuneCountInString(*body.TargetSessionID) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_session_id", *body.TargetSessionID, utf8.RuneCountInString(*body.TargetSessionID), 256, false))
+			}
+		}
+		if body.SourceSurface != nil {
+			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportSessionMovedApikeyToken != "" {
+			apikeyToken = &agentReportSessionMovedApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportSessionMovedSerialNumber != "" {
+			serialNumber = &agentReportSessionMovedSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportSessionMovedHostname != "" {
+			hostname = &agentReportSessionMovedHostname
+		}
+	}
+	v := &agent.ReportSessionMovedPayload{
+		SessionID:       body.SessionID,
+		TargetHarness:   body.TargetHarness,
+		TargetSessionID: body.TargetSessionID,
+		SourceSurface:   body.SourceSurface,
+		Email:           body.Email,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildReportAIScanPayload builds the payload for the agent reportAIScan
+// endpoint from CLI flags.
+func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApikeyToken string, agentReportAIScanEmail string, agentReportAIScanSerialNumber string, agentReportAIScanHostname string) (*agent.ReportAIScanPayload, error) {
+	var err error
+	var body ReportAIScanRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportAIScanBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
+		}
+		if body.Matches == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_started_at", body.ScanStartedAt, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_completed_at", body.ScanCompletedAt, goa.FormatDateTime))
+		if body.TargetListVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 0, true))
+		}
+		if body.TargetListVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 2.147483647e+09, false))
+		}
+		if len(body.Matches) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.matches", body.Matches, len(body.Matches), 100, false))
+		}
+		for _, e := range body.Matches {
+			if e != nil {
+				if err2 := ValidateAIScanMatchRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportAIScanApikeyToken != "" {
+			apikeyToken = &agentReportAIScanApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentReportAIScanEmail != "" {
+			email = &agentReportAIScanEmail
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportAIScanSerialNumber != "" {
+			serialNumber = &agentReportAIScanSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportAIScanHostname != "" {
+			hostname = &agentReportAIScanHostname
+		}
+	}
+	v := &agent.ReportAIScanPayload{
+		ScanStartedAt:     body.ScanStartedAt,
+		ScanCompletedAt:   body.ScanCompletedAt,
+		TargetListVersion: body.TargetListVersion,
+	}
+	if body.Matches != nil {
+		v.Matches = make([]*agent.AIScanMatch, len(body.Matches))
+		for i, val := range body.Matches {
+			if val == nil {
+				v.Matches[i] = nil
+				continue
+			}
+			v.Matches[i] = marshalAIScanMatchRequestBodyToAgentAIScanMatch(val)
+		}
+	} else {
+		v.Matches = []*agent.AIScanMatch{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildCreateSessionHandoffPayload builds the payload for the agent
+// createSessionHandoff endpoint from CLI flags.
+func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agentCreateSessionHandoffApikeyToken string, agentCreateSessionHandoffSerialNumber string, agentCreateSessionHandoffHostname string) (*agent.CreateSessionHandoffPayload, error) {
+	var err error
+	var body CreateSessionHandoffRequestBody
+	{
+		err = json.Unmarshal([]byte(agentCreateSessionHandoffBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }'")
+		}
+		if utf8.RuneCountInString(body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
+		}
+		if utf8.RuneCountInString(body.Content) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 262144, false))
+		}
+		if body.SourceSurface != nil {
+			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentCreateSessionHandoffApikeyToken != "" {
+			apikeyToken = &agentCreateSessionHandoffApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentCreateSessionHandoffSerialNumber != "" {
+			serialNumber = &agentCreateSessionHandoffSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentCreateSessionHandoffHostname != "" {
+			hostname = &agentCreateSessionHandoffHostname
+		}
+	}
+	v := &agent.CreateSessionHandoffPayload{
+		SessionID:     body.SessionID,
+		Content:       body.Content,
+		SourceSurface: body.SourceSurface,
+		TTLSeconds:    body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
 
 	return v, nil
 }

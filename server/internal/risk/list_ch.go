@@ -53,6 +53,7 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	pageSize int,
 	policyID uuid.NullUUID,
 	category, ruleID, userID string,
+	externalUserIDs []string,
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
@@ -68,19 +69,20 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	}
 
 	params := chrepo.ListRiskFindingsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID.String(),
-		PolicyIDs:      policyIDs,
-		From:           from,
-		To:             to,
-		Category:       category,
-		RuleIDSubstr:   ruleID,
-		UserIDSubstr:   userID,
-		AssistantID:    "",
-		NonAssistant:   nonAssistant,
-		UniqueMatch:    uniqueMatch,
-		CursorTime:     nil,
-		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       projectID.String(),
+		PolicyIDs:       policyIDs,
+		From:            from,
+		To:              to,
+		Category:        category,
+		RuleIDSubstr:    ruleID,
+		UserIDSubstr:    userID,
+		ExternalUserIDs: externalUserIDs,
+		AssistantID:     "",
+		NonAssistant:    nonAssistant,
+		UniqueMatch:     uniqueMatch,
+		CursorTime:      nil,
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// resolvePageSize bounds pageSize to [1, 200], so the conversion
 		// cannot wrap.
 		Limit: uint64(conv.SafeInt32(pageSize)) + 1, // #nosec G115 -- non-negative by construction.
@@ -256,10 +258,14 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		Tags:              tags,
 		Spans:             nil,
 		MatchRedacted:     conv.PtrEmpty(row.MatchRedacted),
-		// The ClickHouse listing filters false_positive_at IS NULL, so a
-		// served row is never dismissed; only ListDismissedRiskResults
-		// populates this.
-		FalsePositiveAt: nil,
+		// The ClickHouse listing only serves open findings, so a served row is
+		// never suppressed; only ListDismissedRiskResults populates the
+		// suppression fields, which it does after calling this mapper.
+		FalsePositiveAt:  nil,
+		SuppressedAt:     nil,
+		SuppressedReason: nil,
+		SuppressedDetail: nil,
+		ExclusionID:      nil,
 		// Message event time, not scan time: the Postgres listing exposes
 		// message_created_at as CreatedAt, and the sort order and cursor both
 		// key on it.

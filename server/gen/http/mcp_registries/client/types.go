@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,16 +1018,12 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1048,6 +1040,11 @@ type ExternalMCPServerEntryResponseBody struct {
 	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// The source repository the registry links for this server, when it declares
+	// one
+	Repository *ExternalMCPRepositoryResponseBody `form:"repository,omitempty" json:"repository,omitempty" xml:"repository,omitempty"`
+	// Published packages that run this server, when the registry declares any
+	Packages []*ExternalMCPPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
 // ExternalMCPRemoteResponseBody is used to define fields on response body
@@ -1092,6 +1089,53 @@ type ExternalMCPRemoteVariableResponseBody struct {
 	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
 	// Allowed values for the variable
 	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// ExternalMCPRepositoryResponseBody is used to define fields on response body
+// types.
+type ExternalMCPRepositoryResponseBody struct {
+	// Repository URL
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Hosting service the repository lives on, such as github
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Path within the repository holding the server, for monorepos
+	Subfolder *string `form:"subfolder,omitempty" json:"subfolder,omitempty" xml:"subfolder,omitempty"`
+}
+
+// ExternalMCPPackageResponseBody is used to define fields on response body
+// types.
+type ExternalMCPPackageResponseBody struct {
+	// Package registry the artifact is published to, such as npm or pypi
+	RegistryType *string `form:"registry_type,omitempty" json:"registry_type,omitempty" xml:"registry_type,omitempty"`
+	// Registry base URL when the package lives outside the default public registry
+	RegistryBaseURL *string `form:"registry_base_url,omitempty" json:"registry_base_url,omitempty" xml:"registry_base_url,omitempty"`
+	// Package identifier, scope included
+	Identifier *string `form:"identifier,omitempty" json:"identifier,omitempty" xml:"identifier,omitempty"`
+	// Published version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Launcher the publisher suggests, such as npx or uvx
+	RuntimeHint *string `form:"runtime_hint,omitempty" json:"runtime_hint,omitempty" xml:"runtime_hint,omitempty"`
+	// Execution transport the package declares, such as stdio
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// Environment variables the package asks an install to supply. What a server
+	// demands — a required secret named here is an approval signal in its own
+	// right.
+	EnvironmentVariables []*ExternalMCPPackageEnvironmentVariableResponseBody `form:"environment_variables,omitempty" json:"environment_variables,omitempty" xml:"environment_variables,omitempty"`
+	// SHA-256 of the packaged artifact, when the registry publishes one
+	FileSha256 *string `form:"file_sha256,omitempty" json:"file_sha256,omitempty" xml:"file_sha256,omitempty"`
+}
+
+// ExternalMCPPackageEnvironmentVariableResponseBody is used to define fields
+// on response body types.
+type ExternalMCPPackageEnvironmentVariableResponseBody struct {
+	// Variable name the install must populate
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The publisher's explanation of the variable. Untrusted text.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the publisher marked the value sensitive
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether an install cannot proceed without it
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -1637,16 +1681,15 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
 	v := &types.ExternalMCPServer{
-		RegistrySpecifier:                   *body.RegistrySpecifier,
-		Version:                             *body.Version,
-		Description:                         *body.Description,
-		ToolsetID:                           body.ToolsetID,
-		McpServerID:                         body.McpServerID,
-		RegistryID:                          body.RegistryID,
-		OrganizationMcpCollectionRegistryID: body.OrganizationMcpCollectionRegistryID,
-		Title:                               body.Title,
-		IconURL:                             body.IconURL,
-		Meta:                                body.Meta,
+		RegistrySpecifier: *body.RegistrySpecifier,
+		Version:           *body.Version,
+		Description:       *body.Description,
+		ToolsetID:         body.ToolsetID,
+		McpServerID:       body.McpServerID,
+		RegistryID:        body.RegistryID,
+		Title:             body.Title,
+		IconURL:           body.IconURL,
+		Meta:              body.Meta,
 	}
 	if body.Tools != nil {
 		v.Tools = make([]*types.ExternalMCPTool, len(body.Tools))
@@ -2040,9 +2083,6 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
-	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
@@ -3321,15 +3361,24 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
 	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
-	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
 	}
 	for _, e := range body.Remotes {
 		if e != nil {
 			if err2 := ValidateExternalMCPRemoteResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Repository != nil {
+		if err2 := ValidateExternalMCPRepositoryResponseBody(body.Repository); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Packages {
+		if e != nil {
+			if err2 := ValidateExternalMCPPackageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3369,6 +3418,58 @@ func ValidateExternalMCPRemoteResponseBody(body *ExternalMCPRemoteResponseBody) 
 func ValidateExternalMCPRemoteHeaderResponseBody(body *ExternalMCPRemoteHeaderResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateExternalMCPRepositoryResponseBody runs the validations defined on
+// ExternalMCPRepositoryResponseBody
+func ValidateExternalMCPRepositoryResponseBody(body *ExternalMCPRepositoryResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateExternalMCPPackageResponseBody runs the validations defined on
+// ExternalMCPPackageResponseBody
+func ValidateExternalMCPPackageResponseBody(body *ExternalMCPPackageResponseBody) (err error) {
+	if body.RegistryType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_type", "body"))
+	}
+	if body.Identifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("identifier", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.RegistryBaseURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_base_url", *body.RegistryBaseURL, goa.FormatURI))
+	}
+	for _, e := range body.EnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateExternalMCPPackageEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExternalMCPPackageEnvironmentVariableResponseBody runs the
+// validations defined on ExternalMCPPackageEnvironmentVariableResponseBody
+func ValidateExternalMCPPackageEnvironmentVariableResponseBody(body *ExternalMCPPackageEnvironmentVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.IsSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_secret", "body"))
+	}
+	if body.IsRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_required", "body"))
 	}
 	return
 }

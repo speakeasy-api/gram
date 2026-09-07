@@ -14,14 +14,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
-import { cn } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router";
+import {
+  RemoteNetworkAccessStep,
+  RemoteOrganizationDefaultStep,
+  RemoteSetupScriptStep,
+} from "./device-agent-cloud-setup";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -78,8 +83,9 @@ const platformKey = (a: { goos: string; goarch: string }) =>
 // All the per-OS specifics live in this one table.
 // ---------------------------------------------------------------------------
 type OsKey = "macos" | "windows" | "linux";
+type PlatformKey = OsKey | "remote";
 
-const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
+const PLATFORM_ORDER: PlatformKey[] = ["macos", "windows", "linux", "remote"];
 
 // A manifest-supplied version is rendered directly into a copy-paste
 // shell/PowerShell snippet. Quoting alone doesn't make that safe — double
@@ -123,7 +129,7 @@ function psVersionAssign(version: string | null) {
 type BaseOsSpec = {
   label: string;
   tileDesc: string;
-  logo: string;
+  logo?: string;
   // Per-logo size: the Apple/Windows marks fill their square viewBox
   // edge-to-edge, while Tux is a taller, non-square figure — it runs a touch
   // larger (and is object-contain'd) to sit at the same optical size without
@@ -134,11 +140,12 @@ type BaseOsSpec = {
   invertLogoInDark?: boolean;
 };
 
-// Windows and Linux still ship as raw binaries registered via a manual
-// service-install script; only macOS moved to a signed, notarized .pkg.
+// Linux still ships as raw binaries registered via a manual service-install
+// script; macOS moved to a signed, notarized .pkg and Windows to a signed
+// .msi (their install steps are bespoke components, not script fields).
 // Keeping this as its own type (instead of leaving these fields optional on
-// a single OsSpec) means macOS can't silently carry stale script fields that
-// nothing renders anymore.
+// a single OsSpec) means macOS/Windows can't silently carry stale script
+// fields that nothing renders anymore.
 type ScriptOsSpec = BaseOsSpec & {
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
@@ -157,7 +164,7 @@ type ScriptOsSpec = BaseOsSpec & {
 
 const OS_CONFIG: {
   macos: BaseOsSpec;
-  windows: ScriptOsSpec;
+  windows: BaseOsSpec;
   linux: ScriptOsSpec;
 } = {
   macos: {
@@ -172,20 +179,6 @@ const OS_CONFIG: {
     tileDesc: "x64",
     logo: "/icons/platforms/windows.svg",
     logoSize: "h-7 w-7",
-    lang: "powershell",
-    download: (version) => `${psVersionAssign(version)}
-$BASE = "${RELEASES_BASE}/v$VERSION"
-Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
-Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe`,
-    serviceNote: (
-      <>
-        Installs <code>speakeasyd</code> as a Windows service.
-      </>
-    ),
-    serviceRegister: `.\\speakeasyd.exe -service install
-.\\speakeasyd.exe -service start`,
-    verify: `.\\speakeasy.exe status`,
-    downloadKeys: ["windows/amd64"],
   },
   linux: {
     label: "Linux",
@@ -217,6 +210,15 @@ speakeasyd -service start`,
     hasHelperPackage: true,
   },
 };
+
+const REMOTE_PLATFORM_CONFIG: BaseOsSpec = {
+  label: "Remote sessions",
+  tileDesc: "Claude Code on the web",
+};
+
+function platformConfig(platform: PlatformKey): BaseOsSpec {
+  return platform === "remote" ? REMOTE_PLATFORM_CONFIG : OS_CONFIG[platform];
+}
 
 function SubHeading({ children }: { children: React.ReactNode }) {
   return <Text className="mb-2 font-medium">{children}</Text>;
@@ -319,10 +321,10 @@ function BinaryDownloadButton({
 }
 
 // ManualDownload lists the direct binary links for the selected OS only (the
-// alternative to the curl/PowerShell download script). Degrades to a manifest
-// link if the fetch fails. Windows/Linux only — macOS installs from the pkg
-// (MacInstallStep), not the raw-binary manifest.
-function ManualDownload({ os }: { os: "windows" | "linux" }) {
+// alternative to the curl download script). Degrades to a manifest link if
+// the fetch fails. Linux only — macOS installs from the pkg (MacInstallStep)
+// and Windows from the msi (WinInstallStep), not the raw-binary manifest.
+function ManualDownload({ os }: { os: "linux" }) {
   const { data, isLoading, isError } = useAgentReleases();
 
   if (isLoading) {
@@ -413,10 +415,11 @@ function ManualDownload({ os }: { os: "windows" | "linux" }) {
   );
 }
 
-// DownloadStep is the first setup step on Windows/Linux: two ways to get the
+// DownloadStep is the first setup step on Linux: two ways to get the
 // binaries (script or direct download), separated by an OR so it's clear
-// they're alternatives. macOS uses MacInstallStep instead.
-function DownloadStep({ os }: { os: "windows" | "linux" }) {
+// they're alternatives. macOS uses MacInstallStep and Windows WinInstallStep
+// instead.
+function DownloadStep({ os }: { os: "linux" }) {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   const cfg = OS_CONFIG[os];
@@ -536,13 +539,16 @@ curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
 
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
 function ManualIdentity({ os }: { os: OsKey }) {
-  // macOS: bare `speakeasy` is command-not-found (see MacVerifyStep for why
-  // the CLI isn't on PATH there). Windows/Linux keep the bare command: their
-  // raw binaries land in the shell's cwd/PATH per the download step above.
-  const command =
-    os === "macos"
-      ? `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`
-      : "speakeasy enroll";
+  // macOS and Windows: bare `speakeasy` is command-not-found — neither the
+  // pkg nor the msi puts the CLI on PATH (see MacVerifyStep for the macOS
+  // rationale), so invoke it by its install path. Linux keeps the bare
+  // command: the raw binaries move into /usr/local/bin per the install steps.
+  const commands: Record<OsKey, string> = {
+    macos: `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`,
+    windows: `& "C:\\Program Files\\Speakeasy\\speakeasy.exe" enroll`,
+    linux: "speakeasy enroll",
+  };
+  const command = commands[os];
 
   return (
     <div className="flex flex-col gap-4">
@@ -983,6 +989,128 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
   );
 }
 
+// WinInstallStep is the first (and only pre-verify) setup step on Windows:
+// install from the signed .msi, which lays down the daemon, CLI, and UI under
+// C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
+// service itself — no separate service-registration step. The primary snippet
+// uses this Gram server's stable /v1/install URL, which 302-redirects to the
+// current version's signed msi, so the copy never goes stale. Like the macOS
+// pkg, the msi is deliberately not listed in releases.json (it's the
+// manual/MDM on-ramp), so the direct-download URL is built from the resolved
+// version rather than read off the manifest artifacts.
+function WinInstallStep() {
+  const { data, isError } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const msiUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+    : null;
+  // The snippet lands in an elevated shell, so never emit a plaintext
+  // download: if the server URL is somehow non-HTTPS, skip the stable link
+  // and build the snippet against the (always-HTTPS) release bucket instead.
+  const serverURL = getServerURL();
+  const stableMsiUrl = serverURL.startsWith("https:")
+    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    : null;
+  const downloadScript = stableMsiUrl
+    ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
+msiexec /i speakeasy-agent.msi`
+    : `${psVersionAssign(version)}
+Invoke-WebRequest "${RELEASES_BASE}/v$VERSION/speakeasy-agent_\${VERSION}.msi" -OutFile speakeasy-agent.msi
+msiexec /i speakeasy-agent.msi`;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>Tooling breakdown</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Run the download + install script</SubLabel>
+        <StepNote>
+          Run from an elevated (Administrator) PowerShell. The download URL
+          resolves to the latest signed installer.
+        </StepNote>
+        <CodeBlock language="powershell">{downloadScript}</CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Download the installer directly</SubLabel>
+        {msiUrl ? (
+          <BinaryDownloadButton
+            href={msiUrl}
+            role="Installer"
+            name="speakeasy-agent.msi"
+            version={version ?? ""}
+          />
+        ) : (
+          <Text small muted>
+            {isError
+              ? "Couldn't load the latest release — use the "
+              : "Loading the latest release… or use the "}
+            {stableMsiUrl ? (
+              <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
+                stable installer link
+              </ExternalLink>
+            ) : (
+              <ExternalLink
+                href={MANIFEST_URL}
+                target="_blank"
+                iconSuffixName="external-link"
+              >
+                release manifest
+              </ExternalLink>
+            )}
+            , which always points at the current version.
+          </Text>
+        )}
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Scripted install with raw binaries</SubLabel>
+        <StepNote>
+          Raw binaries remain supported for scripted installs. Unlike the
+          MSI&apos;s machine-wide LocalSystem service, this registers the
+          service for the current user only.
+        </StepNote>
+        <CodeBlock language="powershell">{`${psVersionAssign(version)}
+$BASE = "${RELEASES_BASE}/v$VERSION"
+Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
+Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe
+.\\speakeasyd.exe -service install
+.\\speakeasyd.exe -service start`}</CodeBlock>
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Or push it as a fleet via MDM</SubLabel>
+        <Text small muted>
+          Upload the msi to Intune (or your MDM) as a{" "}
+          <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
+          and assign it per machine — no script needed. Get it with the script
+          or link above, and pair it with a <code>managed.json</code> pushed to{" "}
+          <code>%ProgramData%\Speakeasy\</code> (see the identity step) so
+          enrollment is set centrally.
+        </Text>
+        <Text small muted>
+          Keep <code>auto_update: "notify"</code> on Windows fleets: the agent
+          can&apos;t replace its own running binaries on Windows, so version
+          bumps ship as MSI re-pushes from your MDM.
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// The MSI registers a machine-wide SCM service, so status comes from the SCM
+// rather than a per-user unit. sc.exe is deliberate — bare `sc` is
+// PowerShell's Set-Content alias. The CLI isn't on PATH (see ManualIdentity),
+// so it's invoked by its install path; the daemon's named pipe grants
+// interactive users client access, so no elevation is needed here.
+function WinVerifyStep() {
+  return (
+    <CodeBlock language="powershell">{`sc.exe query com.speakeasy.daemon
+& "C:\\Program Files\\Speakeasy\\speakeasy.exe" status`}</CodeBlock>
+  );
+}
+
 // IdentityStep is the final sheet step: pick how the agent learns who's on the
 // device (fleet MDM vs personal enrollment). Takes os because ManualIdentity's
 // enroll command differs on macOS (see there).
@@ -1047,22 +1175,58 @@ function SetupTab({
 
 type SetupStep = { title: string; body: React.ReactNode };
 
-// buildSteps assembles the ordered setup steps for an OS. macOS installs from
-// a signed .pkg (one combined install step, no chmod/move or separate service
-// registration); Windows/Linux still ship raw binaries via a download script,
+// buildSteps assembles the ordered setup steps for a platform. Remote sessions
+// have their own cloud-environment flow; local platforms follow the OS-specific
+// installation path below. macOS installs from a signed .pkg and Windows from
+// a signed .msi (one combined install step each, no chmod/move or separate
+// service registration); Linux still ships raw binaries via a download script,
 // so the list length (and numbering) varies by OS.
-function buildSteps(os: OsKey): SetupStep[] {
-  if (os === "macos") {
+function buildSteps(platform: PlatformKey): SetupStep[] {
+  if (platform === "remote") {
     return [
-      { title: "Download and install the agent", body: <MacInstallStep /> },
-      { title: "Verify it's running", body: <MacVerifyStep /> },
-      { title: "Set the user's identity", body: <IdentityStep os={os} /> },
+      {
+        title: "Configure the shared environment",
+        body: <RemoteNetworkAccessStep />,
+      },
+      {
+        title: "Install and configure the agent",
+        body: <RemoteSetupScriptStep />,
+      },
+      {
+        title: "Make it the organization default",
+        body: <RemoteOrganizationDefaultStep />,
+      },
     ];
   }
 
-  const cfg = OS_CONFIG[os];
+  if (platform === "macos") {
+    return [
+      { title: "Download and install the agent", body: <MacInstallStep /> },
+      { title: "Verify it's running", body: <MacVerifyStep /> },
+      {
+        title: "Set the user's identity",
+        body: <IdentityStep os={platform} />,
+      },
+    ];
+  }
+
+  if (platform === "windows") {
+    return [
+      { title: "Download and install the agent", body: <WinInstallStep /> },
+      { title: "Verify it's running", body: <WinVerifyStep /> },
+      {
+        title: "Set the user's identity",
+        body: <IdentityStep os={platform} />,
+      },
+    ];
+  }
+
+  const cfg = OS_CONFIG[platform];
   const steps: SetupStep[] = [
-    { title: "Download the binaries", body: <DownloadStep os={os} /> },
+    {
+      title: "Download the binaries",
+      body: <DownloadStep os={platform} />,
+    },
   ];
   if (cfg.chmodMove) {
     steps.push({
@@ -1091,32 +1255,32 @@ function buildSteps(os: OsKey): SetupStep[] {
   }
   steps.push({
     title: "Set the user's identity",
-    body: <IdentityStep os={os} />,
+    body: <IdentityStep os={platform} />,
   });
   return steps;
 }
 
-// DeviceAgentSetupSheet walks through the per-OS setup as a sequence of steps,
-// matching the platform-instrumentation sheet used elsewhere in onboarding:
+// DeviceAgentSetupSheet walks through the selected platform as a sequence of
+// steps, matching the platform-instrumentation sheet used elsewhere in onboarding:
 // progress dots up top, one step visible at a time, back/next in the footer.
 function DeviceAgentSetupSheet({
-  os,
+  platform,
   open,
   onOpenChange,
 }: {
-  os: OsKey | null;
+  platform: PlatformKey | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [stepIdx, setStepIdx] = useState(0);
 
-  // Reset to the first step whenever a fresh OS is opened.
+  // Reset to the first step whenever a platform is opened.
   useEffect(() => {
     if (open) setStepIdx(0);
-  }, [open, os]);
+  }, [open, platform]);
 
-  const steps = os ? buildSteps(os) : [];
-  const cfg = os ? OS_CONFIG[os] : null;
+  const steps = platform ? buildSteps(platform) : [];
+  const cfg = platform ? platformConfig(platform) : null;
   const total = steps.length;
   const isLast = stepIdx === total - 1;
 
@@ -1132,7 +1296,7 @@ function DeviceAgentSetupSheet({
       >
         <SheetHeader className="sr-only">
           <SheetTitle>
-            Install the Speakeasy device agent on {cfg?.label}
+            Set up the Speakeasy device agent for {cfg?.label}
           </SheetTitle>
           <SheetDescription>
             Step-by-step setup for the device agent.
@@ -1213,42 +1377,52 @@ function DeviceAgentSetupSheet({
   );
 }
 
-// OsTile is a clickable platform card, styled like the agent-platform tiles in
-// the manual instrumentation step. Clicking it opens the setup sheet.
-function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
-  const cfg = OS_CONFIG[os];
+// PlatformTile is a clickable setup card: logo on top, name and subtitle
+// stacked underneath, so four tiles fit a row without the text wrapping.
+// Local operating systems use their platform marks; Remote sessions uses a
+// cloud icon but opens the same sheet.
+function PlatformTile({
+  platform,
+  onClick,
+}: {
+  platform: PlatformKey;
+  onClick: () => void;
+}) {
+  const cfg = platformConfig(platform);
   return (
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full flex-col items-center gap-3 border p-5 text-center transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
-        <img
-          src={cfg.logo}
-          alt={`${cfg.label} logo`}
-          className={cn(
-            cfg.logoSize ?? "h-8 w-8",
-            "object-contain",
-            cfg.invertLogoInDark && "dark:invert",
-          )}
-        />
+      <div className="bg-secondary flex h-14 w-14 shrink-0 items-center justify-center">
+        {platform === "remote" ? (
+          <Icon name="cloud" className="h-7 w-7" />
+        ) : (
+          <img
+            src={cfg.logo}
+            alt={`${cfg.label} logo`}
+            className={cn(
+              cfg.logoSize ?? "h-8 w-8",
+              "object-contain",
+              cfg.invertLogoInDark && "dark:invert",
+            )}
+          />
+        )}
       </div>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="space-y-1">
         <p className="text-foreground text-sm font-medium">{cfg.label}</p>
         <p className="text-muted-foreground text-xs">{cfg.tileDesc}</p>
       </div>
-      <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
     </button>
   );
 }
 
-// DeviceAgentSetup is the shared device-agent setup UI: pick your OS from the
-// tile grid, then walk the per-OS install + identity steps in a sheet. Rendered
-// both on the standalone Device Agent page and inside the onboarding
-// "Instrument agents" step (Device Agent tab), so setup lives in one place.
+// DeviceAgentSetup is the shared device-agent setup UI: pick a local OS or
+// Remote sessions from the tile grid, then walk its steps in a sheet. Rendered
+// both on the standalone Device Agent page and inside onboarding.
 export function DeviceAgentSetup(): React.JSX.Element {
-  const [sheetOs, setSheetOs] = useState<OsKey | null>(null);
+  const [sheetPlatform, setSheetPlatform] = useState<PlatformKey | null>(null);
 
   return (
     <Page.Section>
@@ -1256,9 +1430,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
           title above the tab strip, so suppress the section-level one. */}
       <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
-        The Speakeasy device agent runs on-device and enforces your org's
-        required AI-tool plugins and MCP configuration, then reports compliance
-        back to Speakeasy.
+        The Speakeasy device agent runs alongside your AI tools, enforces your
+        org&apos;s required plugins and MCP configuration, and reports
+        compliance back to Speakeasy.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
@@ -1273,15 +1447,19 @@ export function DeviceAgentSetup(): React.JSX.Element {
               <strong className="text-foreground font-medium">
                 Fleet (MDM)
               </strong>{" "}
-              path in each platform's walkthrough covers it.
+              path in each local platform&apos;s walkthrough covers it.
             </Text>
           </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {OS_ORDER.map((os) => (
-              <OsTile key={os} os={os} onClick={() => setSheetOs(os)} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {PLATFORM_ORDER.map((platform) => (
+              <PlatformTile
+                key={platform}
+                platform={platform}
+                onClick={() => setSheetPlatform(platform)}
+              />
             ))}
           </div>
 
@@ -1290,10 +1468,10 @@ export function DeviceAgentSetup(): React.JSX.Element {
               and drops anything else, so a Sheet placed as a direct Section
               child never mounts. */}
           <DeviceAgentSetupSheet
-            os={sheetOs}
-            open={sheetOs !== null}
+            platform={sheetPlatform}
+            open={sheetPlatform !== null}
             onOpenChange={(open) => {
-              if (!open) setSheetOs(null);
+              if (!open) setSheetPlatform(null);
             }}
           />
         </div>

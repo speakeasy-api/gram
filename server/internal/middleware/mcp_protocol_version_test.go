@@ -120,6 +120,15 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 				"route %q resolved to %q, which the middleware does not match for %s", pattern, path, method)
 		}
 	}
+
+	// Gram's own platform MCP server carries no slug, so routePathForSlug
+	// cannot derive it, and the constant cannot be imported: internal/platformmcp
+	// imports this package, so referencing platformmcp.Path here would be an
+	// import cycle. Keep this literal in lockstep with it. Registered for POST
+	// only (see cmd/gram/platform_mcp.go), hence no verb cross-product.
+	got := recordSpanForRequest(t, http.MethodPost, "/platform-mcp", mcpversions.Version20250618)
+	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
 }
 
 func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
@@ -133,9 +142,60 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 		"/mcp/my-server/authorize",
 		"/mcp/my-server/connect",
 		"/mcp/my-server/install",
+		"/platform-mcp/authorize",
+		"/platform-mcp/token",
+		"/platform-mcp/provider-setup",
+		"/platform-mcp/local-fixture/mcp",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
+	}
+}
+
+// TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes is the inverse of
+// TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes: these static routes
+// are registered directly beside /mcp/{mcpSlug} and /x/mcp/{mcpSlug}, so they
+// occupy the slug position without being MCP endpoints and chi resolves them
+// first. Shape alone cannot tell them apart from a slug, so they are excluded
+// by name.
+//
+// Keep this list in lockstep with the one-segment routes registered in
+// internal/mcp/impl.go and internal/xmcp/service.go. MCPSecurity shares this
+// predicate, so a route that regresses back into it is answered with 403
+// rather than merely losing an attribute.
+func TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/idp_callback",
+		"/mcp/remote_login_callback",
+		"/mcp/install-page-9f86d081.js",
+		"/mcp/consent-page-9f86d081.js",
+		"/mcp/consent-tools-9f86d081.js",
+		"/x/mcp/idp_callback",
+		"/x/mcp/remote_login_callback",
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			got := recordSpanForRequest(t, method, path, mcpversions.Version20250618)
+			require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "%s %s", method, path)
+		}
+	}
+}
+
+// The exclusions above are exact segment matches, not prefixes or substrings.
+// A customer slug that merely resembles a callback is still an MCP endpoint,
+// and /platform/mcp/ registers no static siblings at all.
+func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/idp_callback_service",
+		"/mcp/my-remote_login_callback",
+		"/platform/mcp/idp_callback",
+		"/platform/mcp/remote_login_callback",
+	} {
+		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
+		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)], "path %s", path)
 	}
 }
 

@@ -27,9 +27,10 @@ type Provider struct {
 
 	hmacKey []byte
 
-	mu           sync.Mutex
-	codes        map[string]*codeEntry
-	accessTokens map[string]*tokenEntry
+	mu            sync.Mutex
+	codes         map[string]*codeEntry
+	accessTokens  map[string]*tokenEntry
+	refreshTokens map[string]*refreshTokenEntry
 }
 
 type codeEntry struct {
@@ -51,9 +52,17 @@ type tokenEntry struct {
 	expiresAt time.Time
 }
 
+type refreshTokenEntry struct {
+	clientID  string
+	user      User
+	scope     string
+	expiresAt time.Time
+}
+
 const (
-	codeTTL  = 60 * time.Second
-	tokenTTL = time.Hour
+	codeTTL         = 60 * time.Second
+	tokenTTL        = time.Hour
+	refreshTokenTTL = 24 * time.Hour
 )
 
 func NewProvider(cfg *Config, logger *slog.Logger, issuer string, privateKey *rsa.PrivateKey) (*Provider, error) {
@@ -71,15 +80,16 @@ func NewProvider(cfg *Config, logger *slog.Logger, issuer string, privateKey *rs
 	kid := base64.RawURLEncoding.EncodeToString(sum[:])
 
 	return &Provider{
-		cfg:          cfg,
-		logger:       logger,
-		issuer:       issuer,
-		privateKey:   privateKey,
-		publicKey:    pub,
-		keyID:        kid,
-		hmacKey:      hmacKey,
-		codes:        make(map[string]*codeEntry),
-		accessTokens: make(map[string]*tokenEntry),
+		cfg:           cfg,
+		logger:        logger,
+		issuer:        issuer,
+		privateKey:    privateKey,
+		publicKey:     pub,
+		keyID:         kid,
+		hmacKey:       hmacKey,
+		codes:         make(map[string]*codeEntry),
+		accessTokens:  make(map[string]*tokenEntry),
+		refreshTokens: make(map[string]*refreshTokenEntry),
 	}, nil
 }
 
@@ -221,6 +231,36 @@ func (p *Provider) LookupAccessToken(tok string) (*tokenEntry, bool) {
 	return entry, true
 }
 
+func (p *Provider) MintRefreshToken(clientID string, user User, scope string) (string, error) {
+	tok, err := randomToken(32)
+	if err != nil {
+		return "", err
+	}
+	p.mu.Lock()
+	p.refreshTokens[tok] = &refreshTokenEntry{
+		clientID:  clientID,
+		user:      user,
+		scope:     scope,
+		expiresAt: time.Now().Add(refreshTokenTTL),
+	}
+	p.mu.Unlock()
+	return tok, nil
+}
+
+func (p *Provider) LookupRefreshToken(tok, clientID string) (*refreshTokenEntry, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	entry, ok := p.refreshTokens[tok]
+	if !ok || entry.clientID != clientID {
+		return nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(p.refreshTokens, tok)
+		return nil, false
+	}
+	return entry, true
+}
+
 func (p *Provider) SignIDToken(user User, clientID, nonce string, expires time.Time) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
@@ -265,6 +305,11 @@ func (p *Provider) Sweep() {
 	for k, v := range p.accessTokens {
 		if now.After(v.expiresAt) {
 			delete(p.accessTokens, k)
+		}
+	}
+	for k, v := range p.refreshTokens {
+		if now.After(v.expiresAt) {
+			delete(p.refreshTokens, k)
 		}
 	}
 }

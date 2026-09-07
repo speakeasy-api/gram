@@ -33,7 +33,12 @@ export const SEVERITY_ACCENT: Record<SeverityRating, string> = {
 
 /** How the signals list is sectioned. Rows keep the server's risk ranking
  * within every section. */
-export type SignalGroupMode = "severity" | "category" | "team" | "app";
+export type SignalGroupMode =
+  | "severity"
+  | "category"
+  | "team"
+  | "app"
+  | "principal";
 
 /**
  * Group key for signals whose findings carry no team/app attribution (rows
@@ -52,13 +57,27 @@ export const SEVERITY_GROUP_LABEL: Record<SignalSeverity, string> = {
   low: "Low",
 };
 
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
 /**
- * Window-over-window growth in percent, or null when there is no previous
- * baseline (the UI renders "new" instead of a misleading +100%).
+ * Within-window growth in percent: the last third of the window's sparkline
+ * buckets against the first third, so the number moves with the drawn line
+ * rather than with a previous window the chart never shows. Segment means
+ * (mirroring sparkline-math's trendOf) rather than single endpoint buckets,
+ * which are too noisy to anchor a percentage. Null when the window opens with
+ * no findings — the UI renders "new" instead of a misleading percentage.
  */
-export function trendPercent(current: number, previous: number): number | null {
-  if (previous <= 0) return null;
-  return ((current - previous) / previous) * 100;
+export function trendPercent(sparkline: number[]): number | null {
+  const n = sparkline.length;
+  if (n < 2) return null;
+  const seg = Math.max(1, Math.round(n / 3));
+  const first = mean(sparkline.slice(0, seg));
+  if (first <= 0) return null;
+  const last = mean(sparkline.slice(n - seg));
+  return ((last - first) / first) * 100;
 }
 
 export type SignalGroup = {
@@ -85,6 +104,23 @@ function dominantApp(signal: RiskSignal): string {
   return signal.apps[0] ?? "";
 }
 
+/**
+ * The placeholder email the server emits for findings it cannot attribute to
+ * a user. Treated as no attribution here so those signals land in the
+ * unattributed bucket rather than under an "Unknown user" heading.
+ */
+const UNKNOWN_USER_EMAIL = "Unknown user";
+
+/**
+ * The principal (user) a signal is filed under when grouping by principal:
+ * the most-affected user by finding count. Returns the user's email for
+ * display. Empty when no top user exists or the user is unattributed.
+ */
+function dominantPrincipal(signal: RiskSignal): string {
+  const email = signal.topUsers[0]?.email ?? "";
+  return email === UNKNOWN_USER_EMAIL ? "" : email;
+}
+
 function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
   switch (mode) {
     case "severity":
@@ -95,6 +131,8 @@ function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
       return dominantTeam(signal);
     case "app":
       return dominantApp(signal);
+    case "principal":
+      return dominantPrincipal(signal);
   }
 }
 

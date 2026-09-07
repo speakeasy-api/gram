@@ -16,8 +16,10 @@ export type InstallStep = {
  */
 export function InstallSteps({
   steps,
+  onCopy,
 }: {
   steps: InstallStep[];
+  onCopy?: () => void;
 }): React.JSX.Element {
   return (
     <ol className="border-border bg-card list-none border p-4">
@@ -45,6 +47,7 @@ export function InstallSteps({
               <CodeBlock
                 language={step.language ?? "bash"}
                 className="bg-background mt-1"
+                onCopy={onCopy}
               >
                 {step.code}
               </CodeBlock>

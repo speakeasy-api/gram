@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
@@ -41,7 +40,7 @@ func NewUsagePollService(store *Store, telemetryLogger *telemetry.Logger, guardi
 // time-window poller.
 func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderCursor {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
 	source, err := NewCursorUsageSource(s.guardianPolicy, cfg, s.telemetryLogger.LogBulk, "", 0)
@@ -168,6 +167,26 @@ func (src *cursorUsageSource) RetryAfter(err error) (time.Duration, bool) {
 
 func buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
 	userEmail := conv.NormalizeEmail(event.UserEmail)
+	attributes := map[attr.Key]any{
+		attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
+		attr.LogBodyKey:                            "Cursor usage metrics",
+		attr.ProjectIDKey:                          cfg.ProjectID.String(),
+		attr.OrganizationIDKey:                     cfg.OrganizationID,
+		attr.ResourceURNKey:                        cursorUsageMetricsURN,
+		attr.HookSourceKey:                         "cursor",
+		attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
+		attr.GenAIUsageInputTokensKey:              event.TokenUsage.InputTokens,
+		attr.GenAIUsageOutputTokensKey:             event.TokenUsage.OutputTokens,
+		attr.GenAIUsageCacheReadInputTokensKey:     event.TokenUsage.CacheReadTokens,
+		attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
+		attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
+		attr.GenAIResponseModelKey:                 event.Model,
+		attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
+		attr.CursorChargedCentsKey:                 event.ChargedCents,
+	}
+	if event.ConversationID != "" {
+		attributes[attr.GenAIConversationIDKey] = event.ConversationID
+	}
 
 	return telemetry.LogParams{
 		Timestamp: event.Timestamp,
@@ -180,24 +199,8 @@ func buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.Log
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo: telemetry.UserInfoByEmail(userEmail),
-		Attributes: map[attr.Key]any{
-			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
-			attr.LogBodyKey:                            "Cursor usage metrics",
-			attr.ProjectIDKey:                          cfg.ProjectID.String(),
-			attr.OrganizationIDKey:                     cfg.OrganizationID,
-			attr.ResourceURNKey:                        cursorUsageMetricsURN,
-			attr.HookSourceKey:                         "cursor",
-			attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
-			attr.GenAIUsageInputTokensKey:              event.TokenUsage.InputTokens,
-			attr.GenAIUsageOutputTokensKey:             event.TokenUsage.OutputTokens,
-			attr.GenAIUsageCacheReadInputTokensKey:     event.TokenUsage.CacheReadTokens,
-			attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
-			attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
-			attr.GenAIResponseModelKey:                 event.Model,
-			attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
-			attr.CursorChargedCentsKey:                 event.ChargedCents,
-		},
+		UserInfo:   telemetry.UserInfoByEmail(userEmail),
+		Attributes: attributes,
 	}
 }
 

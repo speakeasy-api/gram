@@ -8,12 +8,17 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	auditlogs "github.com/speakeasy-api/gram/server/gen/auditlogs"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListPayload builds the payload for the auditlogs list endpoint from CLI
 // flags.
-func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
+func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListSubjectIds string, auditlogsListActingSurface string, auditlogsListFrom string, auditlogsListTo string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
+	var err error
 	var cursor *string
 	{
 		if auditlogsListCursor != "" {
@@ -50,6 +55,47 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 			subjectID = &auditlogsListSubjectID
 		}
 	}
+	var subjectIds []string
+	{
+		if auditlogsListSubjectIds != "" {
+			err = json.Unmarshal([]byte(auditlogsListSubjectIds), &subjectIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for subjectIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(subjectIds) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("subject_ids", subjectIds, len(subjectIds), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var actingSurface *string
+	{
+		if auditlogsListActingSurface != "" {
+			actingSurface = &auditlogsListActingSurface
+		}
+	}
+	var from *string
+	{
+		if auditlogsListFrom != "" {
+			from = &auditlogsListFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if auditlogsListTo != "" {
+			to = &auditlogsListTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var apikeyToken *string
 	{
 		if auditlogsListApikeyToken != "" {
@@ -69,6 +115,10 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 	v.Action = action
 	v.SubjectType = subjectType
 	v.SubjectID = subjectID
+	v.SubjectIds = subjectIds
+	v.ActingSurface = actingSurface
+	v.From = from
+	v.To = to
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

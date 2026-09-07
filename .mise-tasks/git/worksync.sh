@@ -21,6 +21,29 @@ if [ ! -f "mise.local.toml" ]; then
   exit 1
 fi
 
+# GRAM_ADMIN_SERVER_URL is now the browser-facing admin origin, meaning the
+# admin dashboard dev server, not the admin API. A worktree initialised before
+# that still carries a generated declaration pinned to the API port, and
+# --preserve below would keep it, leaving the OIDC redirect pointing at an
+# origin that serves no SPA. Clear it, plus the origin allowlist derived from
+# it, so the remap pass re-emits both against GRAM_ADMIN_DASHBOARD_PORT.
+#
+# As with PRESIDIO below, the `{{env.GRAM_ADMIN_PORT}}` template is the proof
+# the pair was machine generated: only `zero:remap-ports` writes that literal,
+# copied verbatim from the old mise.toml value. A hand-pinned admin URL lacks
+# the marker and is left entirely alone. The allowlist carries its own marker,
+# the `{{env.GRAM_ADMIN_SERVER_URL}}` template, so a hand-written allowlist
+# survives even when the URL beside it is cleared.
+if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.GRAM_ADMIN_PORT}}'; then
+  mise unset --file mise.local.toml GRAM_ADMIN_SERVER_URL
+  if grep -E '^GRAM_ADMIN_ALLOWED_ORIGINS[[:space:]]*=' mise.local.toml \
+       | grep -qF '{{env.GRAM_ADMIN_SERVER_URL}}'; then
+    mise unset --file mise.local.toml GRAM_ADMIN_ALLOWED_ORIGINS
+  fi
+  echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
+fi
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)
@@ -36,6 +59,20 @@ if [ "$added" -eq 0 ]; then
   echo "✅ Port mappings already in sync."
 else
   echo "✅ Added ${added} env var declaration(s) to mise.local.toml."
+fi
+
+# Pub/Sub now uses one emulator on its default port. A generated host declaration
+# contains the port template copied from mise.toml, which proves the host and
+# port were emitted together by zero:remap-ports. Reset only that generated pair;
+# explicit endpoints remain untouched.
+if grep -E '^PUBSUB_EMULATOR_HOST[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.PUBSUB_EMULATOR_PORT}}'; then
+  for key in PUBSUB_EMULATOR_HOST PUBSUB_EMULATOR_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated Pub/Sub emulator endpoint to the shared default."
 fi
 
 # Presidio moved to the shared stack (compose.shared.yml) and must use the
@@ -63,6 +100,69 @@ if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
     fi
   done
   echo "✅ Reset auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL to the shared defaults."
+fi
+
+# The LGTM observability stack moved to the shared stack for the same reason,
+# and needs the same treatment: a pre-existing worktree still carries the
+# auto-generated remaps for Grafana/Tempo/Loki/Prometheus and the OTLP
+# receivers, which now point at ports nothing is listening on. Same proof as
+# above — `zero:remap-ports` is the only thing that writes the
+# `{{env.OTLP_GRPC_PORT}}` template into OTEL_EXPORTER_OTLP_ENDPOINT, and it
+# emitted the whole group in one pass, so the marker attests the group is
+# generated and the group is reset together.
+if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.OTLP_GRPC_PORT}}'; then
+  for key in OTEL_EXPORTER_OTLP_ENDPOINT OTLP_GRPC_PORT OTLP_HTTP_PORT \
+             GRAFANA_PORT TEMPO_HTTP_PORT LOKI_HTTP_PORT PROMETHEUS_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated LGTM ports to the shared defaults."
+fi
+
+# Temporal now runs in the shared stack. Old worktrees have generated remaps for
+# both published ports and TEMPORAL_ADDRESS; reset those to the fixed shared
+# endpoint. The address template proves the values came from zero:remap-ports,
+# so explicit custom Temporal endpoints remain untouched.
+if grep -E '^TEMPORAL_ADDRESS[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.TEMPORAL_PORT}}'; then
+  for key in TEMPORAL_ADDRESS TEMPORAL_PORT TEMPORAL_WEB_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated Temporal ports to the shared defaults."
+fi
+
+# Shared singleton services need a worktree dimension. `git:workinit` writes
+# all three values for new worktrees; add them here for older worktrees. Preserve
+# custom configuration except Temporal's old `default` value: sharing that
+# namespace across worktrees defeats the isolation this migration establishes.
+worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+if [ -n "$worktree_project" ]; then
+  # Workflow IDs, schedules, and task queues are namespace-scoped in Temporal.
+  if ! grep -qE '^TEMPORAL_NAMESPACE[[:space:]]*=' mise.local.toml \
+     || grep -qE '^TEMPORAL_NAMESPACE[[:space:]]*=[[:space:]]*"default"[[:space:]]*$' mise.local.toml; then
+    mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${worktree_project}"
+    echo "✅ Namespaced this worktree's Temporal state under ${worktree_project}."
+  fi
+
+  # Pub/Sub resource paths include the project ID, so this isolates identical
+  # topic and subscription IDs inside the shared emulator.
+  if ! grep -qE '^GRAM_GCP_PROJECT_ID[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${worktree_project}"
+    echo "✅ Namespaced this worktree's Pub/Sub resources under ${worktree_project}."
+  fi
+
+  # Without this label, telemetry from same-commit worktrees is
+  # indistinguishable in the shared LGTM stack.
+  if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml \
+      "OTEL_RESOURCE_ATTRIBUTES=worktree=${worktree_project}"
+    echo "✅ Tagged this worktree's telemetry as worktree=${worktree_project}."
+  fi
 fi
 
 if [ "${usage_no_migrate:-false}" = "true" ]; then

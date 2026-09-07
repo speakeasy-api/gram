@@ -4,7 +4,6 @@ package demoseed
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,34 +14,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// otherTenantReplacements rewrites every demo identifier in the embedded seed
-// scripts so the same SQL provisions a second, unrelated tenant. Running the
-// seed "against itself" plants adversarial fixture data in exactly the tables
-// the seed touches — including tables added in the future — so any unscoped
-// DELETE/UPDATE someone introduces will, by construction, hit fixture rows.
+// otherTenantSpec retargets the embedded seed scripts at a second, unrelated
+// tenant. Running the seed "against itself" plants adversarial fixture data in
+// exactly the tables the seed touches — including tables added in the future —
+// so any unscoped DELETE/UPDATE someone introduces will, by construction, hit
+// fixture rows.
 //
-// Ordering matters: the backslash-escaped LIKE pattern must be rewritten
-// before the plain user id prefix, or the postflight patterns stop matching
-// the rewritten ids.
-var otherTenantReplacements = [][2]string{
-	{`user\_demo\_`, `user\_othr\_`},                       // postflight LIKE patterns
-	{"user_demo_", "user_othr_"},                           // user ids (feed workos_/directory ids too)
-	{"org_gram_demo_workspace", "org_gram_othr_workspace"}, // org id
-	{"dec0de00", "0ddba110"},                               // uuid prefix + embedded sha literal
-	{"gram-demo-", "gram-othr-"},                           // det_uuid / trace id name seeds
-	{"@demo.getgram.ai", "@othr.getgram.ai"},               // users.email is globally unique
-	{"acme-demo", "acme-othr"},                             // org slug + mcp_slug are globally unique
-	{"demo_grp_", "othr_grp_"},                             // workos_directory_group_id is globally unique
-	{"demo-seed", "othr-seed"},                             // telemetry marker the real postflight leak-checks
+// It is an ordinary Spec, the same mechanism production uses to seed the local
+// development org, so the two cannot drift: a new identifier family added to
+// Spec is automatically rewritten here too.
+var otherTenantSpec = Spec{
+	OrgID:       "org_gram_othr_workspace",
+	OrgSlug:     "acme-othr",
+	OrgName:     "Acme Othr Org",
+	UUIDPrefix:  "0ddba110",
+	UserPrefix:  "user_othr_",
+	EmailDomain: "@othr.getgram.ai",
+	NameSeed:    "gram-othr-",
+	GroupPrefix: "othr_grp_",
+	WorkOSOrgID: "workos_gram_othr_unlinked",
+	Marker:      "othr-seed",
 }
 
 func asOtherTenant(t *testing.T, script string) string {
 	t.Helper()
 
-	for _, r := range otherTenantReplacements {
-		script = strings.ReplaceAll(script, r[0], r[1])
-	}
-	return script
+	require.NoError(t, otherTenantSpec.Validate())
+	return otherTenantSpec.Rewrite(script)
 }
 
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With
@@ -71,22 +69,54 @@ func TestDemoSeedSafety(t *testing.T) {
 	// rename breaks a replacement the fixture silently stops being
 	// adversarial, so fail loudly instead.
 	for _, needle := range []string{"org_gram_demo_workspace", "dec0de00", "user_demo_"} {
-		require.Contains(t, postgresSQL, needle, "postgres.sql lost literal %q; update otherTenantReplacements", needle)
+		require.Contains(t, postgresSQL, needle, "postgres.sql lost literal %q; update DefaultSpec", needle)
 	}
 	for _, needle := range []string{"org_gram_demo_workspace", "dec0de00", "demo-seed"} {
-		require.Contains(t, clickhouseSQL, needle, "clickhouse.sql lost literal %q; update otherTenantReplacements", needle)
+		require.Contains(t, clickhouseSQL, needle, "clickhouse.sql lost literal %q; update DefaultSpec", needle)
 	}
+
+	// Rewriting with the default spec must be a no-op, or the production run
+	// would not be executing the script as written.
+	require.Equal(t, postgresSQL, DefaultSpec().Rewrite(postgresSQL))
+	require.Equal(t, clickhouseSQL, DefaultSpec().Rewrite(clickhouseSQL))
 
 	// Baseline BEFORE the fixture: everything the fixture adds on top of it is
 	// "another tenant's data", and its ids feed the leak check below.
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
-	// Provision the other tenant from the transformed seed scripts.
+	// Provision the other tenant from the transformed seed scripts, including
+	// realistic MCP server dependents that the demo cleanup must not touch.
 	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, asOtherTenant(t, postgresSQL)))
+	require.NoError(t, demoseedtest.PlantMCPServerDependents(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	))
+	milestoneCount, err := demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"MCP dependent fixture must plant one project-scoped onboarding milestone")
+
+	// A missing target server must not leave the fixture's assistant or plugin
+	// parents behind. Snapshot every table so the regression covers all orphans,
+	// not only the two parent classes that exposed the bug.
+	const noServerProjectID = "0ddba110-0000-4000-8000-0000000000ff"
+	require.NoError(t, demoseedtest.CreateProjectWithoutMCPServer(
+		ctx, db, otherTenantSpec.OrgID, noServerProjectID,
+	))
+	pgBeforeNoServer, err := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, err)
+	err = demoseedtest.PlantMCPServerDependents(ctx, db, otherTenantSpec.OrgID, noServerProjectID)
+	require.ErrorContains(t, err, "expected 1 complete dependent set, got 0")
+	pgAfterNoServer, snapshotErr := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, snapshotErr)
+	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
+		"MCP dependent fixture created orphan rows without a target server")
+
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
-	demoProjects := []string{demoProjectID}
+	demoProjects := []string{DefaultSpec().ProjectID()}
 
 	pgBefore, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -104,7 +134,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -112,15 +142,27 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter1)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo seed modified or deleted another tenant's onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter1), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter1)
 
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
-	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, demoProjectID))
+	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob))
+	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -128,6 +170,18 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter2)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo reseed modified or deleted another tenant's onboarding milestone")
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Zero(t, milestoneCount,
+		"demo reseed did not clean up the project-scoped onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter2), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter2)
 
@@ -225,9 +279,9 @@ func requireNoLeakIntoOtherTenants(t *testing.T, added map[string][]string, fixt
 
 	for table, rows := range added {
 		for _, row := range rows {
-			for _, r := range otherTenantReplacements {
-				require.NotContains(t, row, r[1],
-					"postgres table %s: a row added by the demo seed references the other tenant's identifier %q: %s", table, r[1], row)
+			for _, id := range otherTenantSpec.Identifiers() {
+				require.NotContains(t, row, id,
+					"postgres table %s: a row added by the demo seed references the other tenant's identifier %q: %s", table, id, row)
 			}
 			for _, u := range uuidRe.FindAllString(row, -1) {
 				require.False(t, fixtureUUIDs[u],

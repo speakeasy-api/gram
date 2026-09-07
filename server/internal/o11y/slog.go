@@ -171,19 +171,38 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	return nil
 }
 
-func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error {
+// LogDefer runs cb and, when it returns a non-nil error, logs that error at
+// ERROR level under msg. Reserve it for cleanup whose failure is actionable:
+// msg must name the cleanup operation and the resource it acted on, so the log
+// is diagnosable on its own. Cleanup that is expected to fail, or whose
+// failure is inert, belongs in NoLogDefer instead. Inbound HTTP request bodies
+// are neither: net/http owns closing them, so handlers must not close them at
+// all.
+func LogDefer(ctx context.Context, logger *slog.Logger, msg string, cb func() error) error {
 	err := cb()
 	if err == nil {
 		return nil
 	}
 
-	logger.ErrorContext(ctx, "error", attr.SlogError(err))
+	logger.ErrorContext(ctx, msg, attr.SlogError(err))
 
 	return err
 }
 
 func NoLogDefer(cb func() error) {
 	_ = cb()
+}
+
+// LogError logs a non-nil error with context and returns it unchanged, making
+// it convenient to use in tail return statements.
+func LogError(ctx context.Context, logger *slog.Logger, err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+
+	logger.ErrorContext(ctx, msg, attr.SlogError(err))
+
+	return err
 }
 
 type pgxLogger struct {
@@ -202,7 +221,7 @@ func (l *pgxLogger) Log(ctx context.Context, level tracelog.LogLevel, msg string
 
 	attr := make([]any, 0, len(data))
 	for k, v := range data {
-		attr = append(attr, slog.Any(k, v))
+		attr = append(attr, slog.Any(k, v)) //nolint:sloglint // pgx supplies dynamic log keys
 	}
 
 	l.logger.Log(ctx, lvl, msg, attr...)

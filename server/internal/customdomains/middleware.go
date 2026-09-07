@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
 func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
@@ -28,12 +29,6 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				next.ServeHTTP(w, r)
 				return
 			}
-			if env == "dev" && strings.Contains(host, "speakeasyapi.vercel.app") {
-				// preview builds are good
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			if host == "" {
 				serr := oops.E(oops.CodeBadRequest, nil, "request host is not set").LogError(ctx, logger, attr.SlogHostName(host))
 				w.Header().Set("Content-Type", "application/json")
@@ -64,6 +59,17 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				}
 
 				return
+			}
+
+			domainAttrs := make([]slog.Attr, 0, 2)
+			if domain.ID != uuid.Nil {
+				domainAttrs = append(domainAttrs, attr.SlogRequestCustomDomainID(domain.ID.String()))
+			}
+			if domain.Domain != "" {
+				domainAttrs = append(domainAttrs, attr.SlogRequestCustomDomainName(domain.Domain))
+			}
+			if len(domainAttrs) > 0 {
+				wide.Push(ctx, domainAttrs...)
 			}
 
 			if !domain.Activated || !domain.Verified {

@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Terminal, ChevronRight, MonitorCog, Wrench } from "lucide-react";
+import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { cn } from "@/lib/utils";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
-import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "../platform-logos";
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
@@ -27,18 +26,14 @@ export function InstrumentAgentsStep({
   >(() =>
     Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
   );
-  // Controlled so the Cowork note can jump to Manual Setup and open that drawer.
   const [activeTab, setActiveTab] = useState("device-agent");
 
-  // The device agent enforces required plugins/MCP config on-device — it has
-  // no reach into Claude.ai's org-level Cowork plugin settings, so Cowork
-  // always needs its own manual step regardless of which tab the user picks.
-  // This jumps them straight to that step from the Device Agent tab.
+  // Cowork runs in Claude.ai's cloud sandbox, outside the device agent's
+  // reach, so it always needs a separate manual setup step.
   const openCoworkManualSetup = () => {
     setActiveTab("manual");
     setDrawerPlatformId("claude-cowork");
   };
-
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
   );
@@ -81,19 +76,19 @@ export function InstrumentAgentsStep({
 
         <TabsContent value="device-agent" className="space-y-4">
           <Alert variant="info">
-            <AlertTitle>Claude Cowork still needs manual setup</AlertTitle>
+            <AlertTitle>Cowork needs separate setup</AlertTitle>
             <AlertDescription>
-              The device agent instruments coding assistants that run on a
-              developer's machine — Cowork runs in Claude.ai's own cloud
-              sandbox, so it isn't covered here.{" "}
+              The device agent instruments assistants that run on a developer's
+              machine. Cowork runs in Claude.ai's cloud sandbox, so it isn't
+              covered here.{" "}
               <button
                 type="button"
                 onClick={openCoworkManualSetup}
                 className="text-foreground underline underline-offset-2"
               >
                 Set it up manually
-              </button>{" "}
-              alongside your device agent rollout.
+              </button>
+              .
             </AlertDescription>
           </Alert>
           <DeviceAgentSetup />
@@ -112,53 +107,15 @@ export function InstrumentAgentsStep({
               const status = platformStatus[platform.id] ?? "not_started";
 
               return (
-                <button
+                <AgentPlatformPickerItem
                   key={platform.id}
-                  type="button"
+                  platformId={platform.id}
+                  name={platform.name}
+                  description={platform.description}
+                  complete={status === "complete"}
+                  statusBadge={platformStatusBadge(status)}
                   onClick={() => setDrawerPlatformId(platform.id)}
-                  className={cn(
-                    "flex w-full items-center gap-4 border p-4 text-left transition-all",
-                    status === "complete"
-                      ? "border-foreground/10 bg-secondary/20"
-                      : "border-border bg-card hover:border-foreground/20",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 flex-shrink-0 items-center justify-center",
-                      status === "complete"
-                        ? "bg-foreground/10"
-                        : "bg-secondary",
-                    )}
-                  >
-                    {PLATFORM_LOGOS[platform.id] ? (
-                      <img
-                        src={PLATFORM_LOGOS[platform.id]}
-                        alt={platform.name}
-                        className={cn(
-                          "h-5 w-5",
-                          INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
-                        )}
-                      />
-                    ) : (
-                      <span className="text-foreground text-sm font-semibold">
-                        {platform.name.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-foreground text-sm font-medium">
-                        {platform.name}
-                      </p>
-                      {platformStatusBadge(status)}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {platform.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                </button>
+                />
               );
             })}
 
@@ -175,8 +132,8 @@ export function InstrumentAgentsStep({
                       className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                     >
                       <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
-                        <HookSourceIcon
-                          source={platform.id}
+                        <AgentProviderIcon
+                          source={platform.icon}
                           className="h-4 w-4"
                         />
                       </div>

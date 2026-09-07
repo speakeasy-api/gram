@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -41,13 +42,14 @@ func TestService_ServeOpenAPIv3_Success(t *testing.T) {
 
 	// Create asset in database using the URI from storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "openapiv3",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "openapiv3",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -175,13 +177,14 @@ func TestService_ServeOpenAPIv3_WrongProject(t *testing.T) {
 	differentProjectID := uuid.New()
 
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "test-openapi.yaml",
-		Url:           "file://test-openapi.yaml",
-		ProjectID:     differentProjectID,
-		Sha256:        "abc123",
-		Kind:          "openapiv3",
-		ContentType:   "application/yaml",
-		ContentLength: 1024,
+		Name:           "test-openapi.yaml",
+		Url:            "file://test-openapi.yaml",
+		ProjectID:      differentProjectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "openapiv3",
+		ContentType:    "application/yaml",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -209,13 +212,14 @@ func TestService_ServeOpenAPIv3_FileNotInStorage(t *testing.T) {
 
 	// Create asset in database but don't put file in storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "missing-openapi.yaml",
-		Url:           "file://missing-asset.yaml",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "openapiv3",
-		ContentType:   "application/yaml",
-		ContentLength: 1024,
+		Name:           "missing-openapi.yaml",
+		Url:            "file://missing-asset.yaml",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "openapiv3",
+		ContentType:    "application/yaml",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -243,13 +247,14 @@ func TestService_ServeOpenAPIv3_InvalidAssetURL(t *testing.T) {
 
 	// Create asset with invalid URL that will fail url.Parse
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          "invalid-url.yaml",
-		Url:           "ht\ttp://invalid-url",
-		ProjectID:     projectID,
-		Sha256:        "abc123",
-		Kind:          "openapiv3",
-		ContentType:   "application/yaml",
-		ContentLength: 1024,
+		Name:           "invalid-url.yaml",
+		Url:            "ht\ttp://invalid-url",
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "abc123",
+		Kind:           "openapiv3",
+		ContentType:    "application/yaml",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 
@@ -291,13 +296,14 @@ func TestService_ServeOpenAPIv3_JSONContent(t *testing.T) {
 
 	// Create asset in database using the URI from storage
 	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     projectID,
-		Sha256:        "def456",
-		Kind:          "openapiv3",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "def456",
+		Kind:           "openapiv3",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 
@@ -363,13 +369,14 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 	require.NoError(t, err)
 
 	asset, err := ti.repo.CreateAsset(ctx1, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     project1ID,
-		Sha256:        "project1hash",
-		Kind:          "openapiv3",
-		ContentType:   contentType,
-		ContentLength: contentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      project1ID,
+		OrganizationID: testidp.MockOrgID,
+		Sha256:         "project1hash",
+		Kind:           "openapiv3",
+		ContentType:    contentType,
+		ContentLength:  contentLength,
 	})
 	require.NoError(t, err)
 

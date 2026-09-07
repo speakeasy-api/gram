@@ -69,9 +69,21 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	return socket
 }
 
+// isolateInstalledAgent hides machine-wide speakeasyd installs for the test.
+// Without it a real daemon at /usr/local/bin (as on any enrolled developer
+// machine) answers the exec tier and the assertion reads that machine's
+// identity instead of the fixture's.
+func isolateInstalledAgent(t *testing.T) {
+	t.Helper()
+	previous := machineWideAgentPaths
+	machineWideAgentPaths = nil
+	t.Cleanup(func() { machineWideAgentPaths = previous })
+}
+
 func TestDeviceAgentEmailSocketRescue(t *testing.T) {
 	// A daemon running from a location the exec chain can't guess (no PATH
 	// entry, no well-known dir) is still reachable at its fixed socket path.
+	isolateInstalledAgent(t)
 	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
 	t.Setenv("SPEAKEASY_SOCKET", socket)
 	t.Setenv("HOME", t.TempDir()) // no well-known installs
@@ -127,6 +139,9 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shell fixture is POSIX-only")
 	}
+	// Passes without this only because the $HOME candidate happens to be
+	// probed first; pin it so a reordering can't start reading a real install.
+	isolateInstalledAgent(t)
 	home := t.TempDir()
 	binDir := filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin")
 	if runtime.GOOS != "darwin" {

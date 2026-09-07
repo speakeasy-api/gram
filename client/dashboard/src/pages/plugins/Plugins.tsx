@@ -5,6 +5,7 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
+import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -35,18 +36,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
-import { Activity } from "lucide-react";
+import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
+import { PlatformMCPOnboardingContent } from "../org/PlatformMCP";
 import {
   MarketplaceCard,
   UninitializedMarketplaceCard,
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
   PLUGINS_FILTERS,
@@ -81,11 +84,11 @@ export default function Plugins(): JSX.Element {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | null
+    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -98,16 +101,7 @@ export default function Plugins(): JSX.Element {
         toast.error("Failed to download observability plugin");
         return;
       }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(resp, `observability-${platform}.zip`);
     } catch (err) {
       toast.error("Failed to download observability plugin");
       console.error("observability plugin download failed", err);
@@ -383,7 +377,7 @@ export default function Plugins(): JSX.Element {
             </Text>
             <div className="border-border flex-1 border-t" />
           </div>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <ObservabilityPluginCard
               publishStatus={publishStatus}
               isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
@@ -393,6 +387,9 @@ export default function Plugins(): JSX.Element {
                 void handleObservabilityDownload(platform);
               }}
             />
+            <RequireScope scope="org:admin" level="section">
+              <PlatformMCPPluginCard />
+            </RequireScope>
           </div>
         </Stack>
       </ResourceListPage>
@@ -533,7 +530,9 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (platform: "claude" | "cursor" | "codex" | "opencode") => void;
+  onDownload: (
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+  ) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const isConnected = !!publishStatus?.connected;
@@ -635,6 +634,14 @@ function ObservabilityPluginCard({
             >
               Download as zip — OpenCode
             </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("openclaw");
+              }}
+            >
+              Download as zip — OpenClaw
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -647,6 +654,48 @@ function ObservabilityPluginCard({
       <PlatformInstrumentationSheet
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
+      />
+    </Card.Entity>
+  );
+}
+
+function PlatformMCPPluginCard(): JSX.Element {
+  const [installOpen, setInstallOpen] = useState(false);
+
+  return (
+    <Card.Entity
+      className="border-primary/30 bg-primary/[0.02]"
+      icon={<Network className="text-primary h-10 w-10 opacity-80" />}
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <Text
+          variant="subheading"
+          as="div"
+          className="text-md truncate"
+          title="Platform MCP"
+        >
+          Platform MCP
+        </Text>
+        <Badge variant="information">
+          <Badge.Text>Platform</Badge.Text>
+        </Badge>
+      </div>
+
+      <Text small muted className="mb-3 line-clamp-3">
+        Manage MCPs, Risk Policies and explore logs in your favorite agent.
+      </Text>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <Text small muted>
+          Available from the public Speakeasy marketplace
+        </Text>
+        <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
+      </div>
+
+      <PlatformMCPOnboardingContent
+        sheetOnly
+        setupOpen={installOpen}
+        onSetupOpenChange={setInstallOpen}
       />
     </Card.Entity>
   );

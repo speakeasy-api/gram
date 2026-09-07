@@ -223,9 +223,9 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 }
 
 // TamperDemoRows plants stray rows inside the demo scope — a duplicated chat
-// in Postgres and a duplicated telemetry row in ClickHouse — so a subsequent
-// seed run can be shown to clean up unexpected demo-org data, not merely
-// re-assert its own rows.
+// and a visitor-minted API key in Postgres, a duplicated telemetry row in
+// ClickHouse — so a subsequent seed run can be shown to clean up unexpected
+// demo-org data, not merely re-assert its own rows.
 func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID string, projectID string) error {
 	// Generated columns (e.g. chats.deleted) cannot be written, so the
 	// duplicated row is built column by column from the non-generated set.
@@ -263,6 +263,30 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres chat: expected 1 row inserted, got %d", tag.RowsAffected())
 	}
 
+	// The seed itself never inserts an API key or a LiteLLM instance, so these
+	// rows cannot be cloned from existing ones: they stand in for what a demo
+	// visitor creates with the org:admin grants every demo session holds. The
+	// projects delete only SET NULLs api_keys.project_id, so the key needs an
+	// explicit scoped delete — and litellm_instances.api_key_id is ON DELETE
+	// RESTRICT, so the instance must be deleted before the key or the whole
+	// reseed aborts on the FK.
+	if _, err := db.Exec(ctx, `
+		WITH key AS (
+			INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
+			VALUES ($1, $2::uuid, 'user_demo_tamper', 'tampered visitor key', 'gram_demo', 'DEMO-TAMPER-HASH', ARRAY['producer'])
+			RETURNING organization_id, project_id, id
+		)
+		INSERT INTO litellm_instances (organization_id, project_id, api_key_id, created_by_user_id, name)
+		SELECT organization_id, project_id, id, 'user_demo_tamper', 'tampered visitor instance' FROM key`,
+		orgID, projectID,
+	); err != nil {
+		return fmt.Errorf("tamper postgres api key: %w", err)
+	}
+
+	if err := PlantMCPServerDependents(ctx, db, orgID, projectID); err != nil {
+		return fmt.Errorf("tamper postgres MCP server dependents: %w", err)
+	}
+
 	err = ch.Exec(ctx, fmt.Sprintf(`
 		INSERT INTO telemetry_logs
 		SELECT * FROM telemetry_logs WHERE gram_project_id = toUUID('%s') LIMIT 1`, projectID))
@@ -270,4 +294,242 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper clickhouse telemetry row: %w", err)
 	}
 	return nil
+}
+
+// PlantMCPServerDependents adds realistic tenant-owned rows across the full
+// catalog-registration FK closure. Every insert is gated on target_server so a
+// project without an MCP server cannot retain unattached fixture parents.
+func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) error {
+	tag, err := db.Exec(ctx, `
+		WITH target_server AS MATERIALIZED (
+			SELECT id FROM mcp_servers WHERE project_id = $2::uuid ORDER BY id LIMIT 1
+		), new_assistant AS (
+			INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+			SELECT $2::uuid, $1, 'Reseed safety assistant', 'openai/gpt-4o-mini', 'Test reseed cleanup.'
+			FROM target_server
+			RETURNING id
+		), assistant_attachment AS (
+			INSERT INTO assistant_mcp_servers (assistant_id, mcp_server_id, project_id)
+			SELECT new_assistant.id, target_server.id, $2::uuid
+			FROM new_assistant CROSS JOIN target_server
+			RETURNING id
+		), new_plugin AS (
+			INSERT INTO plugins (organization_id, project_id, name, slug)
+			SELECT $1, $2::uuid, 'Reseed safety plugin', 'reseed-safety-plugin'
+			FROM target_server
+			RETURNING id
+		), plugin_attachment AS (
+			INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+			SELECT new_plugin.id, target_server.id, 'Reseed safety server'
+			FROM new_plugin CROSS JOIN target_server
+			RETURNING id
+		), registration AS (
+			INSERT INTO platform_mcp_catalog_registrations (
+				organization_id, project_id, source_kind, catalog_provider,
+				catalog_reference, status, mcp_server_id, acting_surface
+			)
+			SELECT $1, $2::uuid, 'catalog', 'reseed-safety',
+				'reseed-safety-server', 'ready', target_server.id, 'dashboard'
+			FROM target_server
+			RETURNING id
+		), receipt AS (
+			INSERT INTO platform_mcp_operation_receipts (
+				organization_id, project_id, registration_id, user_id, acting_surface,
+				operation, idempotency_key, input_hash, status, expires_at
+			)
+			SELECT $1, $2::uuid, registration.id, 'user_reseed_safety', 'dashboard',
+				'install', 'reseed-safety-install', 'reseed-safety-input', 'completed',
+				clock_timestamp() + interval '1 day'
+			FROM registration
+			RETURNING id
+		), workflow AS (
+			INSERT INTO platform_mcp_onboarding_workflows (
+				organization_id, initiating_subject_urn, source_surface, client_family,
+				selected_project_id, selected_registration_id, expires_at
+			)
+			SELECT $1, 'user:user_reseed_safety', 'dashboard', 'claude',
+				$2::uuid, registration.id, clock_timestamp() + interval '1 day'
+			FROM registration
+			RETURNING id
+		), milestone AS (
+			INSERT INTO platform_mcp_onboarding_milestones (
+				organization_id, milestone, project_id, mcp_key, attempt_id
+			)
+			SELECT $1, 'registration_succeeded', $2::uuid,
+				'reseed-safety:reseed-safety-server', registration.id
+			FROM registration
+			RETURNING id
+		), distribution AS (
+			INSERT INTO platform_mcp_distributions (
+				organization_id, project_id, registration_id, default_plugin_id, plugin_id,
+				plugin_server_id, state, version, attachment_was_created, publication_state,
+				user_id, acting_surface
+			)
+			SELECT $1, $2::uuid, registration.id, new_plugin.id, new_plugin.id,
+				plugin_attachment.id, 'installed', 1, true, 'published',
+				'user_reseed_safety', 'dashboard'
+			FROM registration CROSS JOIN new_plugin CROSS JOIN plugin_attachment
+			RETURNING id, registration_id, version
+		), feedback AS (
+			INSERT INTO platform_mcp_feedback (
+				organization_id, subject_urn, project_id, workflow_id, category,
+				idempotency_key, input_hash, rating, success, expires_at
+			)
+			SELECT $1, 'user:user_reseed_safety', $2::uuid, workflow.id, 'onboarding',
+				'reseed-safety-feedback', 'reseed-safety-feedback-input', 5, true,
+				clock_timestamp() + interval '1 day'
+			FROM workflow
+			RETURNING id
+		)
+		INSERT INTO platform_mcp_selected_use_evidence (
+			organization_id, project_id, registration_id, distribution_id,
+			distribution_version, workflow_id, tool_name, tool_category, succeeded_at
+		)
+		SELECT $1, $2::uuid, distribution.registration_id, distribution.id,
+			distribution.version, workflow.id, 'reseed_safety_tool', 'productivity',
+			clock_timestamp()
+		FROM distribution CROSS JOIN workflow CROSS JOIN receipt CROSS JOIN feedback
+			CROSS JOIN assistant_attachment CROSS JOIN milestone`, orgID, projectID)
+	if err != nil {
+		return fmt.Errorf("plant MCP server dependents: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("plant MCP server dependents: expected 1 complete dependent set, got %d", tag.RowsAffected())
+	}
+	return nil
+}
+
+// CountReseedSafetyProjectMilestones returns the number of project-scoped
+// onboarding milestones planted by PlantMCPServerDependents.
+func CountReseedSafetyProjectMilestones(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) (int, error) {
+	var count int
+	err := db.QueryRow(ctx, `
+		SELECT count(*)
+		FROM platform_mcp_onboarding_milestones
+		WHERE organization_id = $1
+		  AND project_id = $2::uuid
+		  AND milestone = 'registration_succeeded'
+		  AND mcp_key = 'reseed-safety:reseed-safety-server'`, orgID, projectID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count reseed safety project milestones: %w", err)
+	}
+	return count, nil
+}
+
+// CreateProjectWithoutMCPServer adds a project used to prove the dependent
+// fixture is a no-op when its required target server is absent.
+func CreateProjectWithoutMCPServer(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) error {
+	tag, err := db.Exec(ctx, `
+		INSERT INTO projects (id, organization_id, name, slug)
+		VALUES ($2::uuid, $1, 'Reseed safety no-server project', 'reseed-safety-no-server')`,
+		orgID, projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("create project without MCP server: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("create project without MCP server: expected 1 project, got %d", tag.RowsAffected())
+	}
+	return nil
+}
+
+// LoginArtifacts is the state a developer's first login leaves in Postgres
+// before the local seed has ever run: the organization (created
+// un-whitelisted, already linked to WorkOS), the user row — whose id the auth
+// callback derives from the IDP subject rather than from the email the seed
+// keys on — and the membership tying the two together.
+type LoginArtifacts struct {
+	OrgID string
+	// OrgWorkOSID is the WorkOS organization the callback linked the org to,
+	// so the seed meets an already-linked row rather than a bare one.
+	OrgWorkOSID string
+	OrgName     string
+	OrgSlug     string
+	UserID      string
+	Email       string
+	// WorkOSID is the login subject, which the callback also records on the
+	// membership.
+	WorkOSID string
+	// MembershipID is the WorkOS membership id the callback recorded. It is
+	// deliberately not the 'devidp_mem_'-prefixed one the seed writes: the
+	// seed has to adopt the membership it finds, not only one it made.
+	MembershipID string
+}
+
+// PlantLoginArtifacts writes what logging in before seeding would have
+// written.
+func PlantLoginArtifacts(ctx context.Context, db *pgxpool.Pool, a LoginArtifacts) error {
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_metadata (id, name, slug, workos_id, whitelisted)
+		VALUES ($1, $2, $3, $4, FALSE)`, a.OrgID, a.OrgName, a.OrgSlug, a.OrgWorkOSID); err != nil {
+		return fmt.Errorf("plant organization: %w", err)
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO users (id, email, display_name, workos_id)
+		VALUES ($1, $2, 'Dev', $3)`, a.UserID, a.Email, a.WorkOSID); err != nil {
+		return fmt.Errorf("plant user: %w", err)
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_user_relationships
+			(organization_id, user_id, workos_user_id, workos_membership_id)
+		VALUES ($1, $2, $3, $4)`, a.OrgID, a.UserID, a.WorkOSID, a.MembershipID); err != nil {
+		return fmt.Errorf("plant membership: %w", err)
+	}
+	return nil
+}
+
+// DeveloperState is what the local fixtures are expected to converge on for
+// the developer they adopt, however the database got there.
+type DeveloperState struct {
+	// Users counts the rows holding the developer's email: more than one
+	// means a second identity was minted.
+	Users int
+	// UserID and WorkOSID come from the single row when Users == 1.
+	UserID   string
+	WorkOSID string
+	// Whitelisted is the organization's gate flag, and OrgWorkOSID its link
+	// to the IDP.
+	Whitelisted bool
+	OrgWorkOSID string
+	// Memberships and RoleAssignments count the live rows tying UserID to the
+	// organization.
+	Memberships     int
+	RoleAssignments int
+}
+
+// ReadDeveloperState collects the rows the local fixtures are responsible for.
+func ReadDeveloperState(ctx context.Context, db *pgxpool.Pool, orgID, email string) (DeveloperState, error) {
+	var state DeveloperState
+
+	if err := db.QueryRow(ctx,
+		`SELECT count(*) FROM users WHERE email = $1`, email).Scan(&state.Users); err != nil {
+		return state, fmt.Errorf("count users: %w", err)
+	}
+	if state.Users != 1 {
+		return state, nil
+	}
+
+	if err := db.QueryRow(ctx,
+		`SELECT id, coalesce(workos_id, '') FROM users WHERE email = $1`, email,
+	).Scan(&state.UserID, &state.WorkOSID); err != nil {
+		return state, fmt.Errorf("read user: %w", err)
+	}
+	if err := db.QueryRow(ctx,
+		`SELECT whitelisted, coalesce(workos_id, '') FROM organization_metadata WHERE id = $1`, orgID,
+	).Scan(&state.Whitelisted, &state.OrgWorkOSID); err != nil {
+		return state, fmt.Errorf("read organization: %w", err)
+	}
+	if err := db.QueryRow(ctx, `
+		SELECT count(*) FROM organization_user_relationships
+		WHERE organization_id = $1 AND user_id = $2 AND deleted IS FALSE`,
+		orgID, state.UserID).Scan(&state.Memberships); err != nil {
+		return state, fmt.Errorf("count memberships: %w", err)
+	}
+	if err := db.QueryRow(ctx, `
+		SELECT count(*) FROM organization_role_assignments
+		WHERE organization_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+		orgID, state.UserID).Scan(&state.RoleAssignments); err != nil {
+		return state, fmt.Errorf("count role assignments: %w", err)
+	}
+	return state, nil
 }

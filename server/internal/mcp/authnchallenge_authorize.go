@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -80,8 +81,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	// URL-shaped client_ids resolve via CIMD here (flag-gated, inside the
-	// resolver). All resolution failures render inline per RFC 6749
+	// URL-shaped client_ids resolve via CIMD here (admission-gated, inside
+	// the resolver). All resolution failures render inline per RFC 6749
 	// §4.1.2.1 — the redirect_uri of an unresolved client cannot be
 	// trusted — and a document fetch failure aborts the request per
 	// draft-ietf-oauth-client-id-metadata-document-02 §5.1 (fail closed,
@@ -109,13 +110,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
-		if errors.Is(err, errCIMDDisabled) {
-			// Same wire response as an unknown client so the rejection does
-			// not leak per-organization flag state; the log line is what
-			// distinguishes a flag-off rejection during an incident.
-			logger.InfoContext(ctx, "rejecting url-shaped client_id while cimd flag is disabled")
-			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
-		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
@@ -131,6 +125,16 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// below and every response built later in the flow agree on it.
 	baseURL := s.BaseURLForRequest(r)
 
+	// The endpoint's canonical URI at the address this request arrived on. One
+	// value serves three contracts: the RFC 9207 `iss` on every authorization
+	// response, the AS metadata issuer, and the RFC 9728 protected-resource
+	// `resource`. That identity is what lets the RFC 8707 check below compare
+	// against a value the client was already handed.
+	issuer, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
+	}
+
 	// At this point the redirect_uri is trusted (matched against the
 	// registered set on the client row), so RFC 6749 §4.1.2.1 requires that
 	// any remaining validation errors are forwarded to the client by 302
@@ -138,11 +142,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// observe the failure. The two-phase Validate split exists to make this
 	// switch unambiguous.
 	if err := req.ValidatePostRedirect(); err != nil {
-		issuer, issErr := endpoint.RootURL(baseURL)
-		if issErr != nil {
-			return oops.E(oops.CodeUnexpected, issErr, "build authorization response issuer").LogError(ctx, logger)
-		}
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, err)
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
+	}
+	// RFC 8707 §2: a resource naming some other server means the client
+	// believes it is getting a token for an endpoint this one will never mint
+	// for. Rejecting makes that misconfiguration visible at the point it
+	// happens instead of at first use.
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, issuer); err != nil {
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 
 	challengeID := uuid.NewString()
@@ -186,6 +193,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		Subject:             subject,
 		CreatedAt:           time.Now(),
 		FirstParty:          false,
+		// Auto-connect has not run for a challenge this new.
+		AutoConnectDone: false,
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
@@ -200,7 +209,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if forceIDP {
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
-			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 		}
 		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
@@ -214,7 +223,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		if err != nil {
 			// A failure to build the IDP authorization URL typically means the
 			// issuer's IDP wiring is misconfigured — a config-class flow failure.
-			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, idpURL.String(), http.StatusFound)
@@ -223,7 +232,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
@@ -235,8 +244,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
 func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
@@ -248,18 +256,25 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 // invoke this AFTER the supplied redirect_uri has been validated against the
 // registered set on the OAuth client row — passing through an untrusted URI
 // here would turn the AS into an open redirector.
-func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState string, err error) error {
+// failureReason labels the rejection with the same vocabulary the token
+// endpoint logs (for example "resource_mismatch"), so one query finds a given
+// class of rejection on both legs. Empty when the error code alone identifies
+// the cause.
+func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		code = oauthErr.Code
 		description = oauthErr.Description
 	}
-	logger.InfoContext(ctx, "authorize request rejected (post-redirect)",
+	args := []any{
 		attr.SlogOAuthError(code),
 		attr.SlogOAuthErrorDescription(description),
-	)
+	}
+	if failureReason != "" {
+		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	logger.InfoContext(ctx, "authorize request rejected (post-redirect)", args...)
 	redirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      redirectURI,
 		Issuer:           issuer,

@@ -17,6 +17,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
   cursor: "Cursor",
+  // The device agent's IDE deeplink target — the same Cursor surface as the
+  // cursor CLI, reached via the desktop app.
+  "cursor-app": "Cursor",
   codex: "Codex",
   "codex-web": "Codex Web",
   // ChatGPT (web/desktop chat) and ChatGPT Work, observed via the OpenAI
@@ -25,6 +28,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   chatgpt: "ChatGPT",
   "chatgpt-work": "ChatGPT Work",
   opencode: "opencode",
+  openclaw: "OpenClaw",
   litellm: "LiteLLM",
   copilot: "Copilot",
   "github-copilot": "Copilot",
@@ -49,4 +53,25 @@ export function formatPlatform(value: string): string {
     .filter(Boolean)
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+/**
+ * Format a chat's full source label, including its LiteLLM proxy relationship.
+ * Proxy-owned transcripts name the client behind the proxy ("Claude Code via
+ * LiteLLM"); natively captured sessions the proxy also observed name the
+ * surface with the proxy appended ("Claude Code via LiteLLM" with
+ * source=claude-code) — proxied rows are suppressed for those sessions, so the
+ * source alone would hide the LiteLLM association.
+ */
+export function formatChatSource(
+  source: string,
+  chat: { originatingClient?: string; litellmProxied?: boolean },
+): string {
+  if (chat.originatingClient) {
+    return `${formatPlatform(chat.originatingClient)} via ${formatPlatform(source)}`;
+  }
+  if (chat.litellmProxied && source !== "litellm") {
+    return `${formatPlatform(source)} via ${formatPlatform("litellm")}`;
+  }
+  return formatPlatform(source);
 }

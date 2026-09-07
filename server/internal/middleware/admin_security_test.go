@@ -151,6 +151,129 @@ func TestAdminOriginCheck_RejectsMissingOriginAndReferer(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
+func TestAdminOriginCheck_AllowsSameHostWithEmptyAllowlist(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "https://gram-admin.speakeasy.com/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://gram-admin.speakeasy.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.True(t, called)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestAdminOriginCheck_RejectsForeignOriginWithEmptyAllowlist(t *testing.T) {
+	t.Parallel()
+
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "https://gram-admin.speakeasy.com/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// A TLS terminating ingress hands the server a plain HTTP request, so the
+// scheme the server sees never matches the scheme the browser sent.
+func TestAdminOriginCheck_AllowsSameHostBehindTLSTermination(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://gram-admin.speakeasy.com/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://gram-admin.speakeasy.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.True(t, called)
+}
+
+func TestAdminOriginCheck_PrefersForwardedHost(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://gram-admin.svc.cluster.local/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://gram-admin.speakeasy.com")
+	req.Header.Set("X-Forwarded-Host", "gram-admin.speakeasy.com, gram-admin.svc.cluster.local")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.True(t, called)
+}
+
+func TestAdminOriginCheck_RejectsForeignOriginWithForwardedHost(t *testing.T) {
+	t.Parallel()
+
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://gram-admin.svc.cluster.local/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	req.Header.Set("X-Forwarded-Host", "gram-admin.speakeasy.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestAdminOriginCheck_MatchesHostCaseInsensitively(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "https://gram-admin.speakeasy.com/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://GRAM-ADMIN.speakeasy.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.True(t, called)
+}
+
+func TestAdminOriginCheck_RejectsSameHostOnAnotherPort(t *testing.T) {
+	t.Parallel()
+
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	}))
+
+	// The port is part of the origin, so the dev server on another port is a
+	// separate origin and it still needs the allowlist.
+	req := httptest.NewRequest(http.MethodPost, "https://localhost:8083/admin/organization.update", nil)
+	req.Header.Set("Origin", "https://localhost:5174")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
 func TestAdminCookieAttributes_RewritesAdminCookies(t *testing.T) {
 	t.Parallel()
 

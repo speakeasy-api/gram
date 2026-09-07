@@ -3,10 +3,10 @@
 
 set -e
 
+# Cache keys only. `aube install` deliberately does not run here: this task has
+# to emit AUBE_STORE_PATH before the job restores the aube store cache, so
+# installing here would always download the whole workspace from the registry.
+# Jobs run `aube install --frozen-lockfile` themselves after the cache step.
 echo Compute cache keys
 echo ==================
 mise run github:pre-cache
-echo
-echo Install scripting dependencies
-echo ==============================
-pnpm install --frozen-lockfile --filter @gram/workspace

@@ -25,12 +25,17 @@ func BuildCreateMcpEndpointPayload(mcpEndpointsCreateMcpEndpointBody string, mcp
 	{
 		err = json.Unmarshal([]byte(mcpEndpointsCreateMcpEndpointBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }'")
 		}
 		if body.CustomDomainID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", *body.CustomDomainID, goa.FormatUUID))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Slug) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 128, false))
@@ -58,9 +63,10 @@ func BuildCreateMcpEndpointPayload(mcpEndpointsCreateMcpEndpointBody string, mcp
 		}
 	}
 	v := &mcpendpoints.CreateMcpEndpointPayload{
-		CustomDomainID: body.CustomDomainID,
-		McpServerID:    body.McpServerID,
-		Slug:           types.McpEndpointSlug(body.Slug),
+		CustomDomainID:  body.CustomDomainID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Slug:            types.McpEndpointSlug(body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -140,13 +146,23 @@ func BuildGetMcpEndpointPayload(mcpEndpointsGetMcpEndpointID string, mcpEndpoint
 
 // BuildListMcpEndpointsPayload builds the payload for the mcpEndpoints
 // listMcpEndpoints endpoint from CLI flags.
-func BuildListMcpEndpointsPayload(mcpEndpointsListMcpEndpointsMcpServerID string, mcpEndpointsListMcpEndpointsSessionToken string, mcpEndpointsListMcpEndpointsApikeyToken string, mcpEndpointsListMcpEndpointsProjectSlugInput string) (*mcpendpoints.ListMcpEndpointsPayload, error) {
+func BuildListMcpEndpointsPayload(mcpEndpointsListMcpEndpointsMcpServerID string, mcpEndpointsListMcpEndpointsMetaMcpServerID string, mcpEndpointsListMcpEndpointsSessionToken string, mcpEndpointsListMcpEndpointsApikeyToken string, mcpEndpointsListMcpEndpointsProjectSlugInput string) (*mcpendpoints.ListMcpEndpointsPayload, error) {
 	var err error
 	var mcpServerID *string
 	{
 		if mcpEndpointsListMcpEndpointsMcpServerID != "" {
 			mcpServerID = &mcpEndpointsListMcpEndpointsMcpServerID
 			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if mcpEndpointsListMcpEndpointsMetaMcpServerID != "" {
+			metaMcpServerID = &mcpEndpointsListMcpEndpointsMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -172,6 +188,7 @@ func BuildListMcpEndpointsPayload(mcpEndpointsListMcpEndpointsMcpServerID string
 	}
 	v := &mcpendpoints.ListMcpEndpointsPayload{}
 	v.McpServerID = mcpServerID
+	v.MetaMcpServerID = metaMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -187,13 +204,18 @@ func BuildUpdateMcpEndpointPayload(mcpEndpointsUpdateMcpEndpointBody string, mcp
 	{
 		err = json.Unmarshal([]byte(mcpEndpointsUpdateMcpEndpointBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.CustomDomainID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", *body.CustomDomainID, goa.FormatUUID))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Slug) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 128, false))
@@ -221,10 +243,11 @@ func BuildUpdateMcpEndpointPayload(mcpEndpointsUpdateMcpEndpointBody string, mcp
 		}
 	}
 	v := &mcpendpoints.UpdateMcpEndpointPayload{
-		ID:             body.ID,
-		CustomDomainID: body.CustomDomainID,
-		McpServerID:    body.McpServerID,
-		Slug:           types.McpEndpointSlug(body.Slug),
+		ID:              body.ID,
+		CustomDomainID:  body.CustomDomainID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Slug:            types.McpEndpointSlug(body.Slug),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

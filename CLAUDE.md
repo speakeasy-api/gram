@@ -4,6 +4,8 @@ This document provides an overview of the key directories in the Gram project to
 
 <tip>
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
+
+In a fresh git worktree the stack is booted for you and then paused — containers exist with migrations and seed data applied, but no application daemons are running (a placeholder holds the dashboard port and serves a resume page). You rarely need to wake it by hand: opening the worktree's dashboard URL serves a "Resuming stack" page that wakes it and reloads, and `mise run seed` / `mise run playwright` wake it first. `mise run wake` and `mise run pause` (alias `sleep`) are there when you want to be explicit, and `mise run idle-pause --all` pauses stacks nobody is using.
 </tip>
 
 ## Customer Data Is Confidential
@@ -67,7 +69,11 @@ Contains the main application code for the Gram server:
 - `mise build:server`: Build the server binary
 - `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
+- `mise run test:server`: Run server tests; accepts the same extra arguments as `go test` and runs from `server/`, so package paths are relative to `server/` (for example, `mise run test:server ./internal/thirdparty/openrouter/`)
 - `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
+- `mise run wake`: Start this worktree's stack (containers, then daemons). A new worktree is booted and then left paused, so run this before you need the dashboard or API.
+- `mise run pause` (alias `mise run sleep`): Stop the daemons and containers again, keeping their data. It also parks a placeholder server on the site port, so opening the dashboard URL wakes the stack.
+- `mise run idle-pause [--all] [--minutes 60]`: Pause stacks with no established connections for that long. pitchfork runs it every 5 minutes for the current worktree (the `idle-pause` cron daemon in `pitchfork.toml`), so a stack you stop looking at pauses itself.
 - `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>
@@ -78,9 +84,9 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 <commands>
 
-- `pnpm -F dashboard type-check`: Type-check the dashboard
-- `pnpm -F dashboard build`: Build the dashboard
-- `pnpm -F dashboard dev`: Run dev server
+- `aube run -F dashboard type-check`: Type-check the dashboard
+- `aube run -F dashboard build`: Build the dashboard
+- `aube run -F dashboard dev`: Run dev server
 
 </commands>
 
@@ -92,11 +98,23 @@ Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GI
 
 ### Testing assistants locally
 
+`./zero` (and `mise run zero:assistants`) writes `GRAM_ASSISTANT_RUNTIME_PROVIDER` and `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE` into `mise.local.toml` when those keys are missing there — persisting a value already in the environment, or `local` / `gram-assistant-runtime` if unset — and builds `gram-assistant-runtime:dev` if that image is missing.
+
+`mise run zero:assistants --restart` rewrites those keys to the local defaults and rebuilds the image (use this when a stale `flyio` pin is in the way). Do not leave those keys in `mise.toml` — committed defaults make it impossible to tell an intentional override from a stale value. LLM chat still needs `OPENROUTER_DEV_KEY` in `mise.local.toml` (`mise run zero:openrouter`).
+
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
+
+### Demo org and seed data
+
+We maintain a demo org (`app.getgram.ai/explore-demo`) that customers use to explore the product before their own org is set up. It is reseeded daily from a SQL seed stored in this repo, and the same seed provisions each developer's local org.
+
+When you add a feature or change an existing one, update the demo seed in the same change so the new data shows up in both the demo org and local dev. Activate the `gram-demo-seed` skill (`.agents/skills/gram-demo-seed/SKILL.md`) for the rules and the workflow.
 
 ### Database Migrations
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.
+
+Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-temporal/SKILL.md`). Activate it any time you touch `server/internal/background/`, add a Temporal schedule, signal, or workflow start, or make anything react to chat messages, tool calls, MCP requests, or other per-row events.
 
 ## Mise CLI
 
@@ -118,6 +136,10 @@ mise run start
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - Identify any available skills relevant to the task so you can activate them when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Pull requests
+
+**Use the `pull-request` skill when preparing pull requests.** It contains the guidelines we follow to prepare work for review and how to present the PR title and description.
 
 ## Cursor Cloud specific instructions
 

@@ -45,10 +45,9 @@ var _ = pingv2.Message{}
 }
 
 // TestSubscribeScansBatchVsSingle runs the production Go subscribe scans against
-// a sample tree and proves mustReceiveBatch is picked up by the batch scan (with
-// the handler captured past the extra settings arg) while the single-message
-// scan does not also match it. It guards the patterns themselves, which a Go-only
-// test cannot. Skips when ast-grep is unavailable.
+// a sample tree and proves each receiver shape is captured exactly once with its
+// handler as the first trailing argument. It guards the ast-grep patterns
+// themselves, which a Go-only test cannot. Skips when ast-grep is unavailable.
 func TestSubscribeScansBatchVsSingle(t *testing.T) {
 	if _, err := exec.LookPath(astGrepBin()); err != nil {
 		t.Skipf("ast-grep not available: %v", err)
@@ -63,7 +62,8 @@ func TestSubscribeScansBatchVsSingle(t *testing.T) {
 
 func reg(rg receiverGroup) {
 	mustReceive(rg, pingv2.Message{}, pingv2.ProcessorSub{}, ping.NewHandler(logger))
-	mustReceiveBatch(rg, riskv1.Finding{}, riskv1.FindingBQWriterSub{}, gcp.BatchReceiveSettings{}, risk.NewFindingBQWriter(logger))
+	mustReceiveBatch(rg, riskv1.Finding{}, riskv1.FindingBQWriterSub{}, risk.NewFindingBQWriter(logger), gcp.BatchReceiveSettings{})
+	mustReceiveBatchWithResult(rg, otelv1.Span{}, otelv1.SpanRelay{}, otel.NewSpanRelayHandler(logger), gcp.BatchReceiveSettings{})
 }
 `
 	if err := os.WriteFile(filepath.Join(srcDir, "streams.go"), []byte(src), 0o644); err != nil {
@@ -96,10 +96,19 @@ func reg(rg receiverGroup) {
 	if got := batch[0].meta("SUB"); got != "riskv1.FindingBQWriterSub{}" {
 		t.Errorf("subscribe-batch-go SUB = %q, want %q", got, "riskv1.FindingBQWriterSub{}")
 	}
-	// The handler is captured after the BatchReceiveSettings argument, with the
-	// settings excluded.
 	if got := batch[0].firstMulti("HANDLER"); got != "risk.NewFindingBQWriter(logger)" {
 		t.Errorf("subscribe-batch-go handler = %q, want %q", got, "risk.NewFindingBQWriter(logger)")
+	}
+
+	batchResult := byRule["subscribe-batch-result-go"]
+	if len(batchResult) != 1 {
+		t.Fatalf("subscribe-batch-result-go matched %d sites, want 1", len(batchResult))
+	}
+	if got := batchResult[0].meta("SUB"); got != "otelv1.SpanRelay{}" {
+		t.Errorf("subscribe-batch-result-go SUB = %q, want %q", got, "otelv1.SpanRelay{}")
+	}
+	if got := batchResult[0].firstMulti("HANDLER"); got != "otel.NewSpanRelayHandler(logger)" {
+		t.Errorf("subscribe-batch-result-go handler = %q, want %q", got, "otel.NewSpanRelayHandler(logger)")
 	}
 }
 
@@ -119,5 +128,42 @@ var _ = riskv1.Finding{}
 
 	if got := imports["riskv1"]; got != "gram.risk.v1" {
 		t.Errorf("imports[%q] = %q, want %q", "riskv1", got, "gram.risk.v1")
+	}
+}
+
+func TestPyImportsInlineComments(t *testing.T) {
+	src := `from gram.ping.v2 import ping_pb2  # trailing comment
+from gram.risk.v1 import (
+    finding_pb2,  # mid-block comment must not swallow the next item
+    presidio_analysis_pb2,
+    reply_pb2,  # a ) inside a comment must not close the block
+    presidio_enforcement_pb2,
+)
+from redis import asyncio as redis_asyncio
+`
+	path := filepath.Join(t.TempDir(), "multi.py")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	imports, err := pyImports(path)
+	if err != nil {
+		t.Fatalf("pyImports: %v", err)
+	}
+
+	want := map[string]string{
+		"ping_pb2":                 "gram.ping.v2",
+		"finding_pb2":              "gram.risk.v1",
+		"presidio_analysis_pb2":    "gram.risk.v1",
+		"reply_pb2":                "gram.risk.v1",
+		"presidio_enforcement_pb2": "gram.risk.v1",
+	}
+	for name, pkg := range want {
+		if got := imports[name]; got != pkg {
+			t.Errorf("imports[%q] = %q, want %q", name, got, pkg)
+		}
+	}
+	if len(imports) != len(want) {
+		t.Errorf("imports has %d entries, want %d: %v", len(imports), len(want), imports)
 	}
 }

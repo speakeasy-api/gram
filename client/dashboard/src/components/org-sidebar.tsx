@@ -1,6 +1,7 @@
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
-import { RequireScope } from "@/components/require-scope";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -8,23 +9,25 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/Sidebar";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useOrgRoutes } from "@/routes";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Icon } from "@/components/ui/Icon";
-import * as React from "react";
-import { Link } from "react-router";
+import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
+
 import { GramLogo } from "./gram-logo";
-import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
-import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { HatchRule } from "./hatch-rule";
+import { Icon } from "@/components/ui/Icon";
+import { Link } from "react-router";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { RequireScope } from "@/components/require-scope";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 import { TrialStatusCard } from "./trial-status-card";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -55,13 +58,19 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
   const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data: productFeatures } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
   const isPlatformAdmin = useIsPlatformAdmin();
+  const killswitchAccess = useKillswitchAccess();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -73,19 +82,26 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
   ].some((r) => r.active);
+
+  const dataActive = [orgRoutes.data, orgRoutes.dataExports].some(
+    (route) => route.active,
+  );
 
   const secureActive = [
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
   ].some((r) => r.active);
 
   const identityActive = [
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
@@ -93,43 +109,46 @@ export function OrgSidebar({
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
-    orgRoutes.platformAdminFeatures,
     orgRoutes.platformAdminOnboarding,
+    orgRoutes.platformAdminOpenRouterKeys,
     orgRoutes.platformRemoteIdentityProviders,
   ].some((r) => r.active);
 
-  const activeGroup = settingsActive
-    ? "Settings"
-    : secureActive
-      ? "Secure"
-      : identityActive
-        ? "Identity"
-        : platformAdminActive
-          ? "Platform Admin"
-          : undefined;
+  const groupActivations: Array<[string, boolean]> = [
+    ["Settings", settingsActive],
+    ["Data", dataActive],
+    ["Secure", secureActive],
+    ["Identity", identityActive],
+    ["Platform Admin", platformAdminActive],
+  ];
+  const activeGroup = groupActivations.find(([, active]) => active)?.[0];
 
   const allOrgNavRoutes = [
     orgRoutes.home,
-    orgRoutes.collections,
     orgRoutes.team,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
+    orgRoutes.data,
+    orgRoutes.dataExports,
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
-    orgRoutes.platformAdminFeatures,
     orgRoutes.platformAdminOnboarding,
+    orgRoutes.platformAdminOpenRouterKeys,
     orgRoutes.platformRemoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
@@ -137,17 +156,19 @@ export function OrgSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="gap-3 pb-3">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+      {/* Matches AppSidebar: logo + collapse control on one --header-height row,
+          closed by the crosshatch rule so it lines up with the page header. */}
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Link
             to={orgRoutes.home.href()}
-            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
             <GramLogo className="w-28" />
           </Link>
-          <CommandPaletteTrigger />
+          <SidebarTrigger />
         </div>
-        <WorkspaceSwitcher />
+        <HatchRule />
       </SidebarHeader>
       <SidebarContent className="pt-2">
         {rbacLoading ? (
@@ -155,7 +176,7 @@ export function OrgSidebar({
         ) : (
           <NavGroupProvider
             activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Secure", "Identity"]}
+            defaultOpenGroups={["Settings", "Data", "Secure", "Identity"]}
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2">
@@ -163,12 +184,6 @@ export function OrgSidebar({
               <ScopeGatedTopLevelItem
                 item={orgRoutes.home}
                 scope={["org:read", "project:read", "org:admin"]}
-              />
-
-              {/* Collections — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.collections}
-                scope={["org:read", "org:admin"]}
               />
 
               {/* Team — top-level */}
@@ -184,11 +199,6 @@ export function OrgSidebar({
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
-                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
-                  { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  { item: orgRoutes.skills, scope: "org:admin" },
-                  { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
-                  { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
                   true
                     ? [
@@ -196,8 +206,29 @@ export function OrgSidebar({
                           item: orgRoutes.externalServices,
                           scope: orgReadOrAdmin,
                         },
+                        {
+                          item: orgRoutes.encryptionKeys,
+                          scope: orgReadOrAdmin,
+                        },
                       ]
                     : []),
+                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
+                  { item: orgRoutes.logs, scope: orgReadOrAdmin },
+                  { item: orgRoutes.skills, scope: "org:admin" },
+                  { item: orgRoutes.platformMcp, scope: "org:admin" },
+                  { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
+                  { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
+                ]}
+              />
+
+              {/* Data group — org-level access to ingested events and
+                  project-scoped export configuration. */}
+              <ScopeGatedNavGroup
+                label="Data"
+                Icon={(p) => <Icon {...p} name="database" />}
+                items={[
+                  { item: orgRoutes.data, scope: orgReadOrAdmin },
+                  { item: orgRoutes.dataExports, scope: orgReadOrAdmin },
                 ]}
               />
 
@@ -207,6 +238,14 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  ...(killswitchAccess.canAccess
+                    ? [
+                        {
+                          item: orgRoutes.killswitch,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
@@ -220,7 +259,7 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
                   ...(isUserSessionsEnabled
-                    ? [{ item: orgRoutes.userSessions, scope: orgReadOrAdmin }]
+                    ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),
                   { item: orgRoutes.identity, scope: orgReadOrAdmin },
                   {
@@ -265,10 +304,6 @@ export function OrgSidebar({
                           label: "RBAC Override",
                         },
                         {
-                          item: orgRoutes.platformAdminFeatures,
-                          label: "Features",
-                        },
-                        {
                           item: orgRoutes.platformAdminOnboarding,
                           label: "Onboarding",
                         },
@@ -276,6 +311,14 @@ export function OrgSidebar({
                     : []),
                   ...(isPlatformAdmin
                     ? [
+                        // OpenRouter Keys and Remote Identity Providers stay
+                        // strictly admin-gated even in local dev: both manage
+                        // real platform state (live upstream credentials, the
+                        // shared issuer catalog), not local developer aids.
+                        {
+                          item: orgRoutes.platformAdminOpenRouterKeys,
+                          label: "OpenRouter Keys",
+                        },
                         {
                           item: orgRoutes.platformRemoteIdentityProviders,
                           label: "Remote Identity Providers",

@@ -20,6 +20,7 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
+	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -53,6 +54,49 @@ type externalMCPConfig struct {
 	toolDefID    uuid.UUID
 	toolURN      string
 	slug         string
+}
+
+func addOrdinaryToolToExternalMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, config *externalMCPConfig) {
+	t.Helper()
+
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "mixed-fixture", uuid.NewString()[:8])
+	err := tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       config.toolset.ProjectID,
+		DeploymentID:    config.deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "ordinary_tool",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Ordinary tool",
+		Description:     "Ordinary tool in a mixed toolset",
+		Tags:            []string{},
+		HttpMethod:      http.MethodGet,
+		Path:            "/ordinary",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        []byte(`[]`),
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{},
+		DestructiveHint: pgtype.Bool{},
+		IdempotentHint:  pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	proxyURN, err := urn.ParseTool(config.toolURN)
+	require.NoError(t, err)
+	latestVersion, err := toolsets_repo.New(ti.conn).GetLatestToolsetVersion(ctx, config.toolset.ID)
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     config.toolset.ID,
+		Version:       latestVersion.Version + 1,
+		ToolUrns:      []urn.Tool{toolURN, proxyURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: latestVersion.ID, Valid: true},
+	})
+	require.NoError(t, err)
 }
 
 // setupToolsetWithExternalMCP creates all necessary database records for testing external MCP proxy

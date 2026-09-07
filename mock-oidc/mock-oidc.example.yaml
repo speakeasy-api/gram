@@ -22,4 +22,4 @@ provider:
       client_secret: GOCSPX-example_secret
       name: Gram (Google)
       redirect_uris:
-        - "https://localhost:8083/admin/auth.callback"
+        - "${GRAM_ADMIN_SERVER_URL}/admin/auth.callback"

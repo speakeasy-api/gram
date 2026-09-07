@@ -7,10 +7,45 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/OpenRouterTeam/go-sdk/models/sdkerrors"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
+
+// HTTPError carries the status of a non-successful OpenRouter response without
+// retaining the response body, which may contain customer data.
+type HTTPError struct {
+	StatusCode int
+	Err        error
+}
+
+func (e *HTTPError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("OpenRouter API error (status %d), response body omitted: %v", e.StatusCode, e.Err)
+	}
+	return fmt.Sprintf("OpenRouter API error (status %d), response body omitted", e.StatusCode)
+}
+
+func (e *HTTPError) Unwrap() error {
+	return e.Err
+}
+
+// ErrAPIKeyIdentityMismatch is returned when OpenRouter acknowledges a key
+// mutation for a different key than the one Gram requested. Repeating the same
+// mutation cannot safely repair that invariant violation.
+var ErrAPIKeyIdentityMismatch = errors.New("openrouter: upstream API key identity mismatch")
+
+// IsPermanentError reports deterministic provider responses and key identity
+// invariant violations. Transport errors, 408/429 responses, and 5xx responses
+// remain retryable.
+func IsPermanentError(err error) bool {
+	if errors.Is(err, ErrAPIKeyIdentityMismatch) {
+		return true
+	}
+	var httpErr *HTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode >= http.StatusBadRequest && httpErr.StatusCode < http.StatusInternalServerError && httpErr.StatusCode != http.StatusRequestTimeout && httpErr.StatusCode != http.StatusTooManyRequests
+}
 
 // ErrInsufficientCredits is returned when OpenRouter rejects a request with
 // status 402: the org has exhausted its credit balance or requested more
@@ -121,9 +156,9 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 			attr.OpenRouterRateLimitReset(header.Get("X-RateLimit-Reset")),
 			attr.OpenRouterRetryAfter(header.Get("Retry-After")),
 		)
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrRateLimited)
+		return &HTTPError{StatusCode: status, Err: ErrRateLimited}
 	case http.StatusPaymentRequired:
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrInsufficientCredits)
+		return &HTTPError{StatusCode: status, Err: ErrInsufficientCredits}
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		// 400/422 is the strongest "request body is the problem" signal, but
 		// it also covers non-history bad params (invalid model, malformed
@@ -132,9 +167,9 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 		// real history. Require BOTH the status code and a corruption-shaped
 		// body before opting into self-heal.
 		if looksLikeHistoryCorruption(strings.TrimSpace(string(body))) {
-			return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrHistoryCorruptionCandidate)
+			return &HTTPError{StatusCode: status, Err: ErrHistoryCorruptionCandidate}
 		}
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrBadRequest)
+		return &HTTPError{StatusCode: status, Err: ErrBadRequest}
 	case http.StatusForbidden:
 		// 403 is overloaded: a missing or unentitled key, an org policy block,
 		// and a provider moderation refusal all land here. Only the last one is
@@ -142,12 +177,76 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 		// so require a content-shaped body before spending the caller's attempt
 		// budget on it.
 		if looksLikeContentPolicy(strings.TrimSpace(string(body))) {
-			return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrContentPolicy)
+			return &HTTPError{StatusCode: status, Err: ErrContentPolicy}
 		}
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted", status)
+		return &HTTPError{StatusCode: status, Err: nil}
 	default:
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted", status)
+		return &HTTPError{StatusCode: status, Err: nil}
 	}
+}
+
+func classifySDKError(ctx context.Context, err error) error {
+	status, ok := sdkErrorStatus(err)
+	if !ok {
+		return err
+	}
+	header := http.Header{}
+	if apiErr, found := errors.AsType[*sdkerrors.APIError](err); found && apiErr.RawResponse != nil {
+		header = apiErr.RawResponse.Header
+	}
+	return classifyHTTPError(ctx, status, header, []byte(err.Error()))
+}
+
+func sdkErrorStatus(err error) (int, bool) {
+	if _, ok := errors.AsType[*sdkerrors.BadRequestResponseError](err); ok {
+		return http.StatusBadRequest, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.UnauthorizedResponseError](err); ok {
+		return http.StatusUnauthorized, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.PaymentRequiredResponseError](err); ok {
+		return http.StatusPaymentRequired, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ForbiddenResponseError](err); ok {
+		return http.StatusForbidden, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.NotFoundResponseError](err); ok {
+		return http.StatusNotFound, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.RequestTimeoutResponseError](err); ok {
+		return http.StatusRequestTimeout, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ConflictResponseError](err); ok {
+		return http.StatusConflict, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.PayloadTooLargeResponseError](err); ok {
+		return http.StatusRequestEntityTooLarge, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.UnprocessableEntityResponseError](err); ok {
+		return http.StatusUnprocessableEntity, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.TooManyRequestsResponseError](err); ok {
+		return http.StatusTooManyRequests, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.InternalServerResponseError](err); ok {
+		return http.StatusInternalServerError, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.BadGatewayResponseError](err); ok {
+		return http.StatusBadGateway, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ServiceUnavailableResponseError](err); ok {
+		return http.StatusServiceUnavailable, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.EdgeNetworkTimeoutResponseError](err); ok {
+		return 524, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ProviderOverloadedResponseError](err); ok {
+		return 529, true
+	}
+	if apiErr, ok := errors.AsType[*sdkerrors.APIError](err); ok && apiErr.StatusCode >= http.StatusBadRequest {
+		return apiErr.StatusCode, true
+	}
+	return 0, false
 }
 
 // historyCorruptionBodyMarkers are fragments inference providers emit when

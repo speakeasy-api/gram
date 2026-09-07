@@ -57,8 +57,6 @@ export function resolveEntityLink(
       return newTab(`/blocks/${enc(rest)}`);
 
     // --- Org-scoped ---
-    case "collection":
-      return newTab(`${org}/collections/${enc(rest)}`);
     case "remote_idp":
       return newTab(`${org}/remote-identity-providers/${enc(rest)}`);
     case "remote_session_client":
@@ -69,7 +67,7 @@ export function resolveEntityLink(
         : UNRESOLVABLE;
     case "user_session":
       // No per-session detail route — link to the connections list.
-      return newTab(`${org}/user-sessions`);
+      return newTab(`${org}/mcp-sessions`);
   }
 
   // --- Project-scoped ---

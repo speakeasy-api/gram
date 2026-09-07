@@ -411,7 +411,7 @@ class EmulatedPubSubBroker(PubSubBroker):
             self._publisher.create_topic(request=request)
             self._logger.info("topic created", topic=topic_path)
         except AlreadyExists:
-            self._logger.info("topic already exists", topic=topic_path)
+            self._logger.debug("topic already exists", topic=topic_path)
         self._reconciled_topics.add(topic_id)
 
     def _reconcile_subscription(self, sub_id: str, topic_id: str, options) -> None:
@@ -479,7 +479,7 @@ class EmulatedPubSubBroker(PubSubBroker):
             self._subscriber.create_subscription(request=request)
             self._logger.info("subscription created", subscription=sub_path)
         except AlreadyExists:
-            self._logger.info("subscription already exists", subscription=sub_path)
+            self._logger.debug("subscription already exists", subscription=sub_path)
         self._reconciled_subscriptions.add(sub_id)
 
 

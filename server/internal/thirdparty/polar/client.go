@@ -90,7 +90,9 @@ var _ billing.Repository = (*Client)(nil)
 
 func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	client := guardianPolicy.PooledClient()
-	client.Timeout = 30 * time.Second
+	// Polar serializes /quantities meter queries per-meter on their side, so
+	// during degraded periods individual calls can take well over a minute.
+	client.Timeout = 2 * time.Minute
 
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar_usage")),
@@ -266,7 +268,7 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 }
 
 func isPolarMeteredModelUsage(source billing.ModelUsageSource) bool {
-	return source != billing.ModelUsageSourceGram && source != billing.ModelUsageSourceRiskAnalysis && source != billing.ModelUsageSourceSkillEfficacy && source != billing.ModelUsageSourceSkillSuggestions && source != billing.ModelUsageSourceChatAnalysis
+	return source != billing.ModelUsageSourceGram && source != billing.ModelUsageSourceRiskAnalysis && source != billing.ModelUsageSourceSkillEfficacy && source != billing.ModelUsageSourceSkillSuggestions && source != billing.ModelUsageSourceChatAnalysis && source != billing.ModelUsageSourceMCPResearch
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
@@ -654,14 +656,16 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 
 // readPeriodUsage reads the period usage from the customer state if available, otherwise reads the usage from the meters directly.
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
+	credits := -1
+	includedCredits := -1
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
 		ToolCalls:                -1,
 		IncludedToolCalls:        -1,
 		Servers:                  -1,
 		IncludedServers:          -1,
-		Credits:                  -1,
-		IncludedCredits:          -1,
+		Credits:                  nil,
+		IncludedCredits:          nil,
 		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0, // Not related to polar, populated elsewhere
 	}
@@ -710,9 +714,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		}
 
 		if creditMeter != nil {
-			usage.Credits = int(creditMeter.ConsumedUnits)
+			credits = int(creditMeter.ConsumedUnits)
 			if creditMeter.CreditedUnits > 0 {
-				usage.IncludedCredits = int(creditMeter.CreditedUnits)
+				includedCredits = int(creditMeter.CreditedUnits)
 			}
 		}
 	}
@@ -727,7 +731,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	// ran sequentially (~1s each to api.polar.sh), causing ~3s of unnecessary latency.
 	needToolCalls := usage.ToolCalls == -1
 	needServers := usage.Servers == -1
-	needCredits := usage.Credits == -1
+	needCredits := credits == -1
 
 	if needToolCalls || needServers || needCredits {
 		now := time.Now()
@@ -792,11 +796,11 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			usage.Servers = int(res.Total)
 		}
 		if res := <-creditsCh; res != nil {
-			usage.Credits = int(res.Total)
+			credits = int(res.Total)
 		}
 	}
 
-	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {
+	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || includedCredits == -1 {
 		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 		if err != nil {
 			return nil, fmt.Errorf("get free tier product: %w", err)
@@ -814,9 +818,11 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 
 		usage.IncludedToolCalls = conv.Ternary(usage.IncludedToolCalls == -1, freeTierLimits.ToolCalls, usage.IncludedToolCalls)
 		usage.IncludedServers = conv.Ternary(usage.IncludedServers == -1, freeTierLimits.Servers, usage.IncludedServers)
-		usage.IncludedCredits = conv.Ternary(usage.IncludedCredits == -1, freeTierLimits.Credits, usage.IncludedCredits)
+		includedCredits = conv.Ternary(includedCredits == -1, freeTierLimits.Credits, includedCredits)
 	}
 
+	usage.Credits = &credits
+	usage.IncludedCredits = &includedCredits
 	return &usage, nil
 }
 
@@ -1096,6 +1102,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
+			TumPricePerMillionUsd: nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
@@ -1120,7 +1127,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
+			TumPricePerMillionUsd: nil,
 		},
+		Payg: billing.NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          0,
@@ -1143,7 +1152,8 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets:          []string{},
+			TumPricePerMillionUsd: nil,
 		},
 	}, nil
 }
