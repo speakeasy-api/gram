@@ -10,6 +10,7 @@ import { PlatformMCPOnboardingContent } from "./PlatformMCP";
 import { RequireScope } from "@/components/require-scope";
 import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
 import { useOrgRoutes } from "@/routes";
+import { useSearchParams } from "react-router";
 import { useState } from "react";
 
 // The agents the Platform MCP walkthrough supports, with the same brand marks
@@ -31,6 +32,10 @@ const STEPS = [
   { index: "02", label: "Run one command" },
   { index: "03", label: "Approve access" },
 ];
+
+function entrySourceFromQuery(value: string | null) {
+  return Object.values(SourceSurface).find((surface) => surface === value);
+}
 
 function clientFamilyForAgent(agentID: string): ClientFamily {
   switch (agentID) {
@@ -65,6 +70,13 @@ export function HeadlessContent(): JSX.Element {
 
 function HeadlessHero(): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const [searchParams] = useSearchParams();
+  // Where the user came from, when they arrived through a dashboard CTA rather
+  // than the mode strip. Falls back to the settings surface, which is what
+  // landing here directly means.
+  const entrySource =
+    entrySourceFromQuery(searchParams.get("entrySource")) ??
+    SourceSurface.PlatformMcpSettings;
   const [setupOpen, setSetupOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<ClientFamily>();
   const openSetup = () => {
@@ -212,7 +224,7 @@ function HeadlessHero(): JSX.Element {
         sheetOnly
         setupOpen={setupOpen}
         onSetupOpenChange={setSetupOpen}
-        initialSourceSurface={SourceSurface.PlatformMcpSettings}
+        initialSourceSurface={entrySource}
         initialClient={selectedAgent}
         onSetupComplete={() => orgRoutes.home.goTo()}
       />

@@ -32,7 +32,6 @@ import {
   type PlatformMCPInstallMethod,
 } from "./platform-mcp-install-walkthrough";
 import type { PlatformMCPOnboardingState } from "@gram/client/models/components/platformmcponboardingstate.js";
-import { RequireScope } from "@/components/require-scope";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
@@ -99,36 +98,6 @@ function starterPrompt(
   }
 
   return "Help me add a reviewed MCP server to a project. Show the available catalogue options and eligible projects, then ask me to choose one of each. Inspect the chosen server and collect only its declared non-secret configuration, including declared URL values where applicable. Register it privately, send me to the secure dashboard setup when needed, verify it is ready, and add it to that project's existing Default plugin. Do not ask me to paste API keys, tokens, passwords, OAuth codes, client secrets, or secret headers into chat. Do not ask me for the MCP server endpoint itself; use the reviewed catalogue entry selected for this project.";
-}
-
-function platformMcpEntrySource(
-  value: string | null,
-): SourceSurfaceValue | undefined {
-  return Object.values(SourceSurface).find((surface) => surface === value);
-}
-
-export default function PlatformMCP(): JSX.Element {
-  const [searchParams] = useSearchParams();
-  const sourceSurface = platformMcpEntrySource(searchParams.get("entrySource"));
-  const currentProjectSlug = searchParams.get("projectSlug") ?? undefined;
-  const openFromCta = searchParams.get("setup") === "1" && !!sourceSurface;
-
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <PlatformMCPOnboardingContent
-            currentProjectSlug={currentProjectSlug}
-            initialSourceSurface={sourceSurface}
-            autoOpen={openFromCta}
-          />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
 }
 
 export function PlatformMCPOnboardingContent({
