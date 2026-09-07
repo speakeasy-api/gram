@@ -47,6 +47,13 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
 
+  // An external MCP proxy carries one synthetic ":proxy" entry standing in for
+  // tools it cannot enumerate until someone authenticates. Counting it would
+  // tell every such server it has exactly one tool.
+  const toolCount = toolset.tools.filter(
+    (tool) => !(tool.type === "externalmcp" && tool.name.endsWith(":proxy")),
+  ).length;
+
   return (
     <div onMouseEnter={start} onMouseLeave={stop} className="h-full">
       <Card.Entity
@@ -117,7 +124,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
           {toolset.description?.trim() ||
             (toolset.origin?.registrySpecifier
               ? `From ${toolset.origin.registrySpecifier}`
-              : `${toolset.tools.length} ${toolset.tools.length === 1 ? "tool" : "tools"}`)}
+              : `${toolCount} ${toolCount === 1 ? "tool" : "tools"}`)}
         </Text>
 
         {/* Footer row with status indicator and open link */}

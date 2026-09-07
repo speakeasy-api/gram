@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { Table, TableProps } from "@/components/ui/Table";
-import { Suspense, useState } from "react";
+import { cloneElement, Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
@@ -312,20 +312,23 @@ function DeploymentsTable() {
             latest={deployments[0] === row}
           >
             {/* Only one deployment is serving; the others are history, and
-                read that way. */}
-            <div
-              className={cn(
-                "contents",
-                activeDeployment !== row && "opacity-70",
-              )}
-            >
-              {rowElement}
-            </div>
+                read that way. The class goes on the row itself: a wrapper
+                would be a div inside <tbody>, and `display: contents`
+                generates no box for the opacity to apply to. */}
+            {activeDeployment === row ? rowElement : dimmed(rowElement)}
           </DeploymentRowContextMenu>
         )}
       />
     </>
   );
+}
+
+/** The row, marked as history rather than the deployment in force. */
+function dimmed(rowElement: React.ReactElement): React.ReactElement {
+  const row = rowElement as React.ReactElement<{ className?: string }>;
+  return cloneElement(row, {
+    className: cn(row.props.className, "opacity-70"),
+  });
 }
 
 function DeploymentsExplainer() {

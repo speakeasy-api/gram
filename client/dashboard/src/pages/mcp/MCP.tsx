@@ -10,7 +10,6 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
-import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { Badge } from "@/components/ui/Badge";
@@ -97,14 +96,6 @@ function MCPOverview() {
   } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
-  const {
-    isLoading: isLoadingEndpoints,
-    isFetching: isFetchingEndpoints,
-    isError: isEndpointsError,
-    refetch: refetchEndpoints,
-  } = useMcpEndpoints({ gramProject }, undefined, {
-    throwOnError: false,
-  });
   // Gateways (meta MCP servers) are behind a rollout flag: opt-in, so an
   // unresolved flag keeps them hidden. The flag gates discoverability only —
   // the backend enforces mcp:read/mcp:write regardless.
@@ -130,15 +121,11 @@ function MCPOverview() {
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
-    void refetchEndpoints();
     void refetchPlugins();
     if (gatewaysEnabled) void refetchGateways();
   };
   const isRefreshing =
-    isFetchingMcpServers ||
-    isFetchingEndpoints ||
-    isFetchingGateways ||
-    toolsets.isFetching;
+    isFetchingMcpServers || isFetchingGateways || toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
@@ -156,16 +143,10 @@ function MCPOverview() {
   );
 
   const isLoading =
-    toolsets.isLoading ||
-    isLoadingMcpServers ||
-    isLoadingEndpoints ||
-    isLoadingGateways;
+    toolsets.isLoading || isLoadingMcpServers || isLoadingGateways;
 
   const hasRefreshError =
-    toolsets.isError ||
-    isMcpServersError ||
-    isEndpointsError ||
-    isGatewaysError;
+    toolsets.isError || isMcpServersError || isGatewaysError;
 
   const [search, setSearch] = useState("");
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
@@ -233,7 +214,9 @@ function MCPOverview() {
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
   const hasItems = toolsets.length + mcpServers.length + gateways.length > 0;
-  const showFilters = !isLoading && hasItems;
+  // Also shown when the list failed to load: the toolbar carries the retry and
+  // "Add new", which are exactly what you need when nothing came back.
+  const showFilters = !isLoading && (hasItems || hasRefreshError);
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
