@@ -858,7 +858,9 @@ function PolicyCenterContent() {
     {
       key: "messageTypes",
       header: "Applies To",
-      width: "2.1fr",
+      // Narrower than the column #6128 removed for crowding out the row's
+      // kebab menu; the summary is a short phrase with detail in the tooltip.
+      width: "1.2fr",
       render: (row) => {
         // Category recommendations decide the scope, so a failed or pending
         // fetch must not render partial data as if it were the whole answer.

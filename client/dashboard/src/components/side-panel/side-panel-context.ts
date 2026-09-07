@@ -9,8 +9,7 @@ import { createContext, useContext } from "react";
  * which is free in practice because the opener has already warmed the query
  * cache.
  */
-export type SidePanelDescriptor = {
-  kind: "setup-guide";
+type SidePanelCommon = {
   title: string;
   /** Second header line, naming what the panel holds when the title names its subject. */
   subtitle?: string;
@@ -18,13 +17,21 @@ export type SidePanelDescriptor = {
   iconUrl?: string;
   /** Where the same material lives on the docs site, when it has one page. */
   docsUrl?: string;
-  props: { registrySpecifier?: string; serverUrl?: string };
 };
 
-export const SIDE_PANEL_WIDTH_KEY = "gram.side-panel.width";
+export type SidePanelDescriptor =
+  | (SidePanelCommon & {
+      kind: "setup-guide";
+      props: { registrySpecifier?: string; serverUrl?: string };
+    })
+  | (SidePanelCommon & {
+      kind: "source";
+      /** The asset id is the key; the panel refetches the rest. */
+      props: { sourceKind: "openapi" | "function"; assetId: string };
+    });
 
-// The panel opens at its widest and is only ever dragged narrower, so the
-// worst case a page has to reflow into is fixed at SIDE_PANEL_MAX_WIDTH.
+// The panel is always its maximum width, narrowing only when the viewport
+// cannot hold it, so this is also the worst case a page has to reflow into.
 export const SIDE_PANEL_MAX_WIDTH = 560;
 export const SIDE_PANEL_MIN_WIDTH = 360;
 

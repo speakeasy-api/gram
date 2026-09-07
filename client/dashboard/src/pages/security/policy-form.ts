@@ -1,9 +1,7 @@
 import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   type PolicyAction,
-  type PolicyMessageType,
   type RuleCategory,
 } from "./policy-data";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -58,10 +56,6 @@ export const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
-
-export const ALL_POLICY_MESSAGE_TYPES = Object.keys(
-  POLICY_MESSAGE_TYPE_META,
-) as Array<PolicyMessageType>;
 
 export type CategoriesPayload = {
   sources: string[];

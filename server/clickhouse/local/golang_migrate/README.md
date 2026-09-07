@@ -38,9 +38,9 @@ The script will automatically use the configured migration engine.
 
 ## URL Format Differences
 
-Note that golang-migrate requires a different URL format than Atlas:
+Unlike Atlas, golang-migrate requires the database, username, and password as query parameters. A database in the URL path is ignored.
 
 - **Atlas**: `clickhouse://user:password@host:port/database?params`
-- **golang-migrate**: `clickhouse://host:port/database?username=user&password=pass&params`
+- **golang-migrate**: `clickhouse://host:port?database=gram&username=user&password=pass&secure=true&skip_verify=true&x-multi-statement=true`
 
 This is handled automatically by using the `GRAM_CLICKHOUSE_GOMIGRATE_URL` environment variable for golang-migrate.

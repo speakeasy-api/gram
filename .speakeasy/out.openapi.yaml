@@ -66271,6 +66271,10 @@ components:
         name:
           type: string
           description: The name of the key
+        project_id:
+          type: string
+          description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
+          format: uuid
         scopes:
           type: array
           items:

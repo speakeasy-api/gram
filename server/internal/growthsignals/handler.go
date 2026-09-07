@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -134,9 +135,7 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 // which is exactly what the key needs to be.
 func withInsertID(extra map[string]string, eventID string) map[string]string {
 	stamped := make(map[string]string, len(extra)+1)
-	for key, value := range extra {
-		stamped[key] = value
-	}
+	maps.Copy(stamped, extra)
 	stamped[propertyInsertID] = eventID
 
 	return stamped

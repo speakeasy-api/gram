@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.strict.json",
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", ".playwright"],
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["dom", "es2022"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}

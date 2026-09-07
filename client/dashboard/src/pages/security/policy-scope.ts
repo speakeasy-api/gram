@@ -1,8 +1,8 @@
 import {
+  ALL_POLICY_MESSAGE_TYPES,
   POLICY_MESSAGE_TYPE_META,
   type PolicyMessageType,
 } from "./policy-data";
-import { ALL_POLICY_MESSAGE_TYPES } from "./policy-form";
 
 export type Scope = {
   scopeInclude?: string;

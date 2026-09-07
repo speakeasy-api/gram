@@ -17,6 +17,9 @@ import (
 type CreateKeyRequestBody struct {
 	// The name of the key
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional project binding. Omit for an organization-wide key; independent of
+	// permission scopes and the Gram-Project header.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The scopes of the key that determines its permissions.
 	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 }
@@ -1471,7 +1474,8 @@ func NewVerifyKeyGatewayErrorResponseBody(res *goa.ServiceError) *VerifyKeyGatew
 // NewCreateKeyPayload builds a keys service createKey endpoint payload.
 func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys.CreateKeyPayload {
 	v := &keys.CreateKeyPayload{
-		Name: *body.Name,
+		Name:      *body.Name,
+		ProjectID: body.ProjectID,
 	}
 	v.Scopes = make([]string, len(body.Scopes))
 	for i, val := range body.Scopes {
@@ -1515,6 +1519,9 @@ func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 	}
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if len(body.Scopes) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1, true))

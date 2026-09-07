@@ -313,8 +313,7 @@ func mapRiskExclusionMutationError(err error) error {
 	case errors.Is(err, exclusioncore.ErrPolicyNotFound), errors.Is(err, exclusioncore.ErrExclusionNotFound), errors.Is(err, pgx.ErrNoRows):
 		return &RiskMutationError{Code: "not_found", Message: "The requested risk exclusion or policy was not found.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationNotFound, err)}
 	}
-	var coreMutation *exclusioncore.MutationError
-	if errors.As(err, &coreMutation) {
+	if _, ok := errors.AsType[*exclusioncore.MutationError](err); ok {
 		return riskMutationUnavailableWithCause(err)
 	}
 	return riskMutationUnavailableWithCause(err)

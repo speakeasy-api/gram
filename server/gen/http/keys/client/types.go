@@ -17,6 +17,9 @@ import (
 type CreateKeyRequestBody struct {
 	// The name of the key
 	Name string `form:"name" json:"name" xml:"name"`
+	// Optional project binding. Omit for an organization-wide key; independent of
+	// permission scopes and the Gram-Project header.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The scopes of the key that determines its permissions.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
@@ -837,7 +840,8 @@ type ValidateKeyProjectResponseBody struct {
 // "createKey" endpoint of the "keys" service.
 func NewCreateKeyRequestBody(p *keys.CreateKeyPayload) *CreateKeyRequestBody {
 	body := &CreateKeyRequestBody{
-		Name: p.Name,
+		Name:      p.Name,
+		ProjectID: p.ProjectID,
 	}
 	if p.Scopes != nil {
 		body.Scopes = make([]string, len(p.Scopes))

@@ -323,6 +323,10 @@ func (s *Service) prepareStripeCheckoutIntent(
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// Serialize first writes before either unique index sees a concurrent insert.
+	if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
+		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "lock billing metadata organization").LogError(ctx, s.logger)
+	}
 	stored, err := queries.StoreStripeCustomer(ctx, repo.StoreStripeCustomerParams{
 		OrganizationID:   organizationID,
 		StripeCustomerID: pgtype.Text{String: customerID, Valid: true},

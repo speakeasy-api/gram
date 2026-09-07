@@ -42,7 +42,7 @@ export default function CreateTunneledMcp(): JSX.Element | null {
   }
 
   if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.add.href()} replace />;
   }
 
   return <CreateTunneledMcpForm />;
@@ -122,8 +122,7 @@ function CreateTunneledMcpForm() {
             <Button
               variant="secondary"
               onClick={() =>
-                routes.sources.source.goTo(
-                  "tunneledmcp",
+                routes.mcp.x.overview.goTo(
                   tunneledMcpRouteParam(created.tunneledMcpServer),
                 )
               }
@@ -234,7 +233,7 @@ function CreateTunneledMcpForm() {
               type="button"
               variant="secondary"
               disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              onClick={() => routes.mcp.add.goTo()}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
