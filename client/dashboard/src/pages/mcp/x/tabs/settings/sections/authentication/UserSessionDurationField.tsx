@@ -1,10 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import {
   Select,
@@ -19,8 +14,10 @@ import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSes
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AuthRow, RowSave } from "./AuthRow";
 
 type DurationUnit = "hour" | "day" | "week";
 
@@ -108,24 +105,29 @@ export function UserSessionDurationField({
   };
 
   return (
-    <Field data-invalid={update.isError ? true : undefined}>
-      <FieldLabel htmlFor="mcp-auth-session-duration">
-        Maximum Session Duration
-      </FieldLabel>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <AuthRow
+      label="Session length"
+      hint="Longest a sign-in lasts before users authenticate again."
+      htmlFor="mcp-auth-session-duration"
+    >
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           id="mcp-auth-session-duration"
           type="number"
           min="1"
           value={String(durationNumber)}
           onChange={handleNumberChange}
-          className="w-[100px]"
+          aria-invalid={dirty && !valid ? true : undefined}
+          aria-describedby={
+            dirty && !valid ? "mcp-auth-session-duration-error" : undefined
+          }
+          className="w-[90px]"
         />
         <Select
           value={durationUnit}
           onValueChange={(value) => setDurationUnit(value as DurationUnit)}
         >
-          <SelectTrigger className="w-[120px]">
+          <SelectTrigger className="w-[110px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -136,23 +138,34 @@ export function UserSessionDurationField({
             ))}
           </SelectContent>
         </Select>
-        <RequireScope scope="project:write" level="component">
-          <Button
-            variant="primary"
-            size="md"
-            disabled={!dirty || !valid || update.isPending}
-            onClick={handleSave}
-          >
-            <Button.Text>Save</Button.Text>
-          </Button>
-        </RequireScope>
       </div>
-      <FieldDescription>
-        Users authenticate with Speakeasy before using this server. Sessions can
-        never outlive this duration; the consent screen lets users pick any
-        shorter length.
-      </FieldDescription>
+
+      {dirty && !valid && (
+        <FieldError id="mcp-auth-session-duration-error">
+          Enter a duration of at least one hour.
+        </FieldError>
+      )}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
-    </Field>
+
+      <RowSave visible={dirty}>
+        <RequireScope scope="project:write" level="component">
+          {({ disabled }) => (
+            <Button
+              variant="primary"
+              size="md"
+              disabled={disabled || !valid || update.isPending}
+              onClick={handleSave}
+            >
+              {update.isPending && (
+                <Button.LeftIcon>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
+            </Button>
+          )}
+        </RequireScope>
+      </RowSave>
+    </AuthRow>
   );
 }

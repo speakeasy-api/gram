@@ -82,9 +82,7 @@ describe("RemoteIdentityProvidersField", () => {
   it("keeps Attach Provider available once providers exist", () => {
     renderField([issuer()]);
 
-    expect(
-      screen.getByRole("button", { name: /attach provider/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /add provider/i })).toBeTruthy();
   });
 
   // Remote/tunneled servers have exactly one upstream: once it is attached,
@@ -92,9 +90,7 @@ describe("RemoteIdentityProvidersField", () => {
   it("hides Attach Provider for single-upstream targets once a provider exists", () => {
     renderField([issuer()], { allowAdditionalProviders: false });
 
-    expect(
-      screen.queryByRole("button", { name: /attach provider/i }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
   });
 
   it("links the provider name to its detail page", () => {
@@ -137,7 +133,7 @@ describe("RemoteIdentityProvidersField", () => {
     renderField([issuer()], { onEdit, onDelete });
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
 
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledTimes(1);
