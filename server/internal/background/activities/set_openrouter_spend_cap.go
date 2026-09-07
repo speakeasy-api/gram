@@ -72,6 +72,11 @@ type SetOpenRouterSpendCapArgs struct {
 	ActorDisplayName *string
 	// BypassPolicy is false for existing and customer-initiated workflows.
 	BypassPolicy bool
+	// ActingSurface is the surface the scheduling request was acting through,
+	// captured at schedule time because this activity runs in a worker with
+	// none of that request's context. Empty on payloads created before the
+	// field existed.
+	ActingSurface string
 }
 
 type setOpenRouterSpendCapHeartbeat struct {
@@ -83,16 +88,19 @@ type setOpenRouterSpendCapHeartbeat struct {
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
-	// Deliberately not marked SurfaceSystem when the policy is not bypassed.
-	// BypassPolicy separates an admin override from normal billing policy, not
-	// a request from background work: usage.SetSpendCap is an authenticated
-	// handler that schedules this same workflow with BypassPolicy false. The
-	// activity runs in a worker, so the originating request's context is gone
-	// by the time we get here and the two are indistinguishable. Marking them
-	// all system would erase real user attribution, so this path keeps
-	// recording unknown until the surface is threaded through the workflow
-	// args alongside the actor.
-	if args.BypassPolicy {
+	// The scheduling request's surface is carried in the payload, because this
+	// activity runs in a worker where that request's context no longer exists.
+	// BypassPolicy is not a substitute: it separates an admin override from
+	// normal billing policy, and usage.SetSpendCap schedules this same workflow
+	// with it false, so keying the surface off it would stamp customer changes
+	// as admin work.
+	switch {
+	case args.ActingSurface != "":
+		ctx = contextvalues.SetActingSurface(ctx, args.ActingSurface)
+	case args.BypassPolicy:
+		// Payload predates ActingSurface. Only the admin entry point sets
+		// BypassPolicy, so this keeps in-flight admin workflows attributed
+		// across the deploy rather than dropping them to unknown.
 		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdmin))
 	}
 
