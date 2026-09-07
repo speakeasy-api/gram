@@ -1,10 +1,5 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
-import {
-  ACCENT_RED,
-  OTHER_SERIES,
-  SERIES,
-  SEVERITY,
-} from "@/components/chart/palette";
+import { ACCENT_RED, SERIES, SEVERITY } from "@/components/chart/palette";
 import type { ChartDataset } from "chart.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
@@ -15,9 +10,9 @@ type TimestampedLineDataset = ChartDataset<
 
 // Editorial severity-first ramp from the shared chart palette: the worst
 // category (secrets) takes the one red accent, the next tiers take the
-// severity oranges, the rest walk the neutral ink ramp (lightness repeats are
-// fine — lines read by legend label, not hue), and "custom" recedes to the
-// Other neutral.
+// severity oranges, and the rest walk the neutral ink ramp (lightness repeats
+// are fine — lines read by legend label, not hue). No category takes a grey:
+// grey is reserved for the dimmed/inactive state in the exposure bar.
 function riskCategoryChartColors(
   series: readonly string[],
 ): Array<{ category: RuleCategory; color: string }> {
@@ -34,7 +29,7 @@ function riskCategoryChartColors(
     { category: "destructive_tool", color: series[1]! },
     { category: "cli_destructive", color: series[2]! },
     { category: "account_identity", color: series[3]! },
-    { category: "custom", color: OTHER_SERIES },
+    { category: "custom", color: series[7]! },
   ];
 }
 
