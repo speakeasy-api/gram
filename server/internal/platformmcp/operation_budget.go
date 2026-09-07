@@ -207,6 +207,9 @@ type OperationBudgets struct {
 	// an administrator walking the inventory does not spend the allowance the
 	// failure diagnosis it leads to will need.
 	Plugins OperationBudget
+	// AccessReads meters role/member access inspection separately. Member search
+	// returns masked personal data and must not be fundable by another read lane.
+	AccessReads OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -277,5 +280,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

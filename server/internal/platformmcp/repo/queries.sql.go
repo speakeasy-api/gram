@@ -6427,6 +6427,86 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 	return i, err
 }
 
+const searchPlatformMCPAccessMembers = `-- name: SearchPlatformMCPAccessMembers :many
+WITH member_roles AS (
+  SELECT ora.workos_user_id,
+    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
+    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
+  FROM organization_role_assignments ora
+  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
+    AND r.organization_id = $2 AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
+  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
+    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
+  WHERE ora.organization_id = $2 AND ora.deleted_at IS NULL
+    AND COALESCE(r.id, g.id) IS NOT NULL
+  GROUP BY ora.workos_user_id
+), matching AS (
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  FROM organization_user_relationships rel
+  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
+  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
+  WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
+    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
+    AND ($4::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
+)
+SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+FROM matching
+ORDER BY email, id
+LIMIT $1
+`
+
+type SearchPlatformMCPAccessMembersParams struct {
+	ResultLimit    int32
+	OrganizationID string
+	RoleID         string
+	Query          string
+}
+
+type SearchPlatformMCPAccessMembersRow struct {
+	ID           string
+	DisplayName  string
+	Email        string
+	RoleIds      []string
+	TotalMatches int64
+}
+
+// Count distinct members and return only a bounded page from the same snapshot.
+// Active local role assignments follow the access roster's WorkOS identity join.
+func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
+		arg.ResultLimit,
+		arg.OrganizationID,
+		arg.RoleID,
+		arg.Query,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPlatformMCPAccessMembersRow
+	for rows.Next() {
+		var i SearchPlatformMCPAccessMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Email,
+			&i.RoleIds,
+			&i.TotalMatches,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeletePendingPlatformMCPCatalogRegistration = `-- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec
 UPDATE platform_mcp_catalog_registrations
 SET deleted_at = clock_timestamp()

@@ -10,6 +10,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
+func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
+	t.Parallel()
+
+	budget := allowBudget()
+	budgets := OperationBudgets{
+		Catalog: budget, Registration: budget, Handoff: budget, SetupStart: budget,
+		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
+		Plugins: budget, AccessReads: budget, Diagnostics: budget,
+		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget,
+		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
+	}
+	require.True(t, budgets.Valid())
+
+	budgets.AccessReads.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessReads.Connection = allowOperationLimiter{}
+	budgets.AccessReads.Organization = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessReads = budget
+	budgets.Plugins.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.Plugins.Connection = allowOperationLimiter{}
+	budgets.Plugins.Organization = nil
+	require.False(t, budgets.Valid())
+}
+
 func TestOperationBudgetChargesConnectionBeforeOrganization(t *testing.T) {
 	t.Parallel()
 

@@ -231,6 +231,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		AccessReads: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.AccessReadsConnectionLimitName, ratelimit.PerMinute(platformmcp.AccessReadQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.AccessReadsOrganizationLimitName, ratelimit.PerMinute(platformmcp.AccessReadQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Metered separately and lower: personal-data reads (this and session
 		// recall below, each on its own budget) must not be fundable by
 		// spending the ordinary diagnostic allowance.
@@ -304,6 +308,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget)
+	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 
 	registryHandler := localfixture.NewRegistryHTTP(fixtureConfig).Handler()
@@ -361,6 +366,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		sessionRecall,
 		riskMutations,
 		fixtureConfig.CatalogDescriptor(),
+		accessReads,
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
@@ -577,6 +583,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		AccessReads: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.AccessReadsConnectionLimitName, ratelimit.PerMinute(platformmcp.AccessReadQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.AccessReadsOrganizationLimitName, ratelimit.PerMinute(platformmcp.AccessReadQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Metered separately and lower: personal-data reads (this and session
 		// recall below, each on its own budget) must not be fundable by
 		// spending the ordinary diagnostic allowance.
@@ -650,6 +660,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	}
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget)
+	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
@@ -693,6 +704,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		sessionRecall,
 		riskMutations,
 		platformmcp.CatalogDescriptor{},
+		accessReads,
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
