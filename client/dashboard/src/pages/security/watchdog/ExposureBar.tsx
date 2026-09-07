@@ -82,7 +82,7 @@ export function ExposureBar({
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(slice.category)}
                 onBlur={() => setHovered(null)}
-                className="cursor-pointer transition-colors hover:opacity-80"
+                className="cursor-pointer transition-colors"
                 style={{
                   width: `${Math.max(slice.share * 100, 1)}%`,
                   backgroundColor: dimmed
