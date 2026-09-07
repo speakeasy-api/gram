@@ -37,12 +37,6 @@ type apiClient struct {
 }
 
 func newAPIClient(base *url.URL, origin string, insecure bool, logger *slog.Logger) *apiClient {
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		// cookiejar.New with nil options never errors; keep the compiler honest.
-		panic(err)
-	}
-
 	var transport http.RoundTripper
 	if insecure {
 		transport = &http.Transport{
@@ -55,7 +49,7 @@ func newAPIClient(base *url.URL, origin string, insecure bool, logger *slog.Logg
 		origin: origin,
 		logger: logger,
 		hc: &http.Client{
-			Jar:       &authCookieJar{CookieJar: jar, base: base},
+			Jar:       &authCookieJar{},
 			Transport: transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				// Cookies are host-scoped, not port-scoped. Stop before the jar
@@ -249,30 +243,47 @@ func sameOrigin(a, b *url.URL) bool {
 	return aErr == nil && bErr == nil && aOrigin == bOrigin
 }
 
-// Go's cookie jar ignores ports. Login must visit the IDP, but must neither
-// send dashboard credentials there nor accept dashboard cookies set by it.
+// Go's cookie jar ignores ports. Give each canonical origin its own jar so
+// login can visit the IDP without sharing any dashboard cookie state. Within
+// an origin, the standard jar still enforces cookie path, domain and expiry.
+// Like http.CookieJar, this wrapper is safe for concurrent use.
 type authCookieJar struct {
-	http.CookieJar
-	base *url.URL
+	mu   sync.Mutex
+	jars map[string]*cookiejar.Jar
 }
 
 func (j *authCookieJar) Cookies(u *url.URL) []*http.Cookie {
-	return j.filter(u, j.CookieJar.Cookies(u))
+	jar := j.jarForOrigin(u)
+	if jar == nil {
+		return nil
+	}
+	return jar.Cookies(u)
 }
 
 func (j *authCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	j.CookieJar.SetCookies(u, j.filter(u, cookies))
+	if jar := j.jarForOrigin(u); jar != nil {
+		jar.SetCookies(u, cookies)
+	}
 }
 
-func (j *authCookieJar) filter(u *url.URL, cookies []*http.Cookie) []*http.Cookie {
-	if sameOrigin(u, j.base) {
-		return cookies
+func (j *authCookieJar) jarForOrigin(u *url.URL) *cookiejar.Jar {
+	origin, err := canonicalOrigin(u)
+	if err != nil {
+		return nil
 	}
-	filtered := make([]*http.Cookie, 0, len(cookies))
-	for _, cookie := range cookies {
-		if cookie.Name != sessionCookieName && cookie.Name != accessCookieName {
-			filtered = append(filtered, cookie)
-		}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if jar := j.jars[origin]; jar != nil {
+		return jar
 	}
-	return filtered
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		// cookiejar.New with nil options never errors.
+		panic(err)
+	}
+	if j.jars == nil {
+		j.jars = make(map[string]*cookiejar.Jar)
+	}
+	j.jars[origin] = jar
+	return jar
 }

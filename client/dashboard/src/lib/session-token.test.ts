@@ -90,6 +90,7 @@ describe("SessionTokenStore", () => {
     "/chat/turnstream",
     "/rpc/auth.info",
     "/rpc/auth.switchScopes",
+    "/rpc/auth.enterDemo",
     "/rpc/auth.logout",
   ])("aborts %s promptly without canceling shared refresh", async (path) => {
     const pending = deferred<Response>();
@@ -119,44 +120,144 @@ describe("SessionTokenStore", () => {
     ).toBe("access-1");
   });
 
-  it("aborts queued callers without releasing the mutation ordering barrier", async () => {
+  it.each([
+    "/rpc/auth.info",
+    "/rpc/auth.switchScopes",
+    "/rpc/auth.enterDemo",
+    "/rpc/auth.logout",
+  ])("isolates dispatched %s from caller cancellation", async (path) => {
     const pending = deferred<Response>();
+    const nextPending = deferred<Response>();
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(refreshed())
-      .mockReturnValueOnce(pending.promise)
+      .mockImplementationOnce((input) => {
+        const request = input as Request;
+        return new Promise<Response>((resolve, reject) => {
+          request.signal.addEventListener("abort", () => {
+            reject(request.signal.reason);
+          });
+          void pending.promise.then(resolve);
+        });
+      })
+      .mockReturnValueOnce(nextPending.promise)
       .mockResolvedValue(new Response(null, { status: 204 }));
     const store = new SessionTokenStore(() => BASE, fetcher);
     await store.refresh();
-    const scope = store.fetch(`${BASE}/rpc/auth.switchScopes`, {
-      method: "POST",
-    });
-    await vi.advanceTimersByTimeAsync(0);
     const controller = new AbortController();
-    const queued = store.fetch(`${BASE}/rpc/auth.info`, {
+    const canceled = store.fetch(`${BASE}${path}`, {
+      method: "POST",
       signal: controller.signal,
-    });
-    controller.abort();
-    await expect(queued).rejects.toBe(controller.signal.reason);
-    const writeController = new AbortController();
-    const canceledWrite = store.fetch(`${BASE}/rpc/tools.create`, {
-      method: "POST",
-      signal: writeController.signal,
-    });
-    writeController.abort();
-    await expect(canceledWrite).rejects.toBe(writeController.signal.reason);
-    const survivor = store.fetch(`${BASE}/rpc/tools.create`, {
-      method: "POST",
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(fetcher).toHaveBeenCalledTimes(2);
-    pending.resolve(refreshed("scoped-token"));
-    await Promise.all([scope, survivor]);
+    const dispatched = fetcher.mock.calls[1]![0] as Request;
+    const next = store.fetch(`${BASE}/rpc/auth.info`);
+    const survivor = store.fetch(`${BASE}/rpc/tools.create`, {
+      method: "POST",
+    });
+    controller.abort();
+    await expect(canceled).rejects.toBe(controller.signal.reason);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dispatched.signal.aborted).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot()).toBe("access-1");
+
+    pending.resolve(refreshed("mutation-token"));
+    await vi.advanceTimersByTimeAsync(0);
+    const loggedOut = path === "/rpc/auth.logout";
+    expect(store.getSnapshot()).toBe(loggedOut ? "" : "mutation-token");
     expect(fetcher).toHaveBeenCalledTimes(3);
+    const nextRequest = fetcher.mock.calls[2]![0] as Request;
+    expect(nextRequest.url).toBe(`${BASE}/rpc/auth.info`);
+    expect(nextRequest.headers.get("Gram-Session")).toBe(
+      loggedOut ? null : "mutation-token",
+    );
+
+    nextPending.resolve(refreshed("canonical-token"));
+    await Promise.all([next, survivor]);
+    expect(store.getSnapshot()).toBe(loggedOut ? "" : "canonical-token");
+    expect(fetcher).toHaveBeenCalledTimes(4);
     expect(
-      (fetcher.mock.calls[2]![0] as Request).headers.get("Gram-Session"),
-    ).toBe("scoped-token");
+      (fetcher.mock.calls[3]![0] as Request).headers.get("Gram-Session"),
+    ).toBe(loggedOut ? null : "canonical-token");
   });
+
+  it("still cancels an ordinary response stream after dispatch", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(refreshed())
+      .mockImplementationOnce(async (input) => {
+        const request = input as Request;
+        return new Response(
+          new ReadableStream({
+            start(stream) {
+              request.signal.addEventListener("abort", () => {
+                stream.error(request.signal.reason);
+              });
+            },
+          }),
+        );
+      });
+    const store = new SessionTokenStore(() => BASE, fetcher);
+    const controller = new AbortController();
+    const response = await store.fetch(`${BASE}/chat/turnstream`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    const read = response.body!.getReader().read();
+    controller.abort();
+    await expect(read).rejects.toBe(controller.signal.reason);
+    expect((fetcher.mock.calls[1]![0] as Request).signal.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    "/rpc/auth.info",
+    "/rpc/auth.switchScopes",
+    "/rpc/auth.enterDemo",
+    "/rpc/auth.logout",
+  ])(
+    "aborts queued %s without releasing the mutation ordering barrier",
+    async (path) => {
+      const pending = deferred<Response>();
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(refreshed())
+        .mockReturnValueOnce(pending.promise)
+        .mockResolvedValue(new Response(null, { status: 204 }));
+      const store = new SessionTokenStore(() => BASE, fetcher);
+      await store.refresh();
+      const scope = store.fetch(`${BASE}/rpc/auth.switchScopes`, {
+        method: "POST",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const controller = new AbortController();
+      const queued = store.fetch(`${BASE}${path}`, {
+        signal: controller.signal,
+      });
+      controller.abort();
+      await expect(queued).rejects.toBe(controller.signal.reason);
+      const writeController = new AbortController();
+      const canceledWrite = store.fetch(`${BASE}/rpc/tools.create`, {
+        method: "POST",
+        signal: writeController.signal,
+      });
+      writeController.abort();
+      await expect(canceledWrite).rejects.toBe(writeController.signal.reason);
+      const survivor = store.fetch(`${BASE}/rpc/tools.create`, {
+        method: "POST",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      pending.resolve(refreshed("scoped-token"));
+      await Promise.all([scope, survivor]);
+      expect(fetcher).toHaveBeenCalledTimes(3);
+      expect(
+        (fetcher.mock.calls[2]![0] as Request).headers.get("Gram-Session"),
+      ).toBe("scoped-token");
+    },
+  );
 
   it("does not start refresh for an already aborted request", async () => {
     const fetcher = vi.fn<typeof fetch>();

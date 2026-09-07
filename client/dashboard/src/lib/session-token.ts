@@ -139,6 +139,7 @@ export class SessionTokenStore {
     const switchScope =
       path === "/rpc/auth.switchScopes" || path === "/rpc/auth.enterDemo";
     const sessionInfo = path === "/rpc/auth.info";
+    const authMutation = logout || switchScope || sessionInfo;
 
     const send = async () => {
       request.signal.throwIfAborted();
@@ -155,6 +156,10 @@ export class SessionTokenStore {
         new Request(request, {
           headers,
           credentials: "include",
+          // Once dispatched, auth mutations own their lifecycle: caller abort
+          // must not release the ordering barrier or discard their token.
+          // The caller is still checked above so queued cancellations never send.
+          signal: authMutation ? new AbortController().signal : request.signal,
         }),
       );
       if (response.ok && logout) {
@@ -181,7 +186,7 @@ export class SessionTokenStore {
       return response;
     };
 
-    if (logout || switchScope || sessionInfo) {
+    if (authMutation) {
       // Serialize scope changes and logout with refresh. Keep auth.info in
       // this sequence too so its returned header cannot overwrite a newer
       // scope token. Reserve the slot synchronously, before yielding.

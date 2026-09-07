@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -148,26 +149,32 @@ func TestAPIClientLoginCrossesIDPOriginWithoutDashboardCredentials(t *testing.T)
 	t.Parallel()
 	var idpHits, callbackHits atomic.Int32
 	var base *url.URL
+	// Include arbitrary cookies, not only the two credential names. The real
+	// auth middleware sets gram_auth_nonce at / and binds it to the callback.
+	names := []string{sessionCookieName, accessCookieName, "gram_auth_nonce", "dashboard_preference"}
 	idp := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idpHits.Add(1)
-		for _, name := range []string{sessionCookieName, accessCookieName} {
-			if _, err := r.Cookie(name); err == nil {
-				http.Error(w, "dashboard cookie leaked to IDP", http.StatusBadRequest)
+		if r.URL.Path == "/authorize" {
+			if len(r.Cookies()) != 0 {
+				http.Error(w, "dashboard cookies leaked to IDP", http.StatusBadRequest)
 				return
 			}
-		}
-		if r.URL.Path == "/rpc/auth.refresh" {
-			for _, name := range []string{sessionCookieName, accessCookieName} {
-				http.SetCookie(w, &http.Cookie{Name: name, Value: "forged-credential", Path: "/", Secure: true})
+			for _, name := range names {
+				http.SetCookie(w, &http.Cookie{Name: name, Value: "idp-" + name, Path: "/", Secure: true})
 			}
-			http.SetCookie(w, &http.Cookie{Name: "idp_session", Value: "fabricated-idp-session", Path: "/idp", Secure: true})
-			http.Redirect(w, r, "/idp/continue", http.StatusFound)
+			http.Redirect(w, r, "/continue", http.StatusFound)
 			return
 		}
-		cookie, err := r.Cookie("idp_session")
-		if err != nil || cookie.Value != "fabricated-idp-session" {
-			http.Error(w, "missing IDP cookie", http.StatusBadRequest)
+		if r.URL.Path != "/continue" {
+			http.Error(w, "unexpected IDP path", http.StatusBadRequest)
 			return
+		}
+		for _, name := range names {
+			cookie, err := r.Cookie(name)
+			if err != nil || cookie.Value != "idp-"+name {
+				http.Error(w, "missing independent IDP cookie", http.StatusBadRequest)
+				return
+			}
 		}
 		http.Redirect(w, r, base.String()+"/rpc/auth.callback", http.StatusFound)
 	}))
@@ -175,15 +182,19 @@ func TestAPIClientLoginCrossesIDPOriginWithoutDashboardCredentials(t *testing.T)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/rpc/auth.login":
-			http.SetCookie(w, &http.Cookie{Name: "login_nonce", Value: "fabricated-nonce", Path: "/rpc/auth.callback", Secure: true})
-			http.Redirect(w, r, idp.URL+"/rpc/auth.refresh", http.StatusFound)
+			http.SetCookie(w, &http.Cookie{Name: "gram_auth_nonce", Value: "dashboard-gram_auth_nonce", Path: "/", Secure: true})
+			http.Redirect(w, r, idp.URL+"/authorize", http.StatusFound)
 		case "/rpc/auth.callback":
-			cookie, err := r.Cookie("login_nonce")
-			if err != nil || cookie.Value != "fabricated-nonce" {
-				http.Error(w, "missing login nonce", http.StatusBadRequest)
-				return
+			for _, name := range names {
+				cookie, err := r.Cookie(name)
+				if err != nil || cookie.Value != "dashboard-"+name {
+					http.Error(w, "dashboard cookie or callback nonce overwritten", http.StatusBadRequest)
+					return
+				}
 			}
 			callbackHits.Add(1)
+			http.SetCookie(w, &http.Cookie{Name: "gram_auth_nonce", MaxAge: -1, Path: "/", Secure: true})
+			http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "new-refresh", Path: "/rpc/auth.refresh", Secure: true})
 			http.Redirect(w, r, idp.URL+"/dashboard-not-running", http.StatusFound)
 		default:
 			http.Error(w, "unexpected path", http.StatusBadRequest)
@@ -195,23 +206,29 @@ func TestAPIClientLoginCrossesIDPOriginWithoutDashboardCredentials(t *testing.T)
 	require.NoError(t, err)
 	client := newAPIClient(base, server.URL, true, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// Broad-path cookies also exercise net/http's initial Cookie header copy.
-	client.hc.Jar.SetCookies(base, []*http.Cookie{
-		{Name: sessionCookieName, Value: "fabricated-refresh", Path: "/", Secure: true},
-		{Name: accessCookieName, Value: "fabricated-access", Path: "/", Secure: true},
-	})
+	for _, name := range names {
+		client.hc.Jar.SetCookies(base, []*http.Cookie{{Name: name, Value: "dashboard-" + name, Path: "/", Secure: true}})
+	}
 	require.NoError(t, client.login(context.Background()))
 	require.EqualValues(t, 2, idpHits.Load())
 	require.EqualValues(t, 1, callbackHits.Load())
-	cookies := client.hc.Jar.Cookies(base.ResolveReference(&url.URL{Path: "/rpc/auth.refresh"}))
-	require.Len(t, cookies, 2)
-	values := make(map[string]string, len(cookies))
-	for _, cookie := range cookies {
-		values[cookie.Name] = cookie.Value
+	dashboardCookies := client.hc.Jar.Cookies(base)
+	require.Len(t, dashboardCookies, len(names)-1)
+	for _, cookie := range dashboardCookies {
+		require.NotEqual(t, "gram_auth_nonce", cookie.Name, "callback must clear its nonce")
+		require.Equal(t, "dashboard-"+cookie.Name, cookie.Value)
 	}
-	require.Equal(t, map[string]string{
-		sessionCookieName: "fabricated-refresh",
-		accessCookieName:  "fabricated-access",
-	}, values, "IDP must not overwrite either dashboard cookie")
+	refreshCookies := client.hc.Jar.Cookies(base.ResolveReference(&url.URL{Path: "/rpc/auth.refresh"}))
+	require.Len(t, refreshCookies, len(names))
+	require.Equal(t, sessionCookieName, refreshCookies[0].Name)
+	require.Equal(t, "new-refresh", refreshCookies[0].Value, "callback must store its path-scoped session")
+	idpURL, err := url.Parse(idp.URL)
+	require.NoError(t, err)
+	idpCookies := client.hc.Jar.Cookies(idpURL)
+	require.Len(t, idpCookies, len(names))
+	for _, cookie := range idpCookies {
+		require.Equal(t, "idp-"+cookie.Name, cookie.Value, "callback must not change IDP cookies")
+	}
 }
 
 func TestAPIClientRedirectOriginPolicy(t *testing.T) {
@@ -236,5 +253,106 @@ func TestAPIClientRedirectOriginPolicy(t *testing.T) {
 		} else {
 			require.ErrorContains(t, err, "cross-origin API redirect blocked", tt.url)
 		}
+	}
+}
+
+func TestAuthCookieJarOriginPartitions(t *testing.T) {
+	t.Parallel()
+	jar := &authCookieJar{}
+	parse := func(raw string) *url.URL {
+		u, err := url.Parse(raw)
+		require.NoError(t, err)
+		return u
+	}
+	base := parse("https://api.example.test/login")
+	names := []string{sessionCookieName, accessCookieName, "gram_auth_nonce", "arbitrary_cookie"}
+	for _, name := range names {
+		jar.SetCookies(base, []*http.Cookie{{Name: name, Value: "dashboard", Path: "/", Domain: ".example.test", Secure: true}})
+	}
+	for _, raw := range []string{
+		"https://api.example.test:8443/login",
+		"http://api.example.test:443/login",
+		"https://idp.example.test/login",
+	} {
+		target := parse(raw)
+		require.Empty(t, jar.Cookies(target), "no dashboard cookies may reach %s", raw)
+		for _, name := range names {
+			jar.SetCookies(target, []*http.Cookie{{Name: name, Value: "idp", Path: "/", Domain: ".example.test"}})
+		}
+		cookies := jar.Cookies(target)
+		require.Len(t, cookies, len(names))
+		for _, cookie := range cookies {
+			require.Equal(t, "idp", cookie.Value)
+		}
+		// Deletion is also a write and must not delete dashboard cookies.
+		for _, name := range names {
+			jar.SetCookies(target, []*http.Cookie{{Name: name, MaxAge: -1, Path: "/", Domain: ".example.test"}})
+		}
+		require.Empty(t, jar.Cookies(target))
+		cookies = jar.Cookies(base)
+		require.Len(t, cookies, len(names))
+		for _, cookie := range cookies {
+			require.Equal(t, "dashboard", cookie.Value)
+		}
+	}
+	for _, raw := range []string{"https://API.EXAMPLE.TEST:0443/callback", "https://api.example.test:443/"} {
+		require.Len(t, jar.Cookies(parse(raw)), len(names), "canonical equivalents must share state")
+	}
+	for _, raw := range []string{"/relative", "ftp://api.example.test/", "https://user@api.example.test/"} {
+		u := parse(raw)
+		jar.SetCookies(u, []*http.Cookie{{Name: "invalid", Value: "ignored"}})
+		require.Empty(t, jar.Cookies(u))
+	}
+}
+
+func TestAuthCookieJarPreservesCookieSemantics(t *testing.T) {
+	t.Parallel()
+	jar := &authCookieJar{}
+	base, err := url.Parse("https://api.example.test/rpc/login")
+	require.NoError(t, err)
+	jar.SetCookies(base, []*http.Cookie{
+		{Name: "scoped", Value: "root", Path: "/", Secure: true},
+		{Name: "scoped", Value: "rpc", Path: "/rpc", Secure: true},
+		{Name: "default_path", Value: "rpc"},
+		{Name: "domain", Value: "accepted", Domain: ".example.test", Path: "/"},
+		{Name: "invalid_domain", Value: "rejected", Domain: "other.example.test", Path: "/"},
+		{Name: "expired", Value: "rejected", Path: "/", Expires: time.Unix(1, 0)},
+	})
+	for _, tt := range []struct {
+		path string
+		want []string
+	}{
+		{"/rpc/callback", []string{"scoped=rpc", "default_path=rpc", "scoped=root", "domain=accepted"}},
+		{"/rpc-other", []string{"scoped=root", "domain=accepted"}},
+		{"/", []string{"scoped=root", "domain=accepted"}},
+	} {
+		var got []string
+		for _, cookie := range jar.Cookies(base.ResolveReference(&url.URL{Path: tt.path})) {
+			got = append(got, cookie.Name+"="+cookie.Value)
+		}
+		require.Equal(t, tt.want, got, tt.path)
+	}
+	jar.SetCookies(base, []*http.Cookie{{Name: "scoped", Path: "/rpc", MaxAge: -1}})
+	for _, cookie := range jar.Cookies(base) {
+		if cookie.Name == "scoped" {
+			require.Equal(t, "root", cookie.Value, "deletion must respect path")
+		}
+	}
+}
+
+func TestAuthCookieJarConcurrentUse(t *testing.T) {
+	t.Parallel()
+	jar := &authCookieJar{}
+	for i := range 32 {
+		t.Run(fmt.Sprintf("worker%d", i), func(t *testing.T) {
+			t.Parallel()
+			// Exercise concurrent creation and access of shared and separate jars.
+			for _, port := range []int{443, 8443 + i} {
+				u, err := url.Parse(fmt.Sprintf("https://api.example.test:%d/", port))
+				require.NoError(t, err)
+				jar.SetCookies(u, []*http.Cookie{{Name: fmt.Sprintf("cookie%d", i), Value: "value", Path: "/"}})
+				require.NotEmpty(t, jar.Cookies(u))
+			}
+		})
 	}
 }
