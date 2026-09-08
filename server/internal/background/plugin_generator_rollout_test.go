@@ -220,6 +220,45 @@ func TestPluginGeneratorRolloutWorkflow_RepairsOnceOnFreshRun(t *testing.T) {
 	require.Equal(t, 1, repairs)
 }
 
+func TestPluginGeneratorRolloutWorkflow_SkipsRepairOnPreVersionReplay(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.OnGetVersion(pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion).Return(workflow.DefaultVersion)
+
+	env.RegisterActivityWithOptions(
+		func(context.Context) error {
+			t.Fatal("repair must not run when GetVersion returns DefaultVersion")
+			return nil
+		},
+		activity.RegisterOptions{Name: "RepairOrphanedAPIKeyCreators"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{Candidates: nil}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			t.Fatal("publish should not run when there are no candidates")
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+}
+
 func TestPluginGeneratorRolloutWorkflow_SkipsRepairOnContinuedRun(t *testing.T) {
 	t.Parallel()
 

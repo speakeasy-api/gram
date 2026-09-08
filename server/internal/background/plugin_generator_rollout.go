@@ -37,6 +37,17 @@ const (
 	pluginGeneratorRolloutInterval         = 1 * time.Hour
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
+
+	// pluginGeneratorRolloutRepairChangeID versions the orphaned-key repair
+	// activity that now runs at the start of a fresh sweep. In-flight
+	// executions started before this change have ListPluginPublishCandidates
+	// as their first recorded command; GetVersion returns DefaultVersion on
+	// those replays so they keep that sequence.
+	pluginGeneratorRolloutRepairChangeID = "plugin-rollout-repair-orphaned-creators"
+
+	// pluginGeneratorRolloutRepairVersion is the current command sequence:
+	// repair once on a fresh sweep, then list candidates.
+	pluginGeneratorRolloutRepairVersion = 1
 )
 
 type PluginGeneratorRolloutInput struct {
@@ -120,7 +131,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		}
 	}
 
-	if input.AfterProjectID == nil {
+	if workflow.GetVersion(ctx, pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion) == pluginGeneratorRolloutRepairVersion && input.AfterProjectID == nil {
 		if err := workflow.ExecuteActivity(ctx, a.RepairOrphanedAPIKeyCreators).Get(ctx, nil); err != nil {
 			return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
 		}

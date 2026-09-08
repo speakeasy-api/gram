@@ -517,6 +517,63 @@ func TestListPluginPublishCandidates_FallsBackWhenPluginsMCPKeyHasPlaceholderCre
 	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
 }
 
+func TestListPluginPublishCandidates_FallsBackWhenNewestKeyCreatorLeftOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          "user_departed_member",
+		Email:       "departed-member@example.test",
+		DisplayName: "Departed",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         pgtype.Text{String: "user_departed_member", Valid: true},
+	}))
+
+	keyHash, err := auth.GetAPIKeyHash("gram_local_" + uuid.NewString())
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		CreatedByUserID: "user_departed_member",
+		Name:            "plugins-mcp-20260708-120102-abc123",
+		KeyPrefix:       "gram_local_abcde",
+		KeyHash:         keyHash,
+		Scopes:          []string{"consumer"},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         pgtype.Text{String: "user_departed_member", Valid: true},
+	}))
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
+}
+
 func TestListPluginPublishCandidates_EmptyActorWhenOrgHasNoMember(t *testing.T) {
 	t.Parallel()
 

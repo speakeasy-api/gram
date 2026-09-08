@@ -903,9 +903,14 @@ FROM (
     SELECT ak.created_by_user_id
     FROM api_keys ak
     JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = p.organization_id
+     AND our.deleted IS FALSE
     WHERE ak.project_id = c.project_id
       AND ak.deleted IS FALSE
       AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
     ORDER BY ak.created_at DESC
     LIMIT 1
   ) k ON TRUE
@@ -924,10 +929,11 @@ type ListOrgPluginPublishTargetsRow struct {
 
 // Lists every project in one organization that has a GitHub plugin connection,
 // with a real users.id as the publish actor: the creator of the project's
-// newest plugins-mcp API key when that id exists in users, otherwise the
-// organization's oldest connected member. Like ListPluginPublishCandidates
-// this is a deliberate cross-project sweep, but it is constrained to a
-// single organization rather than scanning globally.
+// newest plugins-mcp API key when that id is a current connected member of
+// the organization, otherwise the organization's oldest connected member.
+// Like ListPluginPublishCandidates this is a deliberate cross-project
+// sweep, but it is constrained to a single organization rather than
+// scanning globally.
 func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
 	if err != nil {
@@ -1072,9 +1078,14 @@ LEFT JOIN LATERAL (
   SELECT ak.created_by_user_id
   FROM api_keys ak
   JOIN users u ON u.id = ak.created_by_user_id
+  JOIN organization_user_relationships our
+    ON our.user_id = ak.created_by_user_id
+   AND our.organization_id = p.organization_id
+   AND our.deleted IS FALSE
   WHERE ak.project_id = cp.project_id
     AND ak.deleted IS FALSE
     AND ak.name LIKE 'plugins-mcp-%'
+    AND u.deleted_at IS NULL
   ORDER BY ak.created_at DESC
   LIMIT 1
 ) k ON TRUE
@@ -1106,10 +1117,13 @@ type ListPluginPublishCandidatesRow struct {
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
 // fingerprint check before any GitHub/key work. Each row carries a real
 // users.id as the publish actor: the creator of the project's newest
-// plugins-mcp API key when that id exists in users (the same JOIN
-// GetAPIKeyByKeyHash uses), otherwise the organization's oldest connected
-// member. A project with no such actor still appears so pagination can
-// advance; the actor id is empty and PublishProject refuses to mint.
+// plugins-mcp API key when that id is a current connected member of the
+// project's organization (users row plus a non-deleted
+// organization_user_relationships row), otherwise the organization's
+// oldest connected member. A former member still in users is skipped so
+// PublishProject's membership check does not reject the publish and skip
+// the fallback. A project with no such actor still appears so pagination
+// can advance; the actor id is empty and PublishProject refuses to mint.
 // This is a deliberate cross-project
 // sweep, so unlike the tenant-scoped queries it is not constrained to a
 // single project_id. The after_project_id filter is applied inside each
