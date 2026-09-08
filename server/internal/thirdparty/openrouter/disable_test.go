@@ -472,7 +472,7 @@ func TestDisableOpenRouterAPIKeyLegacyQueryPreservesClassification(t *testing.T)
 	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
 }
 
-func TestDisableAPIKey_PreservesClassifiedCausesAndRejectsUnclassifiedRows(t *testing.T) {
+func TestDisableAPIKey_PreservesClassifiedCauses(t *testing.T) {
 	t.Parallel()
 
 	t.Run("preserves existing causes", func(t *testing.T) {
