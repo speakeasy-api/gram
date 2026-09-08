@@ -20,6 +20,7 @@ pin = true
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
+gh = "2.100.0"
 go = "1.27.0"
 golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
