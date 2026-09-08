@@ -1146,7 +1146,12 @@ function LogsToolsTraceRow({
 
         <div className="flex min-w-0 flex-2 items-center gap-2">
           <div className="group/server relative flex shrink-0 items-center">
-            <span className="border-border text-muted-foreground shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
+            <span
+              className={cn(
+                "border-border shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase",
+                targetConfig.className,
+              )}
+            >
               {targetConfig.label}
             </span>
             {editDialogProps && (
@@ -1301,23 +1306,44 @@ function LogsToolsTraceRow({
   );
 }
 
-// One neutral tag treatment for every target type — the type is metadata, not
-// a signal, so it no longer carries its own color.
 function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   switch (targetType) {
     case "hosted_mcp_server":
-      return { label: "Hosted MCP" };
+      return {
+        label: "Hosted MCP",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
     case "tunneled_mcp_server":
-      return { label: "Tunneled MCP" };
+      return {
+        label: "Tunneled MCP",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+      };
     case "meta_mcp_server":
-      return { label: "Gateway" };
+      return {
+        label: "Gateway",
+        className:
+          "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300",
+      };
     case "shadow_mcp_server":
-      return { label: "Shadow MCP" };
+      return {
+        label: "Shadow MCP",
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+      };
     case "skill":
-      return { label: "Skill" };
+      return {
+        label: "Skill",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     case "local_tool":
     default:
-      return { label: "Local Tools" };
+      return {
+        label: "Local Tools",
+        className: "bg-muted/50 text-primary",
+      };
   }
 }
 
