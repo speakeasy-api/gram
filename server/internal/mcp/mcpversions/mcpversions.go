@@ -214,6 +214,30 @@ func Known(v string) bool {
 	return slices.Contains(all, v)
 }
 
+// AtLeast reports whether v is a recognized revision no older than floor.
+//
+// The comparison is positional in [all] rather than lexical on the
+// identifiers. Both are correct for the revisions recognized today, which are
+// all ISO dates and are held in that order by TestAllIsChronologicallyOrdered
+// and TestAllAreDatedRevisions. Position is used anyway because it depends on
+// the ordering [all] already declares contractual instead of on the shape of
+// the identifiers, so it keeps its meaning if the specification's undated
+// `draft` revision is ever recognized here — where a lexical test would rank
+// it above every dated revision.
+//
+// An unrecognized value is never at least anything, so a garbage revision
+// cannot reach behavior gated on a real one.
+//
+// Callers testing what governs a request pass the revision in effect
+// ([Resolution.InEffect]), never the declared one: what a client asked for
+// does not decide what it is served.
+func AtLeast(v, floor string) bool {
+	vi := slices.Index(all, v)
+	fi := slices.Index(all, floor)
+
+	return vi >= 0 && fi >= 0 && vi >= fi
+}
+
 // Clamp bounds a client-supplied version for use as a metric dimension: a
 // recognized revision passes through, an absent one becomes [None], and
 // anything else becomes [Other].
