@@ -203,7 +203,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	oauthAuthorityUnavailableCounter, err := meter.Int64Counter(
 		"oauth.authority.unavailable",
-		metric.WithDescription("Retryable private OAuth endpoint authority lookup failures"),
+		metric.WithDescription("Retryable private OAuth endpoint authority lookup failures by issuer, MCP slug, and OAuth flow stage"),
 		metric.WithUnit("{failure}"),
 	)
 	if err != nil {
