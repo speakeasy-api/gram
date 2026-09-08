@@ -32,7 +32,6 @@ import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
-import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
@@ -233,11 +232,6 @@ export class Gram extends ClientSDK {
   private _identity?: Identity;
   get identity(): Identity {
     return (this._identity ??= new Identity(this._options));
-  }
-
-  private _instances?: Instances;
-  get instances(): Instances {
-    return (this._instances ??= new Instances(this._options));
   }
 
   private _integrations?: Integrations;

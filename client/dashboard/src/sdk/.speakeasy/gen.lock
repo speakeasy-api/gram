@@ -241,7 +241,6 @@ trackedFiles:
   src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
   src/funcs/identityResolve.ts: {}
-  src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
   src/funcs/jsonWebKeySetsActivateKey.ts: {}
@@ -902,7 +901,6 @@ trackedFiles:
   src/models/components/geteventvolumeresult.ts: {}
   src/models/components/gethookssummarypayload.ts: {}
   src/models/components/gethookssummaryresult.ts: {}
-  src/models/components/getinstanceresult.ts: {}
   src/models/components/getintegrationresult.ts: {}
   src/models/components/getkeyusageresponsebody.ts: {}
   src/models/components/getlatestdeploymentresult.ts: {}
@@ -970,7 +968,6 @@ trackedFiles:
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
   src/models/components/ingestrequestbody2.ts: {}
-  src/models/components/instancemcpserver.ts: {}
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
@@ -1802,7 +1799,6 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
-  src/models/operations/getinstance.ts: {}
   src/models/operations/getjsonwebkeyset.ts: {}
   src/models/operations/getjsonwebkeysetdeletepreflight.ts: {}
   src/models/operations/getlatestdeployment.ts: {}
@@ -2579,8 +2575,6 @@ trackedFiles:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/ingestHookEvent.ts: {}
-  src/react-query/instance.core.ts: {}
-  src/react-query/instance.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
@@ -3172,7 +3166,6 @@ trackedFiles:
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
   src/sdk/identity.ts: {}
-  src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/jsonwebkeysets.ts: {}
   src/sdk/keys.ts: {}
