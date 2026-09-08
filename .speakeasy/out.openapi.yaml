@@ -85803,6 +85803,12 @@ components:
         user_label:
           type: string
           description: User-facing user identity label
+        via_meta_mcp_server_id:
+          type: string
+          description: Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+        via_meta_mcp_server_name:
+          type: string
+          description: Display name of the dispatching gateway; a deleted gateway keeps its last name
       description: A single target-aware tool usage trace row
       required:
         - id

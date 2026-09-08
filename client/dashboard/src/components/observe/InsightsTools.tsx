@@ -1951,6 +1951,12 @@ function HooksAnalytics({
 
   const targetFiltersByLabel = useMemo(() => {
     const filters = new Map<string, string[]>();
+    // Charts group by display label, so two targets sharing a name (a gateway
+    // named after the server it fronts, say) land on one row; clicking it
+    // filters to every target behind that label rather than the last one.
+    const addServerFilter = (label: string, value: string) => {
+      filters.set(label, [...(filters.get(label) ?? []), value]);
+    };
     for (const target of targets ?? []) {
       const label = displayTargetLabel(
         target.targetLabel,
@@ -1958,11 +1964,11 @@ function HooksAnalytics({
         serverNameMappings,
       );
       if (target.targetType === "hosted_mcp_server") {
-        filters.set(label, [encodeHostedServerFilter(target.targetId)]);
+        addServerFilter(label, encodeHostedServerFilter(target.targetId));
       } else if (target.targetType === "meta_mcp_server") {
-        filters.set(label, [encodeGatewayServerFilter(target.targetId)]);
+        addServerFilter(label, encodeGatewayServerFilter(target.targetId));
       } else if (target.targetType === "shadow_mcp_server") {
-        filters.set(label, [encodeShadowServerFilter(target.targetId)]);
+        addServerFilter(label, encodeShadowServerFilter(target.targetId));
       } else if (target.targetType === "local_tool") {
         filters.set(label, ["local_tool"]);
       } else if (target.targetType === "skill") {

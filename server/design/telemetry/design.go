@@ -2601,6 +2601,8 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	})
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
 	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
+	Attribute("via_meta_mcp_server_id", String, "Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself")
+	Attribute("via_meta_mcp_server_name", String, "Display name of the dispatching gateway; a deleted gateway keeps its last name")
 
 	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
 })

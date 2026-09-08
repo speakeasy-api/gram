@@ -183,7 +183,15 @@ func TestListToolUsageTraces_ClassifiesHookObservedGateway(t *testing.T) {
 	require.Len(t, filtered.Traces, 2)
 	for _, trace := range filtered.Traces {
 		require.NotEqual(t, "shadow-db", trace.TargetID)
+		if trace.TargetType == gen.ToolUsageTargetType(repo.ToolUsageTargetTypeMetaMCP) {
+			require.Nil(t, trace.ViaMetaMcpServerID, "a call on the gateway itself is not routed through one")
+			continue
+		}
+		require.NotNil(t, trace.ViaMetaMcpServerID, "the dispatch names the gateway that routed it")
+		require.Equal(t, gatewayID, *trace.ViaMetaMcpServerID)
+		require.Equal(t, "Acme Gateway", *trace.ViaMetaMcpServerName)
 	}
+	require.Nil(t, byTarget["shadow_mcp_server:shadow-db"].ViaMetaMcpServerID)
 
 	query := "conv-gateway"
 	raw, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})

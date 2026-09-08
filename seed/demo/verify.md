@@ -123,7 +123,8 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
     tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
     server filter applied; on Tool Logs the hook-observed rows are tagged
-    Gateway (not Shadow MCP) and link back to the gateway. Back on the MCP
+    Gateway (not Shadow MCP) and link back to the gateway, and each member
+    dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
 16. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns

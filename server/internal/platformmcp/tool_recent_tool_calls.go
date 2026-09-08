@@ -101,9 +101,13 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		statuses = []string{outcome}
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, metaMCPMatchers, err := telemetrysvc.LoadToolUsageMatchers(ctx, r.db, project.ID)
+	hostedMCPMatchers, mcpServerMatchers, err := telemetrysvc.LoadToolUsageMatchers(ctx, r.db, project.ID)
 	if err != nil {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call matchers: %w", err)
+	}
+	metaMCPMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, r.db, project.ID)
+	if err != nil {
+		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call gateway matchers: %w", err)
 	}
 
 	rows, err := r.recentToolCalls.telemetry.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{

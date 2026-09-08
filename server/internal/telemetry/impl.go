@@ -3405,9 +3405,13 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		})
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, metaMCPMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
+	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	if err != nil {
+		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
 
 	return repo.GetToolUsageSummaryParams{
@@ -3652,9 +3656,13 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		}
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, metaMCPMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
+	}
+	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints").LogError(ctx, logger)
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
@@ -3689,7 +3697,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	return toToolUsageTracesResult(rows, nextCursor), nil
+	return toToolUsageTracesResult(rows, nextCursor, metaMCPNames(metaMCPMatchers)), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
@@ -3717,9 +3725,13 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, err
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, metaMCPMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
+	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
 
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
@@ -3774,7 +3786,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 	timeStart := now.AddDate(0, 0, -mcpServerActivityLookbackDays).UnixNano()
 	recentThreshold := now.AddDate(0, 0, -recentWindowDays).UnixNano()
 
-	hostedMCPMatchers, mcpServerMatchers, _, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
@@ -3861,11 +3873,12 @@ func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, authCtx *conte
 }
 
 // LoadToolUsageMatchers loads the project-owned names and stable source IDs
-// used to classify hosted, direct-remote, tunneled, and gateway MCP telemetry.
-func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.HostedMCPMatcher, []repo.MCPServerMatcher, []repo.MetaMCPMatcher, error) {
+// used to classify hosted, direct-remote, and tunneled MCP telemetry. Gateway
+// matchers are loaded separately by LoadMetaMCPMatchers.
+func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.HostedMCPMatcher, []repo.MCPServerMatcher, error) {
 	toolsets, err := toolsetsRepo.New(db).ListToolsetsByProject(ctx, projectID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("list project toolsets: %w", err)
+		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
 
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
@@ -3888,7 +3901,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	// shared by a live and a deleted server resolves to the live one.
 	servers, err := mcpserversRepo.New(db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("list project MCP servers: %w", err)
+		return nil, nil, fmt.Errorf("list project MCP servers: %w", err)
 	}
 
 	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
@@ -3929,49 +3942,70 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 			TargetLabel: targetLabel,
 		})
 	}
+	return hostedMatchers, serverMatchers, nil
+}
 
-	// Gateways are only reachable through their endpoints' URLs, which is all
-	// a hook-observed call carries (gram.mcp.server_url). Platform endpoints
-	// match the same bare "/mcp/<slug>" suffix the hosted matcher uses.
-	// Custom-domain endpoints are anchored on their host and listed first: the
-	// platform and each domain are separate slug namespaces and the query
-	// takes the first matching suffix, so the host-anchored form has to win
-	// over the bare one. A domain-root endpoint is served at the bare host.
-	// Deleted endpoints are included so historical calls stay classified. The
-	// hosted matcher still runs before this one, so a toolset whose mcp slug
-	// equals a custom-domain gateway slug claims that gateway's hook calls.
+// LoadMetaMCPMatchers loads the gateway endpoint URL suffixes that classify
+// hook-observed calls against a gateway. A gateway is only reachable through
+// its endpoints' URLs, which is all such a call carries (gram.mcp.server_url).
+// Platform endpoints match the same bare "/mcp/<slug>" suffix the hosted
+// matcher uses; custom-domain endpoints are anchored on their host, which the
+// query tests before the hosted matcher (a host-anchored match cannot be a
+// platform URL). Custom-domain matchers are listed first because the query
+// takes the first matching suffix and the bare form is a suffix of the
+// anchored one. Deleted endpoints keep matching so history stays classified;
+// soft deletion clears is_domain_root, so a deleted custom-domain endpoint
+// also claims the bare host unless a live root endpoint holds it now.
+func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
 	endpoints, err := metamcpRepo.New(db).ListMetaMCPEndpointsForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("list project gateway endpoints: %w", err)
+		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
 	}
-	metaMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints)+1)
+	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		matcher := repo.MetaMCPMatcher{
-			URLSuffix:   "/mcp/" + endpoint.Slug,
-			TargetID:    endpoint.MetaMcpServerID.String(),
-			TargetLabel: endpoint.Name,
+			URLSuffix:    "/mcp/" + endpoint.Slug,
+			TargetID:     endpoint.MetaMcpServerID.String(),
+			TargetLabel:  endpoint.Name,
+			HostAnchored: false,
 		}
 		domain := ""
 		if endpoint.CustomDomain.Valid {
 			domain = endpoint.CustomDomain.String
 		}
-		switch {
-		case domain == "":
+		if domain == "" {
 			platformMatchers = append(platformMatchers, matcher)
-		case endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool:
+			continue
+		}
+		matcher.HostAnchored = true
+		isRoot := endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
+		if isRoot || (endpoint.Deleted && !endpoint.DomainRootTaken) {
 			// Clients record the root with or without a trailing slash.
 			matcher.URLSuffix = "://" + domain
-			metaMatchers = append(metaMatchers, matcher)
+			anchoredMatchers = append(anchoredMatchers, matcher)
 			matcher.URLSuffix = "://" + domain + "/"
-			metaMatchers = append(metaMatchers, matcher)
-		default:
-			matcher.URLSuffix = "://" + domain + matcher.URLSuffix
-			metaMatchers = append(metaMatchers, matcher)
+			anchoredMatchers = append(anchoredMatchers, matcher)
+		}
+		if !isRoot {
+			matcher.URLSuffix = "://" + domain + "/mcp/" + endpoint.Slug
+			anchoredMatchers = append(anchoredMatchers, matcher)
 		}
 	}
-	metaMatchers = append(metaMatchers, platformMatchers...)
-	return hostedMatchers, serverMatchers, metaMatchers, nil
+	return append(anchoredMatchers, platformMatchers...), nil
+}
+
+// metaMCPNames maps gateway ids to display names. The matchers cover this
+// project's gateways, deleted ones included, so a gateway that no longer
+// exists still resolves to its last name.
+func metaMCPNames(matchers []repo.MetaMCPMatcher) map[string]string {
+	names := make(map[string]string, len(matchers))
+	for _, matcher := range matchers {
+		if _, ok := names[matcher.TargetID]; !ok {
+			names[matcher.TargetID] = matcher.TargetLabel
+		}
+	}
+	return names
 }
 
 func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {
@@ -3995,9 +4029,21 @@ func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
 	return startTimeUnixNano, parts[1], nil
 }
 
-func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string) *telem_gen.ListToolUsageTracesResult {
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string) *telem_gen.ListToolUsageTracesResult {
 	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
 	for _, row := range rows {
+		// A call the gateway dispatched to a member is attributed to the member
+		// and carries the gateway as its route; a call observed against the
+		// gateway itself is the gateway, not routed through one.
+		var viaGatewayID, viaGatewayName *string
+		if row.MetaMCPServerID != "" && row.TargetType != repo.ToolUsageTargetTypeMetaMCP {
+			viaGatewayID = conv.PtrEmpty(row.MetaMCPServerID)
+			name := gatewayNames[row.MetaMCPServerID]
+			if name == "" {
+				name = row.MetaMCPServerID
+			}
+			viaGatewayName = conv.PtrEmpty(name)
+		}
 		trace := &telem_gen.ToolUsageTraceSummary{
 			ID:      row.ID,
 			TraceID: conv.PtrEmpty(row.TraceID),
@@ -4005,23 +4051,25 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
 				Value: row.LogGroupValue,
 			},
-			StartTimeUnixNano: strconv.FormatInt(row.StartTimeUnixNano, 10),
-			LogCount:          row.LogCount,
-			GramUrn:           row.GramURN,
-			ToolName:          row.ToolName,
-			TargetType:        telem_gen.ToolUsageTargetType(row.TargetType),
-			TargetKind:        telem_gen.ToolUsageTargetKind(row.TargetKind),
-			TargetID:          row.TargetID,
-			TargetLabel:       row.TargetLabel,
-			UserKey:           row.UserKey,
-			UserLabel:         row.UserLabel,
-			UserKind:          telem_gen.ToolUsageUserKind(row.UserKind),
-			HookSource:        row.HookSource,
-			EventSource:       row.EventSource,
-			HTTPStatusCode:    row.HTTPStatusCode,
-			HookStatus:        row.HookStatus,
-			BlockReason:       row.BlockReason,
-			AccountType:       row.AccountType,
+			StartTimeUnixNano:    strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:             row.LogCount,
+			GramUrn:              row.GramURN,
+			ToolName:             row.ToolName,
+			TargetType:           telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:           telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:             row.TargetID,
+			TargetLabel:          row.TargetLabel,
+			UserKey:              row.UserKey,
+			UserLabel:            row.UserLabel,
+			UserKind:             telem_gen.ToolUsageUserKind(row.UserKind),
+			HookSource:           row.HookSource,
+			EventSource:          row.EventSource,
+			HTTPStatusCode:       row.HTTPStatusCode,
+			HookStatus:           row.HookStatus,
+			BlockReason:          row.BlockReason,
+			AccountType:          row.AccountType,
+			ViaMetaMcpServerID:   viaGatewayID,
+			ViaMetaMcpServerName: viaGatewayName,
 		}
 		traces = append(traces, trace)
 	}
@@ -4084,16 +4132,9 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 
 	gateways := make([]*telem_gen.ToolUsageGatewayFilterOption, 0, len(options.Gateways))
 	if includeGateways {
-		// The matchers cover this project's gateways, deleted ones included, so
-		// a gateway that no longer exists still resolves to its last name. An id
-		// the project never owned (meta_mcp_server_id is stamped from client
-		// attributes on the OTLP path) is not offered as a filter.
-		gatewayNames := make(map[string]string, len(metaMCPMatchers))
-		for _, matcher := range metaMCPMatchers {
-			if _, ok := gatewayNames[matcher.TargetID]; !ok {
-				gatewayNames[matcher.TargetID] = matcher.TargetLabel
-			}
-		}
+		// An id the project never owned (meta_mcp_server_id is stamped from
+		// client attributes on the OTLP path) is not offered as a filter.
+		gatewayNames := metaMCPNames(metaMCPMatchers)
 		for _, row := range options.Gateways {
 			name, known := gatewayNames[row.MetaMCPServerID]
 			if !known {

@@ -162,6 +162,14 @@ export type ToolUsageTraceSummary = {
    * User-facing user identity label
    */
   userLabel: string;
+  /**
+   * Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+   */
+  viaMetaMcpServerId?: string | undefined;
+  /**
+   * Display name of the dispatching gateway; a deleted gateway keeps its last name
+   */
+  viaMetaMcpServerName?: string | undefined;
 };
 
 /** @internal */
@@ -210,6 +218,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     user_key: z.string(),
     user_kind: ToolUsageTraceSummaryUserKind$inboundSchema,
     user_label: z.string(),
+    via_meta_mcp_server_id: z.optional(z.string()),
+    via_meta_mcp_server_name: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -232,6 +242,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "user_key": "userKey",
       "user_kind": "userKind",
       "user_label": "userLabel",
+      "via_meta_mcp_server_id": "viaMetaMcpServerId",
+      "via_meta_mcp_server_name": "viaMetaMcpServerName",
     });
   }),
 );

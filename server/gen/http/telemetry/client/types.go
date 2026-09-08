@@ -8200,6 +8200,12 @@ type ToolUsageTraceSummaryResponseBody struct {
 	// AI account classification ('team' or 'personal'); empty/absent when
 	// unclassified
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Gateway (meta MCP server) that dispatched this call to the target; absent
+	// for direct calls and for calls observed against a gateway itself
+	ViaMetaMcpServerID *string `form:"via_meta_mcp_server_id,omitempty" json:"via_meta_mcp_server_id,omitempty" xml:"via_meta_mcp_server_id,omitempty"`
+	// Display name of the dispatching gateway; a deleted gateway keeps its last
+	// name
+	ViaMetaMcpServerName *string `form:"via_meta_mcp_server_name,omitempty" json:"via_meta_mcp_server_name,omitempty" xml:"via_meta_mcp_server_name,omitempty"`
 }
 
 // ToolUsageTraceLogGroupResponseBody is used to define fields on response body

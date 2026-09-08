@@ -4041,10 +4041,14 @@ type MCPServerMatcher struct {
 // MetaMCPMatcher maps one gateway endpoint URL suffix to its gateway target so
 // hook-observed calls against the gateway classify as meta_mcp_server instead
 // of shadow. A gateway with several endpoints contributes one matcher each.
+// HostAnchored marks a suffix that starts at the URL's host (a custom-domain
+// endpoint); such a match cannot be a platform URL, so it is tested before the
+// hosted matcher, while bare "/mcp/<slug>" suffixes are tested after it.
 type MetaMCPMatcher struct {
-	URLSuffix   string
-	TargetID    string
-	TargetLabel string
+	URLSuffix    string
+	TargetID     string
+	TargetLabel  string
+	HostAnchored bool
 }
 
 // GetToolUsageSummaryParams defines the parameters for target-aware tool usage.
@@ -4127,6 +4131,7 @@ type ToolUsageTraceSummary struct {
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
 	AccountType       *string `ch:"account_type"`
+	MetaMCPServerID   string  `ch:"meta_mcp_server_id"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -4402,6 +4407,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"hook_status",
 		"block_reason",
 		"account_type",
+		"meta_mcp_server_id",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -5246,10 +5252,11 @@ func toolUsageMCPServerMatchIndexExpr(sourceExpr string) string {
 	return "indexOf(?, " + sourceExpr + ")"
 }
 
-func toolUsageMetaMCPMatcherArrays(matchers []MetaMCPMatcher) (urlSuffixes []string, targetIDs []string, targetLabels []string) {
+func toolUsageMetaMCPMatcherArrays(matchers []MetaMCPMatcher) (urlSuffixes []string, targetIDs []string, targetLabels []string, anchored []uint8) {
 	urlSuffixes = make([]string, 0, len(matchers))
 	targetIDs = make([]string, 0, len(matchers))
 	targetLabels = make([]string, 0, len(matchers))
+	anchored = make([]uint8, 0, len(matchers))
 	for _, matcher := range matchers {
 		if matcher.URLSuffix == "" || matcher.TargetID == "" {
 			continue
@@ -5261,12 +5268,23 @@ func toolUsageMetaMCPMatcherArrays(matchers []MetaMCPMatcher) (urlSuffixes []str
 		} else {
 			targetLabels = append(targetLabels, matcher.TargetID)
 		}
+		if matcher.HostAnchored {
+			anchored = append(anchored, 1)
+		} else {
+			anchored = append(anchored, 0)
+		}
 	}
-	return urlSuffixes, targetIDs, targetLabels
+	return urlSuffixes, targetIDs, targetLabels, anchored
 }
 
-func toolUsageMetaMCPMatchIndexExpr(serverURLExpr string) string {
-	return "arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?)"
+// toolUsageMetaMCPMatchColumns yields the match index plus whether that match
+// was host-anchored (index 0 reads the array default, 0). Bind the suffix
+// array and then the anchored array.
+func toolUsageMetaMCPMatchColumns(serverURLExpr string) []string {
+	return []string{
+		"arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?) AS meta_mcp_match_index",
+		"arrayElement(?, meta_mcp_match_index) AS meta_mcp_match_anchored",
+	}
 }
 
 // toolUsageGatewayIDExpr resolves the gateway an event belongs to: the target
@@ -5325,7 +5343,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	hasMatchers := len(hostedToolsetSlugs) > 0
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
-	metaURLSuffixes, metaTargetIDs, metaTargetLabels := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 	hasMCPServerMatchers := len(mcpSourceIDs) > 0
 	hasMetaMatchers := len(metaURLSuffixes) > 0
 	if hasMatchers || hasMCPServerMatchers || hasMetaMatchers {
@@ -5341,8 +5359,8 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
 		}
 		if hasMetaMatchers {
-			columns = append(columns, toolUsageMetaMCPMatchIndexExpr("g_mcp_server_url")+" AS meta_mcp_match_index")
-			prefixArgs = append(prefixArgs, metaURLSuffixes)
+			columns = append(columns, toolUsageMetaMCPMatchColumns("g_mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
 		}
 		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), groupedSQL)
 		sourceArgs = prefixArgs
@@ -5373,6 +5391,15 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			targetKindArgs = append(targetKindArgs, mcpServerMatch, "'"+toolUsageTargetKindServer+"'")
 			targetIDArgs = append(targetIDArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+		}
+		// A host-anchored gateway match cannot be a platform URL, so it beats
+		// the hosted URL match; a bare "/mcp/<slug>" gateway match yields to it.
+		if hasMetaMatchers {
+			metaAnchoredMatch := "meta_mcp_match_anchored = 1"
+			targetTypeArgs = append(targetTypeArgs, metaAnchoredMatch, "'"+ToolUsageTargetTypeMetaMCP+"'")
+			targetKindArgs = append(targetKindArgs, metaAnchoredMatch, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, metaAnchoredMatch, "arrayElement(?, meta_mcp_match_index)")
+			targetLabelArgs = append(targetLabelArgs, metaAnchoredMatch, "arrayElement(?, meta_mcp_match_index)")
 		}
 		if hasMatchers {
 			hostedMatch := "hosted_match_index > 0"
@@ -5493,6 +5520,9 @@ FROM (%s)`,
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetIDs)
 	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetIDs)
+	}
 	if hasMatchers {
 		finalArgs = append(finalArgs, hostedToolsetSlugs)
 	}
@@ -5501,6 +5531,9 @@ FROM (%s)`,
 	}
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetLabels)
+	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetLabels)
 	}
 	if hasMatchers {
 		finalArgs = append(finalArgs, hostedToolsetSlugs)
@@ -5608,7 +5641,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
-	metaURLSuffixes, metaTargetIDs, metaTargetLabels := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 	sourceSQL := rawSQL
 	sourceArgs := rawArgs
 	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
@@ -5624,8 +5657,8 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
 		}
 		if len(metaURLSuffixes) > 0 {
-			columns = append(columns, toolUsageMetaMCPMatchIndexExpr("mcp_server_url")+" AS meta_mcp_match_index")
-			prefixArgs = append(prefixArgs, metaURLSuffixes)
+			columns = append(columns, toolUsageMetaMCPMatchColumns("mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
 		}
 		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), rawSQL)
 		sourceArgs = prefixArgs
@@ -5703,6 +5736,13 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 			targetIDArgs = append(targetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 		}
+		if len(metaURLSuffixes) > 0 {
+			metaAnchoredCondition := "meta_mcp_match_anchored = 1"
+			targetTypeArgs = append(targetTypeArgs, metaAnchoredCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
+			targetKindArgs = append(targetKindArgs, metaAnchoredCondition, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
+			targetLabelArgs = append(targetLabelArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
+		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
 			targetTypeArgs = append(targetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
@@ -5776,6 +5816,9 @@ FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, reso
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetIDs)
 	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
 	}
@@ -5784,6 +5827,9 @@ FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, reso
 	}
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetLabels)
+	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetLabels)
 	}
 	if len(hostedToolsetSlugs) > 0 {
 		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
@@ -5909,7 +5955,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
-	metaURLSuffixes, metaTargetIDs, metaTargetLabels := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 
 	directSourceSQL := directGroupedSQL
 	directSourceArgs := directGroupedArgs
@@ -6004,8 +6050,8 @@ FROM (%s)`,
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
 		}
 		if len(metaURLSuffixes) > 0 {
-			columns = append(columns, toolUsageMetaMCPMatchIndexExpr("g_mcp_server_url")+" AS meta_mcp_match_index")
-			prefixArgs = append(prefixArgs, metaURLSuffixes)
+			columns = append(columns, toolUsageMetaMCPMatchColumns("g_mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
 		}
 		hookSourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), hookGroupedSQL)
 		hookSourceArgs = prefixArgs
@@ -6043,6 +6089,13 @@ FROM (%s)`,
 			hookTargetKindArgs = append(hookTargetKindArgs, mcpServerMatchCondition, "'"+toolUsageTargetKindServer+"'")
 			hookTargetIDArgs = append(hookTargetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 			hookTargetLabelArgs = append(hookTargetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+		}
+		if len(metaURLSuffixes) > 0 {
+			metaAnchoredCondition := "meta_mcp_match_anchored = 1"
+			hookTargetTypeArgs = append(hookTargetTypeArgs, metaAnchoredCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
+			hookTargetKindArgs = append(hookTargetKindArgs, metaAnchoredCondition, "'"+toolUsageTargetKindServer+"'")
+			hookTargetIDArgs = append(hookTargetIDArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
+			hookTargetLabelArgs = append(hookTargetLabelArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
 		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
@@ -6114,6 +6167,9 @@ FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookT
 	if len(mcpSourceIDs) > 0 {
 		hookArgs = append(hookArgs, mcpTargetTypes, mcpTargetIDs)
 	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		hookArgs = append(hookArgs, hostedToolsetSlugs)
 	}
@@ -6122,6 +6178,9 @@ FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookT
 	}
 	if len(mcpSourceIDs) > 0 {
 		hookArgs = append(hookArgs, mcpTargetLabels)
+	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetLabels)
 	}
 	if len(hostedToolsetSlugs) > 0 {
 		hookArgs = append(hookArgs, hostedToolsetSlugs)

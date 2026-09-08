@@ -655,8 +655,17 @@ SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
+    e.deleted,
     e.is_domain_root,
-    cd.domain AS custom_domain
+    cd.domain AS custom_domain,
+    EXISTS (
+      SELECT 1
+      FROM mcp_endpoints r
+      WHERE r.custom_domain_id = e.custom_domain_id
+        AND r.is_domain_root IS TRUE
+        AND r.deleted IS FALSE
+        AND r.id <> e.id
+    ) AS domain_root_taken
 FROM mcp_endpoints e
 JOIN meta_mcp_servers ms
   ON ms.id = e.meta_mcp_server_id
@@ -666,6 +675,16 @@ LEFT JOIN custom_domains cd
  AND cd.organization_id = ms.organization_id
 WHERE e.project_id = $1
   AND e.meta_mcp_server_id IS NOT NULL
+  AND (
+    e.deleted IS FALSE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM mcp_endpoints l
+      WHERE l.slug = e.slug
+        AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+        AND l.deleted IS FALSE
+    )
+  )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC
 `
 
@@ -673,15 +692,22 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 	MetaMcpServerID uuid.UUID
 	Name            string
 	Slug            string
+	Deleted         bool
 	IsDomainRoot    pgtype.Bool
 	CustomDomain    pgtype.Text
+	DomainRootTaken bool
 }
 
 // Gateway endpoints with their gateway name and custom domain, for classifying
 // hook-observed calls to a gateway URL in tool-usage telemetry. Includes
 // soft-deleted endpoints and gateways so historical calls keep their
-// classification; live rows order first so a reused slug resolves to the live
-// gateway.
+// classification, except a deleted endpoint whose slug a live endpoint now
+// holds in the same namespace: that URL belongs to the live one. The slug
+// and domain-root existence checks are deliberately not project-scoped,
+// mirroring the global partial unique indexes on mcp_endpoints. Live rows
+// order first. Soft deletion clears is_domain_root, so domain_root_taken lets
+// the caller decide whether a deleted custom-domain endpoint may still claim
+// the bare host.
 func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
 	if err != nil {
@@ -695,8 +721,10 @@ func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Contex
 			&i.MetaMcpServerID,
 			&i.Name,
 			&i.Slug,
+			&i.Deleted,
 			&i.IsDomainRoot,
 			&i.CustomDomain,
+			&i.DomainRootTaken,
 		); err != nil {
 			return nil, err
 		}
