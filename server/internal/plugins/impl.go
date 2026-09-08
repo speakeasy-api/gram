@@ -54,9 +54,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
@@ -1830,23 +1830,37 @@ func usableAPIKeyCreatorID(userID string) bool {
 	return userID != "" && userID != "system"
 }
 
+func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organizationID, userID string) error {
+	if !usableAPIKeyCreatorID(userID) {
+		return fmt.Errorf("created by user id must be a real user")
+	}
+	members, err := usersrepo.New(db).GetConnectedUsersByIDs(ctx, usersrepo.GetConnectedUsersByIDsParams{
+		Ids:            []string{userID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("get plugin api key creator: %w", err)
+	}
+	if len(members) == 0 {
+		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+	}
+	return nil
+}
+
 func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
 	if !usableAPIKeyCreatorID(input.CreatedByUserID) {
 		return nil, fmt.Errorf("created by user id must be a real user")
-	}
-	if _, err := usersrepo.New(s.db).GetUser(ctx, input.CreatedByUserID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("created by user id %q does not exist", input.CreatedByUserID)
-		}
-		return nil, fmt.Errorf("get created by user: %w", err)
-	}
-	if s.github == nil {
-		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+	if err := requirePluginAPIKeyCreator(ctx, s.db, project.ID, input.CreatedByUserID); err != nil {
+		return nil, err
+	}
+	if s.github == nil {
+		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
 	actorDisplayName := "Gram"
@@ -2611,14 +2625,8 @@ func (s *Service) persistPluginAPIKeys(
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if !usableAPIKeyCreatorID(input.Actor.CreatedByUserID) {
-		return fmt.Errorf("refusing to mint plugin api key without a real creator")
-	}
-	if _, err := usersrepo.New(tx).GetUser(ctx, input.Actor.CreatedByUserID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("refusing to mint plugin api key: creator %q is not a user", input.Actor.CreatedByUserID)
-		}
-		return fmt.Errorf("get plugin api key creator: %w", err)
+	if err := requirePluginAPIKeyCreator(ctx, tx, input.OrganizationID, input.Actor.CreatedByUserID); err != nil {
+		return fmt.Errorf("refusing to mint plugin api key: %w", err)
 	}
 
 	keysQ := keysrepo.New(tx)

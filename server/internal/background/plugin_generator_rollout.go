@@ -120,6 +120,12 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		}
 	}
 
+	if input.AfterProjectID == nil {
+		if err := workflow.ExecuteActivity(ctx, a.RepairOrphanedAPIKeyCreators).Get(ctx, nil); err != nil {
+			return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
+		}
+	}
+
 	after := input.AfterProjectID
 	for {
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {

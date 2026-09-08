@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
@@ -577,5 +578,32 @@ func TestPublishProject_RejectsUnknownCreator(t *testing.T) {
 		SkipIfUnchanged: true,
 	})
 	require.Error(t, err)
-	require.ErrorContains(t, err, "does not exist")
+	require.ErrorContains(t, err, "not a member of the organization")
+}
+
+func TestPublishProject_RejectsForeignOrgCreator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          "user_foreign_org",
+		Email:       "foreign-org-creator@example.test",
+		DisplayName: "Foreign",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "user_foreign_org",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "not a member of the organization")
 }

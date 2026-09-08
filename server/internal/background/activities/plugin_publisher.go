@@ -74,17 +74,6 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 		after = *input.AfterProjectID
 	}
 
-	// Heal keys minted under a placeholder creator before listing, so the
-	// subsequent actor lookup sees a real users.id and already-published
-	// hooks/MCP keys start authenticating without a republish.
-	repaired, err := keysrepo.New(p.db).RepairOrphanedAPIKeyCreators(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
-	}
-	if repaired > 0 {
-		p.logger.InfoContext(ctx, "repaired orphaned api key creators")
-	}
-
 	rows, err := pluginsrepo.New(p.db).ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
 		AfterProjectID: after,
 		ResultLimit:    limit,
@@ -108,6 +97,21 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 	}
 
 	return &ListPluginPublishCandidatesResult{Candidates: candidates}, nil
+}
+
+func (p *PluginPublisher) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
+	if p.db == nil {
+		return fmt.Errorf("database is not configured")
+	}
+
+	repaired, err := keysrepo.New(p.db).RepairOrphanedAPIKeyCreators(ctx)
+	if err != nil {
+		return fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	if repaired > 0 {
+		p.logger.InfoContext(ctx, "repaired orphaned api key creators")
+	}
+	return nil
 }
 
 func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
