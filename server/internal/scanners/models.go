@@ -1,8 +1,13 @@
 package scanners
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
 // Result describes both a scanner's findings and whether real scan work
@@ -33,6 +38,126 @@ func AsyncRiskOperationID(executionPath, policyID string, policyVersion int64, c
 		anchorKind, anchorID = "chat_message", chatMessageID
 	}
 	return strings.Join([]string{executionPath, policyID, strconv.FormatInt(policyVersion, 10), anchorKind, anchorID}, ":")
+}
+
+// RiskMessage is the common attribution carried by asynchronous risk scan
+// envelopes. Message type is supplied separately because custom rules names
+// that field kind.
+type RiskMessage interface {
+	GetRequestId() string
+	GetChatMessageId() string
+	GetProjectId() string
+	GetOrganizationId() string
+	GetRiskPolicyId() string
+	GetRiskPolicyVersion() int64
+	GetContentPartId() string
+	GetChatId() string
+	GetParentChatMessageId() string
+	GetOriginRiskPolicyId() string
+	GetOriginRiskPolicyVersion() int64
+	GetPolicyLinkReason() string
+	GetMessageLinkReason() string
+	GetExecutionPath() string
+	GetToolCallId() string
+	GetToolName() string
+	GetHookSource() string
+	GetUserId() string
+}
+
+// ParseRiskProvenance validates and normalizes attribution shared by async risk
+// consumers. Legacy envelopes that predate origin fields use their policy
+// fields only when both form a complete policy identity.
+func ParseRiskProvenance(m RiskMessage, messageType, defaultExecutionPath string) (metering.RiskProvenance, error) {
+	projectID, err := uuid.Parse(m.GetProjectId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse project id: %w", err)
+	}
+	if projectID == uuid.Nil {
+		return metering.RiskProvenance{}, fmt.Errorf("project id must not be nil")
+	}
+	if strings.TrimSpace(m.GetOrganizationId()) == "" {
+		return metering.RiskProvenance{}, fmt.Errorf("organization id must not be empty")
+	}
+
+	policyText := m.GetOriginRiskPolicyId()
+	policyVersion := m.GetOriginRiskPolicyVersion()
+	if policyText == "" && policyVersion == 0 && m.GetPolicyLinkReason() == "" && m.GetRiskPolicyId() != "" && m.GetRiskPolicyVersion() > 0 {
+		policyText = m.GetRiskPolicyId()
+		policyVersion = m.GetRiskPolicyVersion()
+	}
+	policyID, err := parseOptionalUUID(policyText)
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse origin risk policy id: %w", err)
+	}
+	chatID, err := parseOptionalUUID(m.GetChatId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse chat id: %w", err)
+	}
+	chatMessageText := m.GetChatMessageId()
+	if chatMessageText == "" {
+		chatMessageText = m.GetParentChatMessageId()
+	}
+	chatMessageID, err := parseOptionalUUID(chatMessageText)
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse chat message id: %w", err)
+	}
+	contentPartID, err := parseOptionalUUID(m.GetContentPartId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse content part id: %w", err)
+	}
+	executionPath := m.GetExecutionPath()
+	if executionPath == "" {
+		executionPath = defaultExecutionPath
+	}
+	if policyID == uuid.Nil {
+		if policyVersion != 0 || strings.TrimSpace(m.GetPolicyLinkReason()) == "" {
+			return metering.RiskProvenance{}, fmt.Errorf("risk provenance requires originating policy or explicit no-policy reason")
+		}
+	} else if policyVersion <= 0 || m.GetPolicyLinkReason() != "" {
+		return metering.RiskProvenance{}, fmt.Errorf("policy-triggered risk provenance requires a version and no unlinked policy reason")
+	}
+	if strings.TrimSpace(executionPath) == "" {
+		return metering.RiskProvenance{}, fmt.Errorf("risk provenance requires execution path")
+	}
+	if chatMessageID == uuid.Nil && strings.TrimSpace(m.GetMessageLinkReason()) == "" {
+		return metering.RiskProvenance{}, fmt.Errorf("risk provenance requires a chat message id or explicit unlinked reason")
+	}
+	if chatMessageID != uuid.Nil && m.GetMessageLinkReason() != "" {
+		return metering.RiskProvenance{}, fmt.Errorf("linked risk provenance must not have an unlinked reason")
+	}
+
+	return metering.RiskProvenance{
+		OrganizationID:    m.GetOrganizationId(),
+		ProjectID:         projectID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policyVersion,
+		PolicyLinkReason:  m.GetPolicyLinkReason(),
+		ChatID:            chatID,
+		ChatMessageID:     chatMessageID,
+		ContentPartID:     contentPartID,
+		MessageLinkReason: m.GetMessageLinkReason(),
+		OperationID:       AsyncRiskOperationID(executionPath, policyText, policyVersion, chatMessageText, m.GetContentPartId(), m.GetRequestId()),
+		ExecutionPath:     executionPath,
+		RequestID:         m.GetRequestId(),
+		MessageType:       messageType,
+		HookSource:        m.GetHookSource(),
+		UserID:            m.GetUserId(),
+		ToolCallID:        m.GetToolCallId(),
+		ToolName:          m.GetToolName(),
+		Model:             "",
+		Provider:          "",
+	}, nil
+}
+
+func parseOptionalUUID(value string) (uuid.UUID, error) {
+	if value == "" {
+		return uuid.Nil, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("parse optional UUID: %w", err)
+	}
+	return id, nil
 }
 
 // Finding represents a single secret or sensitive data match found in a message.

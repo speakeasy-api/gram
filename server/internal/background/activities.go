@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -257,6 +258,8 @@ func NewActivities(
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
 
+	riskRecorder := metering.NewRiskRecorder(logger, publishers.MeterReadings)
+
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
@@ -281,6 +284,7 @@ func NewActivities(
 		&shadowMCPPolicyBypassChecker{
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
+		riskRecorder,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))

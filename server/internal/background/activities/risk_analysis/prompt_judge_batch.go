@@ -2,6 +2,8 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -84,10 +87,12 @@ func judgeFanout(
 }
 
 func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(messages))
+	out := make([]scanners.Result, len(messages))
+	models := make([]string, len(messages))
+	providers := make([]string, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
-		return out, nil
+		return findingsFromResults(out), nil
 	}
 
 	indices := make([]int, 0, len(messages))
@@ -98,36 +103,57 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		indices = append(indices, i)
 	}
 	if len(indices) == 0 {
-		return out, nil
+		return findingsFromResults(out), nil
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
-			findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
-			setEventMatch(findings, messages[idx])
-			out[idx] = findings
+			out[idx].Findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+			setEventMatch(out[idx].Findings, messages[idx])
 		}
-		return out, nil
+		return findingsFromResults(out), nil
 	}
 
 	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices); err != nil {
 		return nil, err
 	}
 
+	startedAt := time.Now().UTC()
 	judgeFanout(
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
 		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
-			findings := promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
-			setEventMatch(findings, messages[idx])
-			out[idx] = findings
+			out[idx].Findings = promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
+			if err == nil && verdict != nil && verdict.Completed {
+				out[idx].STokens = verdict.STokens
+				out[idx].Completed = true
+				models[idx] = verdict.Model
+				providers[idx] = verdict.Provider
+			}
+			setEventMatch(out[idx].Findings, messages[idx])
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
-	return out, nil
+	requestID := batchScanRequestID(args, "prompt_policy").String()
+	var recordErr error
+	for i := range out {
+		if !out[i].Completed {
+			continue
+		}
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, requestID)
+		provenance.Model = models[i]
+		provenance.Provider = providers[i]
+		if err := a.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, out[i].STokens, startedAt); err != nil {
+			recordErr = errors.Join(recordErr, err)
+		}
+	}
+	if recordErr != nil {
+		return nil, fmt.Errorf("record prompt policy usage: %w", recordErr)
+	}
+	return findingsFromResults(out), nil
 }
 
 func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
@@ -135,17 +161,13 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 }
 
 func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) error {
-	// Deterministic per batch (with a discriminator separating it from the
-	// standard-policy request id) so a Temporal retry republishes identical
-	// requests: the request id feeds the analyzer's deterministic finding ids,
-	// and a fresh random id per attempt would mint new ClickHouse rows the
-	// read-time dedup could never collapse.
-	requestID := batchScanRequestID(args, "prompt_policy")
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
+	requestID := batchScanRequestID(args, "prompt_policy")
 	for _, idx := range indices {
 		msg := messages[idx]
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -157,14 +179,22 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 		}
 
 		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
-			RequestId:         new(requestID.String()),
-			ChatMessageId:     chatMessageID,
-			ContentPartId:     contentPartID,
-			ProjectId:         new(args.ProjectID.String()),
-			OrganizationId:    &args.OrganizationID,
-			RiskPolicyId:      new(args.RiskPolicyID.String()),
-			RiskPolicyVersion: &args.PolicyVersion,
-			CreatedAt:         &createdAt,
+			RequestId:               new(requestID.String()),
+			ChatMessageId:           chatMessageID,
+			ContentPartId:           contentPartID,
+			ProjectId:               new(args.ProjectID.String()),
+			OrganizationId:          &args.OrganizationID,
+			RiskPolicyId:            new(args.RiskPolicyID.String()),
+			RiskPolicyVersion:       &args.PolicyVersion,
+			CreatedAt:               &createdAt,
+			ChatId:                  nilUUIDString(msg.ChatID),
+			ParentChatMessageId:     nilUUIDString(msg.ParentChatMessageID),
+			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
+			OriginRiskPolicyVersion: &args.PolicyVersion,
+			MessageLinkReason:       &provenance.MessageLinkReason,
+			ExecutionPath:           new(shadowStreamExecutionPath),
+			ToolCallId:              &provenance.ToolCallID,
+			HookSource:              &msg.Source,
 
 			Content:     new(msg.Content),
 			UserId:      &msg.UserID,

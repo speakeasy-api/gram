@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"

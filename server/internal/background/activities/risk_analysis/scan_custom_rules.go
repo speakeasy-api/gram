@@ -2,20 +2,21 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 )
 
-func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, customRuleIDs []string) ([][]scanners.Finding, error) {
-	if err := a.publishCustomRulesScanRequests(ctx, args, requestID, messages, customRuleIDs); err != nil {
+func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string) ([][]scanners.Finding, error) {
+	if err := a.publishCustomRulesScanRequests(ctx, args, messages, customRuleIDs); err != nil {
 		return nil, err
 	}
 
@@ -38,13 +39,18 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 		})
 	}
 
+	startedAt := time.Now().UTC()
 	results, err := a.customRuleScanner.ScanBatch(ctx, customruleanalyzer.ScanBatchRequest{
 		ProjectID:     args.ProjectID,
 		CustomRuleIDs: customRuleIDs,
 		Messages:      scanMessages,
 	})
+	recordErr := a.recordBatchResults(ctx, metering.RiskCustomRules(), args, messages, results, startedAt)
 	if err != nil {
-		return [][]scanners.Finding{}, fmt.Errorf("scan with custom rules: %w", err)
+		return findingsFromResults(results), errors.Join(fmt.Errorf("scan with custom rules: %w", err), recordErr)
+	}
+	if recordErr != nil {
+		return findingsFromResults(results), fmt.Errorf("record custom rules usage: %w", recordErr)
 	}
 
 	activity.RecordHeartbeat(ctx, SourceCustom)
@@ -55,10 +61,12 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 // CustomRulesAnalysis per message onto the async analyzer topic, carrying the
 // full CEL input (content, kind, tool calls) and the selected rule ids so the
 // subscriber can re-load and evaluate the same rules against the same message.
-func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, customRuleIDs []string) error {
+func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
+	requestID := batchScanRequestID(args, "standard")
 	for _, msg := range messages {
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		view := batchMessageView(msg)
 		toolCalls := make([]*riskv1.CustomRulesAnalysis_ToolCall, 0, len(view.Tools))
@@ -70,14 +78,24 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 		}
 
 		publishResults = append(publishResults, a.customRulesPub.Publish(ctx, riskv1.CustomRulesAnalysis_builder{
-			RequestId:         new(requestID.String()),
-			ChatMessageId:     chatMessageID,
-			ContentPartId:     contentPartID,
-			ProjectId:         new(args.ProjectID.String()),
-			OrganizationId:    &args.OrganizationID,
-			RiskPolicyId:      new(args.RiskPolicyID.String()),
-			RiskPolicyVersion: &args.PolicyVersion,
-			CreatedAt:         &createdAt,
+			RequestId:               new(requestID.String()),
+			ChatMessageId:           chatMessageID,
+			ContentPartId:           contentPartID,
+			ProjectId:               new(args.ProjectID.String()),
+			OrganizationId:          &args.OrganizationID,
+			RiskPolicyId:            new(args.RiskPolicyID.String()),
+			RiskPolicyVersion:       &args.PolicyVersion,
+			CreatedAt:               &createdAt,
+			ChatId:                  nilUUIDString(msg.ChatID),
+			ParentChatMessageId:     nilUUIDString(msg.ParentChatMessageID),
+			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
+			OriginRiskPolicyVersion: &args.PolicyVersion,
+			MessageLinkReason:       &provenance.MessageLinkReason,
+			ExecutionPath:           new(shadowStreamExecutionPath),
+			ToolCallId:              &provenance.ToolCallID,
+			ToolName:                &provenance.ToolName,
+			HookSource:              &msg.Source,
+			UserId:                  &msg.UserID,
 
 			Content:       new(msg.Content),
 			Kind:          new(msg.Type),
