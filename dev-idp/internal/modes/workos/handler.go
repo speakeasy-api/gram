@@ -7,23 +7,24 @@
 //
 // Two things are always served locally, whatever the backend:
 //
-//   - POST /user_management/authenticate, the second leg of non-interactive
-//     login. It cannot be proxied: real WorkOS only accepts codes minted by
-//     its own interactive AuthKit ceremony, and forwarding a dev-idp code
-//     would trade away the zero-friction login that dev-idp exists to give.
-//     Under BackendWorkOS it resolves identity *through* the WorkOS API and
-//     then mints the session here, reporting the real WorkOS user id.
+//   - The authorization_code grant at POST /user_management/authenticate, the
+//     second leg of non-interactive login. Real WorkOS only accepts codes from
+//     its own AuthKit ceremony, so dev-idp consumes its local code. Other
+//     grants, including Magic Auth, pass through to WorkOS.
 //   - /_inspect/*, the dev-idp dashboard's read-only window. Namespaced so
 //     it can never shadow a genuine WorkOS API path.
 package workos
 
 import (
+	"bytes"
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -40,8 +41,10 @@ import (
 )
 
 const (
-	// Mode is the discriminator persisted on current_users rows holding a
-	// real WorkOS subject.
+	maxAuthenticateBodyBytes = 64 << 10
+
+	// Mode is the identity slot key persisted on current_users rows holding a
+	// real WorkOS subject. It does not select the runtime backend.
 	Mode = "workos"
 
 	// Prefix is the URL prefix the dev-idp listener mounts this handler
@@ -54,12 +57,16 @@ type Config struct {
 	// Backend selects emulation or passthrough.
 	Backend Backend
 
+	// ClientSecret authenticates Gram callers to the dev-idp WorkOS surface.
+	// It is never forwarded to WorkOS.
+	ClientSecret string
+
 	// UpstreamURL is the real WorkOS API base URL that BackendWorkOS
 	// proxies to. Ignored under BackendLocal.
 	UpstreamURL string
 
-	// APIKey authenticates proxied requests that arrive without their own
-	// Authorization header. Ignored under BackendLocal.
+	// APIKey authenticates dev-idp to upstream WorkOS. Ignored under
+	// BackendLocal and never shared with downstream Gram callers.
 	APIKey string
 }
 
@@ -78,6 +85,13 @@ type Handler struct {
 // implementation and is required. client is required under BackendWorkOS
 // and unused under BackendLocal.
 func NewHandler(cfg Config, emulator http.Handler, client *gramworkos.Client, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) (*Handler, error) {
+	if cfg.ClientSecret == "" || cfg.ClientSecret == "unset" {
+		return nil, errors.New("dev-idp WorkOS client secret is required")
+	}
+	if cfg.Backend == BackendWorkOS && (cfg.APIKey == "" || cfg.APIKey == "unset") {
+		return nil, errors.New("WorkOS API key is required for the workos backend")
+	}
+
 	h := &Handler{
 		cfg:      cfg,
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"),
@@ -97,11 +111,9 @@ func NewHandler(cfg Config, emulator http.Handler, client *gramworkos.Client, lo
 		h.proxy = &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(upstream)
 			r.Out.Host = upstream.Host
-			// The Gram server sends its own key; anything else (the
-			// dashboard, curl) borrows the configured one.
-			if r.In.Header.Get("Authorization") == "" && apiKey != "" {
-				r.Out.Header.Set("Authorization", "Bearer "+apiKey)
-			}
+			// The downstream credential authenticates to dev-idp only. Never
+			// forward it across the upstream trust boundary.
+			r.Out.Header.Set("Authorization", "Bearer "+apiKey)
 		}}
 	}
 
@@ -121,16 +133,170 @@ func (h *Handler) Handler() http.Handler {
 		mux.HandleFunc("GET /_inspect/", handleInspectUnavailable)
 		// The emulator already implements authenticate against local state.
 		mux.Handle("/", h.emulator)
-		return mux
+		return h.authenticateClients(mux)
 	}
 
 	mux.HandleFunc("GET /_inspect/currentUser", h.handleGetCurrentUser)
 	mux.HandleFunc("GET /_inspect/users/{id_or_email}", h.handleGetUser)
 	mux.HandleFunc("GET /_inspect/organizations/{id}", h.handleGetOrganization)
 
-	mux.HandleFunc("POST /user_management/authenticate", h.handleAuthenticate)
+	mux.HandleFunc("POST /user_management/authenticate", h.routeAuthenticate)
+	mux.HandleFunc("POST /sso/token", h.proxySSOToken)
 	mux.Handle("/", h.proxy)
-	return mux
+	return h.authenticateClients(mux)
+}
+
+func (h *Handler) authenticateClients(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.isPublicRoute(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		presented, err := clientSecretFromRequest(r)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, errRequestBodyTooLarge) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(presented), []byte(h.cfg.ClientSecret)) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid dev-idp client secret"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Handler) isPublicRoute(r *http.Request) bool {
+	if strings.HasPrefix(r.URL.Path, "/_inspect/") {
+		return true
+	}
+	if h.cfg.Backend != BackendLocal {
+		return false
+	}
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/passwordless/sessions/") && strings.HasSuffix(r.URL.Path, "/authorize") {
+		return true
+	}
+	return r.Method == http.MethodGet && r.URL.Path == "/portal"
+}
+
+func clientSecretFromRequest(r *http.Request) (string, error) {
+	switch r.URL.Path {
+	case "/user_management/authenticate":
+		body, err := readAndRestoreBody(r)
+		if err != nil {
+			return "", err
+		}
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return "", errors.New("invalid request body")
+		}
+		rawClientSecret, ok := payload["client_secret"]
+		if !ok {
+			return "", nil
+		}
+		var clientSecret string
+		if err := json.Unmarshal(rawClientSecret, &clientSecret); err != nil {
+			return "", errors.New("invalid request body")
+		}
+		return clientSecret, nil
+	case "/sso/token":
+		body, err := readAndRestoreBody(r)
+		if err != nil {
+			return "", err
+		}
+		values, err := url.ParseQuery(string(body))
+		if err != nil {
+			return "", errors.New("invalid form body")
+		}
+		return values.Get("client_secret"), nil
+	default:
+		secret, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		return secret, nil
+	}
+}
+
+var errRequestBodyTooLarge = errors.New("request body too large")
+
+func readAndRestoreBody(r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxAuthenticateBodyBytes+1))
+	if err != nil {
+		return nil, errors.New("read request body")
+	}
+	if len(body) > maxAuthenticateBodyBytes {
+		return nil, errRequestBodyTooLarge
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	return body, nil
+}
+
+func (h *Handler) routeAuthenticate(w http.ResponseWriter, r *http.Request) {
+	body, err := readAndRestoreBody(r)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, errRequestBodyTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var envelope struct {
+		GrantType string `json:"grant_type"`
+	}
+	if json.Unmarshal(body, &envelope) == nil && envelope.GrantType == "authorization_code" {
+		h.handleAuthenticate(w, r)
+		return
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	apiKey, err := json.Marshal(h.cfg.APIKey)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "encode upstream credential"})
+		return
+	}
+	for key := range payload {
+		if strings.EqualFold(key, "client_secret") {
+			delete(payload, key)
+		}
+	}
+	payload["client_secret"] = apiKey
+	body, err = json.Marshal(payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "encode request body"})
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	h.proxy.ServeHTTP(w, r)
+}
+
+func (h *Handler) proxySSOToken(w http.ResponseWriter, r *http.Request) {
+	body, err := readAndRestoreBody(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid form body"})
+		return
+	}
+	values.Set("client_secret", h.cfg.APIKey)
+	body = []byte(values.Encode())
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	h.proxy.ServeHTTP(w, r)
 }
 
 // handleInspectUnavailable answers the inspection routes under BackendLocal,

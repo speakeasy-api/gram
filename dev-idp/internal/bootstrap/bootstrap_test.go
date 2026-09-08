@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
@@ -15,7 +16,7 @@ func testLogger() *slog.Logger { return plog.NewLogger(io.Discard) }
 
 func TestOpen_Memory(t *testing.T) {
 	t.Parallel()
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""}, testLogger())
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.DB{Mode: config.DBModeFile, Path: filepath.Join(dir, "devidp.db")}
 
-	db1, err := bootstrap.Open(t.Context(), cfg, testLogger())
+	db1, err := bootstrap.Open(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("Open #1: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	}
 	_ = db1.Close()
 
-	db2, err := bootstrap.Open(t.Context(), cfg, testLogger())
+	db2, err := bootstrap.Open(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("Open #2 (re-apply schema): %v", err)
 	}
@@ -59,6 +60,37 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("re-opened users count: got %d, want 1 (schema apply must be idempotent)", n)
 	}
+}
+
+func TestOpen_DoesNotReconcileExistingTables(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE users (
+		  id TEXT NOT NULL PRIMARY KEY,
+		  email TEXT NOT NULL,
+		  display_name TEXT NOT NULL,
+		  photo_url TEXT,
+		  github_handle TEXT,
+		  admin INTEGER NOT NULL DEFAULT 0,
+		  whitelisted INTEGER NOT NULL DEFAULT 1,
+		  retired_extra TEXT,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if slices.Contains(columnNames(t, t.Context(), db, "users"), "retired_extra") {
+		return
+	}
+	t.Fatal("Open unexpectedly reconciled the retired_extra column")
 }
 
 func TestParseDB(t *testing.T) {

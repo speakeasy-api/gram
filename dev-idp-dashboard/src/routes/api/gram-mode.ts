@@ -21,7 +21,7 @@ function slotForBackend(backend: Backend): Mode {
 function buildEnvReadout() {
   return ENV_DOCS.map((doc) => {
     const raw = process.env[doc.name];
-    const isSet = raw !== undefined && raw !== "";
+    const isSet = raw !== undefined && raw !== "" && raw !== "unset";
     return {
       name: doc.name,
       description: doc.description,

@@ -163,19 +163,22 @@ GRAM_DEVIDP_HOST = "localhost"
 GRAM_DEVIDP_PORT = "35291"
 GRAM_DEVIDP_CONTROL_PORT = "35292"
 GRAM_DEVIDP_DASHBOARD_PORT = "35293"
-GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
-GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
+GRAM_DEVIDP_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## WorkOS API key. The local backend accepts any value.
-## Override in mise.local.toml with a real sk_test_... key for the workos backend.
+## Shared secret used by Gram clients to authenticate to dev-idp. `./zero`
+## generates a per-checkout value in mise.local.toml.
 GRAM_IDP_CLIENT_SECRET = "unset"
+## Upstream WorkOS API key, used only by dev-idp's workos backend.
+## Override in mise.local.toml with a real sk_test_... key for the workos backend.
+WORKOS_API_KEY = "unset"
 ## Identity backend: "local" (default) or "workos". Login stays
 ## non-interactive either way. For real WorkOS, set in mise.local.toml:
 ##   GRAM_DEVIDP_BACKEND = "workos"
-##   GRAM_IDP_CLIENT_SECRET = "sk_test_..."
+##   WORKOS_API_KEY = "sk_test_..."
 ## See CONTRIBUTING.md "Local auth and identity" for details.
 GRAM_DEVIDP_BACKEND = "local"
 ## Points the Gram server at the dev-idp's WorkOS surface. Constant across

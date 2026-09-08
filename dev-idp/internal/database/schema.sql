@@ -1,6 +1,6 @@
 -- dev-idp SQLite schema. Applied at app boot via internal/bootstrap. Every
--- statement is idempotent (CREATE TABLE / CREATE INDEX IF NOT EXISTS) so
--- re-applying on every start is a no-op once the schema is in place.
+-- statement is idempotent (CREATE TABLE / CREATE INDEX IF NOT EXISTS), while
+-- `mise db:devidp:reconcile` handles existing-table drift during worktree sync.
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL PRIMARY KEY,
@@ -50,11 +50,13 @@ CREATE TABLE IF NOT EXISTS memberships (
 CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_id_organization_id_key
   ON memberships (user_id, organization_id);
 
--- currentUser per identity slot. `subject_ref` is slot-specific: a `users.id`
--- for the `oauth2-1` slot, an external WorkOS `sub` for the `workos` slot.
--- Which slot is authoritative follows GRAM_DEVIDP_BACKEND. Stored as TEXT
+-- currentUser per identity slot. `mode` is the stable slot key, not the active
+-- backend or a runtime mode toggle. `subject_ref` is slot-specific:
+-- a `users.id` for the `oauth2-1` slot, an external WorkOS `sub` for the `workos`
+-- slot. Which slot is authoritative follows GRAM_DEVIDP_BACKEND. Stored as TEXT
 -- with no FK because the workos value is external.
 CREATE TABLE IF NOT EXISTS current_users (
+  -- Identity slot key: `oauth2-1` or `workos`.
   mode TEXT NOT NULL PRIMARY KEY,
   subject_ref TEXT NOT NULL,
 

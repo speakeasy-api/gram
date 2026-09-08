@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -32,6 +33,12 @@ type passwordlessState struct {
 	expiresAt   time.Time
 }
 
+type magicAuthState struct {
+	email     string
+	userID    uuid.UUID
+	expiresAt time.Time
+}
+
 // Handler serves the WorkOS emulator's HTTP routes.
 type Handler struct {
 	tracer trace.Tracer
@@ -40,6 +47,9 @@ type Handler struct {
 
 	pwlMu       sync.Mutex
 	pwlSessions map[string]*passwordlessState // keyed by session ID
+
+	magicAuthMu sync.Mutex
+	magicAuth   map[string]magicAuthState // keyed by one-time code
 }
 
 func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
@@ -47,7 +57,10 @@ func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sq
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"),
 		logger:      logger.With(slog.String("component", "devidp.workos.emulator")),
 		db:          db,
+		pwlMu:       sync.Mutex{},
 		pwlSessions: make(map[string]*passwordlessState),
+		magicAuthMu: sync.Mutex{},
+		magicAuth:   make(map[string]magicAuthState),
 	}
 }
 

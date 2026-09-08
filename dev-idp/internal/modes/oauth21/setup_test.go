@@ -44,7 +44,7 @@ func newDBHandler(t *testing.T) *dbHandler {
 	t.Helper()
 
 	logger := newTestLogger(t)
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""}, logger)
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
 	require.NoError(t, err, "open in-memory dev-idp database")
 	t.Cleanup(func() { _ = db.Close() })
 

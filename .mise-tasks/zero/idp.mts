@@ -8,18 +8,23 @@ import { $, question } from "zx";
 
 async function run() {
   const backend = process.env["GRAM_DEVIDP_BACKEND"] || "local";
+  const apiKey = process.env["WORKOS_API_KEY"];
+  const hasAPIKey =
+    typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset";
 
-  if (backend === "workos" && process.env["usage_restart"] !== "true") {
+  if (
+    backend === "workos" &&
+    hasAPIKey &&
+    process.env["usage_restart"] !== "true"
+  ) {
     console.log("✅ Identity backend: workos (already configured).");
     process.exit(0);
   }
 
   if (backend === "local" && process.env["usage_restart"] !== "true") {
     // Check if the user previously made an explicit choice (not just the default).
-    const secret = process.env["GRAM_IDP_CLIENT_SECRET"];
     const hasExplicitChoice =
-      (typeof secret === "string" && secret !== "" && secret !== "unset") ||
-      process.env["GRAM_IDP_SKIPPED"] === "true";
+      hasAPIKey || process.env["GRAM_IDP_SKIPPED"] === "true";
     if (hasExplicitChoice) {
       console.log("✅ Identity backend: local (already configured).");
       process.exit(0);
@@ -71,7 +76,7 @@ async function setupRealWorkOS() {
 
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=workos`;
-  await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=${key.trim()}`;
+  await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
 
   // Deliberately NOT setting GRAM_IDP_CLIENT_ID. The server routes any
   // client_-prefixed id straight to WorkOS's hosted AuthKit, which is an

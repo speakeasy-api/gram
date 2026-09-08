@@ -31,7 +31,13 @@ export const ENV_DOCS: readonly EnvDoc[] = [
   {
     name: "GRAM_IDP_CLIENT_SECRET",
     description:
-      "WorkOS API key. The local backend accepts any value; the workos backend needs a real sk_test_... key for the passthrough.",
+      "Client secret Gram uses to authenticate to dev-idp. Generated locally and never forwarded to WorkOS.",
+    sensitive: true,
+  },
+  {
+    name: "WORKOS_API_KEY",
+    description:
+      "Upstream WorkOS API key owned by dev-idp. Only required by the workos backend.",
     sensitive: true,
   },
 ] as const;

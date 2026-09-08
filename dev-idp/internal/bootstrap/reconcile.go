@@ -6,7 +6,29 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/speakeasy-api/gram/dev-idp/internal/config"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database"
 )
+
+// Reconcile upgrades an existing dev-idp database to the embedded schema.
+// Unlike Open, it may drop retired columns and indexes, so callers should run
+// it only at an explicit upgrade boundary such as git:worksync.
+func Reconcile(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
+	db, err := openSQLite(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := reconcile(ctx, db, logger); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, database.Schema); err != nil {
+		return fmt.Errorf("apply schema after reconcile: %w", err)
+	}
+	return nil
+}
 
 // reconcile brings an existing database up to the embedded schema.
 //

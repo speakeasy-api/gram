@@ -205,6 +205,7 @@ mise db:migrate
 mise clickhouse:migrate
 
 mise run zero:devidp
+mise run db:devidp:reconcile
 
 echo -e "\n✅ All set up!"
 

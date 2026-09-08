@@ -44,6 +44,45 @@ if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
 fi
 
+# A short-lived dev-idp setup stored the WorkOS API key under the downstream
+# GRAM_IDP_CLIENT_SECRET name. Its documented sk_* shape distinguishes it from
+# a generated dev-idp secret. Move it to WORKOS_API_KEY when needed, then mint a
+# fresh downstream credential. OIDC_CLIENT_SECRET belongs to the retired OIDC
+# application and is never treated as a WorkOS API key.
+generate_idp_client_secret=false
+case "${GRAM_IDP_CLIENT_SECRET:-}" in
+  ""|unset)
+    generate_idp_client_secret=true
+    ;;
+  sk_*)
+    case "${WORKOS_API_KEY:-}" in
+      ""|unset)
+        printf '%s' "${GRAM_IDP_CLIENT_SECRET}" \
+          | mise set --file mise.local.toml --stdin WORKOS_API_KEY >/dev/null
+        echo "✅ Moved the WorkOS API key to WORKOS_API_KEY."
+        ;;
+    esac
+    if grep -qE '^GRAM_IDP_CLIENT_SECRET[[:space:]]*=' mise.local.toml; then
+      mise unset --file mise.local.toml GRAM_IDP_CLIENT_SECRET
+    fi
+    generate_idp_client_secret=true
+    ;;
+esac
+
+if [ "$generate_idp_client_secret" = "true" ]; then
+  idp_client_secret="devidp_$(openssl rand -hex 32)"
+  printf '%s' "$idp_client_secret" \
+    | mise set --file mise.local.toml --stdin GRAM_IDP_CLIENT_SECRET >/dev/null
+  unset idp_client_secret
+  echo "✅ Generated a dev-idp client secret for Gram callers."
+fi
+unset generate_idp_client_secret
+
+if grep -qE '^OIDC_CLIENT_SECRET[[:space:]]*=' mise.local.toml; then
+  mise unset --file mise.local.toml OIDC_CLIENT_SECRET
+  echo "✅ Removed the retired OIDC client secret; it is not a WorkOS API key."
+fi
+
 # dev-idp folded its two identity modes into one WorkOS surface picked by
 # GRAM_DEVIDP_BACKEND. Nothing reads GRAM_IDP_MODE any more; `zero:idp` used
 # to write it, so clear it rather than leave a knob that does nothing. The
@@ -53,6 +92,15 @@ fi
 if grep -qE '^GRAM_IDP_MODE[[:space:]]*=' mise.local.toml; then
   mise unset --file mise.local.toml GRAM_IDP_MODE
   echo "✅ Removed the retired GRAM_IDP_MODE setting; GRAM_DEVIDP_BACKEND replaced it."
+fi
+
+# Older WorkOS setup wrote a hosted AuthKit client id into the worktree. That
+# bypasses dev-idp's fixed login client and restores an interactive external
+# login. Remove only the recognizable WorkOS client_* value; custom local
+# client ids remain untouched.
+if grep -qE '^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*"client_[^"]*"[[:space:]]*$' mise.local.toml; then
+  mise unset --file mise.local.toml GRAM_IDP_CLIENT_ID
+  echo "✅ Removed the stale WorkOS GRAM_IDP_CLIENT_ID override; using gram-local-dev."
 fi
 
 echo "⏳ Syncing port mappings..."
@@ -181,6 +229,10 @@ if [ "${usage_no_migrate:-false}" = "true" ]; then
   echo "ℹ️  Skipping database migrations (--no-migrate)."
   exit 0
 fi
+
+echo
+echo "⏳ Reconciling dev-idp SQLite schema..."
+mise run db:devidp:reconcile
 
 echo
 echo "⏳ Applying Postgres migrations..."

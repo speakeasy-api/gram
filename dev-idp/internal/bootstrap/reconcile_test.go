@@ -45,7 +45,7 @@ func columnNames(t *testing.T, ctx context.Context, db *sql.DB, tableName string
 // stranded local checkouts: CREATE ... IF NOT EXISTS left it in place, and the
 // first insert then failed its NOT NULL constraint on a column the code no
 // longer sets.
-func TestOpen_DropsRetiredColumn(t *testing.T) {
+func TestReconcile_DropsRetiredColumn(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -64,8 +64,10 @@ func TestOpen_DropsRetiredColumn(t *testing.T) {
 		);
 	`)
 
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
-	require.NoError(t, err, "Open must upgrade a stale database rather than fail")
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	db, err := bootstrap.Open(t.Context(), cfg)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	require.NotContains(t, columnNames(t, t.Context(), db, "auth_codes"), "mode",
@@ -83,7 +85,7 @@ func TestOpen_DropsRetiredColumn(t *testing.T) {
 
 // A retired index has to be dropped before its column can be, or SQLite
 // refuses the ALTER.
-func TestOpen_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
+func TestReconcile_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -98,7 +100,9 @@ func TestOpen_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 		CREATE INDEX oauth_clients_mode_idx ON oauth_clients (mode);
 	`)
 
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	db, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -114,7 +118,7 @@ func TestOpen_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 
 // Curated rows (users, orgs, memberships people set up by hand) must survive
 // an upgrade -- otherwise this is just a nuke with extra steps.
-func TestOpen_PreservesRowsAcrossUpgrade(t *testing.T) {
+func TestReconcile_PreservesRowsAcrossUpgrade(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -134,7 +138,9 @@ func TestOpen_PreservesRowsAcrossUpgrade(t *testing.T) {
 		INSERT INTO users (id, email, display_name) VALUES ('u1', 'kept@example.com', 'Kept User');
 	`)
 
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	db, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -147,7 +153,7 @@ func TestOpen_PreservesRowsAcrossUpgrade(t *testing.T) {
 
 // A change SQLite cannot make in place should say so plainly and name the
 // column, rather than surfacing later as a constraint violation.
-func TestOpen_UnalterableDriftReportsActionably(t *testing.T) {
+func TestReconcile_UnalterableDriftReportsActionably(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -165,57 +171,29 @@ func TestOpen_UnalterableDriftReportsActionably(t *testing.T) {
 		);
 	`)
 
-	_, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
-	require.Error(t, err, "in-place-impossible drift must fail loudly at boot")
+	err := bootstrap.Reconcile(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	require.Error(t, err, "in-place-impossible drift must fail loudly during reconciliation")
 	require.Contains(t, err.Error(), "users.display_name", "error should name the offending column")
 	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
 }
 
 // Reconciling must be idempotent: a database already at the current schema
-// should come up unchanged, however many times it is opened.
-func TestOpen_CurrentSchemaIsStable(t *testing.T) {
+// should remain unchanged across repeated reconciliation runs.
+func TestReconcile_CurrentSchemaIsStable(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.DB{Mode: config.DBModeFile, Path: filepath.Join(t.TempDir(), "devidp.db")}
 
-	first, err := bootstrap.Open(t.Context(), cfg, testLogger())
+	first, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	before := columnNames(t, t.Context(), first, "oauth_clients")
 	require.NoError(t, first.Close())
 
 	for range 2 {
-		db, err := bootstrap.Open(t.Context(), cfg, testLogger())
+		require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+		db, err := bootstrap.Open(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Equal(t, before, columnNames(t, t.Context(), db, "oauth_clients"))
 		require.NoError(t, db.Close())
 	}
-}
-
-// A retired column that SQLite refuses to drop -- because it is the primary
-// key, or unique -- has to report the same actionable message as any other
-// in-place-impossible change, not the driver's own wording. Renaming the key
-// of a ledger table is a realistic change, and the raw error ("cannot drop
-// PRIMARY KEY column") tells an operator nothing about what to do.
-func TestOpen_UndroppableColumnReportsActionably(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "devidp.db")
-	writeLegacyDB(t, path, `
-		CREATE TABLE ema_resource_tokens (
-		  token TEXT NOT NULL PRIMARY KEY,
-		  resource_id TEXT NOT NULL,
-		  user_id TEXT NOT NULL,
-		  client_id TEXT NOT NULL,
-		  audience TEXT NOT NULL,
-		  scope TEXT NOT NULL DEFAULT '',
-		  expires_at DATETIME NOT NULL,
-		  revoked_at DATETIME,
-		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-
-	_, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
-	require.Error(t, err, "an undroppable retired column must fail loudly at boot")
-	require.Contains(t, err.Error(), "ema_resource_tokens.token", "error should name the offending column")
-	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
 }

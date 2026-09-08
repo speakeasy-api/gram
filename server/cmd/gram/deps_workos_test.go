@@ -56,17 +56,23 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 		},
 		{
 			// Local development points at the dev-idp mock-workos emulator,
-			// which needs no key. The endpoint is what makes it reachable.
-			name:            "local falls back to the mock endpoint",
-			env:             "local",
-			flags:           map[string]string{"workos-endpoint": "http://127.0.0.1:35000"},
+			// which authenticates callers with its own client secret.
+			name: "local uses the dev-idp client secret",
+			env:  "local",
+			flags: map[string]string{
+				"idp-client-secret": "test-client-secret",
+				"workos-endpoint":   "http://127.0.0.1:35000",
+			},
 			wantUnavailable: false,
 		},
 		{
-			name:            "local reaches the mock endpoint past the unset sentinel",
-			env:             "local",
-			flags:           map[string]string{"workos-api-key": "unset", "workos-endpoint": "http://127.0.0.1:35000"},
-			wantUnavailable: false,
+			name: "local rejects the unset client-secret sentinel",
+			env:  "local",
+			flags: map[string]string{
+				"idp-client-secret": "unset",
+				"workos-endpoint":   "http://127.0.0.1:35000",
+			},
+			wantUnavailable: true,
 		},
 		{
 			name:            "local with nothing configured refuses",
@@ -83,14 +89,15 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			// Every flag the function reads is set explicitly, including the
 			// ones this case wants empty. urfave/cli resolves an unset flag
 			// from its environment variables, and a developer machine running
-			// the local stack has both WORKOS_API_URL and
-			// GRAM_IDP_CLIENT_SECRET exported, which silently turns the
-			// refusing cases into configured ones.
+			// the local stack has both WORKOS_API_URL and WORKOS_API_KEY
+			// exported, which silently turns the refusing cases into configured
+			// ones.
 			flags := map[string]string{
-				"environment":     tc.env,
-				"workos-api-key":  "",
-				"workos-endpoint": "",
-				"idp-client-id":   "",
+				"environment":       tc.env,
+				"idp-client-secret": "",
+				"workos-api-key":    "",
+				"workos-endpoint":   "",
+				"idp-client-id":     "",
 			}
 			maps.Copy(flags, tc.flags)
 
@@ -114,37 +121,6 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			require.IsType(t, (*workos.Client)(nil), got)
 		})
 	}
-}
-
-// TestNewAdminWorkOSOrganizationCreator_FallsBackToTheSharedIdPSecret pins the
-// second environment variable on the flag. The admin server is deployed beside
-// a server and a worker that already read GRAM_IDP_CLIENT_SECRET, and reading
-// it too is what keeps organization creation working without a second copy of
-// the same secret being added to the deployment.
-//
-// Not parallel: it edits the process environment, which t.Setenv already
-// refuses to do from a parallel test.
-func TestNewAdminWorkOSOrganizationCreator_FallsBackToTheSharedIdPSecret(t *testing.T) {
-	// WORKOS_API_KEY comes first in the flag's list, and urfave/cli stops at
-	// the first variable that is merely present. Leaving it set to anything,
-	// the empty string included, would decide this test before the fallback is
-	// consulted, so it has to be removed rather than blanked.
-	unsetEnv(t, "WORKOS_API_KEY")
-	t.Setenv("GRAM_IDP_CLIENT_SECRET", "test-api-key")
-
-	got := newAdminWorkOSOrganizationCreator(
-		t.Context(),
-		testenv.NewLogger(t),
-		guardian.NewDefaultPolicy(noop.NewTracerProvider()),
-		newAdminCLIContext(t, map[string]string{
-			"environment":     "prod",
-			"workos-endpoint": "",
-			"idp-client-id":   "",
-		}),
-	)
-
-	require.IsType(t, (*workos.Client)(nil), got,
-		"a deployment that sets only the shared identity-provider secret must still be able to create organizations")
 }
 
 // unsetEnv removes a variable for the duration of a test and puts it back
