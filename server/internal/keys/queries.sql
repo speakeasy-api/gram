@@ -26,7 +26,12 @@ WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many
-SELECT *
+-- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
+-- whose created_by_user_id is not a users.id is unusable (auth's join drops
+-- it), but hiding it here would leave the owner with an invisible row they
+-- cannot inspect or delete. RepairOrphanedAPIKeyCreators repoints those rows
+-- instead; the durable guarantee belongs on a foreign key, not on this SELECT.
+SELECT api_keys.*
 FROM api_keys
 WHERE api_keys.organization_id = @organization_id
   AND api_keys.deleted IS FALSE
@@ -38,7 +43,33 @@ WHERE api_keys.organization_id = @organization_id
       AND li.api_key_id = api_keys.id
       AND li.deleted IS FALSE
   )
-ORDER BY created_at DESC;
+ORDER BY api_keys.created_at DESC;
+
+-- name: RepairOrphanedAPIKeyCreators :execrows
+-- Points API keys whose created_by_user_id is not a users.id (including the
+-- 'system' placeholder minted by the plugin rollout sweep) at the oldest
+-- connected member of their organization. GetAPIKeyByKeyHash JOINs users on
+-- that column, so these keys authenticate as 401 until this rewrite. This is
+-- a deliberate cross-tenant repair — unlike tenant-scoped queries it is not
+-- constrained to a project_id.
+UPDATE api_keys k
+SET
+  created_by_user_id = member.user_id,
+  updated_at = clock_timestamp()
+FROM (
+  SELECT DISTINCT ON (our.organization_id)
+    our.organization_id,
+    our.user_id
+  FROM organization_user_relationships our
+  JOIN users u ON u.id = our.user_id
+  WHERE our.deleted IS FALSE
+    AND our.user_id IS NOT NULL
+    AND u.deleted_at IS NULL
+  ORDER BY our.organization_id, our.created_at ASC, our.user_id ASC
+) member
+WHERE k.organization_id = member.organization_id
+  AND k.deleted IS FALSE
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = k.created_by_user_id);
 
 -- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (

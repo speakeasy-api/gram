@@ -497,6 +497,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
 	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
+	temporalWorker.RegisterActivity(activities.RepairOrphanedAPIKeyCreators)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
 	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)
