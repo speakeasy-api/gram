@@ -1,5 +1,4 @@
 import { Check } from "lucide-react";
-import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
 import { cn } from "@/lib/utils";
 
 export interface Step {
@@ -9,32 +8,11 @@ export interface Step {
   /** Optional inline marker after the title, e.g. "Required" / "Optional". */
   badge?: string;
   /**
-   * Board status, for timelines of setup tasks. When set it decides the
-   * marker (done shows a check wherever it sits) instead of the step's
-   * position relative to the current one.
+   * Explicit completion, for rails whose steps finish out of order (a task
+   * page's sub-steps). When set it decides the check mark instead of the
+   * step's position relative to the current one.
    */
-  status?: SetupTaskStatus;
-  /** A line under the description, e.g. who owns the task. */
-  meta?: string;
-}
-
-function statusLabel(status: SetupTaskStatus | undefined): JSX.Element | null {
-  switch (status) {
-    case "in_progress":
-      return (
-        <span className="text-default-information text-[10px] font-semibold tracking-wide uppercase">
-          In progress
-        </span>
-      );
-    case "awaiting_support":
-      return (
-        <span className="text-default-warning text-[10px] font-semibold tracking-wide uppercase">
-          Awaiting support
-        </span>
-      );
-    default:
-      return null;
-  }
+  status?: "done";
 }
 
 interface OnboardingStepperProps {
@@ -58,12 +36,11 @@ export function OnboardingStepper({
     <nav className="flex flex-col" aria-label="Progress">
       {steps.map((step, index) => {
         const isCurrent = index === currentStep;
-        // A task timeline carries each task's board status; the linear wizard
-        // has none and falls back to position, where everything before the
-        // current step counts as done.
-        const isCompleted = step.status
-          ? step.status === "done"
-          : index < currentStep;
+        // A task page's rail marks each sub-step done as its outcome lands;
+        // the linear wizard has no such signal and falls back to position,
+        // where everything before the current step counts as done.
+        const isCompleted =
+          step.status === "done" || (!step.status && index < currentStep);
         const isUpcoming = !isCurrent && !isCompleted;
         const isLocked = index > maxAllowedStep;
         const isLast = index === steps.length - 1;
@@ -165,7 +142,6 @@ export function OnboardingStepper({
                     {step.badge}
                   </span>
                 )}
-                {statusLabel(step.status)}
               </h3>
               <p
                 className={cn(
@@ -177,11 +153,6 @@ export function OnboardingStepper({
               >
                 {step.description}
               </p>
-              {step.meta ? (
-                <p className="text-muted-foreground/80 mt-1 text-xs">
-                  {step.meta}
-                </p>
-              ) : null}
             </div>
           </div>
         );

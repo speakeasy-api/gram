@@ -27,6 +27,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupShell } from "./components/setup-shell";
+import { setupTaskSlug } from "./task-slugs";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 
 type FailedInvite = { email: string; roleId: string };
@@ -206,9 +207,12 @@ function SetupBoardInner(): JSX.Element {
   );
   useEffect(() => {
     if (requestedTask) {
-      void navigate(orgRoutes.setupTask.href(requestedTask.key), {
-        replace: true,
-      });
+      void navigate(
+        orgRoutes.setupTask.href(setupTaskSlug(requestedTask.key)),
+        {
+          replace: true,
+        },
+      );
     }
     // orgRoutes is rebuilt every render; only the resolved task matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -291,7 +295,7 @@ function SetupBoardInner(): JSX.Element {
           isPlatformAdmin={isPlatformAdmin}
           pending={pending}
           retryInviteKeys={new Set(Object.keys(failedInvites))}
-          onOpen={(task) => orgRoutes.setupTask.goTo(task.key)}
+          onOpen={(task) => orgRoutes.setupTask.goTo(setupTaskSlug(task.key))}
           onStatusChange={(task, status) => void updateStatus(task, status)}
           onAssign={setAssignmentTask}
           onRemind={() => {

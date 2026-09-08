@@ -1477,11 +1477,11 @@ const ORG_ROUTE_STRUCTURE = {
     component: SetupWizard,
     outsideMainLayout: true,
   },
-  // Each board card opens as its own page: the task's content in the
-  // wizard's linear frame, with a timeline of every task's status alongside.
+  // Each board card opens as its own page at a short slug (setup/idp,
+  // setup/anthropic-observability, ...), with a rail of that card's own steps.
   setupTask: {
     title: "Setup task",
-    url: "setup/task/:taskKey",
+    url: "setup/:taskSlug",
     icon: "list-checks",
     component: SetupTaskPage,
     outsideMainLayout: true,

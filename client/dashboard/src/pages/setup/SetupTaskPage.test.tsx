@@ -9,27 +9,27 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import SetupTaskPage from "./SetupTaskPage";
+import { StepSection } from "./components/step-section";
 
 const mocks = vi.hoisted(() => ({
-  taskKey: "instrument-agents",
+  taskSlug: "anthropic-observability",
   platformAdmin: false,
   setupQuery: vi.fn(),
   update: vi.fn(),
   updatePending: false,
   invalidate: vi.fn(),
-  goToTask: vi.fn(),
   goToBoard: vi.fn(),
   showPylonChat: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  marketplacePublished: false,
 }));
 
 vi.mock("react-router", () => ({
-  useParams: () => ({ taskKey: mocks.taskKey }),
+  useParams: () => ({ taskSlug: mocks.taskSlug }),
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setupTask: { goTo: mocks.goToTask },
     setup: {
       goTo: mocks.goToBoard,
       Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
@@ -42,6 +42,8 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("./components/setup-shell", () => ({
   SetupShell: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+// A stand-in card with two real StepSections, so the rail is fed the same
+// way the real cards feed it.
 vi.mock("./components/setup-task-content", () => ({
   SetupTaskContent: ({
     taskKey,
@@ -58,6 +60,16 @@ vi.mock("./components/setup-task-content", () => ({
   }) => (
     <div>
       <p>Content for {taskKey}</p>
+      <StepSection
+        index={1}
+        title="Publish plugin marketplace"
+        complete={mocks.marketplacePublished}
+      >
+        <span>marketplace body</span>
+      </StepSection>
+      <StepSection index={2} title="Confirm traffic">
+        <span>traffic body</span>
+      </StepSection>
       <button onClick={onComplete}>Complete</button>
       <button onClick={onSkip}>Skip</button>
       <button onClick={onBack}>Back</button>
@@ -99,24 +111,10 @@ const tasks: SetupTask[] = [
     hidden: false,
   },
   {
-    key: "instrument-agents",
-    title: "Set up observability in other platforms",
-    description: "Connect coding agents",
+    key: "anthropic-observability",
+    title: "Set up Anthropic observability",
+    description: "Connect Claude Code and Cowork",
     status: "in_progress",
-    completedByFact: false,
-    blockedBy: [],
-    hidden: false,
-    assignee: {
-      userId: "user-priya",
-      email: "priya@example.com",
-      name: "Priya Raman",
-    },
-  },
-  {
-    key: "configure-policies",
-    title: "Configure policies",
-    description: "Pick the categories to flag",
-    status: "awaiting_support",
     completedByFact: false,
     blockedBy: [],
     hidden: false,
@@ -133,15 +131,19 @@ function loaded(list: SetupTask[] = tasks) {
   };
 }
 
+function rail(): HTMLElement {
+  return screen.getByRole("navigation", { name: "Progress" });
+}
+
 afterEach(cleanup);
 beforeEach(() => {
-  mocks.taskKey = "instrument-agents";
+  mocks.taskSlug = "anthropic-observability";
   mocks.platformAdmin = false;
   mocks.updatePending = false;
+  mocks.marketplacePublished = false;
   mocks.setupQuery.mockReset().mockReturnValue(loaded());
   mocks.update.mockReset().mockResolvedValue(tasks[1]);
   mocks.invalidate.mockReset();
-  mocks.goToTask.mockReset();
   mocks.goToBoard.mockReset();
   mocks.showPylonChat.mockReset();
   mocks.toastSuccess.mockReset();
@@ -149,23 +151,37 @@ beforeEach(() => {
 });
 
 describe("SetupTaskPage", () => {
-  it("shows the task in the linear frame with a status timeline", () => {
+  it("resolves the slug to its task and lists only that task's own steps", () => {
     render(<SetupTaskPage />);
 
-    expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
-    expect(screen.getByText("1 of 3 complete")).toBeTruthy();
-    const timeline = screen.getByRole("navigation", { name: "Progress" });
-    expect(timeline.textContent).toContain("Set up identity provider");
-    expect(timeline.textContent).toContain("In progress");
-    expect(timeline.textContent).toContain("Priya Raman");
-    expect(timeline.textContent).toContain("Awaiting support");
     expect(
-      screen.getByRole("button", { name: /Set up identity provider/ }),
+      screen.getByText("Content for anthropic-observability"),
     ).toBeTruthy();
+    expect(rail().textContent).toContain("Publish plugin marketplace");
+    expect(rail().textContent).toContain("Confirm traffic");
+    expect(rail().textContent).not.toContain("Set up identity provider");
+    expect(screen.getByText("0 of 2 complete")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("completes the task and moves on to the next one", async () => {
+  it("ticks a step off in the rail once its outcome lands", () => {
+    const view = render(<SetupTaskPage />);
+    expect(screen.getByText("0 of 2 complete")).toBeTruthy();
+
+    mocks.marketplacePublished = true;
+    view.rerender(<SetupTaskPage />);
+
+    expect(screen.getByText("1 of 2 complete")).toBeTruthy();
+  });
+
+  it("accepts the task key as a slug too", () => {
+    mocks.taskSlug = "identity-provider";
+    render(<SetupTaskPage />);
+
+    expect(screen.getByText("Content for identity-provider")).toBeTruthy();
+  });
+
+  it("completes the task and returns to the board", async () => {
     render(<SetupTaskPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
@@ -174,31 +190,25 @@ describe("SetupTaskPage", () => {
       expect(mocks.update).toHaveBeenCalledWith({
         request: {
           updateSetupTaskRequestBody: {
-            taskKey: "instrument-agents",
+            taskKey: "anthropic-observability",
             status: "done",
           },
         },
       }),
     );
-    await waitFor(() =>
-      expect(mocks.goToTask).toHaveBeenCalledWith("configure-policies"),
-    );
+    await waitFor(() => expect(mocks.goToBoard).toHaveBeenCalledOnce());
     expect(mocks.invalidate).toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalled();
   });
 
-  it("returns to the board after the last task and from the first task's back", () => {
-    mocks.taskKey = "configure-policies";
-    const view = render(<SetupTaskPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
-    expect(mocks.goToBoard).toHaveBeenCalledOnce();
-    expect(mocks.update).not.toHaveBeenCalled();
-    view.unmount();
-
-    mocks.taskKey = "identity-provider";
+  it("returns to the board from back and skip without changing status", () => {
     render(<SetupTaskPage />);
+
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+
     expect(mocks.goToBoard).toHaveBeenCalledTimes(2);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("persists awaiting support before opening chat and stays on the page", async () => {
@@ -218,7 +228,7 @@ describe("SetupTaskPage", () => {
     expect(mocks.update).toHaveBeenCalledWith({
       request: {
         updateSetupTaskRequestBody: {
-          taskKey: "instrument-agents",
+          taskKey: "anthropic-observability",
           status: "awaiting_support",
         },
       },
@@ -227,22 +237,16 @@ describe("SetupTaskPage", () => {
 
     finishUpdate(tasks[1]!);
     await waitFor(() => expect(mocks.showPylonChat).toHaveBeenCalledOnce());
-    expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
-    expect(mocks.goToTask).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Content for anthropic-observability"),
+    ).toBeTruthy();
+    expect(mocks.goToBoard).not.toHaveBeenCalled();
   });
 
-  it("sends an unknown task key back to the board once the list has loaded", async () => {
-    mocks.taskKey = "no-such-task";
+  it("sends an unknown slug back to the board once the list has loaded", async () => {
+    mocks.taskSlug = "no-such-task";
     render(<SetupTaskPage />);
 
     await waitFor(() => expect(mocks.goToBoard).toHaveBeenCalledOnce());
-  });
-
-  it("jumps between tasks from the timeline", () => {
-    render(<SetupTaskPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Configure policies/ }));
-
-    expect(mocks.goToTask).toHaveBeenCalledWith("configure-policies");
   });
 });

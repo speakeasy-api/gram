@@ -84,11 +84,11 @@ function SetupStepButton() {
 
   return (
     <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setup.Link queryParams={{ step: "identity-provider" }}>
+      <orgRoutes.setupTask.Link params={["idp"]}>
         <Button variant="secondary" size="sm">
           Configure
         </Button>
-      </orgRoutes.setup.Link>
+      </orgRoutes.setupTask.Link>
     </RequireScope>
   );
 }

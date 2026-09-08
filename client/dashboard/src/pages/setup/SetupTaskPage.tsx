@@ -1,9 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router";
-import type {
-  SetupTask,
-  SetupTaskStatus,
-} from "@gram/client/models/components/setuptask.js";
+import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { invalidateAllListSetupTasks } from "@gram/client/react-query/listSetupTasks.js";
 import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
@@ -18,74 +15,81 @@ import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { useOrgRoutes } from "@/routes";
 import { JourneyLayout } from "./components/journey-layout";
+import {
+  JourneyStepsProvider,
+  useJourneySteps,
+} from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
+import { setupTaskKeyForSlug } from "./task-slugs";
 
-// Every board card opens here instead of in a modal: the task's content sits
-// in the wizard's linear frame, and the rail is a timeline of the whole
-// journey drawn from the board's statuses rather than from position, so a
-// task done out of order still shows as done and an owner still shows who.
+// One board card, on its own page. The rail lists only this card's own steps
+// (the sections it renders), each ticking off as its outcome lands. The
+// board stays the map of the whole journey; this page is one stop on it.
 export default function SetupTaskPage(): JSX.Element {
   return (
     <RequireScope scope="org:read" level="page">
-      <SetupTaskPageInner />
+      <JourneyStepsProvider>
+        <SetupTaskPageInner />
+      </JourneyStepsProvider>
     </RequireScope>
   );
 }
 
-function ownerLabel(task: SetupTask): string | undefined {
-  if (!task.assignee) return undefined;
-  return task.assignee.name ?? task.assignee.email;
-}
+function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  const steps = useJourneySteps();
+  // A card with no sub-steps still gets a rail entry so the page reads the
+  // same way as its siblings.
+  const railSteps: Step[] =
+    steps.length > 0
+      ? steps.map((step) => ({
+          id: String(step.index),
+          title: step.title,
+          description: step.complete ? "Done" : "",
+          status: step.complete ? "done" : undefined,
+        }))
+      : [{ id: "task", title: taskTitle, description: "" }];
+  const currentStep = railSteps.findIndex((step) => step.status !== "done");
 
-function timelineStep(task: SetupTask): Step {
-  return {
-    id: task.key,
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    meta: ownerLabel(task),
-    badge: task.hidden ? "Hidden" : undefined,
-  };
+  return (
+    <div>
+      <orgRoutes.setup.Link className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1.5 text-sm">
+        <ArrowLeft className="h-4 w-4" />
+        Setup board
+      </orgRoutes.setup.Link>
+      <p className="text-eyebrow mb-4">
+        {railSteps.filter((step) => step.status === "done").length} of{" "}
+        {railSteps.length} complete
+      </p>
+      <OnboardingStepper
+        steps={railSteps}
+        currentStep={currentStep === -1 ? railSteps.length : currentStep}
+      />
+    </div>
+  );
 }
 
 function SetupTaskPageInner(): JSX.Element {
-  const { taskKey = "" } = useParams<{ taskKey: string }>();
+  const { taskSlug = "" } = useParams<{ taskSlug: string }>();
+  const taskKey = setupTaskKeyForSlug(taskSlug);
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const isPlatformAdmin = useIsPlatformAdmin();
   const queryClient = useQueryClient();
-  // Platform admins can arrive here from a hidden card, so their timeline
-  // includes hidden tasks (marked as such); everyone else sees the board's
-  // default set.
   const setupTasks = useOrganizationSetupTasks(
     organization.id,
     isPlatformAdmin,
     { retry: false },
   );
   const updateTask = useUpdateSetupTaskMutation();
-  // The complete and support handlers await a round trip; a second click
-  // while the first is in flight must not fire it again.
+  // Complete and support await a round trip; a second click while the first
+  // is in flight must not fire it again.
   const actionInFlight = useRef(false);
 
-  const tasks = setupTasks.data?.tasks ?? [];
-  const index = tasks.findIndex((task) => task.key === taskKey);
-  const task = index === -1 ? undefined : tasks[index];
-
-  const goToTask = (nextIndex: number) => {
-    const next = tasks[nextIndex];
-    if (next) orgRoutes.setupTask.goTo(next.key);
-  };
+  const task = setupTasks.data?.tasks.find((t) => t.key === taskKey);
   const goToBoard = () => orgRoutes.setup.goTo();
-  const advance = () => {
-    if (index + 1 < tasks.length) goToTask(index + 1);
-    else goToBoard();
-  };
-  const goBack = () => {
-    if (index > 0) goToTask(index - 1);
-    else goToBoard();
-  };
 
   const mutate = async (body: UpdateSetupTaskRequestBody) => {
     await updateTask.mutateAsync({
@@ -123,7 +127,7 @@ function SetupTaskPageInner(): JSX.Element {
       if (!task) return;
       if (await setStatus("done", "Failed to complete setup task")) {
         toast.success(`${task.title} completed`);
-        advance();
+        goToBoard();
       }
     });
 
@@ -134,35 +138,15 @@ function SetupTaskPageInner(): JSX.Element {
       }
     });
 
-  // Deep links may name a task that no longer exists; send those to the board
-  // once the list has loaded rather than leaving an empty frame.
+  // A link to a task that no longer exists lands on the board once the list
+  // has loaded, rather than on an empty frame.
   const listLoaded = setupTasks.isSuccess;
   useEffect(() => {
     if (listLoaded && !task) goToBoard();
-    // goToBoard is a fresh closure each render; the effect only needs to run
-    // when the list settles or the resolved task changes.
+    // goToBoard is a fresh closure each render; only the resolved task and
+    // the list settling matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listLoaded, task]);
-
-  const doneCount = tasks.filter((t) => t.status === "done").length;
-
-  const rail = (
-    <div>
-      <orgRoutes.setup.Link className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1.5 text-sm">
-        <ArrowLeft className="h-4 w-4" />
-        Setup board
-      </orgRoutes.setup.Link>
-      <p className="text-eyebrow mb-4">
-        {doneCount} of {tasks.length} complete
-      </p>
-      <OnboardingStepper
-        steps={tasks.map(timelineStep)}
-        currentStep={index}
-        onStepClick={goToTask}
-        allowJumpAhead
-      />
-    </div>
-  );
 
   let content: JSX.Element | null = null;
   if (setupTasks.isError) {
@@ -190,15 +174,12 @@ function SetupTaskPageInner(): JSX.Element {
   } else if (task) {
     content = (
       <SetupTaskContent
-        // Remount when the route changes so per-task state (sheets, statuses)
-        // starts fresh for the next task.
-        key={task.key}
         taskKey={task.key}
         projectSlug="default"
         onComplete={() => void complete()}
         onSupport={() => void requestSupport()}
-        onSkip={advance}
-        onBack={goBack}
+        onSkip={goToBoard}
+        onBack={goToBoard}
       />
     );
   }
@@ -206,9 +187,9 @@ function SetupTaskPageInner(): JSX.Element {
   return (
     <SetupShell view="board">
       <JourneyLayout
-        rail={rail}
+        rail={<StepsRail taskTitle={task?.title ?? ""} />}
         loading={setupTasks.isPending}
-        skeletonRows={7}
+        skeletonRows={3}
       >
         {content}
       </JourneyLayout>

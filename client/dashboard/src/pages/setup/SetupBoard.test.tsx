@@ -147,7 +147,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     setupTask: {
       goTo: mocks.goToTask,
-      href: (key: string) => `/acme/setup/task/${key}`,
+      href: (slug: string) => `/acme/setup/${slug}`,
     },
   }),
 }));
@@ -299,12 +299,9 @@ describe("SetupBoard", () => {
     render(<SetupBoard />);
 
     await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith(
-        "/acme/setup/task/connect-idp",
-        {
-          replace: true,
-        },
-      ),
+      expect(mocks.navigate).toHaveBeenCalledWith("/acme/setup/connect-idp", {
+        replace: true,
+      }),
     );
   });
 

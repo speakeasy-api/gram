@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRegisterJourneyStep } from "./journey-steps";
 
 interface StepSectionProps {
   index: number;
@@ -25,6 +26,8 @@ export function StepSection({
   children,
 }: StepSectionProps): JSX.Element {
   const headingId = useId();
+  // The task page's rail lists whatever sections the task renders.
+  useRegisterJourneyStep(headingId, { index, title, complete });
 
   return (
     <section aria-labelledby={headingId} className="space-y-3">
