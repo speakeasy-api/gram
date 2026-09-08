@@ -9,6 +9,8 @@
 //     OPENROUTER_DISABLE_CAUSES_MIGRATION.md. It defaults to a non-writing dry
 //     run. Writes use -apply or -manual-override and require explicit target
 //     confirmation.
+//   - agent-management-grants: PostgreSQL-only built-in administrator grant
+//     backfill and rollout gate; see AGENT_MANAGEMENT_GRANTS_MIGRATION.md.
 //   - pro-entitlements: PostgreSQL application-data backfill; see
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
 //
@@ -91,11 +93,13 @@ func run() int {
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	case "legacy-policy-scope":
 		return runLegacyPolicyScope(args, os.Stdout, os.Getenv)
+	case "agent-management-grants":
+		return runAgentManagementGrants(args, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, legacy-policy-scope, pro-entitlements)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, legacy-policy-scope, pro-entitlements, agent-management-grants)")
 		return 2
 	}
 }
