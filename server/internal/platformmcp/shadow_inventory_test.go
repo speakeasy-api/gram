@@ -59,10 +59,12 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	flags := &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}
 	codec, err := newSubjectReferenceCodec("shadow-test-key")
 	require.NoError(t, err)
+	versions, err := newShadowDecisionVersionCodec("shadow-test-key")
+	require.NoError(t, err)
 	service := &ShadowInventoryService{
 		projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row}}, target: row},
-		reviews: stubShadowReview{summary: mcpapproval.PlatformReviewSummary{Status: status, EvidenceCollected: true, EvidenceGaps: []string{}, IdentityKind: "remote", PackagePublication: "unknown", RepositoryState: "found", AdvisoryLookup: "complete", KnownAdvisories: 2, AuthorityState: "declared", CapabilitySource: "server", DeclaredToolCount: 3, RiskyDeclarationCount: 1, ResearchStatus: "completed", ResearchCoverage: "moderate", CitationCount: 2, TrustedCitationCount: 1}},
-		flags:   flags, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec,
+		reviews: stubShadowReview{summary: mcpapproval.PlatformReviewSummary{Status: status, EvidenceCollected: true, EvidenceGaps: []string{}, IdentityKind: "remote", PackagePublication: "unknown", RepositoryState: "found", AdvisoryLookup: "complete", KnownAdvisories: 2, AuthorityState: "declared", CapabilitySource: "server", DeclaredToolCount: 3, RiskyDeclarationCount: 1, ResearchStatus: "completed", ResearchCoverage: "moderate", CitationCount: 2, TrustedCitationCount: 1, DecisionVersionState: mcpapproval.DecisionVersionState{RequestID: uuid.New()}}},
+		flags:   flags, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, versions: versions,
 		now: func() time.Time { return time.Date(6, 9, 6, 12, 0, 0, 0, time.UTC) },
 	}
 	principal := Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
@@ -102,11 +104,13 @@ func TestShadowInventoryBoundsRequestOnlyPrefixAcrossPages(t *testing.T) {
 	}
 	codec, err := newSubjectReferenceCodec("shadow-prefix-key")
 	require.NoError(t, err)
+	versions, err := newShadowDecisionVersionCodec("shadow-prefix-key")
+	require.NoError(t, err)
 	service := &ShadowInventoryService{
 		projects:  &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}},
 		inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: rows}}, reviews: stubShadowReview{},
 		flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, organizations: riskMutationOrganizationResolver{slug: "organization"},
-		budget: allowBudget(), references: codec, now: time.Now,
+		budget: allowBudget(), references: codec, versions: versions, now: time.Now,
 	}
 	principal := Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
 
@@ -138,7 +142,9 @@ func TestShadowInventoryCursorIsProjectAndSessionBound(t *testing.T) {
 	row := &accessgen.ShadowMCPInventoryServer{CanonicalServerURL: "https://one.example.test", TargetKind: new(shadowTargetKindServerURL), FirstSeen: "2026-09-06T10:00:00Z", AccessSummary: &accessgen.ShadowMCPAccessSummary{State: "unenforced", AllowedFor: "none", BlockedFor: "none", BlockingDefault: "none", DecisionCoverage: "none"}}
 	codec, err := newSubjectReferenceCodec("shadow-cursor-key")
 	require.NoError(t, err)
-	service := &ShadowInventoryService{projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row, row}}}, reviews: stubShadowReview{}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, now: time.Now}
+	versions, err := newShadowDecisionVersionCodec("shadow-cursor-key")
+	require.NoError(t, err)
+	service := &ShadowInventoryService{projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row, row}}}, reviews: stubShadowReview{}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, versions: versions, now: time.Now}
 	principal := Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
 
 	first, err := service.List(t.Context(), principal, ListShadowMCPInventoryInput{ProjectID: project.ID.String(), Limit: 1})

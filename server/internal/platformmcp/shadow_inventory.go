@@ -78,6 +78,7 @@ type ShadowMCPTargetSummary struct {
 	UserCount          SubjectCount            `json:"user_count"`
 	Access             ShadowMCPAccessSummary  `json:"access"`
 	Review             *ShadowMCPReviewSummary `json:"review,omitempty"`
+	DecisionVersion    string                  `json:"decision_version,omitempty"`
 	TargetReference    string                  `json:"target_reference"`
 	ReferenceExpiresAt string                  `json:"reference_expires_at"`
 }
@@ -131,6 +132,7 @@ type ShadowInventoryService struct {
 	organizations OrganizationSlugResolver
 	budget        OperationBudget
 	references    *subjectReferenceCodec
+	versions      *shadowDecisionVersionCodec
 	now           func() time.Time
 }
 
@@ -139,17 +141,21 @@ func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowRev
 	if err != nil {
 		return nil, ErrShadowInventoryUnavailable
 	}
+	versions, err := newShadowDecisionVersionCodec(keyMaterial)
+	if err != nil {
+		return nil, ErrShadowInventoryUnavailable
+	}
 	if dbReader == nil || reviews == nil || flags == nil || organizations == nil || dbQueries == nil || !budget.valid() {
 		return nil, ErrShadowInventoryUnavailable
 	}
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		flags: flags, organizations: organizations, budget: budget, references: codec, now: time.Now,
+		flags: flags, organizations: organizations, budget: budget, references: codec, versions: versions, now: time.Now,
 	}, nil
 }
 
 func (s *ShadowInventoryService) valid() bool {
-	return s != nil && s.projects != nil && s.inventory != nil && s.reviews != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.references != nil && s.now != nil
+	return s != nil && s.projects != nil && s.inventory != nil && s.reviews != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.references != nil && s.versions != nil && s.now != nil
 }
 
 func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, input ListShadowMCPInventoryInput) (ListShadowMCPInventoryOutput, error) {
@@ -223,6 +229,25 @@ func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, 
 	return output, nil
 }
 
+// ResolveTargetReference resolves a D1 handle for the D2 mutation path. The
+// underlying URL or command remains inside the server process.
+func (s *ShadowInventoryService) ResolveTargetReference(principal Principal, projectID, targetReference string) (string, string, error) {
+	if !s.valid() {
+		return "", "", ErrShadowInventoryUnavailable
+	}
+	projectID = strings.TrimSpace(projectID)
+	scope := queryScope("shadow_target", projectID)
+	encoded, err := s.references.DecodeScoped(strings.TrimSpace(targetReference), principal, shadowTargetReferenceKind, scope, s.now())
+	if err != nil {
+		return "", "", ErrShadowInventoryNotFound
+	}
+	var reference shadowTargetReference
+	if json.Unmarshal([]byte(encoded), &reference) != nil || !validShadowTargetKind(reference.Kind) || reference.Key == "" {
+		return "", "", ErrShadowInventoryNotFound
+	}
+	return reference.Kind, reference.Key, nil
+}
+
 func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Principal, input GetShadowMCPReviewInput) (GetShadowMCPReviewOutput, error) {
 	if !s.valid() || principal.OrganizationID == "" {
 		return GetShadowMCPReviewOutput{}, ErrShadowInventoryUnavailable
@@ -234,17 +259,12 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 	if err := s.admit(ctx, principal, project); err != nil {
 		return GetShadowMCPReviewOutput{}, err
 	}
-	scope := queryScope("shadow_target", project.ID.String())
-	encoded, err := s.references.DecodeScoped(strings.TrimSpace(input.TargetReference), principal, shadowTargetReferenceKind, scope, s.now())
+	targetKind, targetKey, err := s.ResolveTargetReference(principal, project.ID.String(), input.TargetReference)
 	if err != nil {
-		return GetShadowMCPReviewOutput{}, ErrShadowInventoryNotFound
-	}
-	var reference shadowTargetReference
-	if json.Unmarshal([]byte(encoded), &reference) != nil || !validShadowTargetKind(reference.Kind) || reference.Key == "" {
-		return GetShadowMCPReviewOutput{}, ErrShadowInventoryNotFound
+		return GetShadowMCPReviewOutput{}, err
 	}
 	row, err := s.inventory.ReadShadowMCPInventoryTarget(ctx, access.ShadowMCPInventoryTargetInput{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: reference.Kind, TargetKey: reference.Key,
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: targetKind, TargetKey: targetKey,
 	})
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, mapShadowReadError(err)
@@ -258,12 +278,16 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 		return output, nil
 	}
 	review, err := s.reviews.ReadPlatformReview(ctx, mcpapproval.PlatformReviewReadInput{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: reference.Kind, TargetKey: reference.Key,
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: targetKind, TargetKey: targetKey,
 	})
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, mapShadowReadError(err)
 	}
 	output.Evidence = shadowEvidence(review)
+	output.Target.DecisionVersion, err = s.versions.Encode(review.DecisionVersionState)
+	if err != nil {
+		return GetShadowMCPReviewOutput{}, ErrShadowInventoryUnavailable
+	}
 	return output, nil
 }
 
@@ -320,7 +344,7 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 		FirstSeen: "", LastSeen: "", LastCalled: "", ObservedUseCount: max(row.ObservedUseCount, 0),
 		UserCount: NewSubjectCount(int64(row.UserCount)),
 		Access:    ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
-		Review:    nil, TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
+		Review:    nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
 	}
 	if !validShadowAccessSummary(result.Access) {
 		return ShadowMCPTargetSummary{}, ErrShadowInventoryUnavailable

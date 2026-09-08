@@ -31,28 +31,29 @@ type PlatformReviewReadInput struct {
 // PlatformReviewSummary is a deliberately lossy projection containing only
 // closed classifications and aggregate counts.
 type PlatformReviewSummary struct {
-	Status                string   `json:"status"`
-	StandingDecision      string   `json:"standing_decision,omitempty"`
-	RequesterCount        int64    `json:"requester_count"`
-	CreatedAt             string   `json:"created_at"`
-	UpdatedAt             string   `json:"updated_at"`
-	EvidenceCollected     bool     `json:"evidence_collected"`
-	EvidenceChanged       bool     `json:"evidence_changed"`
-	EvidenceGaps          []string `json:"evidence_gaps"`
-	IdentityKind          string   `json:"identity_kind"`
-	VersionPinned         bool     `json:"version_pinned"`
-	PackagePublication    string   `json:"package_publication"`
-	RepositoryState       string   `json:"repository_state"`
-	AdvisoryLookup        string   `json:"advisory_lookup"`
-	KnownAdvisories       int      `json:"known_advisories"`
-	AuthorityState        string   `json:"authority_state"`
-	CapabilitySource      string   `json:"capability_source"`
-	DeclaredToolCount     int      `json:"declared_tool_count"`
-	RiskyDeclarationCount int      `json:"risky_declaration_count"`
-	ResearchStatus        string   `json:"research_status"`
-	ResearchCoverage      string   `json:"research_coverage"`
-	CitationCount         int      `json:"citation_count"`
-	TrustedCitationCount  int      `json:"trusted_citation_count"`
+	Status                string               `json:"status"`
+	StandingDecision      string               `json:"standing_decision,omitempty"`
+	RequesterCount        int64                `json:"requester_count"`
+	CreatedAt             string               `json:"created_at"`
+	UpdatedAt             string               `json:"updated_at"`
+	EvidenceCollected     bool                 `json:"evidence_collected"`
+	EvidenceChanged       bool                 `json:"evidence_changed"`
+	EvidenceGaps          []string             `json:"evidence_gaps"`
+	IdentityKind          string               `json:"identity_kind"`
+	VersionPinned         bool                 `json:"version_pinned"`
+	PackagePublication    string               `json:"package_publication"`
+	RepositoryState       string               `json:"repository_state"`
+	AdvisoryLookup        string               `json:"advisory_lookup"`
+	KnownAdvisories       int                  `json:"known_advisories"`
+	AuthorityState        string               `json:"authority_state"`
+	CapabilitySource      string               `json:"capability_source"`
+	DeclaredToolCount     int                  `json:"declared_tool_count"`
+	RiskyDeclarationCount int                  `json:"risky_declaration_count"`
+	ResearchStatus        string               `json:"research_status"`
+	ResearchCoverage      string               `json:"research_coverage"`
+	CitationCount         int                  `json:"citation_count"`
+	TrustedCitationCount  int                  `json:"trusted_citation_count"`
+	DecisionVersionState  DecisionVersionState `json:"-"`
 }
 
 // ReadPlatformReview returns a privacy-safe review summary for a Platform
@@ -99,6 +100,16 @@ func (s *Service) ReadPlatformReview(ctx context.Context, input PlatformReviewRe
 	summary.UpdatedAt = conv.FromPGTimestamptz(request.UpdatedAt)
 	summary.EvidenceCollected = request.EvidenceCollectedAt.Valid
 	summary.EvidenceChanged = request.EvidenceChangedAt.Valid
+	summary.DecisionVersionState = DecisionVersionState{
+		RequestID: request.ID, Status: request.Status, UpdatedAt: request.UpdatedAt.Time,
+		EvidenceVersion: request.EvidenceVersion, EvidenceCollectedAt: request.EvidenceCollectedAt.Time,
+		EvidenceChangedAt: request.EvidenceChangedAt.Time, LatestDecisionID: uuid.Nil, LatestDecision: "", LatestDecisionAt: time.Time{},
+	}
+	if len(decisions) > 0 {
+		summary.DecisionVersionState.LatestDecisionID = decisions[0].ID
+		summary.DecisionVersionState.LatestDecision = decisions[0].Decision
+		summary.DecisionVersionState.LatestDecisionAt = decisions[0].DecidedAt.Time
+	}
 	if request.Status != statusSuperseded && len(decisions) > 0 {
 		switch decisions[0].Decision {
 		case decisionApproved, decisionDenied:
@@ -133,6 +144,7 @@ func newPlatformReviewSummary(status string) PlatformReviewSummary {
 		PackagePublication: "unknown", RepositoryState: "unknown", AdvisoryLookup: "unknown", KnownAdvisories: 0,
 		AuthorityState: "unknown", CapabilitySource: "unknown", DeclaredToolCount: 0, RiskyDeclarationCount: 0,
 		ResearchStatus: "none", ResearchCoverage: "unknown", CitationCount: 0, TrustedCitationCount: 0,
+		DecisionVersionState: DecisionVersionState{RequestID: uuid.Nil, Status: "", UpdatedAt: time.Time{}, EvidenceVersion: 0, EvidenceCollectedAt: time.Time{}, EvidenceChangedAt: time.Time{}, LatestDecisionID: uuid.Nil, LatestDecision: "", LatestDecisionAt: time.Time{}},
 	}
 }
 

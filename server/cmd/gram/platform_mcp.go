@@ -713,7 +713,17 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
-	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	if shadowErr != nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
+	} else {
+		platformReader.WithShadowInventory(shadowInventory)
+		shadowDecisionBudget := platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionConnectionLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionOrganizationLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		}
+		platformReader.WithShadowDecisions(platformmcp.NewShadowDecisionService(config.DB, shadowInventory, config.ShadowReview, pluginInventory, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), shadowDecisionBudget))
+	}
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)

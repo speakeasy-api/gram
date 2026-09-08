@@ -297,6 +297,7 @@ type PostgresReader struct {
 	recentToolCalls     *RecentToolCallReadService
 	eventFeed           *EventFeedReadService
 	shadowInventory     *ShadowInventoryService
+	shadowDecisions     *ShadowDecisionService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -313,7 +314,15 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		recentToolCalls:     nil,
 		eventFeed:           nil,
 		shadowInventory:     nil,
+		shadowDecisions:     nil,
 	}
+}
+
+func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
+	if r != nil && service != nil && service.valid() {
+		r.shadowDecisions = service
+	}
+	return r
 }
 
 func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *PostgresReader {

@@ -56,6 +56,10 @@ const (
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
+	// FlagPlatformMCPShadowAccessDecisions is the exact-project kill switch for
+	// approval decisions exposed through Platform MCP. It is evaluated at
+	// invocation time and fails closed independently of the dashboard workflow.
+	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
