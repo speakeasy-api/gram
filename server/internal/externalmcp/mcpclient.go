@@ -218,16 +218,17 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	logger.InfoContext(ctx, "connected to external MCP server")
 
 	return &Client{
-		logger:         logger,
-		guardianPolicy: guardianPolicy,
-		remoteURL:      remoteURL,
-		session:        session,
-		authRT:         authRT,
-		bodyLimitRT:    bodyLimitRT,
-		transportType:  transportType,
-		options:        options,
-		metadataKey:    metadataScope(remoteURL, transportType, opts),
-		discovered:     make(map[string]json.RawMessage),
+		logger:              logger,
+		guardianPolicy:      guardianPolicy,
+		remoteURL:           remoteURL,
+		session:             session,
+		authRT:              authRT,
+		bodyLimitRT:         bodyLimitRT,
+		transportType:       transportType,
+		options:             options,
+		metadataKey:         metadataScope(remoteURL, transportType, opts),
+		discovered:          make(map[string]json.RawMessage),
+		discoveryGeneration: 0,
 	}, nil
 }
 

@@ -85,12 +85,14 @@ type toolMetadataCache struct {
 
 func newToolMetadataCache(capacity int, ttl time.Duration) *toolMetadataCache {
 	return &toolMetadataCache{
-		mu:       sync.Mutex{},
-		entries:  make(map[toolMetadataKey]*list.Element),
-		lru:      list.New(),
-		capacity: capacity,
-		ttl:      ttl,
-		now:      time.Now,
+		mu:                sync.Mutex{},
+		nextGeneration:    0,
+		minimumGeneration: 0,
+		entries:           make(map[toolMetadataKey]*list.Element),
+		lru:               list.New(),
+		capacity:          capacity,
+		ttl:               ttl,
+		now:               time.Now,
 	}
 }
 

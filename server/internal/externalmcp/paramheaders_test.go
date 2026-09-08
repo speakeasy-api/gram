@@ -181,6 +181,7 @@ func TestParameterHeadersInvalidArguments(t *testing.T) {
 func TestParameterHeadersSchemaBudgets(t *testing.T) {
 	t.Parallel()
 	t.Run("bytes", func(t *testing.T) {
+		t.Parallel()
 		// Even ignored metadata and whitespace must count before parsing.
 		schema := `{ "description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes-len(`{ "description":""}`)) + `"}`
 		require.Len(t, schema, maxParameterHeaderSchemaBytes)
@@ -191,6 +192,7 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 		require.Nil(t, headers)
 	})
 	t.Run("depth", func(t *testing.T) {
+		t.Parallel()
 		schema := `{"type":"string","x-mcp-header":"Value"}`
 		for range maxParameterHeaderDepth {
 			schema = `{"properties":{"nested":` + schema + `}}`
@@ -203,6 +205,7 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 		require.Nil(t, headers)
 	})
 	t.Run("nodes", func(t *testing.T) {
+		t.Parallel()
 		// Boolean and unannotated nodes consume the same budget as bindings.
 		properties := make(map[string]json.RawMessage)
 		properties["value"] = json.RawMessage(`{"type":"string","x-mcp-header":"Value"}`)
