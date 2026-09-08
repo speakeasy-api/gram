@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE description="Generate dev-idp signing and client credentials for local development."
 //MISE hide=true
@@ -70,6 +70,11 @@ async function run() {
     await $`mise set --file mise.local.toml ${RSA_KEY}=${privateKey}`;
     console.log(`🔑 ${RSA_KEY} has been set in mise.local.toml`);
   }
+
+  // Temporary: evolve databases for dev-idp schema changes introduced on
+  // 2026-09-07. Remove this invocation and the temporary evolution path after
+  // 2026-10-15, when local environments can be assumed to have run it.
+  await $`mise run db:devidp:evolve`;
 }
 
 run();

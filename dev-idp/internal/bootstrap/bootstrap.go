@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/database"
 )
 
-// schemaSQL is indirected so reconcile.go can derive the expected shape.
+// schemaSQL is indirected so evolve.go can derive the expected shape.
 func schemaSQL() string { return database.Schema }
 
 // Open returns a *sql.DB ready for use. For in-memory mode, the caller

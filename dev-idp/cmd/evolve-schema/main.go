@@ -16,7 +16,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "reconcile dev-idp schema:", err)
+		fmt.Fprintln(os.Stderr, "evolve dev-idp schema:", err)
 		os.Exit(1)
 	}
 }
@@ -32,10 +32,10 @@ func run() error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp-schema-reconcile"))
+	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp-schema-evolve"))
 
-	if err := bootstrap.Reconcile(ctx, dbCfg, logger); err != nil {
-		return fmt.Errorf("reconcile schema: %w", err)
+	if err := bootstrap.Evolve(ctx, dbCfg, logger); err != nil {
+		return fmt.Errorf("evolve schema: %w", err)
 	}
 	return nil
 }

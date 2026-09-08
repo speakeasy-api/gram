@@ -60,7 +60,7 @@ After changing backends, restart pitchfork with `mise run start`. Each backend k
 > [!IMPORTANT]
 > **Pulling this into an existing worktree?** Run `mise gws` once, then `mise run start`. dev-idp moved its OAuth surface from `/oauth2` to `/oauth2-1` and its WorkOS surface from `/mock-workos` to `/workos`, and every worktree pins those URLs in `mise.local.toml` with its own port baked in, so the new `mise.toml` defaults never reach a checkout that predates the rename. `git:worksync` refreshes the pinned copies (it recognizes them by the `{{env.…}}` template they still carry) and drops the retired `GRAM_IDP_MODE` setting. If you skip this, dev-idp says so in the first lines of `mise run start`, and any request to an old path answers 410 with the same fix.
 
-`mise gws` brings dev-idp's SQLite database up to the current schema, preserving existing users, organizations and memberships. If a change ever needs more than SQLite can do in place, the sync fails with the affected column and reset instructions.
+`mise gws` evolves dev-idp's SQLite database to the current schema, preserving existing users, organizations and memberships. If a change ever needs more than SQLite can do in place, the sync fails with the affected column and reset instructions.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>

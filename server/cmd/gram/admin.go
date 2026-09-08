@@ -235,7 +235,7 @@ func newAdminCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "idp-client-secret",
-			Usage:    "Client secret for identity-provider API calls",
+			Usage:    "Client secret for local admin API calls through dev-idp",
 			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
 			Required: false,
 		},

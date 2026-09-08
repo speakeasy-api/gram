@@ -45,7 +45,7 @@ func columnNames(t *testing.T, ctx context.Context, db *sql.DB, tableName string
 // stranded local checkouts: CREATE ... IF NOT EXISTS left it in place, and the
 // first insert then failed its NOT NULL constraint on a column the code no
 // longer sets.
-func TestReconcile_DropsRetiredColumn(t *testing.T) {
+func TestEvolve_DropsRetiredColumn(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -65,7 +65,7 @@ func TestReconcile_DropsRetiredColumn(t *testing.T) {
 	`)
 
 	cfg := config.DB{Mode: config.DBModeFile, Path: path}
-	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
 	db, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -85,7 +85,7 @@ func TestReconcile_DropsRetiredColumn(t *testing.T) {
 
 // A retired index has to be dropped before its column can be, or SQLite
 // refuses the ALTER.
-func TestReconcile_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
+func TestEvolve_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -101,7 +101,7 @@ func TestReconcile_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 	`)
 
 	cfg := config.DB{Mode: config.DBModeFile, Path: path}
-	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
 	db, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -118,7 +118,7 @@ func TestReconcile_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 
 // Curated rows (users, orgs, memberships people set up by hand) must survive
 // an upgrade -- otherwise this is just a nuke with extra steps.
-func TestReconcile_PreservesRowsAcrossUpgrade(t *testing.T) {
+func TestEvolve_PreservesRowsAcrossUpgrade(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -139,7 +139,7 @@ func TestReconcile_PreservesRowsAcrossUpgrade(t *testing.T) {
 	`)
 
 	cfg := config.DB{Mode: config.DBModeFile, Path: path}
-	require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+	require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
 	db, err := bootstrap.Open(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -153,7 +153,7 @@ func TestReconcile_PreservesRowsAcrossUpgrade(t *testing.T) {
 
 // A change SQLite cannot make in place should say so plainly and name the
 // column, rather than surfacing later as a constraint violation.
-func TestReconcile_UnalterableDriftReportsActionably(t *testing.T) {
+func TestEvolve_UnalterableDriftReportsActionably(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -171,15 +171,15 @@ func TestReconcile_UnalterableDriftReportsActionably(t *testing.T) {
 		);
 	`)
 
-	err := bootstrap.Reconcile(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
-	require.Error(t, err, "in-place-impossible drift must fail loudly during reconciliation")
+	err := bootstrap.Evolve(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	require.Error(t, err, "in-place-impossible drift must fail loudly during evolution")
 	require.Contains(t, err.Error(), "users.display_name", "error should name the offending column")
 	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
 }
 
-// Reconciling must be idempotent: a database already at the current schema
-// should remain unchanged across repeated reconciliation runs.
-func TestReconcile_CurrentSchemaIsStable(t *testing.T) {
+// Evolving must be idempotent: a database already at the current schema
+// should remain unchanged across repeated evolution runs.
+func TestEvolve_CurrentSchemaIsStable(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.DB{Mode: config.DBModeFile, Path: filepath.Join(t.TempDir(), "devidp.db")}
@@ -190,7 +190,7 @@ func TestReconcile_CurrentSchemaIsStable(t *testing.T) {
 	require.NoError(t, first.Close())
 
 	for range 2 {
-		require.NoError(t, bootstrap.Reconcile(t.Context(), cfg, testLogger()))
+		require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
 		db, err := bootstrap.Open(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Equal(t, before, columnNames(t, t.Context(), db, "oauth_clients"))

@@ -62,7 +62,7 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	}
 }
 
-func TestOpen_DoesNotReconcileExistingTables(t *testing.T) {
+func TestOpen_DoesNotEvolveExistingTables(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "devidp.db")
@@ -90,7 +90,7 @@ func TestOpen_DoesNotReconcileExistingTables(t *testing.T) {
 	if slices.Contains(columnNames(t, t.Context(), db, "users"), "retired_extra") {
 		return
 	}
-	t.Fatal("Open unexpectedly reconciled the retired_extra column")
+	t.Fatal("Open unexpectedly evolved the retired_extra column")
 }
 
 func TestParseDB(t *testing.T) {

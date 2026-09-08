@@ -231,8 +231,10 @@ if [ "${usage_no_migrate:-false}" = "true" ]; then
 fi
 
 echo
-echo "⏳ Reconciling dev-idp SQLite schema..."
-mise run db:devidp:reconcile
+# Temporary support for dev-idp schema changes introduced on 2026-09-07.
+# Remove after 2026-10-15, when local environments can be assumed evolved.
+echo "⏳ Evolving dev-idp SQLite schema..."
+mise run db:devidp:evolve
 
 echo
 echo "⏳ Applying Postgres migrations..."

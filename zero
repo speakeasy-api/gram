@@ -205,8 +205,6 @@ mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
-mise run db:devidp:reconcile
-
 echo -e "\n✅ All set up!"
 
 # Use local:start if it's defined, otherwise fall back to the default start task.

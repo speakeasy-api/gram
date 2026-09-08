@@ -11,26 +11,30 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/database"
 )
 
-// Reconcile upgrades an existing dev-idp database to the embedded schema.
+// Evolve upgrades an existing dev-idp database to the embedded schema.
 // Unlike Open, it may drop retired columns and indexes, so callers should run
 // it only at an explicit upgrade boundary such as git:worksync.
-func Reconcile(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
+//
+// This is temporary support for schema changes introduced on 2026-09-07.
+// Remove it after 2026-10-15, when local environments can be assumed to have
+// run the evolution.
+func Evolve(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
 	db, err := openSQLite(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := reconcile(ctx, db, logger); err != nil {
+	if err := evolve(ctx, db, logger); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, database.Schema); err != nil {
-		return fmt.Errorf("apply schema after reconcile: %w", err)
+		return fmt.Errorf("apply schema after evolve: %w", err)
 	}
 	return nil
 }
 
-// reconcile brings an existing database up to the embedded schema.
+// evolve brings an existing database up to the embedded schema.
 //
 // The schema is applied with CREATE ... IF NOT EXISTS, which creates whatever
 // is missing but never touches a table that already exists. So a database
@@ -50,7 +54,7 @@ func Reconcile(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
 // nullability changed in place cannot be altered by SQLite without rebuilding
 // the table, so that case reports what it found and asks for the database to
 // be deleted -- recreating it costs a login.
-func reconcile(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
+func evolve(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 	want, err := expectedShape(ctx)
 	if err != nil {
 		return err
@@ -63,7 +67,7 @@ func reconcile(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin schema reconcile: %w", err)
+		return fmt.Errorf("begin schema evolution: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -75,7 +79,7 @@ func reconcile(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 			continue
 		}
 
-		n, err := reconcileTable(ctx, tx, name, wantTable, gotTable, logger)
+		n, err := evolveTable(ctx, tx, name, wantTable, gotTable, logger)
 		if err != nil {
 			return err
 		}
@@ -86,15 +90,15 @@ func reconcile(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 		return nil
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit schema reconcile: %w", err)
+		return fmt.Errorf("commit schema evolution: %w", err)
 	}
 	logger.InfoContext(ctx, "upgraded dev-idp schema in place", slog.Int("changes", changed))
 	return nil
 }
 
-// reconcileTable aligns one existing table with its expected shape and
+// evolveTable aligns one existing table with its expected shape and
 // returns how many statements it ran.
-func reconcileTable(ctx context.Context, tx *sql.Tx, name string, want, got table, logger *slog.Logger) (int, error) {
+func evolveTable(ctx context.Context, tx *sql.Tx, name string, want, got table, logger *slog.Logger) (int, error) {
 	changed := 0
 
 	// Indexes first: SQLite refuses to drop a column an index still
@@ -121,7 +125,7 @@ func reconcileTable(ctx context.Context, tx *sql.Tx, name string, want, got tabl
 			// the table rebuilt, so answer with the same actionable message as
 			// every other in-place-impossible case rather than letting a raw
 			// driver error out -- an unhelpful error here is exactly what this
-			// reconciler exists to prevent.
+			// evolution exists to prevent.
 			return changed, rebuildRequired(name, col,
 				fmt.Sprintf("retired column cannot be dropped in place: %v", err))
 		}

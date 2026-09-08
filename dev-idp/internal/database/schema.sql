@@ -1,6 +1,6 @@
 -- dev-idp SQLite schema. Applied at app boot via internal/bootstrap. Every
 -- statement is idempotent (CREATE TABLE / CREATE INDEX IF NOT EXISTS), while
--- `mise db:devidp:reconcile` handles existing-table drift during worktree sync.
+-- `mise run db:devidp:evolve` handles existing-table drift during worktree sync.
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL PRIMARY KEY,
