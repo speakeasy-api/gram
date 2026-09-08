@@ -278,6 +278,42 @@ func TestEmulatorBrowserRoutesAreNotPublicUnderWorkOSBackend(t *testing.T) {
 	require.False(t, proxied)
 }
 
+// Only the registered inspection GETs are public. Anything else under
+// /_inspect/ falls through to the catch-all upstream proxy, so exempting it
+// from client authentication would hand the real WorkOS API to an
+// unauthenticated caller.
+func TestUnregisteredInspectPathsAreNotPublicUnderWorkOSBackend(t *testing.T) {
+	t.Parallel()
+
+	proxied := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		proxied = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	h := newTestHandler(t, Config{
+		Backend:      BackendWorkOS,
+		ClientSecret: testClientValue,
+		UpstreamURL:  upstream.URL,
+		APIKey:       "sk_test_upstream",
+	}, stubHandler("emulator"))
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/_inspect/currentUser"},
+		{http.MethodGet, "/_inspect/not-a-route"},
+		{http.MethodDelete, "/_inspect/organizations/org_1"},
+	} {
+		rec := httptest.NewRecorder()
+		h.Handler().ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		require.Equal(t, http.StatusUnauthorized, rec.Code, "%s %s", tc.method, tc.path)
+	}
+	require.False(t, proxied, "an unauthenticated request must never reach upstream")
+}
+
 func TestWorkOSBackendRewritesSSOTokenCredential(t *testing.T) {
 	t.Parallel()
 

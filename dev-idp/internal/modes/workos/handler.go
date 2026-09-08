@@ -146,10 +146,10 @@ func (h *Handler) Handler() http.Handler {
 	return h.authenticateClients(mux)
 }
 
-func (h *Handler) authenticateClients(next http.Handler) http.Handler {
+func (h *Handler) authenticateClients(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.isPublicRoute(r) {
-			next.ServeHTTP(w, r)
+		if h.isPublicRoute(mux, r) {
+			mux.ServeHTTP(w, r)
 			return
 		}
 
@@ -168,12 +168,17 @@ func (h *Handler) authenticateClients(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		mux.ServeHTTP(w, r)
 	})
 }
 
-func (h *Handler) isPublicRoute(r *http.Request) bool {
-	if strings.HasPrefix(r.URL.Path, "/_inspect/") {
+func (h *Handler) isPublicRoute(mux *http.ServeMux, r *http.Request) bool {
+	// Public means "one of the inspection routes this mux actually
+	// registered", which is what the mux itself answers. Matching on the
+	// /_inspect/ prefix instead would exempt every path and method that
+	// falls through to the catch-all upstream proxy, handing unauthenticated
+	// callers the real WorkOS API under the workos backend.
+	if _, pattern := mux.Handler(r); strings.HasPrefix(pattern, "GET /_inspect/") {
 		return true
 	}
 	if h.cfg.Backend != BackendLocal {
