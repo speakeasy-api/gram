@@ -82,7 +82,7 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 		return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
 	}
 	if repaired > 0 {
-		p.logger.InfoContext(ctx, "repaired orphaned api key creators", slog.Int64("repaired", repaired))
+		p.logger.InfoContext(ctx, "repaired orphaned api key creators")
 	}
 
 	rows, err := pluginsrepo.New(p.db).ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
