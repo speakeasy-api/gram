@@ -392,7 +392,7 @@ func (failingConditionalCache) SetIfAbsent(context.Context, string, any, time.Du
 
 // refreshDeadlineContext lets the test trigger a deadline without a wall-clock race.
 type refreshDeadlineContext struct {
-	context.Context
+	context.Context //nolint:containedctx // This context decorator controls deadline expiry in the test.
 }
 
 func (c refreshDeadlineContext) Err() error {
@@ -410,7 +410,10 @@ type deadlineOnLeaseCache struct {
 func (c deadlineOnLeaseCache) Get(ctx context.Context, key string, value any) error {
 	// Keep replay reads available after expiry so the request exercises the
 	// deadline branch rather than the cache-unavailable response.
-	return c.Cache.Get(context.WithoutCancel(ctx), key, value)
+	if err := c.Cache.Get(context.WithoutCancel(ctx), key, value); err != nil {
+		return fmt.Errorf("get cached refresh replay: %w", err)
+	}
+	return nil
 }
 
 func (c deadlineOnLeaseCache) AcquireLease(context.Context, string, string, time.Duration) (bool, error) {
