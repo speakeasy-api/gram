@@ -180,7 +180,11 @@ function SourceServersPanel({
   isPage: boolean;
 }): React.JSX.Element | null {
   const routes = useRoutes();
-  const { data, isLoading } = useListToolsets();
+  // A failed server list must not take the source page down with it, nor
+  // read as "no servers": the tools and file above are still worth showing.
+  const { data, isLoading, isError } = useListToolsets(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const servers = useMemo(() => {
     if (toolUrns.length === 0) return [];
@@ -191,6 +195,13 @@ function SourceServersPanel({
   }, [data, toolUrns]);
 
   if (!isPage) {
+    if (isError) {
+      return (
+        <Text small muted>
+          Couldn&apos;t load the servers this source is used in.
+        </Text>
+      );
+    }
     if (servers.length === 0) return null;
     return (
       <div className="flex flex-col gap-3">
@@ -228,9 +239,11 @@ function SourceServersPanel({
     >
       {servers.length === 0 ? (
         <Text muted small>
-          {isLoading
-            ? "Loading servers\u2026"
-            : "No server carries this source's tools yet. Build one from it to expose them."}
+          {isError
+            ? "Couldn't load the project's servers. Reload to try again."
+            : isLoading
+              ? "Loading servers\u2026"
+              : "No server carries this source's tools yet. Build one from it to expose them."}
         </Text>
       ) : (
         <ul className="divide-border divide-y">
