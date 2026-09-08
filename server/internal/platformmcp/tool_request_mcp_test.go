@@ -87,25 +87,7 @@ func TestRequestMCPNotifiesAdmins(t *testing.T) {
 	t.Parallel()
 
 	requester := &fakeAccessRequester{result: access.NotifyResult{SentToCount: 2}}
-	server, _ := newMemberServer(nil, nil, "test-cursor-key", nil, requester)
-
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = serverSession.Close() })
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "request-mcp-test", Version: "0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
-
-	ctx := ContextWithPrincipal(t.Context(), testPrincipal())
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "request_mcp",
-		Arguments: map[string]any{
-			"name": "Slack",
-		},
-	})
+	result, err := callMemberTool(t, requester, "request_mcp", map[string]any{"name": "Slack"})
 	require.NoError(t, err)
 	require.False(t, result.IsError)
 
@@ -121,7 +103,28 @@ func TestRequestMCPRejectsInvalidRemoteURL(t *testing.T) {
 	t.Parallel()
 
 	requester := &fakeAccessRequester{result: access.NotifyResult{SentToCount: 1}}
+	result, err := callMemberTool(t, requester, "request_mcp", map[string]any{
+		"name":       "Slack",
+		"remote_url": "http://remote.example.test/mcp",
+	})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Zero(t, requester.calls)
+
+	payload, err := json.Marshal(result.Content)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), "invalid_request")
+}
+
+func callMemberTool(t *testing.T, requester AccessRequester, name string, arguments map[string]any) (*mcp.CallToolResult, error) {
+	t.Helper()
+
 	server, _ := newMemberServer(nil, nil, "test-cursor-key", nil, requester)
+	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(ContextWithPrincipal(ctx, testPrincipal()), method, req)
+		}
+	})
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -133,19 +136,5 @@ func TestRequestMCPRejectsInvalidRemoteURL(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
 
-	ctx := ContextWithPrincipal(t.Context(), testPrincipal())
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "request_mcp",
-		Arguments: map[string]any{
-			"name":       "Slack",
-			"remote_url": "http://remote.example.test/mcp",
-		},
-	})
-	require.NoError(t, err)
-	require.True(t, result.IsError)
-	require.Zero(t, requester.calls)
-
-	payload, err := json.Marshal(result.Content)
-	require.NoError(t, err)
-	require.Contains(t, string(payload), "invalid_request")
+	return session.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: arguments})
 }
