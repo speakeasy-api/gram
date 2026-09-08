@@ -32,6 +32,7 @@ type GitleaksEnforcement struct {
 	xxx_hidden_CreatedAt         *string                `protobuf:"bytes,7,opt,name=created_at,json=createdAt"`
 	xxx_hidden_Content           *string                `protobuf:"bytes,9,opt,name=content"`
 	xxx_hidden_ContentPartId     *string                `protobuf:"bytes,10,opt,name=content_part_id,json=contentPartId"`
+	xxx_hidden_ContentTruncated  bool                   `protobuf:"varint,11,opt,name=content_truncated,json=contentTruncated"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -150,49 +151,61 @@ func (x *GitleaksEnforcement) GetContentPartId() string {
 	return ""
 }
 
+func (x *GitleaksEnforcement) GetContentTruncated() bool {
+	if x != nil {
+		return x.xxx_hidden_ContentTruncated
+	}
+	return false
+}
+
 func (x *GitleaksEnforcement) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
 }
 
 func (x *GitleaksEnforcement) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
 }
 
 func (x *GitleaksEnforcement) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
 }
 
 func (x *GitleaksEnforcement) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
 }
 
 func (x *GitleaksEnforcement) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
 }
 
 func (x *GitleaksEnforcement) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
 }
 
 func (x *GitleaksEnforcement) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
 }
 
 func (x *GitleaksEnforcement) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
 }
 
 func (x *GitleaksEnforcement) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 9)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 10)
+}
+
+func (x *GitleaksEnforcement) SetContentTruncated(v bool) {
+	x.xxx_hidden_ContentTruncated = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
 }
 
 func (x *GitleaksEnforcement) HasRequestId() bool {
@@ -258,6 +271,13 @@ func (x *GitleaksEnforcement) HasContentPartId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
 }
 
+func (x *GitleaksEnforcement) HasContentTruncated() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
 func (x *GitleaksEnforcement) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -303,6 +323,11 @@ func (x *GitleaksEnforcement) ClearContentPartId() {
 	x.xxx_hidden_ContentPartId = nil
 }
 
+func (x *GitleaksEnforcement) ClearContentTruncated() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_ContentTruncated = false
+}
+
 type GitleaksEnforcement_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -315,6 +340,7 @@ type GitleaksEnforcement_builder struct {
 	CreatedAt         *string
 	Content           *string
 	ContentPartId     *string
+	ContentTruncated  *bool
 }
 
 func (b0 GitleaksEnforcement_builder) Build() *GitleaksEnforcement {
@@ -322,40 +348,44 @@ func (b0 GitleaksEnforcement_builder) Build() *GitleaksEnforcement {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 9)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 10)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
+	}
+	if b.ContentTruncated != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		x.xxx_hidden_ContentTruncated = *b.ContentTruncated
 	}
 	return m0
 }
@@ -364,7 +394,7 @@ var File_gram_risk_v1_gitleaks_enforcement_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"\n" +
-	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xec\x02\n" +
+	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x99\x03\n" +
 	"\x13GitleaksEnforcement\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -378,7 +408,8 @@ const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\tR\tcreatedAt\x12\x18\n" +
 	"\acontent\x18\t \x01(\tR\acontent\x12&\n" +
 	"\x0fcontent_part_id\x18\n" +
-	" \x01(\tR\rcontentPartId:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	" \x01(\tR\rcontentPartId\x12+\n" +
+	"\x11content_truncated\x18\v \x01(\bR\x10contentTruncated:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_gitleaks_enforcement_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_gitleaks_enforcement_proto_goTypes = []any{

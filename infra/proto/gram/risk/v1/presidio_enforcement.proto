@@ -26,6 +26,7 @@ message PresidioEnforcement {
   // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
   // emitted. Zero/unset means the consumer applies its default threshold.
   double score_threshold = 12;
+  bool content_truncated = 13;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 600}

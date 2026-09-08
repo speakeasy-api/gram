@@ -521,6 +521,7 @@ const (
 	RiskPathKey                     = attribute.Key("gram.risk.path")
 	RiskStartPosKey                 = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                   = attribute.Key("gram.risk.end_pos")
+	RiskEnforcementTruncatedKey     = attribute.Key("gram.risk.enforcement_truncated")
 	SecretNameKey                   = attribute.Key("gram.secret.name")
 	SecurityPlacementKey            = attribute.Key("gram.security.placement")
 	SecuritySchemeKey               = attribute.Key("gram.security.scheme")
@@ -2176,6 +2177,10 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskEnforcementTruncated(v bool) attribute.KeyValue {
+	return RiskEnforcementTruncatedKey.Bool(v)
+}
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
 func SlogRiskScanRequestID(v string) slog.Attr {

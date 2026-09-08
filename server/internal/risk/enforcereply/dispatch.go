@@ -4,15 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 )
@@ -21,8 +25,8 @@ const (
 	// DefaultWaitTimeout prevents deadline-free callers from retaining waiters.
 	DefaultWaitTimeout = 30 * time.Second
 
-	// MaxContentBytes matches the established per-message Presidio safety budget.
-	MaxContentBytes = 50 * 1024
+	// MaxContentBytes bounds enforcement scan cost below Pub/Sub's transport limit.
+	MaxContentBytes = 1 * 1024 * 1024
 )
 
 // EnforcementLane is the non-generic request seam used by enforcement fan-out.
@@ -79,10 +83,12 @@ type Dispatcher struct {
 	presidio    EnforcementLane
 	close       func(context.Context) error
 	waitTimeout time.Duration
+	logger      *slog.Logger
+	truncations metric.Int64Counter
 }
 
 // NewDispatcher resolves request brokers for the supported enforcement lanes.
-func NewDispatcher(ctx context.Context, broker gcp.PublisherBroker, inbox *Inbox, cfg DispatcherConfig) (*Dispatcher, error) {
+func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, broker gcp.PublisherBroker, inbox *Inbox, cfg DispatcherConfig) (*Dispatcher, error) {
 	if inbox == nil {
 		return nil, errors.New("enforcement reply inbox is required")
 	}
@@ -130,7 +136,18 @@ func NewDispatcher(ctx context.Context, broker gcp.PublisherBroker, inbox *Inbox
 			return errors.Join(closeErrs...)
 		},
 		waitTimeout: cfg.WaitTimeout,
+		logger:      logger,
+		truncations: newTruncationCounter(meterProvider),
 	}, nil
+}
+
+func newTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counter {
+	truncations, _ := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/risk/enforcereply").Int64Counter(
+		"risk.enforcement.truncations",
+		metric.WithDescription("Number of enforcement requests truncated to the 1 MiB limit before publication"),
+		metric.WithUnit("{message}"),
+	)
+	return truncations
 }
 
 // Dispatch fans content out to distinct lanes and folds replies by lane.
@@ -141,11 +158,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if request.ProjectID == "" {
 		return Outcome{}, errors.New("enforcement project id is required")
 	}
-	if len(request.Content) > MaxContentBytes {
-		return Outcome{}, fmt.Errorf("enforcement content is %d bytes; maximum is %d bytes", len(request.Content), MaxContentBytes)
+	truncated := false
+	if originalSize := len(request.Content); originalSize > MaxContentBytes {
+		request.Content = truncateAtRuneBoundary(request.Content, MaxContentBytes)
+		truncated = true
+		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize))
+		if d.truncations != nil {
+			d.truncations.Add(ctx, 1)
+		}
 	}
 	if len(request.Lanes) == 0 {
-		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false}, nil
+		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: truncated}, nil
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {
@@ -180,22 +203,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO:
 				laneBroker = d.presidio
 				enforcement = riskv1.PresidioEnforcement_builder{
-					RequestId:      new(requestID.String()),
-					ProjectId:      new(request.ProjectID),
-					OrganizationId: new(request.OrganizationID),
-					CreatedAt:      new(createdAt),
-					Content:        new(request.Content),
-					Entities:       request.PresidioEntities,
-					ScoreThreshold: request.PresidioScoreThreshold,
+					RequestId:        new(requestID.String()),
+					ProjectId:        new(request.ProjectID),
+					OrganizationId:   new(request.OrganizationID),
+					CreatedAt:        new(createdAt),
+					Content:          new(request.Content),
+					Entities:         request.PresidioEntities,
+					ScoreThreshold:   request.PresidioScoreThreshold,
+					ContentTruncated: new(truncated),
 				}.Build()
 			default:
 				laneBroker = d.gitleaks
 				enforcement = riskv1.GitleaksEnforcement_builder{
-					RequestId:      new(requestID.String()),
-					ProjectId:      new(request.ProjectID),
-					OrganizationId: new(request.OrganizationID),
-					CreatedAt:      new(createdAt),
-					Content:        new(request.Content),
+					RequestId:        new(requestID.String()),
+					ProjectId:        new(request.ProjectID),
+					OrganizationId:   new(request.OrganizationID),
+					CreatedAt:        new(createdAt),
+					Content:          new(request.Content),
+					ContentTruncated: new(truncated),
 				}.Build()
 			}
 			reply, requestErr := laneBroker.Request(laneCtx, enforcement)
@@ -215,7 +240,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if err := group.Wait(); err != nil {
 		return Outcome{}, fmt.Errorf("dispatch enforcement lanes: %w", err)
 	}
-	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline}, nil
+	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline, Truncated: truncated}, nil
+}
+
+func truncateAtRuneBoundary(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // Close flushes and stops the dispatcher's publishers.

@@ -19,6 +19,7 @@ message GitleaksEnforcement {
 
   string content = 9;
   string content_part_id = 10;
+  bool content_truncated = 11;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 600}

@@ -906,6 +906,10 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, organizationID string
 		}
 		return findings
 	}
+	if outcome.Truncated {
+		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
+		s.logger.WarnContext(ctx, "pub/sub enforcement content truncated", attr.SlogRiskScanTextSize(len(text)))
+	}
 
 	for _, lane := range lanes {
 		reply := outcome.ByLane[lane]

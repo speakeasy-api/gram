@@ -932,6 +932,7 @@ pubsub:
           string created_at = 7;
           string content = 9;
           string content_part_id = 10;
+          bool content_truncated = 11;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -977,6 +978,7 @@ pubsub:
           string content_part_id = 10;
           repeated string entities = 11;
           double score_threshold = 12;
+          bool content_truncated = 13;
         }
       type: PROTOCOL_BUFFER
   - labels:

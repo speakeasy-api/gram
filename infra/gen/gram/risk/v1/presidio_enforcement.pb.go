@@ -34,6 +34,7 @@ type PresidioEnforcement struct {
 	xxx_hidden_ContentPartId     *string                `protobuf:"bytes,10,opt,name=content_part_id,json=contentPartId"`
 	xxx_hidden_Entities          []string               `protobuf:"bytes,11,rep,name=entities"`
 	xxx_hidden_ScoreThreshold    float64                `protobuf:"fixed64,12,opt,name=score_threshold,json=scoreThreshold"`
+	xxx_hidden_ContentTruncated  bool                   `protobuf:"varint,13,opt,name=content_truncated,json=contentTruncated"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -166,49 +167,56 @@ func (x *PresidioEnforcement) GetScoreThreshold() float64 {
 	return 0
 }
 
+func (x *PresidioEnforcement) GetContentTruncated() bool {
+	if x != nil {
+		return x.xxx_hidden_ContentTruncated
+	}
+	return false
+}
+
 func (x *PresidioEnforcement) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 12)
 }
 
 func (x *PresidioEnforcement) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 12)
 }
 
 func (x *PresidioEnforcement) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 12)
 }
 
 func (x *PresidioEnforcement) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 12)
 }
 
 func (x *PresidioEnforcement) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 12)
 }
 
 func (x *PresidioEnforcement) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 12)
 }
 
 func (x *PresidioEnforcement) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 12)
 }
 
 func (x *PresidioEnforcement) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 12)
 }
 
 func (x *PresidioEnforcement) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 12)
 }
 
 func (x *PresidioEnforcement) SetEntities(v []string) {
@@ -217,7 +225,12 @@ func (x *PresidioEnforcement) SetEntities(v []string) {
 
 func (x *PresidioEnforcement) SetScoreThreshold(v float64) {
 	x.xxx_hidden_ScoreThreshold = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 12)
+}
+
+func (x *PresidioEnforcement) SetContentTruncated(v bool) {
+	x.xxx_hidden_ContentTruncated = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 12)
 }
 
 func (x *PresidioEnforcement) HasRequestId() bool {
@@ -290,6 +303,13 @@ func (x *PresidioEnforcement) HasScoreThreshold() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
 }
 
+func (x *PresidioEnforcement) HasContentTruncated() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
 func (x *PresidioEnforcement) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -340,6 +360,11 @@ func (x *PresidioEnforcement) ClearScoreThreshold() {
 	x.xxx_hidden_ScoreThreshold = 0
 }
 
+func (x *PresidioEnforcement) ClearContentTruncated() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_ContentTruncated = false
+}
+
 type PresidioEnforcement_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -355,7 +380,8 @@ type PresidioEnforcement_builder struct {
 	Entities          []string
 	// Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
 	// emitted. Zero/unset means the consumer applies its default threshold.
-	ScoreThreshold *float64
+	ScoreThreshold   *float64
+	ContentTruncated *bool
 }
 
 func (b0 PresidioEnforcement_builder) Build() *PresidioEnforcement {
@@ -363,45 +389,49 @@ func (b0 PresidioEnforcement_builder) Build() *PresidioEnforcement {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 12)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 12)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 12)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 12)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 12)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 12)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 12)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 12)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 12)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	x.xxx_hidden_Entities = b.Entities
 	if b.ScoreThreshold != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 12)
 		x.xxx_hidden_ScoreThreshold = *b.ScoreThreshold
+	}
+	if b.ContentTruncated != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 12)
+		x.xxx_hidden_ContentTruncated = *b.ContentTruncated
 	}
 	return m0
 }
@@ -410,7 +440,7 @@ var File_gram_risk_v1_presidio_enforcement_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_enforcement_proto_rawDesc = "" +
 	"\n" +
-	"'gram/risk/v1/presidio_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbc\x03\n" +
+	"'gram/risk/v1/presidio_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe9\x03\n" +
 	"\x13PresidioEnforcement\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -426,7 +456,8 @@ const file_gram_risk_v1_presidio_enforcement_proto_rawDesc = "" +
 	"\x0fcontent_part_id\x18\n" +
 	" \x01(\tR\rcontentPartId\x12\x1a\n" +
 	"\bentities\x18\v \x03(\tR\bentities\x12'\n" +
-	"\x0fscore_threshold\x18\f \x01(\x01R\x0escoreThreshold:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tR\treply_urnB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x0fscore_threshold\x18\f \x01(\x01R\x0escoreThreshold\x12+\n" +
+	"\x11content_truncated\x18\r \x01(\bR\x10contentTruncated:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tR\treply_urnB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_enforcement_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_presidio_enforcement_proto_goTypes = []any{

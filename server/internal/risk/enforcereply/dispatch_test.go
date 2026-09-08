@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -49,13 +51,28 @@ type (
 	capturePresidioPublisher    = capturePublisher[*riskv1.PresidioEnforcement]
 )
 
-func testDispatcher(inbox *Inbox, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
-	return testDispatcherWithPresidio(inbox, publisher, &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}, waitTimeout)
+func int64CounterValue(metrics metricdata.ResourceMetrics, name string) int64 {
+	for _, scope := range metrics.ScopeMetrics {
+		for _, candidate := range scope.Metrics {
+			if candidate.Name != name {
+				continue
+			}
+			sum, ok := candidate.Data.(metricdata.Sum[int64])
+			if ok && len(sum.DataPoints) == 1 {
+				return sum.DataPoints[0].Value
+			}
+		}
+	}
+	return 0
 }
 
-func testDispatcherWithPresidio(inbox *Inbox, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
-	gitleaksReq := redisinbox.NewRequestBroker(inbox, gitleaksPub)
-	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
+func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
+	return testDispatcherWithPresidio(te, publisher, &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}, waitTimeout)
+}
+
+func testDispatcherWithPresidio(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
+	gitleaksReq := redisinbox.NewRequestBroker(te.inbox, gitleaksPub)
+	presidioReq := redisinbox.NewRequestBroker(te.inbox, presidioPub)
 	return &Dispatcher{
 		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
 		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
@@ -63,6 +80,8 @@ func testDispatcherWithPresidio(inbox *Inbox, gitleaksPub *captureEnforcementPub
 			return errors.Join(gitleaksReq.Close(ctx), presidioReq.Close(ctx))
 		},
 		waitTimeout: waitTimeout,
+		logger:      newTestLogger(),
+		truncations: newTruncationCounter(te.meterProvider),
 	}
 }
 
@@ -82,7 +101,7 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 		}
 		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	}
-	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
+	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-dispatch",
@@ -93,12 +112,14 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
 	require.False(t, outcome.Deadline)
+	require.False(t, outcome.Truncated)
 	require.NotNil(t, outcome.ByLane[gitleaksLane])
 	require.Len(t, publisher.messages, 1)
 	message := publisher.messages[0]
 	require.Equal(t, "org-dispatch", message.GetOrganizationId())
 	require.Equal(t, "project-dispatch", message.GetProjectId())
 	require.Equal(t, "safe content", message.GetContent())
+	require.False(t, message.GetContentTruncated())
 	require.NotEmpty(t, message.GetCreatedAt())
 	_, err = time.Parse(time.RFC3339Nano, message.GetCreatedAt())
 	require.NoError(t, err)
@@ -137,7 +158,7 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 		}
 		return te.writer.Reply(ctx, replyURN, testReply(correlationID, presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	}
-	dispatcher := testDispatcherWithPresidio(te.inbox, gitleaksPub, presidioPub, time.Second)
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
 
 	threshold := 0.25
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
@@ -191,7 +212,7 @@ func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {
 		}
 		return te.writer.Reply(ctx, replyURN, testReply(correlationID, presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	}}
-	dispatcher := testDispatcherWithPresidio(te.inbox, gitleaksPub, presidioPub, time.Second)
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-partial",
@@ -210,7 +231,7 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-deadline")
 	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testDispatcher(te.inbox, publisher, 25*time.Millisecond)
+	dispatcher := testDispatcher(te, publisher, 25*time.Millisecond)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-deadline",
@@ -225,21 +246,68 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 	require.Zero(t, te.inbox.Snapshot().Waiters)
 }
 
-func TestDispatchRejectsOversizedContent(t *testing.T) {
+func TestDispatchTruncatesOversizedContent(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dispatch-oversized")
 	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
+	publisher.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	dispatcher := testDispatcher(te, publisher, time.Second)
 
-	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-oversized",
 		ProjectID:      "project-oversized",
-		Content:        strings.Repeat("x", MaxContentBytes+1),
+		Content:        strings.Repeat("x", MaxContentBytes+10),
 		Lanes:          []Lane{gitleaksLane},
 	})
-	require.ErrorContains(t, err, "maximum is 51200 bytes")
-	require.Empty(t, publisher.messages)
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, strings.Repeat("x", MaxContentBytes), publisher.messages[0].GetContent())
+	require.True(t, publisher.messages[0].GetContentTruncated())
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
+	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
+}
+
+func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-multibyte")
+	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	presidioPub.onPublish = func(ctx context.Context, _ *riskv1.PresidioEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
+	expected := strings.Repeat("x", MaxContentBytes-1)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-multibyte",
+		ProjectID:      "project-multibyte",
+		Content:        expected + "€tail",
+		Lanes:          []Lane{presidioLane},
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+	require.Len(t, presidioPub.messages, 1)
+	require.Equal(t, expected, presidioPub.messages[0].GetContent())
+	require.True(t, utf8.ValidString(presidioPub.messages[0].GetContent()))
+	require.True(t, presidioPub.messages[0].GetContentTruncated())
 }
 
 func TestDispatchRejectsDuplicateLane(t *testing.T) {
@@ -247,7 +315,7 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-duplicate")
 	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
+	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-duplicate",
